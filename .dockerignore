@@ -1,0 +1,12 @@
+.git
+.worktrees
+.superpowers
+artifacts
+target
+web/node_modules
+web/dist
+desktop/gen
+*.db
+*.db-wal
+*.db-shm
+.env

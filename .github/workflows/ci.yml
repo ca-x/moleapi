@@ -43,3 +43,51 @@ jobs:
       - run: cargo test --locked
       - run: cargo clippy --locked --all-targets -- -D warnings
       - run: cargo build --locked --release -p moleapi-server
+  database:
+    needs: source
+    if: needs.source.outputs.available == 'true'
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: moleapi
+          POSTGRES_PASSWORD: moleapi_test_only
+          POSTGRES_DB: moleapi
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: moleapi_test_only
+          MYSQL_DATABASE: moleapi
+          MYSQL_USER: moleapi
+          MYSQL_PASSWORD: moleapi_test_only
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -uroot -pmoleapi_test_only"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: database-integration
+      - run: npm --prefix web ci
+      - run: npm --prefix web run build
+      - name: Run the same migration/auth/isolation/CAS suite against all three engines
+        env:
+          MOLEAPI_TEST_POSTGRES_URL: postgresql://moleapi:moleapi_test_only@127.0.0.1:5432/moleapi
+          MOLEAPI_TEST_MYSQL_URL: mysql://moleapi:moleapi_test_only@127.0.0.1:3306/moleapi
+        run: cargo test --locked -p moleapi-server --test database -- --nocapture --test-threads=1

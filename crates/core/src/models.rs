@@ -1,0 +1,131 @@
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Pair {
+    pub id: String,
+    pub key: String,
+    pub value: String,
+    pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secret: Option<bool>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Auth {
+    pub kind: String,
+    pub token: String,
+    pub username: String,
+    pub password: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Assertion {
+    pub id: String,
+    pub name: String,
+    pub kind: String,
+    pub target: String,
+    pub expected: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Example {
+    pub id: String,
+    pub name: String,
+    pub status: u16,
+    pub headers: Vec<Pair>,
+    pub body: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct RequestSpec {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub specification_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation_id: Option<String>,
+    pub id: String,
+    pub name: String,
+    pub method: String,
+    pub url: String,
+    pub description: String,
+    pub query: Vec<Pair>,
+    pub headers: Vec<Pair>,
+    pub body_kind: String,
+    pub body: String,
+    pub auth: Auth,
+    pub timeout_ms: u64,
+    pub follow_redirects: bool,
+    pub verify_tls: bool,
+    pub assertions: Vec<Assertion>,
+    pub examples: Vec<Example>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Collection {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub requests: Vec<RequestSpec>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Environment {
+    pub id: String,
+    pub name: String,
+    pub variables: Vec<Pair>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct WorkspaceData {
+    #[serde(default)]
+    pub specifications: Vec<Specification>,
+    pub schema_version: u32,
+    pub collections: Vec<Collection>,
+    pub environments: Vec<Environment>,
+    pub active_environment_id: Option<String>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Workspace {
+    pub id: String,
+    pub name: String,
+    pub revision: i64,
+    pub updated_at: String,
+    pub data: WorkspaceData,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct TestResult {
+    pub id: String,
+    pub name: String,
+    pub passed: bool,
+    pub actual: String,
+    pub expected: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Response {
+    pub status: u16,
+    pub status_text: String,
+    pub headers: Vec<Pair>,
+    pub body: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body_base64: Option<String>,
+    pub elapsed_ms: u64,
+    pub size_bytes: usize,
+    pub truncated: bool,
+    pub url: String,
+    pub tests: Vec<TestResult>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct HistoryEntry {
+    pub id: String,
+    pub workspace_id: String,
+    pub request_id: String,
+    pub request_name: String,
+    pub method: String,
+    pub url: String,
+    pub status: u16,
+    pub elapsed_ms: u64,
+    pub size_bytes: usize,
+    pub created_at: String,
+    pub response: Response,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Specification {
+    pub id: String,
+    pub name: String,
+    pub kind: String,
+    pub source: String,
+    pub dialect: String,
+}

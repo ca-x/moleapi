@@ -115,6 +115,7 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         with:
           projectPath: desktop
+          tauriScript: ../web/node_modules/.bin/tauri
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
       - uses: actions/upload-artifact@v4
         with:

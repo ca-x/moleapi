@@ -1,0 +1,114 @@
+import { Button, Card, Flex, Heading, Text, TextField } from "@radix-ui/themes";
+import { Plus, Save, Trash2 } from "lucide-react";
+import { Field, PairEditor, ToolButton } from "../../shared/ui";
+import { id } from "../../shared/model";
+import { useWorkbench } from "../workbench/context";
+
+export default function EnvironmentsPage() {
+  const state = useWorkbench();
+  const { draft, saving, setGuard, dirty, updateData, save, environment } =
+    state;
+  if (!draft) return null;
+  return (
+    <div className="page-panel">
+      <div className="page-heading">
+        <div>
+          <Heading size="5">环境变量</Heading>
+          <Text size="2" color="gray">
+            切换开发、测试与生产环境，使用 {"{{变量名}}"} 引用值。
+          </Text>
+        </div>
+        <Button
+          onClick={() => {
+            const next = { id: id(), name: "新建环境", variables: [] };
+            updateData((data) => ({
+              ...data,
+              environments: [...data.environments, next],
+              active_environment_id: next.id,
+            }));
+          }}
+        >
+          <Plus size={16} />
+          新建环境
+        </Button>
+      </div>
+      <Flex gap="3" wrap="wrap">
+        {draft.data.environments.map((e) => (
+          <Button
+            key={e.id}
+            variant={environment?.id === e.id ? "soft" : "outline"}
+            color={environment?.id === e.id ? "cyan" : "gray"}
+            onClick={() =>
+              updateData((data) => ({ ...data, active_environment_id: e.id }))
+            }
+          >
+            {e.name}
+          </Button>
+        ))}
+      </Flex>
+      {environment ? (
+        <Card className="environment-card">
+          <Flex justify="between" align="center" gap="4">
+            <Field label="环境名称">
+              <TextField.Root
+                value={environment.name}
+                onChange={(e) =>
+                  updateData((data) => ({
+                    ...data,
+                    environments: data.environments.map((x) =>
+                      x.id === environment.id
+                        ? { ...x, name: e.target.value }
+                        : x,
+                    ),
+                  }))
+                }
+              />
+            </Field>
+            <ToolButton
+              label="删除当前环境"
+              onClick={() =>
+                setGuard({
+                  title: "删除环境",
+                  description: `删除「${environment.name}」，保存后生效。`,
+                  action: () =>
+                    updateData((data) => ({
+                      ...data,
+                      environments: data.environments.filter(
+                        (e) => e.id !== environment.id,
+                      ),
+                      active_environment_id: null,
+                    })),
+                })
+              }
+            >
+              <Trash2 size={16} />
+            </ToolButton>
+          </Flex>
+          <PairEditor
+            rows={environment.variables}
+            secrets
+            onChange={(variables) =>
+              updateData((data) => ({
+                ...data,
+                environments: data.environments.map((e) =>
+                  e.id === environment.id ? { ...e, variables } : e,
+                ),
+              }))
+            }
+            keyLabel="变量名"
+            valueLabel="变量值"
+          />
+          <Text size="1" color="gray">
+            勾选密钥后会隐藏值，导出默认排除密钥。工作区内的值会保存在当前数据库。
+          </Text>
+        </Card>
+      ) : (
+        <Text color="gray">选择或新建一个环境。</Text>
+      )}
+      <Button loading={saving} disabled={!dirty} onClick={() => void save()}>
+        <Save size={16} />
+        保存工作区
+      </Button>
+    </div>
+  );
+}

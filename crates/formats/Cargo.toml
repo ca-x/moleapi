@@ -1,0 +1,19 @@
+[package]
+name = "moleapi-formats"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+moleapi-core = { path = "../core" }
+openapiv3 = "2"
+oas3 = { version = "0.22", features = ["yaml-spec"] }
+serde_yaml_ng = "0.10"
+jsonschema = { version = "0.33", default-features = false }
+shell-words = "1"
+url = "2"

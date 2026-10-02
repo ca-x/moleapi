@@ -1,0 +1,24 @@
+[package]
+name = "moleapi-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "moleapi"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+axum.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+moleapi-server = { path = "../crates/server", default-features = false }
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tower = { version = "0.5", features = ["util"] }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }

@@ -1,0 +1,15 @@
+services:
+  moleapi:
+    image: ghcr.io/ca-x/moleapi:main
+    build: .
+    ports: ['8787:8787']
+    environment:
+      MOLEAPI_BIND: 0.0.0.0:8787
+      MOLEAPI_ALLOW_REGISTRATION: 'false'
+      MOLEAPI_ALLOW_PRIVATE_NETWORK: 'false'
+      # Optional: set MOLEAPI_DATABASE_URL to postgresql://... or mysql://...
+    volumes:
+      - moleapi-data:/data
+    restart: unless-stopped
+volumes:
+  moleapi-data:

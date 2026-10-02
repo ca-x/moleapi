@@ -1,0 +1,43 @@
+[package]
+name = "moleapi-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+build = "build.rs"
+
+[features]
+default = ["web"]
+web = ["dep:rust-embed", "dep:mime_guess"]
+
+[dependencies]
+moleapi-core = { path = "../core" }
+moleapi-formats = { path = "../formats" }
+anyhow.workspace = true
+axum.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+reqwest.workspace = true
+uuid.workspace = true
+sea-orm = { version = "1.1", features = ["sqlx-sqlite", "sqlx-postgres", "sqlx-mysql", "runtime-tokio-rustls", "macros"] }
+sea-orm-migration = { version = "1.1", default-features = false, features = ["sqlx-sqlite", "sqlx-postgres", "sqlx-mysql", "runtime-tokio-rustls"] }
+argon2 = "0.5"
+rand = "0.8"
+sha2 = "0.10"
+hex = "0.4"
+futures-util = "0.3"
+chrono = "0.4"
+url = "2"
+percent-encoding = "2"
+clap = { version = "4", features = ["derive", "env"] }
+rust-embed = { version = "8", optional = true, features = ["interpolate-folder-path", "debug-embed"] }
+mime_guess = { version = "2", optional = true }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+tempfile = "3"
+
+[build-dependencies]
+sha2 = "0.10"
