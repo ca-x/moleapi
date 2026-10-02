@@ -1,0 +1,129 @@
+name: Server and desktop builds
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    outputs:
+      available: ${{ steps.detect.outputs.available }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: detect
+        run: |
+          if [ -f Cargo.toml ] && [ -f crates/server/Cargo.toml ] && [ -f desktop/tauri.conf.json ] && [ -f web/package-lock.json ]; then
+            echo 'available=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'available=false' >> "$GITHUB_OUTPUT"
+            echo 'Application implementation is pending; no server or desktop artifact was built.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+  server:
+    needs: source
+    if: needs.source.outputs.available == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            binary: moleapi-server
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            binary: moleapi-server
+          - runner: macos-latest
+            target: x86_64-apple-darwin
+            binary: moleapi-server
+          - runner: macos-latest
+            target: aarch64-apple-darwin
+            binary: moleapi-server
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: moleapi-server.exe
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: server-${{ matrix.target }}
+      - run: npm --prefix web ci
+      - run: npm --prefix web run build
+      - run: cargo build --locked --release -p moleapi-server --target ${{ matrix.target }}
+      - name: Archive embedded server executable
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          tar -czf artifacts/moleapi-server-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release ${{ matrix.binary }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: server-${{ matrix.target }}
+          path: artifacts/*.tar.gz
+          if-no-files-found: error
+  desktop:
+    needs: source
+    if: needs.source.outputs.available == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            bundles: deb,rpm,appimage
+          - runner: macos-latest
+            target: x86_64-apple-darwin
+            bundles: dmg
+          - runner: macos-latest
+            target: aarch64-apple-darwin
+            bundles: dmg
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: nsis,msi
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: desktop-${{ matrix.target }}
+      - name: Linux desktop packaging prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev rpm
+      - run: npm --prefix web ci
+      - name: Generate platform icons from provided transparent logo
+        working-directory: desktop
+        run: ../web/node_modules/.bin/tauri icon ../assets/brand/logo.png --output icons
+      - uses: tauri-apps/tauri-action@v0
+        with:
+          projectPath: desktop
+          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.target }}
+          path: |
+            target/${{ matrix.target }}/release/bundle/**/*.deb
+            target/${{ matrix.target }}/release/bundle/**/*.rpm
+            target/${{ matrix.target }}/release/bundle/**/*.AppImage
+            target/${{ matrix.target }}/release/bundle/**/*.dmg
+            target/${{ matrix.target }}/release/bundle/**/*.exe
+            target/${{ matrix.target }}/release/bundle/**/*.msi
+          if-no-files-found: error

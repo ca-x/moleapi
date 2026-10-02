@@ -1,0 +1,562 @@
+{
+  "date": "2026-10-02",
+  "scope": "Selected concrete public controls/options; complete public document hierarchy is in feature-options.json. Authenticated and enterprise UI not observed.",
+  "controls": [
+    {
+      "id": "CTRL-001",
+      "vendor": "apifox",
+      "control": "请求 Body 格式",
+      "options": [
+        "form-data",
+        "x-www-form-urlencoded",
+        "JSON",
+        "XML",
+        "raw",
+        "binary",
+        "GraphQL",
+        "Msgpack"
+      ],
+      "ui_entry_path": null,
+      "ui_entry_path_evidence": "not_observed",
+      "source_url": "https://docs.apifox.com/request-params-and-body.md",
+      "source_heading": "请求体",
+      "source_line": 113,
+      "source_anchor": null,
+      "restrictions": [],
+      "implementation_status": "not_implemented"
+    },
+    {
+      "id": "CTRL-002",
+      "vendor": "apifox",
+      "control": "Auth 类型",
+      "options": [
+        "从父级继承",
+        "No Auth",
+        "API Key",
+        "Bearer Token",
+        "JWT",
+        "Basic Auth",
+        "Digest Auth",
+        "OAuth 1.0",
+        "OAuth 2.0",
+        "Hawk Authentication",
+        "Kerberos",
+        "NTLM",
+        "Akamai EdgeGrid"
+      ],
+      "ui_entry_path": "接口 → Auth → 类型",
+      "ui_entry_path_evidence": "documented",
+      "source_url": "https://docs.apifox.com/authorization-types.md",
+      "source_heading": null,
+      "source_line": null,
+      "source_anchor": null,
+      "restrictions": [],
+      "implementation_status": "not_implemented"
+    },
+    {
+      "id": "CTRL-003",
+      "vendor": "postman",
+      "control": "基础 Authorization 类型",
+      "options": [
+        "No Auth",
+        "API Key",
+        "Bearer Token",
+        "JWT Bearer",
+        "Basic Auth"
+      ],
+      "ui_entry_path": "Request → Authorization → Auth Type",
+      "ui_entry_path_evidence": "documented",
+      "source_url": "https://learning.postman.com/docs/use/send-requests/authorization/authorization-types",
+      "source_heading": null,
+      "source_line": null,
+      "source_anchor": null,
+      "restrictions": [
+        "更多授权类型见各自官方页面，不以此基本类型列表表示完整下拉菜单。"
+      ],
+      "implementation_status": "not_implemented"
+    },
+    {
+      "id": "CTRL-004",
+      "vendor": "apifox",
+      "control": "变量作用域（高到低）",
+      "options": [
+        "临时",
+        "测试数据",
+        "环境",
+        "模块",
+        "项目全局",
+        "团队全局"
+      ],
+      "ui_entry_path": "环境管理",
+      "ui_entry_path_evidence": "documented",
+      "source_url": "https://docs.apifox.com/global-environment-session-variables.md",
+      "source_heading": "变量类型与优先级",
+      "source_line": 19,
+      "source_anchor": null,
+      "restrictions": [
+        "临时 > 测试数据 > 环境 > 模块 > 项目全局 > 团队全局",
+        "远程值同步；本地值不共享，设置后覆盖远程值。"
+      ],
+      "implementation_status": "not_implemented"
+    },
+    {
+      "id": "CTRL-005",
+      "vendor": "apifox",
+      "control": "外部 Vault provider",
+      "options": [
+        "HashiCorp Vault",
+        "Azure Key Vault",
+        "AWS Secrets Manager"
+      ],
+      "ui_entry_path": "团队资源/项目 → 密钥库提供商",
+      "ui_entry_path_evidence": "documented",
+      "source_url": "https://docs.apifox.com/vault-secrets.md",
+      "source_heading": "配置密钥库提供商",
+      "source_line": 12,
+      "source_anchor": null,
+      "restrictions": [
+        "商业旗舰版",
+        "值加密保存本地，不共享；名称和元数据可共享。"
+      ],
+      "implementation_status": "not_implemented"
+    },
+    {
+      "id": "CTRL-006",
+      "vendor": "apifox",
+      "control": "场景控制节点",
+      "options": [
+        "分组",
+        "ForEach 循环",
+        "For 循环",
+        "条件分支",
+        "等待时间"
+      ],
+      "ui_entry_path": "自动化测试 → 场景用例 → 添加步骤",
+      "ui_entry_path_evidence": "documented",
+      "source_url": "https://docs.apifox.com/flow-control-conditions.md",
+      "source_heading": null,
+      "source_line": null,
+      "source_anchor": null,
+      "restrictions": [],
+      "implementation_status": "not_implemented"
+    },
+    {
+      "id": "CTRL-007",
+      "vendor": "apifox",
+      "control": "条件判断运算",
+      "options": [
+        "等于",
+        "不等于",
+        "存在",
+        "不存在",
+        "小于",
+        "小于或等于",
+        "大于",
+        "大于或等于",
+        "正则匹配",
+        "包含",
+        "不包含",
+        "为空",
+        "不为空",
+        "属于集合",
+        "不属于集合"
+      ],
+      "ui_entry_path": null,
+      "ui_entry_path_evidence": "not_observed",
+      "source_url": "https://docs.apifox.com/flow-control-conditions.md",
+      "source_heading": "判断规则",
+      "source_line": 215,
+      "source_anchor": null,
+      "restrictions": [],
+      "implementation_status": "not_implemented"
+    },
+    {
+      "id": "CTRL-008",
+      "vendor": "apifox",
+      "control": "工作台模块",
+      "options": [
+        "接口管理",
+        "自动化测试",
+        "分享文档",
+        "请求历史",
+        "项目设置",
+        "邀请成员"
+      ],
+      "ui_entry_path": null,
+      "ui_entry_path_evidence": "not_observed",
+      "source_url": "https://docs.apifox.com/page-layout.md",
+      "source_heading": "侧边栏",
+      "source_line": 44,
+      "source_anchor": null,
+      "restrictions": [],
+      "implementation_status": "not_implemented"
+    },
+    {
+      "id": "CTRL-009",
+      "vendor": "postman",
+      "control": "侧栏视图",
+      "options": [
+        "Items",
+        "Services",
+        "History",
+        "Local Files"
+      ],
+      "ui_entry_path": null,
+      "ui_entry_path_evidence": "not_observed",
+      "source_url": "https://learning.postman.com/docs/getting-started/basics/navigating-postman",
+      "source_heading": "Sidebar",
+      "source_line": 90,
+      "source_anchor": null,
+      "restrictions": [],
+      "implementation_status": "not_implemented"
+    },
+    {
+      "id": "CTRL-010",
+      "vendor": "postman",
+      "control": "默认资源分组",
+      "options": [
+        "Collections",
+        "Environments",
+        "Documents",
+        "Specs",
+        "SDKs",
+        "Datasets",
+        "Flows"
+      ],
+      "ui_entry_path": "Sidebar → Customize sidebar",
+      "ui_entry_path_evidence": "documented",
+      "source_url": "https://learning.postman.com/docs/getting-started/basics/navigating-postman",
+      "source_heading": "Change sidebar elements",
+      "source_line": 104,
+      "source_anchor": null,
+      "restrictions": [],
+      "implementation_status": "not_implemented"
+    },
+    {
+      "id": "CTRL-011",
+      "vendor": "postman",
+      "control": "协议/客户端类型",
+      "options": [
+        "HTTP/REST",
+        "AI Requests",
+        "Data",
+        "GraphQL",
+        "gRPC",
+        "MCP",
+        "MQTT",
+        "SOAP",
+        "UDS/Named Pipes",
+        "Webhook",
+        "WebSocket/Socket.IO"
+      ],
+      "ui_entry_path": null,
+      "ui_entry_path_evidence": "not_observed",
+      "source_url": "https://learning.postman.com/docs/use/send-requests/protocols/protocols",
+      "source_heading": null,
+      "source_line": null,
+      "source_anchor": null,
+      "restrictions": [
+        "不同协议提供独立客户端，不能用统一 HTTP response 字段代替。"
+      ],
+      "implementation_status": "not_implemented"
+    },
+    {
+      "id": "CTRL-012",
+      "vendor": "postman",
+      "control": "Spec Hub 规范格式",
+      "options": [
+        "OpenAPI",
+        "AsyncAPI",
+        "protobuf 2/3",
+        "GraphQL",
+        "Smithy 2.0"
+      ],
+      "ui_entry_path": null,
+      "ui_entry_path_evidence": "not_observed",
+      "source_url": "https://learning.postman.com/docs/design-apis/specifications/overview",
+      "source_heading": "Supported specification formats",
+      "source_line": 13,
+      "source_anchor": null,
+      "restrictions": [],
+      "implementation_status": "not_implemented"
+    },
+    {
+      "id": "CTRL-013",
+      "vendor": "postman",
+      "control": "Git/云工作方式",
+      "options": [
+        "Local View",
+        "Cloud View"
+      ],
+      "ui_entry_path": null,
+      "ui_entry_path_evidence": "not_observed",
+      "source_url": "https://learning.postman.com/docs/use/native-git/overview",
+      "source_heading": null,
+      "source_line": null,
+      "source_anchor": null,
+      "restrictions": [
+        "Native Git 仅桌面端",
+        "本地 Git 文件与显式 CI/云发布边界需独立处理。"
+      ],
+      "implementation_status": "not_implemented"
+    },
+    {
+      "id": "CTRL-014",
+      "vendor": "postman",
+      "control": "集合格式",
+      "options": [
+        "3.0.0 多文件 YAML",
+        "2.1.0 JSON 兼容导出"
+      ],
+      "ui_entry_path": null,
+      "ui_entry_path_evidence": "not_observed",
+      "source_url": "https://learning.postman.com/docs/use/use-collections/collections-schemas",
+      "source_heading": null,
+      "source_line": null,
+      "source_anchor": null,
+      "restrictions": [
+        "Newman 不能直接执行 3.0，执行 2.1 导出；3.0 使用 Postman CLI。"
+      ],
+      "implementation_status": "not_implemented"
+    },
+    {
+      "id": "CTRL-015",
+      "vendor": "postman",
+      "control": "Dataset 数据源",
+      "options": [
+        "Postman Cloud Store",
+        "Local File",
+        "MySQL",
+        "Postgres",
+        "SQL Server",
+        "JDBC Source",
+        "Add with AI"
+      ],
+      "ui_entry_path": "Sidebar → + → Dataset",
+      "ui_entry_path_evidence": "documented",
+      "source_url": "https://learning.postman.com/docs/tests-and-scripts/datasets/create-datasets",
+      "source_heading": "Data source types",
+      "source_line": 40,
+      "source_anchor": null,
+      "restrictions": [
+        "Dataset: Solo/Team/Enterprise",
+        "Live database: Team/Enterprise",
+        "Custom JDBC: Enterprise",
+        "Desktop 全部；Web 仅 Cloud Store/MySQL/Postgres。"
+      ],
+      "implementation_status": "not_implemented"
+    },
+    {
+      "id": "CTRL-016",
+      "vendor": "postman",
+      "control": "数据文件类型",
+      "options": [
+        "CSV",
+        "JSON",
+        ".xlsx",
+        ".xls",
+        ".ods"
+      ],
+      "ui_entry_path": null,
+      "ui_entry_path_evidence": "not_observed",
+      "source_url": "https://learning.postman.com/docs/tests-and-scripts/datasets/create-datasets",
+      "source_heading": "Data file",
+      "source_line": 49,
+      "source_anchor": null,
+      "restrictions": [
+        "多表格工作表分别成为数据源",
+        "Spreadsheet 不提供预览但可以添加。"
+      ],
+      "implementation_status": "not_implemented"
+    },
+    {
+      "id": "CTRL-017",
+      "vendor": "postman",
+      "control": "JDBC URL patterns",
+      "options": [
+        "MySQL",
+        "Postgres",
+        "SQL Server",
+        "Oracle",
+        "Generic"
+      ],
+      "ui_entry_path": "Dataset → JDBC Source → Driver → Connection URL",
+      "ui_entry_path_evidence": "documented",
+      "source_url": "https://learning.postman.com/docs/tests-and-scripts/datasets/create-datasets",
+      "source_heading": "Supported URL patterns",
+      "source_line": 180,
+      "source_anchor": null,
+      "restrictions": [
+        "需要 JDBC driver JAR 和可用 Java runtime",
+        "JDBC View 使用原数据库 SQL dialect，单数据源，不可跨来源 join。"
+      ],
+      "implementation_status": "not_implemented"
+    },
+    {
+      "id": "CTRL-018",
+      "vendor": "postman",
+      "control": "数据库/SSH 连接字段",
+      "options": [
+        "Host",
+        "Port",
+        "Database",
+        "Username",
+        "Password",
+        "Table",
+        "Schema",
+        "SSH host",
+        "SSH port",
+        "SSH username",
+        "SSH private key",
+        "SSH host key",
+        "Skip SSH host key verification"
+      ],
+      "ui_entry_path": "Dataset → Data Source → Connection",
+      "ui_entry_path_evidence": "documented",
+      "source_url": "https://learning.postman.com/docs/tests-and-scripts/datasets/create-datasets",
+      "source_heading": null,
+      "source_line": null,
+      "source_anchor": null,
+      "restrictions": [
+        "Schema 字段适用 Postgres/SQL Server",
+        "SSH 的源必须能从 SSH server 网络访问。"
+      ],
+      "implementation_status": "not_implemented"
+    },
+    {
+      "id": "CTRL-019",
+      "vendor": "postman",
+      "control": "交互式 Data request source",
+      "options": [
+        "Local file",
+        "Remote file",
+        "MySQL",
+        "PostgreSQL"
+      ],
+      "ui_entry_path": "Sidebar → + → Data → address bar",
+      "ui_entry_path_evidence": "documented",
+      "source_url": "https://learning.postman.com/docs/use/send-requests/protocols/data/create-data-request",
+      "source_heading": "Connect to a data source",
+      "source_line": 11,
+      "source_anchor": null,
+      "restrictions": [
+        "桌面或启用 Desktop Agent 的 Web",
+        "Local file 仅桌面",
+        "Read-only 设置阻止写入/改 schema。"
+      ],
+      "implementation_status": "not_implemented"
+    },
+    {
+      "id": "CTRL-020",
+      "vendor": "postman",
+      "control": "账号 Region Preference",
+      "options": [
+        "Always Ask for Region Selection",
+        "Use EU Region by Default"
+      ],
+      "ui_entry_path": "Desktop → Help → Region Preference for New Accounts",
+      "ui_entry_path_evidence": "documented",
+      "source_url": "https://learning.postman.com/docs/administration/enterprise/about-eu-data-residency",
+      "source_heading": "Set Postman region preference",
+      "source_line": 15,
+      "source_anchor": null,
+      "restrictions": [
+        "Enterprise EU 计划",
+        "只改变新账号认证入口，不改变已存在账号",
+        "EU 文档列出集成/Partner Workspace/BYOK runs/Live Sessions/API Network/Fern 等能力例外。"
+      ],
+      "implementation_status": "not_implemented"
+    },
+    {
+      "id": "CTRL-021",
+      "vendor": "postman",
+      "control": "Newman CLI 选项分组",
+      "options": [
+        "Basic options",
+        "Setup options",
+        "Request options",
+        "SSL options",
+        "Output options",
+        "More configuration options",
+        "Exit status",
+        "Data file example"
+      ],
+      "ui_entry_path": null,
+      "ui_entry_path_evidence": "not_observed",
+      "source_url": "https://learning.postman.com/docs/reference/newman-cli/newman-options",
+      "source_heading": null,
+      "source_line": null,
+      "source_anchor": null,
+      "restrictions": [
+        "这里列官方选项章节；具体 flags/默认值查对应正文，不把章节名当成参数值。"
+      ],
+      "implementation_status": "not_implemented"
+    },
+    {
+      "id": "CTRL-022",
+      "vendor": "postman",
+      "control": "Newman 内置 Reporter",
+      "options": [
+        "Use built-in reporters",
+        "About built-in reporters",
+        "Configure built-in reporters",
+        "CLI reporter",
+        "JSON reporter",
+        "JUnit reporter"
+      ],
+      "ui_entry_path": null,
+      "ui_entry_path_evidence": "not_observed",
+      "source_url": "https://learning.postman.com/docs/reference/newman-cli/newman-built-in-reporters",
+      "source_heading": null,
+      "source_line": null,
+      "source_anchor": null,
+      "restrictions": [
+        "这里列官方选项章节；具体 flags/默认值查对应正文，不把章节名当成参数值。"
+      ],
+      "implementation_status": "not_implemented"
+    },
+    {
+      "id": "CTRL-023",
+      "vendor": "postman",
+      "control": "Postman CLI 选项分组",
+      "options": [
+        "Command categories",
+        "Basic CLI commands",
+        "Authentication commands",
+        "Workspace commands",
+        "Team commands",
+        "Collection commands",
+        "Dependency commands",
+        "Environment commands",
+        "Globals commands",
+        "Request commands",
+        "Monitoring and performance commands",
+        "Application commands",
+        "Flows commands",
+        "API governance commands",
+        "Mock server commands",
+        "Dataset commands",
+        "Search commands",
+        "Simulator commands",
+        "Publish API versions commands",
+        "SDK commands",
+        "Coding agent commands",
+        "Context Graph commands",
+        "Skills commands",
+        "Webhooks commands",
+        "Usage analytics",
+        "Get started"
+      ],
+      "ui_entry_path": null,
+      "ui_entry_path_evidence": "not_observed",
+      "source_url": "https://learning.postman.com/docs/postman-cli/postman-cli-options",
+      "source_heading": null,
+      "source_line": null,
+      "source_anchor": null,
+      "restrictions": [
+        "这里列官方选项章节；具体 flags/默认值查对应正文，不把章节名当成参数值。"
+      ],
+      "implementation_status": "not_implemented"
+    }
+  ]
+}

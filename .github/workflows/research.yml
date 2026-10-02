@@ -1,0 +1,26 @@
+name: Research integrity
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m pip install -r scripts/research-requirements.txt
+      - name: Test Markdown parsing edge cases
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+      - name: Validate catalog completeness, sources and module dependencies
+        run: python3 scripts/verify_research.py
+      - name: Check generated artifacts are reproducible
+        run: |
+          python3 scripts/build_feature_inventory.py
+          python3 scripts/build_parity_matrix.py
+          python3 scripts/build_configuration_options.py
+          git diff --exit-code -- docs

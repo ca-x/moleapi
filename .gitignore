@@ -1,0 +1,14 @@
+/target
+/web/node_modules
+/web/dist
+/desktop/gen
+*.db
+*.db-shm
+*.db-wal
+.env
+/.superpowers
+/artifacts
+/docs/references/raw
+
+__pycache__/
+*.pyc

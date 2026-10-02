@@ -1,0 +1,4556 @@
+[
+  {
+    "category": "",
+    "title": "帮助中心",
+    "url": "https://docs.apifox.com/help.md",
+    "description": ""
+  },
+  {
+    "category": "",
+    "title": "更新日志",
+    "url": "https://docs.apifox.com/changelog.md",
+    "description": ""
+  },
+  {
+    "category": "入门",
+    "title": "产品介绍",
+    "url": "https://docs.apifox.com/introduction.md",
+    "description": ""
+  },
+  {
+    "category": "入门",
+    "title": "私有化部署",
+    "url": "https://docs.apifox.com/siyouhua.md",
+    "description": ""
+  },
+  {
+    "category": "入门",
+    "title": "联系我们",
+    "url": "https://docs.apifox.com/contact-us.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用",
+    "title": "下载 Apifox - Windows macOS Linux 桌面版下载",
+    "url": "https://docs.apifox.com/download.md",
+    "description": "Apifox Windows 桌面版下载、macOS 桌面版下载、Linux 桌面版下载。你可以根据操作系统选择合适的安装包，并在官网首页或下方表格中点击下载。"
+  },
+  {
+    "category": "开始使用",
+    "title": "基本概念",
+    "url": "https://docs.apifox.com/apifox-basic-concepts.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用",
+    "title": "注册与登录",
+    "url": "https://docs.apifox.com/sign-up-and-login.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用",
+    "title": "页面布局",
+    "url": "https://docs.apifox.com/page-layout.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 快速上手",
+    "title": "快速上手",
+    "url": "https://docs.apifox.com/getting-started.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 快速上手",
+    "title": "新建接口",
+    "url": "https://docs.apifox.com/create-api.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 快速上手",
+    "title": "发送接口请求",
+    "url": "https://docs.apifox.com/send-api-request.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 快速上手",
+    "title": "发送快捷请求并保存为接口",
+    "url": "https://docs.apifox.com/quick-request.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 快速上手",
+    "title": "添加断言",
+    "url": "https://docs.apifox.com/add-assertions.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 快速上手",
+    "title": "新建测试场景",
+    "url": "https://docs.apifox.com/create-test-scenario.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 快速上手",
+    "title": "分享 API 文档",
+    "url": "https://docs.apifox.com/share-api-documentation.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 快速上手",
+    "title": "了解更多",
+    "url": "https://docs.apifox.com/learn-more.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 导入导出数据",
+    "title": "导出数据",
+    "url": "https://docs.apifox.com/export-data.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 导入导出数据",
+    "title": "导入导出数据",
+    "url": "https://docs.apifox.com/import-and-export.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 导入导出数据",
+    "title": "定时导入（绑定数据源）",
+    "url": "https://docs.apifox.com/scheduled-import.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 导入导出数据",
+    "title": "导入设置",
+    "url": "https://docs.apifox.com/import-settings.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 导入导出数据",
+    "title": "手动导入",
+    "url": "https://docs.apifox.com/manual-import.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 导入导出数据 > 其它方式导入",
+    "title": "导入 cURL",
+    "url": "https://docs.apifox.com/import-curl.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 导入导出数据 > 其它方式导入",
+    "title": "导入 Markdown",
+    "url": "https://docs.apifox.com/import-markdown.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 导入导出数据 > 其它方式导入",
+    "title": "导入 Insomnia",
+    "url": "https://docs.apifox.com/import-insomnia.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 导入导出数据 > 其它方式导入",
+    "title": "导入 apiDoc",
+    "url": "https://docs.apifox.com/import-apidoc.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 导入导出数据 > 其它方式导入",
+    "title": "导入 .har 文件",
+    "url": "https://docs.apifox.com/import-har.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 导入导出数据 > 其它方式导入",
+    "title": "导入 Apipost",
+    "url": "https://docs.apifox.com/import-apipost.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 导入导出数据 > 其它方式导入",
+    "title": "导入 Eolink",
+    "url": "https://docs.apifox.com/import-eolink.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 导入导出数据 > 其它方式导入",
+    "title": "导入 knife4j",
+    "url": "https://docs.apifox.com/import-knife4j.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 导入导出数据 > 其它方式导入",
+    "title": "导入 NEI",
+    "url": "https://docs.apifox.com/import-nei.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 导入导出数据 > 其它方式导入",
+    "title": "导入小幺鸡（docway）",
+    "url": "https://docs.apifox.com/import-docway.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 导入导出数据 > 其它方式导入",
+    "title": "导入 Apizza",
+    "url": "https://docs.apifox.com/import-apizza.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 导入导出数据 > 其它方式导入",
+    "title": "导入 WSDL",
+    "url": "https://docs.apifox.com/import-wsdl.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 导入导出数据 > 其它方式导入",
+    "title": "导入 Postman",
+    "url": "https://docs.apifox.com/import-postman.md",
+    "description": ""
+  },
+  {
+    "category": "开始使用 > 导入导出数据 > 其它方式导入",
+    "title": "导入 OpenAPI/Swagger",
+    "url": "https://docs.apifox.com/import-openapi-swagger.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "设计 API",
+    "url": "https://docs.apifox.com/design-api.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "新建 API 项目",
+    "url": "https://docs.apifox.com/create-api-project.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "新建接口",
+    "url": "https://docs.apifox.com/create-an-api.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "接口设计规范",
+    "url": "https://docs.apifox.com/api-design-guidelines.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "模块",
+    "url": "https://docs.apifox.com/module.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "请求体多示例配置",
+    "url": "https://docs.apifox.com/multi-example-request-body.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "响应组件",
+    "url": "https://docs.apifox.com/response-components.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "常用字段",
+    "url": "https://docs.apifox.com/common-fields.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "全局参数",
+    "url": "https://docs.apifox.com/global-parameters.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "历史记录",
+    "url": "https://docs.apifox.com/api-history.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "接口评论",
+    "url": "https://docs.apifox.com/api-comments.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "批量管理",
+    "url": "https://docs.apifox.com/bulk-operations.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "通用接口文档",
+    "url": "https://docs.apifox.com/custom-protocol-api.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "以 OpenAPI 文件维护接口",
+    "url": "https://docs.apifox.com/9330582m0.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 基础知识 > 接口基本信息",
+    "title": "请求头",
+    "url": "https://docs.apifox.com/request-headers.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 基础知识 > 接口基本信息",
+    "title": "HTTP/2",
+    "url": "https://docs.apifox.com/http2.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 基础知识 > 接口基本信息",
+    "title": "请求参数编码解码",
+    "url": "https://docs.apifox.com/request-param-encoding-decoding.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 基础知识 > 接口基本信息",
+    "title": "请求参数与请求体",
+    "url": "https://docs.apifox.com/request-params-and-body.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 基础知识 > 接口基本信息",
+    "title": "请求 URL 与方法",
+    "url": "https://docs.apifox.com/request-url-and-method.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 基础知识 > 认证与授权",
+    "title": "认证与授权",
+    "url": "https://docs.apifox.com/authentication-and-authorization.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 基础知识 > 认证与授权",
+    "title": "支持的授权类型",
+    "url": "https://docs.apifox.com/authorization-types.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 基础知识 > 认证与授权",
+    "title": "Digest Auth",
+    "url": "https://docs.apifox.com/digest-auth.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 基础知识 > 认证与授权",
+    "title": "OAuth 1.0",
+    "url": "https://docs.apifox.com/oauth1.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 基础知识 > 认证与授权",
+    "title": "OAuth 2.0",
+    "url": "https://docs.apifox.com/oauth2.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 基础知识 > 认证与授权",
+    "title": "Hawk Authentication",
+    "url": "https://docs.apifox.com/hawk-auth.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 基础知识 > 认证与授权",
+    "title": "Kerberos",
+    "url": "https://docs.apifox.com/kerberos.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 基础知识 > 认证与授权",
+    "title": "NTLM",
+    "url": "https://docs.apifox.com/ntlm.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 基础知识 > 认证与授权",
+    "title": "Akamai EdgeGrid",
+    "url": "https://docs.apifox.com/akamai-edgegrid.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 基础知识 > 认证与授权",
+    "title": "CA 和客户端证书",
+    "url": "https://docs.apifox.com/ca-and-client-certificates.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 基础知识 > 响应与 Cookie",
+    "title": "响应与 Cookie",
+    "url": "https://docs.apifox.com/response-and-cookie.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 基础知识 > 响应与 Cookie",
+    "title": "API 响应",
+    "url": "https://docs.apifox.com/api-response.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 基础知识 > 响应与 Cookie",
+    "title": "创建和发送 Cookie",
+    "url": "https://docs.apifox.com/create-and-send-cookie.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 基础知识 > 响应与 Cookie",
+    "title": "实际请求",
+    "url": "https://docs.apifox.com/actual-request.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 基础知识 > 响应与 Cookie",
+    "title": "提取响应示例",
+    "url": "https://docs.apifox.com/extract-response-example.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 基础知识 > 请求代理",
+    "title": "网页端中的请求代理",
+    "url": "https://docs.apifox.com/request-proxy-in-web.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 基础知识 > 请求代理",
+    "title": "分享文档中的请求代理",
+    "url": "https://docs.apifox.com/share-document-proxy.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 基础知识 > 请求代理",
+    "title": "客户端中的请求代理",
+    "url": "https://docs.apifox.com/client-side-request-proxy.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 基础知识 > API Hub",
+    "title": "API Hub",
+    "url": "https://docs.apifox.com/apihub.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 数据模型",
+    "title": "数据模型 (Schema)",
+    "url": "https://docs.apifox.com/data-schemas.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 数据模型",
+    "title": "高级数据类型",
+    "url": "https://docs.apifox.com/advanced-data-types.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 数据模型",
+    "title": "构建数据模型",
+    "url": "https://docs.apifox.com/build-data-schemas.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 数据模型",
+    "title": "通过 JSON 等生成",
+    "url": "https://docs.apifox.com/generate-from-json.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 数据模型",
+    "title": "新建数据模型",
+    "url": "https://docs.apifox.com/create-data-schema.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 数据模型 > 数据模型进阶",
+    "title": "使用 oneOf / anyOf / allOf 构建组合模式",
+    "url": "https://docs.apifox.com/oneof-anyof-allof.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 数据模型 > 数据模型进阶",
+    "title": "使用 discriminator 实现多态数据结构",
+    "url": "https://docs.apifox.com/use-discriminator.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 鉴权组件",
+    "title": "鉴权组件",
+    "url": "https://docs.apifox.com/security-schemes.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 鉴权组件",
+    "title": "创建鉴权组件",
+    "url": "https://docs.apifox.com/create-security-scheme.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 鉴权组件",
+    "title": "使用鉴权组件",
+    "url": "https://docs.apifox.com/use-security-schemes.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 鉴权组件",
+    "title": "在线文档中的鉴权组件",
+    "url": "https://docs.apifox.com/security-schemes-in-docs.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 高级功能",
+    "title": "参数列表外观",
+    "url": "https://docs.apifox.com/parameter-list-appearance.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 高级功能",
+    "title": "接口唯一标识",
+    "url": "https://docs.apifox.com/api-unique-identifier.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 高级功能",
+    "title": "关联测试场景",
+    "url": "https://docs.apifox.com/linked-test-scenarios.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 高级功能",
+    "title": "接口状态",
+    "url": "https://docs.apifox.com/api-status.md",
+    "description": ""
+  },
+  {
+    "category": "设计 API > 高级功能",
+    "title": "接口字段",
+    "url": "https://docs.apifox.com/api-fields.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API",
+    "title": "开发和调试 API",
+    "url": "https://docs.apifox.com/develop-and-debug-api.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API",
+    "title": "生成请求",
+    "url": "https://docs.apifox.com/generate-request.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API",
+    "title": "发送请求",
+    "url": "https://docs.apifox.com/send-request.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API",
+    "title": "请求历史",
+    "url": "https://docs.apifox.com/request-history.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API",
+    "title": "接口调试用例",
+    "url": "https://docs.apifox.com/api-test-cases.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API",
+    "title": "单接口用例",
+    "url": "https://docs.apifox.com/7227782m0.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API",
+    "title": "动态值",
+    "url": "https://docs.apifox.com/dynamic-values.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API",
+    "title": "校验响应",
+    "url": "https://docs.apifox.com/validate-response.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API",
+    "title": "文档模式/调试模式",
+    "url": "https://docs.apifox.com/design-and-request-mode.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API",
+    "title": "生成代码",
+    "url": "https://docs.apifox.com/generate-code.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 环境和变量",
+    "title": "环境和变量",
+    "url": "https://docs.apifox.com/environments-and-variables.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 环境和变量",
+    "title": "环境管理",
+    "url": "https://docs.apifox.com/environments-and-services.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 环境和变量",
+    "title": "全局/环境/模块/临时变量",
+    "url": "https://docs.apifox.com/global-environment-session-variables.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 环境和变量 > Vault Secrets（密钥库）",
+    "title": "Vault Secrets（密钥库）",
+    "url": "https://docs.apifox.com/vault-secrets.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 前后置操作&脚本",
+    "title": "前后置操作",
+    "url": "https://docs.apifox.com/pre-post-processors.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 前后置操作&脚本",
+    "title": "断言",
+    "url": "https://docs.apifox.com/assertions.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 前后置操作&脚本",
+    "title": "提取变量",
+    "url": "https://docs.apifox.com/extract-variables.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 前后置操作&脚本",
+    "title": "等待时间",
+    "url": "https://docs.apifox.com/wait-time.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 前后置操作&脚本",
+    "title": "安全性",
+    "url": "https://docs.apifox.com/8886331m0.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 前后置操作&脚本 > 数据库操作",
+    "title": "数据库操作",
+    "url": "https://docs.apifox.com/database.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 前后置操作&脚本 > 数据库操作",
+    "title": "MySQL",
+    "url": "https://docs.apifox.com/mysql.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 前后置操作&脚本 > 数据库操作",
+    "title": "MongoDB",
+    "url": "https://docs.apifox.com/mongodb.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 前后置操作&脚本 > 数据库操作",
+    "title": "Redis",
+    "url": "https://docs.apifox.com/redis.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 前后置操作&脚本 > 数据库操作",
+    "title": "Oracle",
+    "url": "https://docs.apifox.com/oracle.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 前后置操作&脚本 > 使用脚本",
+    "title": "使用脚本",
+    "url": "https://docs.apifox.com/scripts.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 前后置操作&脚本 > 使用脚本",
+    "title": "前置脚本",
+    "url": "https://docs.apifox.com/pre-request-scripts.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 前后置操作&脚本 > 使用脚本",
+    "title": "后置脚本",
+    "url": "https://docs.apifox.com/post-request-scripts.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 前后置操作&脚本 > 使用脚本",
+    "title": "公共脚本",
+    "url": "https://docs.apifox.com/common-scripts.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 前后置操作&脚本 > 使用脚本",
+    "title": "pm 脚本 API",
+    "url": "https://docs.apifox.com/postman-script-api.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 前后置操作&脚本 > 使用脚本",
+    "title": "使用 JS 类库",
+    "url": "https://docs.apifox.com/js-libraries.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 前后置操作&脚本 > 使用脚本",
+    "title": "响应数据可视化",
+    "url": "https://docs.apifox.com/response-data-visualization.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 前后置操作&脚本 > 使用脚本",
+    "title": "调用外部程序",
+    "url": "https://docs.apifox.com/call-external-programs.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 前后置操作&脚本 > 脚本示例",
+    "title": "断言示例",
+    "url": "https://docs.apifox.com/assertion-examples.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 前后置操作&脚本 > 脚本示例",
+    "title": "脚本使用变量",
+    "url": "https://docs.apifox.com/use-variables-in-scripts.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 前后置操作&脚本 > 脚本示例",
+    "title": "脚本读取/修改接口请求信息",
+    "url": "https://docs.apifox.com/access-modify-request-data.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 前后置操作&脚本 > 常见问题",
+    "title": "如何获取动态参数的真实值并加密？",
+    "url": "https://docs.apifox.com/5831263m0.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > 前后置操作&脚本 > 常见问题",
+    "title": "脚本运行后，提取的数字（bigint）精度丢失应该如何处理？",
+    "url": "https://docs.apifox.com/5831265m0.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > API 调试",
+    "title": "SSE 调试",
+    "url": "https://docs.apifox.com/sse.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > API 调试",
+    "title": "MCP 调试",
+    "url": "https://docs.apifox.com/mcp.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > API 调试",
+    "title": "GraphQL 调试",
+    "url": "https://docs.apifox.com/graphql.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > API 调试",
+    "title": "WebSocket 调试",
+    "url": "https://docs.apifox.com/websocket.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > API 调试",
+    "title": "Socket.IO 调试",
+    "url": "https://docs.apifox.com/socketio.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > API 调试",
+    "title": "SOAP/WebService",
+    "url": "https://docs.apifox.com/soap.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > API 调试",
+    "title": "gRPC 调试",
+    "url": "https://docs.apifox.com/grpc.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > API 调试",
+    "title": "Webhook 调试",
+    "url": "https://docs.apifox.com/webhook.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > API 调试",
+    "title": "AI Agent Debugger",
+    "url": "https://docs.apifox.com/ai-agent-debugger.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > API 调试",
+    "title": "A2A Debugger",
+    "url": "https://docs.apifox.com/a2a-debugger.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > API 调试",
+    "title": "使用请求代理调试",
+    "url": "https://docs.apifox.com/request-proxy-debugging.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > API 调试 > Dubbo 调试",
+    "title": "新建 Dubbo 接口",
+    "url": "https://docs.apifox.com/create-dubbo-api.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > API 调试 > Dubbo 调试",
+    "title": "调试 Dubbo 接口",
+    "url": "https://docs.apifox.com/debug-dubbo-api.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > API 调试 > Dubbo 调试",
+    "title": "Dubbo 接口文档",
+    "url": "https://docs.apifox.com/dubbo-api-documentation.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > API 调试 > TCP（Socket）",
+    "title": "Socket 接口功能简介",
+    "url": "https://docs.apifox.com/tcp-socket.md",
+    "description": ""
+  },
+  {
+    "category": "开发和调试 API > API 调试 > TCP（Socket）",
+    "title": "报文数据处理器",
+    "url": "https://docs.apifox.com/message-data-processor.md",
+    "description": ""
+  },
+  {
+    "category": "Mock 数据",
+    "title": "Mock 数据",
+    "url": "https://docs.apifox.com/mock.md",
+    "description": ""
+  },
+  {
+    "category": "Mock 数据",
+    "title": "智能 Mock",
+    "url": "https://docs.apifox.com/smart-mock.md",
+    "description": ""
+  },
+  {
+    "category": "Mock 数据",
+    "title": "自定义 Mock",
+    "url": "https://docs.apifox.com/custom-mock.md",
+    "description": ""
+  },
+  {
+    "category": "Mock 数据",
+    "title": "Mock 优先级",
+    "url": "https://docs.apifox.com/mock-priority-rules.md",
+    "description": ""
+  },
+  {
+    "category": "Mock 数据",
+    "title": "Mock 脚本",
+    "url": "https://docs.apifox.com/mock-scripts.md",
+    "description": ""
+  },
+  {
+    "category": "Mock 数据",
+    "title": "云端 Mock",
+    "url": "https://docs.apifox.com/cloud-mock.md",
+    "description": ""
+  },
+  {
+    "category": "Mock 数据",
+    "title": "自托管 Runner Mock",
+    "url": "https://docs.apifox.com/runner-mock.md",
+    "description": ""
+  },
+  {
+    "category": "自动化测试",
+    "title": "自动化测试",
+    "url": "https://docs.apifox.com/automated-testing.md",
+    "description": ""
+  },
+  {
+    "category": "自动化测试 > 编排场景用例",
+    "title": "新建场景用例",
+    "url": "https://docs.apifox.com/new-test-scenario.md",
+    "description": ""
+  },
+  {
+    "category": "自动化测试 > 编排场景用例",
+    "title": "测试步骤间传递数据",
+    "url": "https://docs.apifox.com/pass-data-between-test-steps.md",
+    "description": ""
+  },
+  {
+    "category": "自动化测试 > 编排场景用例",
+    "title": "测试流程控制条件",
+    "url": "https://docs.apifox.com/flow-control-conditions.md",
+    "description": ""
+  },
+  {
+    "category": "自动化测试 > 编排场景用例",
+    "title": "从接口/用例同步数据",
+    "url": "https://docs.apifox.com/sync-from-endpoint-or-test-case.md",
+    "description": ""
+  },
+  {
+    "category": "自动化测试 > 编排场景用例",
+    "title": "跨项目导入接口/用例",
+    "url": "https://docs.apifox.com/import-apis-or-cases-cross-projects.md",
+    "description": ""
+  },
+  {
+    "category": "自动化测试 > 编排场景用例",
+    "title": "导出场景用例数据",
+    "url": "https://docs.apifox.com/export-test-scenario-data.md",
+    "description": ""
+  },
+  {
+    "category": "自动化测试 > 运行场景用例",
+    "title": "运行场景用例",
+    "url": "https://docs.apifox.com/run-test-scenarios.md",
+    "description": ""
+  },
+  {
+    "category": "自动化测试 > 运行场景用例",
+    "title": "批量运行场景用例",
+    "url": "https://docs.apifox.com/batch-run-test-scenarios.md",
+    "description": ""
+  },
+  {
+    "category": "自动化测试 > 运行场景用例",
+    "title": "数据驱动测试",
+    "url": "https://docs.apifox.com/data-driven-testing.md",
+    "description": ""
+  },
+  {
+    "category": "自动化测试 > 运行场景用例",
+    "title": "共用测试数据",
+    "url": "https://docs.apifox.com/8210700m0.md",
+    "description": ""
+  },
+  {
+    "category": "自动化测试 > 运行场景用例",
+    "title": "定时任务",
+    "url": "https://docs.apifox.com/scheduled-tasks.md",
+    "description": ""
+  },
+  {
+    "category": "自动化测试 > 运行场景用例",
+    "title": "管理其它项目接口的运行环境",
+    "url": "https://docs.apifox.com/manage-cross-project-environments.md",
+    "description": ""
+  },
+  {
+    "category": "自动化测试 > 测试套件",
+    "title": "测试套件",
+    "url": "https://docs.apifox.com/7927162m0.md",
+    "description": ""
+  },
+  {
+    "category": "自动化测试 > 测试套件",
+    "title": "新建测试套件",
+    "url": "https://docs.apifox.com/7927169m0.md",
+    "description": ""
+  },
+  {
+    "category": "自动化测试 > 测试套件",
+    "title": "编排测试套件",
+    "url": "https://docs.apifox.com/7927280m0.md",
+    "description": ""
+  },
+  {
+    "category": "自动化测试 > 测试套件",
+    "title": "本地运行测试套件",
+    "url": "https://docs.apifox.com/7927296m0.md",
+    "description": ""
+  },
+  {
+    "category": "自动化测试 > 测试套件",
+    "title": "定时任务",
+    "url": "https://docs.apifox.com/7927622m0.md",
+    "description": ""
+  },
+  {
+    "category": "自动化测试 > 测试报告",
+    "title": "测试报告",
+    "url": "https://docs.apifox.com/test-reports.md",
+    "description": ""
+  },
+  {
+    "category": "自动化测试 > API 测试",
+    "title": "性能测试",
+    "url": "https://docs.apifox.com/performance-testing.md",
+    "description": ""
+  },
+  {
+    "category": "自动化测试 > API 测试",
+    "title": "集成测试",
+    "url": "https://docs.apifox.com/integration-testing.md",
+    "description": ""
+  },
+  {
+    "category": "自动化测试 > API 测试",
+    "title": "端到端测试",
+    "url": "https://docs.apifox.com/end-to-end-testing.md",
+    "description": ""
+  },
+  {
+    "category": "自动化测试 > API 测试",
+    "title": "回归测试",
+    "url": "https://docs.apifox.com/regression-testing.md",
+    "description": ""
+  },
+  {
+    "category": "自动化测试 > API 测试",
+    "title": "契约测试",
+    "url": "https://docs.apifox.com/contract-testing.md",
+    "description": ""
+  },
+  {
+    "category": "Apifox CLI",
+    "title": "Apifox CLI",
+    "url": "https://docs.apifox.com/apifox-cli.md",
+    "description": ""
+  },
+  {
+    "category": "Apifox CLI",
+    "title": "安装和运行 CLI",
+    "url": "https://docs.apifox.com/install-and-run-cli.md",
+    "description": ""
+  },
+  {
+    "category": "Apifox CLI",
+    "title": "CLI 命令选项",
+    "url": "https://docs.apifox.com/cli-command-options.md",
+    "description": ""
+  },
+  {
+    "category": "Apifox CLI",
+    "title": "CLI 运行测试套件",
+    "url": "https://docs.apifox.com/7927315m0.md",
+    "description": ""
+  },
+  {
+    "category": "Apifox CLI",
+    "title": "使用 Apifox CLI 搭配 AI Agent",
+    "url": "https://docs.apifox.com/9212297m0.md",
+    "description": ""
+  },
+  {
+    "category": "Apifox CLI > CI/CD",
+    "title": "CI/CD 集成",
+    "url": "https://docs.apifox.com/cicd.md",
+    "description": ""
+  },
+  {
+    "category": "Apifox CLI > CI/CD",
+    "title": "Git 提交自动触发测试",
+    "url": "https://docs.apifox.com/git-commit-triggered-testing.md",
+    "description": ""
+  },
+  {
+    "category": "Apifox CLI > CI/CD",
+    "title": "与 Gitlab 集成",
+    "url": "https://docs.apifox.com/integration-with-gitlab.md",
+    "description": ""
+  },
+  {
+    "category": "Apifox CLI > CI/CD",
+    "title": "与 Jenkins 集成",
+    "url": "https://docs.apifox.com/integration-with-jenkins.md",
+    "description": ""
+  },
+  {
+    "category": "Apifox CLI > CI/CD",
+    "title": "与 Github Actions 集成",
+    "url": "https://docs.apifox.com/integration-with-github-actions.md",
+    "description": ""
+  },
+  {
+    "category": "Apifox CLI > CI/CD",
+    "title": "与其它更多 CI/CD 平台集成",
+    "url": "https://docs.apifox.com/integration-with-other-ci-cd-platforms.md",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档",
+    "title": "自定义域名",
+    "url": "https://docs.apifox.com/custom-domain.md",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档",
+    "title": "分享文档",
+    "url": "https://docs.apifox.com/api-documentation.md",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档",
+    "title": "快捷分享",
+    "url": "https://docs.apifox.com/quick-share.md",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档",
+    "title": "SEO 设置",
+    "url": "https://docs.apifox.com/seo-settings.md",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档",
+    "title": "页面布局设置",
+    "url": "https://docs.apifox.com/page-layout-settings.md",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档",
+    "title": "AI 相关特性",
+    "url": "https://docs.apifox.com/ai-features.md",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档",
+    "title": "发布文档站",
+    "url": "https://docs.apifox.com/publish-documentation-site.md",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档",
+    "title": "自定义页面代码（ CSS / JS / HTML）",
+    "url": "https://docs.apifox.com/custom-css-js-html.md",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档",
+    "title": "查看 API 文档",
+    "url": "https://docs.apifox.com/view-api-documentation.md",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档 > 高级设置",
+    "title": "文档站搜索设置",
+    "url": "https://docs.apifox.com/documentation-site-search-settings.md",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档 > 高级设置",
+    "title": "跨域代理",
+    "url": "https://docs.apifox.com/cross-origin-proxy.md",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档 > 高级设置",
+    "title": "文档站接入 Google Analytics",
+    "url": "https://docs.apifox.com/google-analytics-integration.md",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档 > 高级设置",
+    "title": "文档左侧目录设置",
+    "url": "https://docs.apifox.com/documentation-sidebar-settings.md",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档 > 高级设置",
+    "title": "文档可见性设置",
+    "url": "https://docs.apifox.com/documentation-visibility-settings.md",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档 > 高级设置",
+    "title": "在线 URL 链接规范",
+    "url": "https://docs.apifox.com/url-link-conventions.md",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档 > API 版本",
+    "title": "API 版本",
+    "url": "https://docs.apifox.com/api-version.md",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档 > API 版本",
+    "title": "创建 API 版本",
+    "url": "https://docs.apifox.com/create-api-version.md",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档 > API 版本",
+    "title": "发布 API 版本",
+    "url": "https://docs.apifox.com/publish-api-version.md",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档 > API 版本",
+    "title": "快捷分享 API 版本",
+    "url": "https://docs.apifox.com/quick-share-api-version.md",
+    "description": ""
+  },
+  {
+    "category": "迭代分支",
+    "title": "迭代分支",
+    "url": "https://docs.apifox.com/sprint-branch.md",
+    "description": ""
+  },
+  {
+    "category": "迭代分支",
+    "title": "新建迭代分支",
+    "url": "https://docs.apifox.com/create-sprint-branch.md",
+    "description": ""
+  },
+  {
+    "category": "迭代分支",
+    "title": "在迭代分支中改动 API",
+    "url": "https://docs.apifox.com/api-changes-in-sprint-branch.md",
+    "description": ""
+  },
+  {
+    "category": "迭代分支",
+    "title": "在迭代分支中测试 API",
+    "url": "https://docs.apifox.com/test-api-in-sprint-branch.md",
+    "description": ""
+  },
+  {
+    "category": "迭代分支",
+    "title": "合并迭代分支",
+    "url": "https://docs.apifox.com/merge-sprint-branch.md",
+    "description": ""
+  },
+  {
+    "category": "迭代分支",
+    "title": "管理迭代分支",
+    "url": "https://docs.apifox.com/manage-sprint-branch.md",
+    "description": ""
+  },
+  {
+    "category": "迭代分支",
+    "title": "AI 分支",
+    "url": "https://docs.apifox.com/ai-branch.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心",
+    "title": "基本概念",
+    "url": "https://docs.apifox.com/management-center.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心",
+    "title": "团队入驻",
+    "url": "https://docs.apifox.com/onboard-team.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 管理项目",
+    "title": "项目基本操作",
+    "url": "https://docs.apifox.com/project-basic-operations.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 管理项目",
+    "title": "项目成员管理",
+    "url": "https://docs.apifox.com/project-member-management.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 管理项目 > 通知设置",
+    "title": "消息通知",
+    "url": "https://docs.apifox.com/message-notifications.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 管理项目 > 通知设置",
+    "title": "通知对象",
+    "url": "https://docs.apifox.com/notification-targets.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 管理项目 > 通知设置",
+    "title": "通知事件",
+    "url": "https://docs.apifox.com/notification-events.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 管理项目 > 项目资源",
+    "title": "数据库连接",
+    "url": "https://docs.apifox.com/database-connections.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 管理项目 > 项目资源",
+    "title": "Git 仓库连接",
+    "url": "https://docs.apifox.com/7230090m0.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 管理团队",
+    "title": "团队基本操作",
+    "url": "https://docs.apifox.com/team-basic-operations.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 管理团队",
+    "title": "团队成员管理",
+    "url": "https://docs.apifox.com/team-member-management.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 管理团队",
+    "title": "成员角色与权限设置",
+    "url": "https://docs.apifox.com/member-roles-and-permissions.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 管理团队",
+    "title": "团队动态",
+    "url": "https://docs.apifox.com/team-activities.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 管理团队 > 团队资源",
+    "title": "通用 Runner",
+    "url": "https://docs.apifox.com/universal-runner.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 管理团队 > 团队资源",
+    "title": "请求代理 Agent（Proxy）",
+    "url": "https://docs.apifox.com/request-proxy-agent.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 管理团队 > 团队资源",
+    "title": "团队变量",
+    "url": "https://docs.apifox.com/team-variables.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 管理团队 > 实时协作",
+    "title": "团队协作",
+    "url": "https://docs.apifox.com/team-collaboration.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 管理组织",
+    "title": "组织基本操作",
+    "url": "https://docs.apifox.com/organization-basic-operations.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 管理组织",
+    "title": "审计日志",
+    "url": "https://docs.apifox.com/9254394m0.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 管理组织",
+    "title": "管理组织内的团队",
+    "url": "https://docs.apifox.com/managing-teams-in-org.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 管理组织 > 单点登录（SSO）",
+    "title": "单点登录（SSO）",
+    "url": "https://docs.apifox.com/sso.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 管理组织 > 单点登录（SSO）",
+    "title": "为组织配置单点登录",
+    "url": "https://docs.apifox.com/configure-sso-for-organization.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 管理组织 > 单点登录（SSO）",
+    "title": "管理用户账号",
+    "url": "https://docs.apifox.com/manage-user-accounts.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 管理组织 > 单点登录（SSO）",
+    "title": "将组映射到团队",
+    "url": "https://docs.apifox.com/map-groups-to-teams.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 管理组织 > 单点登录（SSO）",
+    "title": "Microsoft Entra ID",
+    "url": "https://docs.apifox.com/microsoft-entra-id.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 管理组织 > SCIM 用户管理",
+    "title": "SCIM 用户管理",
+    "url": "https://docs.apifox.com/scim-user-management.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 管理组织 > SCIM 用户管理",
+    "title": "Microsoft Entra ID",
+    "url": "https://docs.apifox.com/scmi-microsoft-entra-id.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 管理组织 > 组织资源",
+    "title": "自托管 Runner",
+    "url": "https://docs.apifox.com/self-hosted-runner.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 安全管理",
+    "title": "密钥扫描",
+    "url": "https://docs.apifox.com/9252226m0.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 订单管理",
+    "title": "管理订阅",
+    "url": "https://docs.apifox.com/manage-subscriptions.md",
+    "description": ""
+  },
+  {
+    "category": "管理中心 > 订单管理",
+    "title": "组织付费经理",
+    "url": "https://docs.apifox.com/7191758m0.md",
+    "description": ""
+  },
+  {
+    "category": "离线空间",
+    "title": "离线空间",
+    "url": "https://docs.apifox.com/offline-space.md",
+    "description": ""
+  },
+  {
+    "category": "IDEA 插件",
+    "title": "快速上手",
+    "url": "https://docs.apifox.com/apifox-idea-plugin.md",
+    "description": ""
+  },
+  {
+    "category": "IDEA 插件",
+    "title": "生成接口文档",
+    "url": "https://docs.apifox.com/generate-api-docs-with-idea.md",
+    "description": ""
+  },
+  {
+    "category": "IDEA 插件",
+    "title": "生成数据模型",
+    "url": "https://docs.apifox.com/generate-data-schemas-with-idea.md",
+    "description": ""
+  },
+  {
+    "category": "IDEA 插件 > 配置",
+    "title": "全局配置",
+    "url": "https://docs.apifox.com/5801717m0.md",
+    "description": ""
+  },
+  {
+    "category": "IDEA 插件 > 配置",
+    "title": "项目内配置",
+    "url": "https://docs.apifox.com/5801720m0.md",
+    "description": ""
+  },
+  {
+    "category": "IDEA 插件 > 配置",
+    "title": "可配置规则",
+    "url": "https://docs.apifox.com/5801721m0.md",
+    "description": ""
+  },
+  {
+    "category": "IDEA 插件 > 配置",
+    "title": "脚本工具",
+    "url": "https://docs.apifox.com/5801722m0.md",
+    "description": ""
+  },
+  {
+    "category": "IDEA 插件 > 配置",
+    "title": "Groovy 本地扩展",
+    "url": "https://docs.apifox.com/5801723m0.md",
+    "description": ""
+  },
+  {
+    "category": "IDEA 插件 > 进阶配置",
+    "title": "注释规范说明",
+    "url": "https://docs.apifox.com/5801730m0.md",
+    "description": ""
+  },
+  {
+    "category": "IDEA 插件 > 进阶配置",
+    "title": "框架支持",
+    "url": "https://docs.apifox.com/5801731m0.md",
+    "description": ""
+  },
+  {
+    "category": "IDEA 插件 > 常见问题",
+    "title": "常见问题",
+    "url": "https://docs.apifox.com/apifox-idea-plugin-faqs.md",
+    "description": ""
+  },
+  {
+    "category": "浏览器扩展",
+    "title": "Chrome 浏览器扩展安装",
+    "url": "https://docs.apifox.com/chrome-extension.md",
+    "description": ""
+  },
+  {
+    "category": "浏览器扩展",
+    "title": "Microsoft Edge 浏览器扩展安装",
+    "url": "https://docs.apifox.com/microsoft-edge-extension.md",
+    "description": ""
+  },
+  {
+    "category": "Apifox AI 功能",
+    "title": "总览",
+    "url": "https://docs.apifox.com/apifox-ai.md",
+    "description": ""
+  },
+  {
+    "category": "Apifox AI 功能",
+    "title": "启用 AI 功能",
+    "url": "https://docs.apifox.com/enable-ai-features.md",
+    "description": ""
+  },
+  {
+    "category": "Apifox AI 功能",
+    "title": "AI 生成测试用例",
+    "url": "https://docs.apifox.com/generate-test-cases.md",
+    "description": "AI 自动生成接口测试用例，可以让 AI 基于当前接口文档快速生成大量测试用例，用以验证单接口的功能响应、规范、稳定和安全情况。同时，可按照用例分组、用例类型管理用例。"
+  },
+  {
+    "category": "Apifox AI 功能",
+    "title": "修改数据模型",
+    "url": "https://docs.apifox.com/generate-data-schemas-with-ai.md",
+    "description": ""
+  },
+  {
+    "category": "Apifox AI 功能",
+    "title": "接口规范性检测",
+    "url": "https://docs.apifox.com/api-compliance-check.md",
+    "description": ""
+  },
+  {
+    "category": "Apifox AI 功能",
+    "title": "接口文档完整性检测",
+    "url": "https://docs.apifox.com/api-docs-completeness-check.md",
+    "description": ""
+  },
+  {
+    "category": "Apifox AI 功能",
+    "title": "字段命名",
+    "url": "https://docs.apifox.com/field-naming.md",
+    "description": ""
+  },
+  {
+    "category": "Apifox AI 功能",
+    "title": "常见问题",
+    "url": "https://docs.apifox.com/apifox-ai-faqs.md",
+    "description": ""
+  },
+  {
+    "category": "Apifox MCP Server",
+    "title": "新版 MCP 内测",
+    "url": "https://docs.apifox.com/8395000m0.md",
+    "description": ""
+  },
+  {
+    "category": "Apifox MCP Server",
+    "title": "Apifox MCP Server",
+    "url": "https://docs.apifox.com/apifox-mcp-server.md",
+    "description": ""
+  },
+  {
+    "category": "Apifox MCP Server",
+    "title": "通过 MCP 使用 Apifox 项目内的 API 文档",
+    "url": "https://docs.apifox.com/6327888m0.md",
+    "description": ""
+  },
+  {
+    "category": "Apifox MCP Server",
+    "title": "通过 MCP 使用公开发布的 API 文档",
+    "url": "https://docs.apifox.com/6327890m0.md",
+    "description": ""
+  },
+  {
+    "category": "Apifox MCP Server",
+    "title": "通过 MCP 使用 OpenAPI/Swagger 文档",
+    "url": "https://docs.apifox.com/6327891m0.md",
+    "description": ""
+  },
+  {
+    "category": "最佳实践",
+    "title": "最佳实践",
+    "url": "https://docs.apifox.com/5743521m0.md",
+    "description": ""
+  },
+  {
+    "category": "最佳实践",
+    "title": "接口之间如何传递数据",
+    "url": "https://docs.apifox.com/5793498m0.md",
+    "description": ""
+  },
+  {
+    "category": "最佳实践",
+    "title": "登录态（Auth）如何处理",
+    "url": "https://docs.apifox.com/5802184m0.md",
+    "description": ""
+  },
+  {
+    "category": "最佳实践",
+    "title": "接口签名如何处理",
+    "url": "https://docs.apifox.com/5802226m0.md",
+    "description": ""
+  },
+  {
+    "category": "最佳实践",
+    "title": "如何加密/解密接口数据",
+    "url": "https://docs.apifox.com/5802338m0.md",
+    "description": ""
+  },
+  {
+    "category": "最佳实践",
+    "title": "Jenkins 定时触发任务",
+    "url": "https://docs.apifox.com/5802381m0.md",
+    "description": ""
+  },
+  {
+    "category": "最佳实践",
+    "title": "如何计算 AI 问答成本",
+    "url": "https://docs.apifox.com/5835636m0.md",
+    "description": ""
+  },
+  {
+    "category": "最佳实践",
+    "title": "与其他成员共用数据库连接配置",
+    "url": "https://docs.apifox.com/6378711m0.md",
+    "description": ""
+  },
+  {
+    "category": "最佳实践",
+    "title": "通过 CLI 运行包含云端数据库连接配置的测试场景",
+    "url": "https://docs.apifox.com/6378956m0.md",
+    "description": ""
+  },
+  {
+    "category": "最佳实践",
+    "title": "通过 Runner 运行包含云端数据库连接配置的测试场景",
+    "url": "https://docs.apifox.com/6379146m0.md",
+    "description": ""
+  },
+  {
+    "category": "最佳实践",
+    "title": "Apifox 测试步骤之间怎么传递数据？",
+    "url": "https://docs.apifox.com/6822783m0.md",
+    "description": ""
+  },
+  {
+    "category": "账号&应用设置",
+    "title": "账号设置",
+    "url": "https://docs.apifox.com/account-settings.md",
+    "description": ""
+  },
+  {
+    "category": "账号&应用设置",
+    "title": "API 访问令牌",
+    "url": "https://docs.apifox.com/api-access-token.md",
+    "description": ""
+  },
+  {
+    "category": "账号&应用设置",
+    "title": "通知",
+    "url": "https://docs.apifox.com/notifications.md",
+    "description": ""
+  },
+  {
+    "category": "账号&应用设置",
+    "title": "语言设置",
+    "url": "https://docs.apifox.com/language-settings.md",
+    "description": ""
+  },
+  {
+    "category": "账号&应用设置",
+    "title": "快捷键",
+    "url": "https://docs.apifox.com/keyboard-shortcuts.md",
+    "description": ""
+  },
+  {
+    "category": "账号&应用设置",
+    "title": "网络代理",
+    "url": "https://docs.apifox.com/network-proxy.md",
+    "description": ""
+  },
+  {
+    "category": "账号&应用设置",
+    "title": "数据备份与恢复",
+    "url": "https://docs.apifox.com/data-backup-restore.md",
+    "description": ""
+  },
+  {
+    "category": "账号&应用设置",
+    "title": "更新 Apifox",
+    "url": "https://docs.apifox.com/update-apifox.md",
+    "description": ""
+  },
+  {
+    "category": "账号&应用设置",
+    "title": "实验性功能",
+    "url": "https://docs.apifox.com/experimental-features.md",
+    "description": ""
+  },
+  {
+    "category": "身份验证 & Auth 鉴权指南",
+    "title": "什么是 API Key",
+    "url": "https://docs.apifox.com/what-is-api-key.md",
+    "description": ""
+  },
+  {
+    "category": "身份验证 & Auth 鉴权指南",
+    "title": "什么是 Bearer Token",
+    "url": "https://docs.apifox.com/what-is-bearer-token.md",
+    "description": ""
+  },
+  {
+    "category": "身份验证 & Auth 鉴权指南",
+    "title": "什么是 JWT",
+    "url": "https://docs.apifox.com/what-is-jwt.md",
+    "description": ""
+  },
+  {
+    "category": "身份验证 & Auth 鉴权指南",
+    "title": "什么是 Basic Auth",
+    "url": "https://docs.apifox.com/what-is-basic-auth.md",
+    "description": ""
+  },
+  {
+    "category": "身份验证 & Auth 鉴权指南",
+    "title": "什么是 Digest Auth",
+    "url": "https://docs.apifox.com/what-is-digest-auth.md",
+    "description": ""
+  },
+  {
+    "category": "身份验证 & Auth 鉴权指南",
+    "title": "什么是 OAuth 1.0",
+    "url": "https://docs.apifox.com/what-is-oauth-1.md",
+    "description": ""
+  },
+  {
+    "category": "身份验证 & Auth 鉴权指南 > 什么是 OAuth 2.0",
+    "title": "什么是 OAuth 2.0",
+    "url": "https://docs.apifox.com/what-is-oauth-2.md",
+    "description": ""
+  },
+  {
+    "category": "身份验证 & Auth 鉴权指南 > 什么是 OAuth 2.0",
+    "title": "授权码授权类型",
+    "url": "https://docs.apifox.com/authorization-code-grant.md",
+    "description": ""
+  },
+  {
+    "category": "身份验证 & Auth 鉴权指南 > 什么是 OAuth 2.0",
+    "title": "授权码授权类型，带有 PKCE",
+    "url": "https://docs.apifox.com/authorization-code-grant-with-pkce.md",
+    "description": ""
+  },
+  {
+    "category": "身份验证 & Auth 鉴权指南 > 什么是 OAuth 2.0",
+    "title": "隐式授权类型",
+    "url": "https://docs.apifox.com/implicit-grant.md",
+    "description": ""
+  },
+  {
+    "category": "身份验证 & Auth 鉴权指南 > 什么是 OAuth 2.0",
+    "title": "密码凭证授权类型",
+    "url": "https://docs.apifox.com/password-credentials-grant.md",
+    "description": ""
+  },
+  {
+    "category": "身份验证 & Auth 鉴权指南 > 什么是 OAuth 2.0",
+    "title": "客户端凭证授权类型",
+    "url": "https://docs.apifox.com/client-credentials-grant.md",
+    "description": ""
+  },
+  {
+    "category": "服务与隐私协议",
+    "title": "服务协议",
+    "url": "https://docs.apifox.com/service-agreement.md",
+    "description": ""
+  },
+  {
+    "category": "服务与隐私协议",
+    "title": "隐私协议",
+    "url": "https://docs.apifox.com/privacy-policy.md",
+    "description": ""
+  },
+  {
+    "category": "服务与隐私协议",
+    "title": "服务等级协议",
+    "url": "https://docs.apifox.com/sla.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料",
+    "title": "API 设计优先理念",
+    "url": "https://docs.apifox.com/api-first-design.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料",
+    "title": "JSON Schema 介绍",
+    "url": "https://docs.apifox.com/json-schema.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料",
+    "title": "JSONPath 介绍",
+    "url": "https://docs.apifox.com/jsonpath.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料",
+    "title": "XPath 介绍",
+    "url": "https://docs.apifox.com/xpath.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料",
+    "title": "Apifox Markdown 语法",
+    "url": "https://docs.apifox.com/apifox-markdown.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料",
+    "title": "CSV 格式规范",
+    "url": "https://docs.apifox.com/csv.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料",
+    "title": "正则表达式",
+    "url": "https://docs.apifox.com/regex.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料",
+    "title": "安装 Java 环境",
+    "url": "https://docs.apifox.com/install-java.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料",
+    "title": "Runner 运行环境",
+    "url": "https://docs.apifox.com/runner-environment.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料",
+    "title": "常见编程语言对应的数据类型",
+    "url": "https://docs.apifox.com/programming-data-types.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料",
+    "title": "Socket 粘包和分包问题",
+    "url": "https://docs.apifox.com/socket-packet-fragmentation-and-merging.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料",
+    "title": "词汇表",
+    "url": "https://docs.apifox.com/glossary.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > Apifox Swagger 扩展",
+    "title": "概述",
+    "url": "https://docs.apifox.com/apifox-openapi-swagger-extension.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > Apifox Swagger 扩展",
+    "title": "x-apifox-folder",
+    "url": "https://docs.apifox.com/x-apifox-folder.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > Apifox Swagger 扩展",
+    "title": "x-apifox-status",
+    "url": "https://docs.apifox.com/x-apifox-status.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > Apifox Swagger 扩展",
+    "title": "x-apifox-name",
+    "url": "https://docs.apifox.com/x-apifox-name.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > Apifox Swagger 扩展",
+    "title": "x-apifox-maintainer",
+    "url": "https://docs.apifox.com/x-apifox-maintainer.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > Apifox JSON Schema 扩展",
+    "title": "概述",
+    "url": "https://docs.apifox.com/apifox-json-schema-extension.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > Apifox JSON Schema 扩展",
+    "title": "x-apifox-mock",
+    "url": "https://docs.apifox.com/x-apifox-mock.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > Apifox JSON Schema 扩展",
+    "title": "x-apifox-orders",
+    "url": "https://docs.apifox.com/x-apifox-orders.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > Apifox JSON Schema 扩展",
+    "title": "x-apifox-enum",
+    "url": "https://docs.apifox.com/x-apifox-enum.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料",
+    "title": "动态值表达式",
+    "url": "https://docs.apifox.com/46262793f0.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "概述",
+    "url": "https://docs.apifox.com/dynamic-value-expressions.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "航空公司（Airline）",
+    "url": "https://docs.apifox.com/5589658m0.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "动物（Animal）",
+    "url": "https://docs.apifox.com/5589662m0.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "颜色（Color）",
+    "url": "https://docs.apifox.com/5589666m0.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "商业（Commerce）",
+    "url": "https://docs.apifox.com/5589669m0.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "公司（Company）",
+    "url": "https://docs.apifox.com/5589672m0.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "数据库（Company）",
+    "url": "https://docs.apifox.com/5589675m0.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "数据类型（Datatype）",
+    "url": "https://docs.apifox.com/5589677m0.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "日期（Date）",
+    "url": "https://docs.apifox.com/5589680m0.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "金融（Finance）",
+    "url": "https://docs.apifox.com/5589683m0.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "食物（Food）",
+    "url": "https://docs.apifox.com/5589685m0.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "Git",
+    "url": "https://docs.apifox.com/5589688m0.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "黑客（Hacker）",
+    "url": "https://docs.apifox.com/5589689m0.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "辅助函数（Helpers）",
+    "url": "https://docs.apifox.com/5589690m0.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "图片（Image）",
+    "url": "https://docs.apifox.com/5589695m0.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "网络（Internet）",
+    "url": "https://docs.apifox.com/5589698m0.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "地点和位置（Location）",
+    "url": "https://docs.apifox.com/5589700m0.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "随机文本单词（Lorem）",
+    "url": "https://docs.apifox.com/5589703m0.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "音乐（Music）",
+    "url": "https://docs.apifox.com/5589733m0.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "数字（Number）",
+    "url": "https://docs.apifox.com/5589760m0.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "人物（Person）",
+    "url": "https://docs.apifox.com/5589761m0.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "电话（Phone）",
+    "url": "https://docs.apifox.com/5589763m0.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "科学（Science）",
+    "url": "https://docs.apifox.com/5589766m0.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "字符串（String）",
+    "url": "https://docs.apifox.com/5589794m0.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "系统（System）",
+    "url": "https://docs.apifox.com/5589800m0.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "车辆（Vehicle）",
+    "url": "https://docs.apifox.com/5589801m0.md",
+    "description": ""
+  },
+  {
+    "category": "参考资料 > 动态值表达式",
+    "title": "单词（Word）",
+    "url": "https://docs.apifox.com/5589803m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题",
+    "title": "技术支持概览",
+    "url": "https://docs.apifox.com/5835927m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题",
+    "title": "导入/导出",
+    "url": "https://docs.apifox.com/49062298f0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 导入/导出",
+    "title": "如何导入接口数据到 Apifox?",
+    "url": "https://docs.apifox.com/5837253m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 导入/导出",
+    "title": "如何导入 cURL 到 Apifox？",
+    "url": "https://docs.apifox.com/5837259m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 导入/导出",
+    "title": "如何将 Postman 的环境变量迁移到 Apifox？",
+    "url": "https://docs.apifox.com/5837289m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 导入/导出",
+    "title": "为什么导出的 API 数量减少了？",
+    "url": "https://docs.apifox.com/5872996m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 导入/导出",
+    "title": "为什么导出到 Markdown 和 HTML 时 API 顺序混乱？",
+    "url": "https://docs.apifox.com/5872999m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 导入/导出",
+    "title": "如何将文档导出为 PDF/Word？",
+    "url": "https://docs.apifox.com/5873007m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 导入/导出",
+    "title": "如何在 Apifox 中导入 Swagger/OpenAPI 时自动将接口分组？",
+    "url": "https://docs.apifox.com/6597992m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 导入/导出",
+    "title": "Postman导入提示错误:URImalformed",
+    "url": "https://docs.apifox.com/6834744m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 导入/导出",
+    "title": "开放接口，选择导入 「OpenAPI/Swagger 格式数据 - URL 导入」，使用本地的服务地址无法导入",
+    "url": "https://docs.apifox.com/7607867m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 导入/导出",
+    "title": "导入报错，如何排查？",
+    "url": "https://docs.apifox.com/8819145m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题",
+    "title": "发送请求",
+    "url": "https://docs.apifox.com/49062315f0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 发送请求",
+    "title": "Apifox 是否支持调试 Socket.IO？",
+    "url": "https://docs.apifox.com/5837658m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 发送请求",
+    "title": "Apifox 是否支持在 WebSocket 接口中使用前置/后置脚本或者断言？",
+    "url": "https://docs.apifox.com/5837836m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 发送请求",
+    "title": "为什么发送请求的时候，出现\"socket hang up\"？",
+    "url": "https://docs.apifox.com/5881479m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 发送请求",
+    "title": "为什么发送请求，提示“Invalid URI xxx\"?",
+    "url": "https://docs.apifox.com/6534734m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 发送请求",
+    "title": "为什么同一个接口客户端请求成功，在web端调试会出现错误：\"无法请求地址\" ？",
+    "url": "https://docs.apifox.com/5885206m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 发送请求",
+    "title": "接口响应过大时，为什么 Apifox 会报错提示超出 nodejs 字符串最大长度？",
+    "url": "https://docs.apifox.com/5894955m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 发送请求 > 解决请求错误",
+    "title": "解决 read ECONNRESET 错误",
+    "url": "https://docs.apifox.com/7468626m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 发送请求 > 解决请求错误",
+    "title": "解决 ECONNREFUSED: XXXX 错误",
+    "url": "https://docs.apifox.com/7468622m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 发送请求 > 解决请求错误",
+    "title": "解决 ETIMEDOUT: XXXX 错误",
+    "url": "https://docs.apifox.com/7468623m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 发送请求 > 解决请求错误",
+    "title": "解决 ENOTFOUND: Couldn't resolve host 错误",
+    "url": "https://docs.apifox.com/6534745m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 发送请求 > 解决请求错误",
+    "title": "解决 ENOTFOUND: getaddrinfo ENOTFOUND www 错误",
+    "url": "https://docs.apifox.com/7468620m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 发送请求 > 解决请求错误",
+    "title": "解决 EHOSTUNREACH：macOS 请求内网接口错误",
+    "url": "https://docs.apifox.com/fixing-the-connect-ehostunreach-error.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题",
+    "title": "设计 API",
+    "url": "https://docs.apifox.com/49062328f0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "标签页使用说明（单击临时打开与双击固定打开）",
+    "url": "https://docs.apifox.com/7973260m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "可以把响应组件作为默认响应吗？",
+    "url": "https://docs.apifox.com/5837858m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "怎么查看是谁修改了接口？",
+    "url": "https://docs.apifox.com/5837871m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "如何在 Apifox 中批量删除目录？",
+    "url": "https://docs.apifox.com/5837878m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "如何在 Apifox 中批量删除接口？",
+    "url": "https://docs.apifox.com/5873849m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "怎么给接口批量添加或删除 URL 前缀？",
+    "url": "https://docs.apifox.com/5837905m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "如何获取 Apifox 的资源目录 ID？",
+    "url": "https://docs.apifox.com/5920973m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "如何在 URL 路径中使用变量？",
+    "url": "https://docs.apifox.com/5973791m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "如何使用 Apifox 给接口录制流量？",
+    "url": "https://docs.apifox.com/5970584m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "在定义接口响应时，是否允许接口没有任何响应内容？",
+    "url": "https://docs.apifox.com/5974307m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "接口/文档/测试场景不小心删除了怎么通过回收站、历史记录恢复？",
+    "url": "https://docs.apifox.com/5985074m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "Apifox 是否支持自定义接口的请求代码？",
+    "url": "https://docs.apifox.com/6028063m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "如何在 Apifox 接口列表中设置显示 接口名称 或 接口 URL？",
+    "url": "https://docs.apifox.com/6260195m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "为什么接口定义的字段在文档中看不到？",
+    "url": "https://docs.apifox.com/6306587m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "如何获取项目ID？",
+    "url": "https://docs.apifox.com/6358540m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "如何快速编辑 JSON 数据结构中的必填字段？",
+    "url": "https://docs.apifox.com/6363766m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "为什么在路径中不支持输入 “#” ？",
+    "url": "https://docs.apifox.com/6749450m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "如果一个字符串属性有多个枚举值，而且在不同地方都用到了，怎么才能保证这个枚举在整个文档里都保持一致？",
+    "url": "https://docs.apifox.com/5837930m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "数组如何配置枚举？",
+    "url": "https://docs.apifox.com/6802030m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "数组如何设置元素的唯一性？",
+    "url": "https://docs.apifox.com/6802276m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "form-data 中字段使用 JSON 值",
+    "url": "https://docs.apifox.com/6839931m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "为什么在 Header 添加 Authorization 会有删除线",
+    "url": "https://docs.apifox.com/6965181m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "如何查看最近创建 / 修改的接口？",
+    "url": "https://docs.apifox.com/7149933m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "如何在 Apifox 中的同一字段处理字符串和文件类型？",
+    "url": "https://docs.apifox.com/7266497m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "接口保存提示 “参数字段长度超过限制”，但未发现单个参数过长，如何解决？",
+    "url": "https://docs.apifox.com/7408490m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "如果同时发送 file 和 json（body请求参数又要有实体类又要有文件）",
+    "url": "https://docs.apifox.com/7466897m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "接口参数值如何设置为 null",
+    "url": "https://docs.apifox.com/7464107m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "Apifox是否可以在打开新接口时，直接打开新的Tab，而不是替换当前Tab",
+    "url": "https://docs.apifox.com/7630851m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "如何指定目录和接口的服务（前置 URL）？",
+    "url": "https://docs.apifox.com/7731906m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 设计 API",
+    "title": "接口参数如何使用表格来呈现？",
+    "url": "https://docs.apifox.com/7767453m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题",
+    "title": "调试 API",
+    "url": "https://docs.apifox.com/49062368f0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "为什么同样的请求在其它工具（比如 Postman）里能正常工作，但在 Apifox 里却不行？",
+    "url": "https://docs.apifox.com/5838500m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "怎么在 Apifox 里用脚本做断言？",
+    "url": "https://docs.apifox.com/5838537m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "JSONPath 只能提取数组，那在 Apifox 里怎么从数组中提取单个元素呢？",
+    "url": "https://docs.apifox.com/5838559m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "在 Apifox 中，不同环境有不同的数据库连接，怎么配置数据库操作？",
+    "url": "https://docs.apifox.com/5838591m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "如何在目录级别添加 header 参数？",
+    "url": "https://docs.apifox.com/5880028m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "如何在自定义脚本中获取服务 baseURL？",
+    "url": "https://docs.apifox.com/5880296m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "如何在 Apifox 自定义脚本中生成动态值？",
+    "url": "https://docs.apifox.com/5981036m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "如何在 Apifox 中查看原始报文？",
+    "url": "https://docs.apifox.com/5985055m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "如何在 Apifox 脚本中发起异步请求？",
+    "url": "https://docs.apifox.com/5987717m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "控制台打印内容大小限制是多少？为什么打印大文件会报错？",
+    "url": "https://docs.apifox.com/5990696m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "如何在接口请求时上传文件？",
+    "url": "https://docs.apifox.com/6019188m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "Apifox 中如何设置请求超时时间？",
+    "url": "https://docs.apifox.com/6062173m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "使用 Windows 版本连接 DB2 数据库时报错怎么解决？",
+    "url": "https://docs.apifox.com/6134121m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "如何批量修改 Header 的 User-Agent 字段",
+    "url": "https://docs.apifox.com/6151324m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "接口带上了非预期的 Cookie 怎么处理？",
+    "url": "https://docs.apifox.com/6151392m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "发送请求失败 “Error: getaddrinfo ENOTFOUND xxx.xxx.xxx.xxx” 的原因及排查方法",
+    "url": "https://docs.apifox.com/6363836m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "为什么Web端发送请求正常，客户端发送请求，出现“read ECONNRESET”？",
+    "url": "https://docs.apifox.com/6531337m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "使用 Apifox 连接 Oracle 数据库报错 NJS-045?",
+    "url": "https://docs.apifox.com/6672036m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "怎么把其它工具的环境迁移到Apifox？",
+    "url": "https://docs.apifox.com/5838520m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "为什么 WebSocket 在 web 端连接正常，在客户端报“1006 Abnormal Closure“？",
+    "url": "https://docs.apifox.com/6803954m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "为什么网络正常，访问 Apifox 提示“连接 Apifox 服务器出错，请检查网络是否异常”？",
+    "url": "https://docs.apifox.com/6808407m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "为什么 curl 请求正常返回 200，但在 Apifox 中请求却返回 400？",
+    "url": "https://docs.apifox.com/6811414m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "为什么在 Apifox 上传文件，后台接收不到？",
+    "url": "https://docs.apifox.com/6818573m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "Dubbo 接口调试时出现 \"The socket was closed.(address:address=>bolt://{ip})\" 错误，如何解决？",
+    "url": "https://docs.apifox.com/6818713m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "如何通过本地解压文件的方式添加 Apifox 浏览器插件？",
+    "url": "https://docs.apifox.com/6834748m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "接口签名使用 AES-GCM 加密",
+    "url": "https://docs.apifox.com/6839988m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "前置脚本如何使用 SHA256withRSA 加密？",
+    "url": "https://docs.apifox.com/6850089m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "Web端运行接口时，报错提示 Get \"http://localhost:3000/test\": dial tcp [::1]:3000: connect: connedtion refused",
+    "url": "https://docs.apifox.com/6888333m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "为什么使用 Web 网页端，通过浏览器插件请求 Ollama 部署的大模型会提示 403？",
+    "url": "https://docs.apifox.com/6926172m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "为什么在 WEB 端中修改 Referer 请求头无效？",
+    "url": "https://docs.apifox.com/7228009m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "接口返回的是 Protobuf 数据，如何正常查看？",
+    "url": "https://docs.apifox.com/7230269m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "接口请求中 Header 携带 Authorization 参数不生效问题",
+    "url": "https://docs.apifox.com/7280161m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "为什么点击 Body 的自动生成 点击不生效，不更新参数值？",
+    "url": "https://docs.apifox.com/7286419m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "为什么直接使用 Apifox 生成的 curl 运行报 “URL using bad/illegal format or missing URL“ ？",
+    "url": "https://docs.apifox.com/7409895m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "Apifox 是否支持 STOMP 协议的 WebSocket 连接？",
+    "url": "https://docs.apifox.com/7409967m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "如何在文件修改后，接口直接读取修改的文件（本地文件路径以变量存储）",
+    "url": "https://docs.apifox.com/7456294m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "Socket 如何使用 GBK 格式发送数据？",
+    "url": "https://docs.apifox.com/7456376m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "为什么参数值中的\"+\"会被解码成空格？",
+    "url": "https://docs.apifox.com/5837806m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "如何在自定义脚本中获取变量时，同时替换该变量的变量值中的变量或动态值",
+    "url": "https://docs.apifox.com/7562187m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "gRPC 请求报 “Request Exception Received message larger than max” 如何解决？",
+    "url": "https://docs.apifox.com/7653433m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "数据库连接报错，该如何排查？",
+    "url": "https://docs.apifox.com/8209235m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "杀毒软件报毒“openapi-generator-cli.jar”如何解决？",
+    "url": "https://docs.apifox.com/8658588m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "为什么变量有值却取不到？",
+    "url": "https://docs.apifox.com/8875297m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 调试 API",
+    "title": "开启兼容带注释 JSON 后仍不生效，如何处理？",
+    "url": "https://docs.apifox.com/8937510m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题",
+    "title": "Mock 数据",
+    "url": "https://docs.apifox.com/49062427f0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Mock 数据",
+    "title": "Apifox支持 Mock WebSocket 接口吗？",
+    "url": "https://docs.apifox.com/5838607m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Mock 数据",
+    "title": "为什么浏览器请求 Mock 接口没有返回内容？",
+    "url": "https://docs.apifox.com/6016634m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Mock 数据",
+    "title": "Mock 数组数据时，如何让生成的数据不重复？",
+    "url": "https://docs.apifox.com/6676371m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Mock 数据",
+    "title": "本地 Mock 服务启动失败怎么办？",
+    "url": "https://docs.apifox.com/7834828m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题",
+    "title": "自动化测试",
+    "url": "https://docs.apifox.com/49062440f0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 自动化测试",
+    "title": "为什么测试场景 Apifox 客户端运行没问题，但在 Apifox CLI 或 Runner 中运行时却出错了？",
+    "url": "https://docs.apifox.com/5838673m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 自动化测试",
+    "title": "为什么无法成功引用前置步骤数据？",
+    "url": "https://docs.apifox.com/5838707m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 自动化测试",
+    "title": "在性能测试中怎么查看实际的请求和响应？",
+    "url": "https://docs.apifox.com/5838722m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 自动化测试",
+    "title": "在 Apifox 中怎么导出性能测试报告？",
+    "url": "https://docs.apifox.com/5838726m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 自动化测试",
+    "title": "如何使用数据库查询得到的数据循环传参给接口运行?",
+    "url": "https://docs.apifox.com/5890939m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 自动化测试",
+    "title": "如何解决 \"Error: unable to verify the first certificate on runner\" 错误？",
+    "url": "https://docs.apifox.com/5925837m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 自动化测试",
+    "title": "为什么在 CLI 执行完生成的测试报告，使用 Apifox 客户端查看报告每个 case 的详情都看不到呢？",
+    "url": "https://docs.apifox.com/6002138m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 自动化测试",
+    "title": "如何在 Apifox Web 版设置通用 Runner 的服务器 Host？",
+    "url": "https://docs.apifox.com/6032295m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 自动化测试",
+    "title": "接口参数是一个上传文件在 Runner、CLI 中找不到怎么办？",
+    "url": "https://docs.apifox.com/6034316m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 自动化测试",
+    "title": "当 Runner 发生问题了，如何查询 Runner 日志用以定位？",
+    "url": "https://docs.apifox.com/6135723m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 自动化测试",
+    "title": "如何查看 runner 版本号？",
+    "url": "https://docs.apifox.com/6045669m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 自动化测试",
+    "title": "使用 Runner 运行测试场景报错，报告提示\"unsafe legacy renegotiation disabled\"?",
+    "url": "https://docs.apifox.com/6002366m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 自动化测试",
+    "title": "用自托管 Runner 执行了任务， 服务器有对应测试报告生成吗？",
+    "url": "https://docs.apifox.com/6710361m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 自动化测试",
+    "title": "为什么linux系统在安装cli后不能直接使用",
+    "url": "https://docs.apifox.com/6164544m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 自动化测试",
+    "title": "为什么测试步骤同步不了接口的参数值？",
+    "url": "https://docs.apifox.com/6165124m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 自动化测试",
+    "title": "为什么接口用例改了，测试步骤没有自动同步？",
+    "url": "https://docs.apifox.com/6166467m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 自动化测试",
+    "title": "如何在 PowerShell 中运行 Apifox CLI 命令",
+    "url": "https://docs.apifox.com/6378958m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 自动化测试",
+    "title": "可以给测试场景下的请求添加统一的前后置操作吗？",
+    "url": "https://docs.apifox.com/6668505m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 自动化测试",
+    "title": "自动化测试中如何让动态值在单次测试中保持一致？",
+    "url": "https://docs.apifox.com/6704429m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 自动化测试",
+    "title": "如何在持续集成中选择多个测试场景一起运行？",
+    "url": "https://docs.apifox.com/6811309m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 自动化测试",
+    "title": "使用 CI/CD 是否支持通知",
+    "url": "https://docs.apifox.com/6967748m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 自动化测试",
+    "title": "为什么使用数据库步骤查看时间数据时，与 Navicat 之类的工具显示格式不一致？",
+    "url": "https://docs.apifox.com/7409844m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 自动化测试",
+    "title": "为什么 Apifox 性能测试中，实际发出的请求数与报告记录数不一致？",
+    "url": "https://docs.apifox.com/7676396m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 自动化测试",
+    "title": "接口有前后置操作，导入到测试场景丢失了，如何排查？",
+    "url": "https://docs.apifox.com/8952930m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题",
+    "title": "发布 API 文档",
+    "url": "https://docs.apifox.com/49062471f0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 发布 API 文档",
+    "title": "怎么在发布的文档中隐藏所有 Apifox 的元素（Logo、按钮等）？",
+    "url": "https://docs.apifox.com/5838772m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 发布 API 文档",
+    "title": "当在 Apifox 中更新文档内容时，已发布的线上 API 文档会跟着改变吗？",
+    "url": "https://docs.apifox.com/5838811m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 发布 API 文档",
+    "title": "自定义域名一直显示未生效怎么办？",
+    "url": "https://docs.apifox.com/5946267m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 发布 API 文档",
+    "title": "如何检查 CNAME 配置是否正确？",
+    "url": "https://docs.apifox.com/5946310m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 发布 API 文档",
+    "title": "Apifox 自定义域名的 SSL 证书生成失败怎么办？",
+    "url": "https://docs.apifox.com/5946320m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 发布 API 文档",
+    "title": "Apifox 发布文档/快捷分享中，如何让使用者修改请求的 Base URL ？",
+    "url": "https://docs.apifox.com/6598703m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 发布 API 文档",
+    "title": "如何将 Apifox 发布文档复制到自己的项目中？",
+    "url": "https://docs.apifox.com/6707249m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 发布 API 文档",
+    "title": "如何在 Apifox 在线文档中共享 Header（如 Token）？",
+    "url": "https://docs.apifox.com/7110742m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 发布 API 文档",
+    "title": "在线文档中调试 http 接口时报错\"Mixed Content request rejected\"？",
+    "url": "https://docs.apifox.com/7233460m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 发布 API 文档",
+    "title": "当发布文档中图片显示“该图片来自其他私有项目,不可访问”,如何处理",
+    "url": "https://docs.apifox.com/7309129m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 发布 API 文档",
+    "title": "分享文档请求接口报“错误：ELANREFUSED. The agent server refused requests from LAN hosts”，如何解决？",
+    "url": "https://docs.apifox.com/7675714m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 发布 API 文档",
+    "title": "Apifox 自定义域名自动生成 SSL 证书错误如何解决？",
+    "url": "https://docs.apifox.com/9241660m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题",
+    "title": "迭代分支",
+    "url": "https://docs.apifox.com/49062497f0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 迭代分支",
+    "title": "怎么访问迭代分支？",
+    "url": "https://docs.apifox.com/5838852m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题",
+    "title": "管理中心",
+    "url": "https://docs.apifox.com/49062530f0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 管理中心",
+    "title": "Apifox 项目、团队和组织的区别",
+    "url": "https://docs.apifox.com/6026168m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 管理中心",
+    "title": "如何为 Apifox 添加白名单？",
+    "url": "https://docs.apifox.com/6032153m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 管理中心",
+    "title": "如何为 Apifox 中的团队配置「IP 允许访问名单」？",
+    "url": "https://docs.apifox.com/6689669m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 管理中心",
+    "title": "如何设置项目权限？",
+    "url": "https://docs.apifox.com/5838863m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 管理中心",
+    "title": "如何设置团队权限",
+    "url": "https://docs.apifox.com/5838872m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 管理中心",
+    "title": "如何邀请已加入团队的成员进入项目？",
+    "url": "https://docs.apifox.com/6377191m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > IDEA 插件",
+    "title": "为什么通过 idea 插件导入的数据模型名称带有《》？",
+    "url": "https://docs.apifox.com/6132756m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > IDEA 插件",
+    "title": "Apifox IDEA 插件可以上传某个 controller 里的指定接口么？",
+    "url": "https://docs.apifox.com/6900764m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > IDEA 插件",
+    "title": "为什么 IDEA 上更新字段内容后推送到 Apifox 内容没更新？",
+    "url": "https://docs.apifox.com/7409914m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > IDEA 插件",
+    "title": "在 IDEA 上如何标记泛型？",
+    "url": "https://docs.apifox.com/7409869m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > IDEA 插件",
+    "title": "IDEA 插件上传 API 时，如何携带 context-path？",
+    "url": "https://docs.apifox.com/7653086m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > IDEA 插件",
+    "title": "IDEA 插件上传接口时，日志出现乱码，如何解决？",
+    "url": "https://docs.apifox.com/7675731m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > IDEA 插件",
+    "title": "IDEA 插件搜索接口的快捷键是什么？",
+    "url": "https://docs.apifox.com/8209213m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > IDEA 插件",
+    "title": "IDEA 插件如何生成枚举值、名称、说明？",
+    "url": "https://docs.apifox.com/9264171m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > IDEA 插件",
+    "title": "Apifox IDEA 插件安装失败，提示 app.zip 相关错误怎么办？",
+    "url": "https://docs.apifox.com/9285614m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Markdown 相关",
+    "title": "如何在 Apifox 的卡片组件中链接到项目内的文档或接口？",
+    "url": "https://docs.apifox.com/5883079m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Markdown 相关",
+    "title": "如何在 Markdown 文档中插入项目内接口/文档/数据模型/目录？",
+    "url": "https://docs.apifox.com/6709643m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Markdown 相关",
+    "title": "怎么在 Apifox 的 Markdown 中使用透明背景图片？",
+    "url": "https://docs.apifox.com/5838796m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Markdown 相关",
+    "title": "为什么 Markdown 文档中使用多个 $ 时部分内容没有正确显示？",
+    "url": "https://docs.apifox.com/5891165m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Markdown 相关",
+    "title": "如何在 Apifox 的 Markdown 中编写流程图？",
+    "url": "https://docs.apifox.com/5981008m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Markdown 相关",
+    "title": "如何控制 Markdown 表格的列宽？",
+    "url": "https://docs.apifox.com/6002792m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题",
+    "title": "收费与部署",
+    "url": "https://docs.apifox.com/49052074f0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 收费与部署",
+    "title": "Apifox 是否收费？最新免费功能权益有哪些？",
+    "url": "https://docs.apifox.com/5836730m0.md",
+    "description": "Apifox 是免费的。免费版不限制成员数量，不限制协作人数，也不限制项目数量。所有成员均可免费加入项目并参与协作，无需按人头付费。"
+  },
+  {
+    "category": "常见问题 > 收费与部署",
+    "title": "Apifox 免费版常见问题（FAQ）：关于人数、团队与协作限制的说明",
+    "url": "https://docs.apifox.com/8079501m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 收费与部署",
+    "title": "数据是存储在本地还是云端？可否离线使用？可否私有化部署？",
+    "url": "https://docs.apifox.com/5836756m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 收费与部署",
+    "title": "购买【商业专业版】1年，使用半年后升级到【商业旗舰版】，如何计费？",
+    "url": "https://docs.apifox.com/6166498m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题",
+    "title": "Web 端与客户端",
+    "url": "https://docs.apifox.com/49054255f0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Web 端与客户端",
+    "title": "Apifox alpha 版下载",
+    "url": "https://docs.apifox.com/download-alpha.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Web 端与客户端",
+    "title": "Apifox Linux 桌面版下载安装",
+    "url": "https://docs.apifox.com/install-apifox-linux.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Web 端与客户端",
+    "title": "Web 端与客户端有何区别？",
+    "url": "https://docs.apifox.com/5836794m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Web 端与客户端",
+    "title": "Web 端与客户端数据不同步如何处理？",
+    "url": "https://docs.apifox.com/5836815m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Web 端与客户端",
+    "title": "为什么Web端或在线文档请求HTTP接口，Apifox响应显示跨域，但是在客户端运行是正常的？",
+    "url": "https://docs.apifox.com/7630900m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Web 端与客户端",
+    "title": "为什么下载时会跳到百度网盘或天翼网盘？",
+    "url": "https://docs.apifox.com/5922065m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Web 端与客户端",
+    "title": "ApifoxAppAgent 进程的作用是什么？",
+    "url": "https://docs.apifox.com/5836857m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Web 端与客户端",
+    "title": "为何 Apifox 启动会有多个 Helper 进程？",
+    "url": "https://docs.apifox.com/6965746m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Web 端与客户端",
+    "title": "Apifox 闪退、白屏怎么办？",
+    "url": "https://docs.apifox.com/5947012m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Web 端与客户端",
+    "title": "Apifox 如何打开开发者工具？",
+    "url": "https://docs.apifox.com/5947017m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Web 端与客户端",
+    "title": "Apifox 支持 win7 吗?",
+    "url": "https://docs.apifox.com/5984981m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Web 端与客户端",
+    "title": "Win 系统自动更新后打不开可能是什么原因？",
+    "url": "https://docs.apifox.com/6549770m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Web 端与客户端",
+    "title": "为什么 Windows 安装新版本后打开还是旧版本？",
+    "url": "https://docs.apifox.com/6706031m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Web 端与客户端",
+    "title": "微信、手机号提示已经被绑定了怎么办？",
+    "url": "https://docs.apifox.com/5988105m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Web 端与客户端",
+    "title": "为什么安装 Apifox 后启动提示\"无法定位程序输入点DiscardVirtualMemory 于动态链接库KERNEL32.dll\"",
+    "url": "https://docs.apifox.com/6305005m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Web 端与客户端",
+    "title": "Ubuntu 24 无法启动 Apifox，如何处理？",
+    "url": "https://docs.apifox.com/7415138m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Web 端与客户端",
+    "title": "Apifox 启动白屏修复方案（沙箱机制兼容问题）",
+    "url": "https://docs.apifox.com/8818643m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > MCP Server",
+    "title": "Apifox 新增接口目录后，MCP 没有获取到新的目录?",
+    "url": "https://docs.apifox.com/6664716m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > MCP Server",
+    "title": "Apifox MCP 为什么会识别不到本地文档的 API 接口?",
+    "url": "https://docs.apifox.com/6668467m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > MCP Server",
+    "title": "内网私有部署的大模型，能够直接用 apifox 的 mcp 嘛？",
+    "url": "https://docs.apifox.com/6850099m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > MCP Server",
+    "title": "如何让 Apifox MCP Server 的 Tools 名称后面不添加随机字符串",
+    "url": "https://docs.apifox.com/7267427m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 公告",
+    "title": "关于 Apifox 外部 JS 文件受篡改的风险提示与升级公告",
+    "url": "https://docs.apifox.com/8392582m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 离线空间",
+    "title": "如何将 Apifox 项目导入到离线空间里？",
+    "url": "https://docs.apifox.com/6926471m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > 离线空间",
+    "title": "如何将离线空间里的数据导入到 Apifox 项目里？",
+    "url": "https://docs.apifox.com/8803651m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > AI 功能",
+    "title": "配置了自定义大模型、非内置服务商，Apifox 提示连接失败该怎么排查？",
+    "url": "https://docs.apifox.com/9142568m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Apifox CLI",
+    "title": "为什么使用 Apifox CLI 时提示 unknown option '--verbose'？",
+    "url": "https://docs.apifox.com/9242788m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Apifox CLI",
+    "title": "如何在 Apifox CLI 中保存和复用运行后的变量值？",
+    "url": "https://docs.apifox.com/9252635m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > Apifox CLI",
+    "title": "Apifox CLI 登录报错 400，如何解决？",
+    "url": "https://docs.apifox.com/9259242m0.md",
+    "description": ""
+  },
+  {
+    "category": "常见问题 > WebService",
+    "title": "WebService 接口请求返回 WSDL，而不是业务响应，如何解决？",
+    "url": "https://docs.apifox.com/9257282m0.md",
+    "description": ""
+  },
+  {
+    "category": "",
+    "title": "技术支持概览",
+    "url": "https://docs.apifox.com/5835927m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "",
+    "title": "导入/导出",
+    "url": "https://docs.apifox.com/49062298f0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "导入/导出",
+    "title": "如何导入接口数据到 Apifox?",
+    "url": "https://docs.apifox.com/5837253m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "导入/导出",
+    "title": "如何导入 cURL 到 Apifox？",
+    "url": "https://docs.apifox.com/5837259m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "导入/导出",
+    "title": "如何将 Postman 的环境变量迁移到 Apifox？",
+    "url": "https://docs.apifox.com/5837289m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "导入/导出",
+    "title": "为什么导出的 API 数量减少了？",
+    "url": "https://docs.apifox.com/5872996m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "导入/导出",
+    "title": "为什么导出到 Markdown 和 HTML 时 API 顺序混乱？",
+    "url": "https://docs.apifox.com/5872999m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "导入/导出",
+    "title": "如何将文档导出为 PDF/Word？",
+    "url": "https://docs.apifox.com/5873007m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "导入/导出",
+    "title": "如何在 Apifox 中导入 Swagger/OpenAPI 时自动将接口分组？",
+    "url": "https://docs.apifox.com/6597992m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "导入/导出",
+    "title": "Postman导入提示错误:URImalformed",
+    "url": "https://docs.apifox.com/6834744m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "导入/导出",
+    "title": "开放接口，选择导入 「OpenAPI/Swagger 格式数据 - URL 导入」，使用本地的服务地址无法导入",
+    "url": "https://docs.apifox.com/7607867m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "导入/导出",
+    "title": "导入报错，如何排查？",
+    "url": "https://docs.apifox.com/8819145m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "",
+    "title": "发送请求",
+    "url": "https://docs.apifox.com/49062315f0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "发送请求",
+    "title": "Apifox 是否支持调试 Socket.IO？",
+    "url": "https://docs.apifox.com/5837658m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "发送请求",
+    "title": "Apifox 是否支持在 WebSocket 接口中使用前置/后置脚本或者断言？",
+    "url": "https://docs.apifox.com/5837836m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "发送请求",
+    "title": "为什么发送请求的时候，出现\"socket hang up\"？",
+    "url": "https://docs.apifox.com/5881479m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "发送请求",
+    "title": "为什么发送请求，提示“Invalid URI xxx\"?",
+    "url": "https://docs.apifox.com/6534734m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "发送请求",
+    "title": "为什么同一个接口客户端请求成功，在web端调试会出现错误：\"无法请求地址\" ？",
+    "url": "https://docs.apifox.com/5885206m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "发送请求",
+    "title": "接口响应过大时，为什么 Apifox 会报错提示超出 nodejs 字符串最大长度？",
+    "url": "https://docs.apifox.com/5894955m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "发送请求 > 解决请求错误",
+    "title": "解决 read ECONNRESET 错误",
+    "url": "https://docs.apifox.com/7468626m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "发送请求 > 解决请求错误",
+    "title": "解决 ECONNREFUSED: XXXX 错误",
+    "url": "https://docs.apifox.com/7468622m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "发送请求 > 解决请求错误",
+    "title": "解决 ETIMEDOUT: XXXX 错误",
+    "url": "https://docs.apifox.com/7468623m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "发送请求 > 解决请求错误",
+    "title": "解决 ENOTFOUND: Couldn't resolve host 错误",
+    "url": "https://docs.apifox.com/6534745m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "发送请求 > 解决请求错误",
+    "title": "解决 ENOTFOUND: getaddrinfo ENOTFOUND www 错误",
+    "url": "https://docs.apifox.com/7468620m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "发送请求 > 解决请求错误",
+    "title": "解决 EHOSTUNREACH：macOS 请求内网接口错误",
+    "url": "https://docs.apifox.com/fixing-the-connect-ehostunreach-error.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "",
+    "title": "设计 API",
+    "url": "https://docs.apifox.com/49062328f0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "标签页使用说明（单击临时打开与双击固定打开）",
+    "url": "https://docs.apifox.com/7973260m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "可以把响应组件作为默认响应吗？",
+    "url": "https://docs.apifox.com/5837858m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "怎么查看是谁修改了接口？",
+    "url": "https://docs.apifox.com/5837871m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "如何在 Apifox 中批量删除目录？",
+    "url": "https://docs.apifox.com/5837878m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "如何在 Apifox 中批量删除接口？",
+    "url": "https://docs.apifox.com/5873849m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "怎么给接口批量添加或删除 URL 前缀？",
+    "url": "https://docs.apifox.com/5837905m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "如何获取 Apifox 的资源目录 ID？",
+    "url": "https://docs.apifox.com/5920973m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "如何在 URL 路径中使用变量？",
+    "url": "https://docs.apifox.com/5973791m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "如何使用 Apifox 给接口录制流量？",
+    "url": "https://docs.apifox.com/5970584m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "在定义接口响应时，是否允许接口没有任何响应内容？",
+    "url": "https://docs.apifox.com/5974307m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "接口/文档/测试场景不小心删除了怎么通过回收站、历史记录恢复？",
+    "url": "https://docs.apifox.com/5985074m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "Apifox 是否支持自定义接口的请求代码？",
+    "url": "https://docs.apifox.com/6028063m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "如何在 Apifox 接口列表中设置显示 接口名称 或 接口 URL？",
+    "url": "https://docs.apifox.com/6260195m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "为什么接口定义的字段在文档中看不到？",
+    "url": "https://docs.apifox.com/6306587m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "如何获取项目ID？",
+    "url": "https://docs.apifox.com/6358540m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "如何快速编辑 JSON 数据结构中的必填字段？",
+    "url": "https://docs.apifox.com/6363766m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "为什么在路径中不支持输入 “#” ？",
+    "url": "https://docs.apifox.com/6749450m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "如果一个字符串属性有多个枚举值，而且在不同地方都用到了，怎么才能保证这个枚举在整个文档里都保持一致？",
+    "url": "https://docs.apifox.com/5837930m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "数组如何配置枚举？",
+    "url": "https://docs.apifox.com/6802030m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "数组如何设置元素的唯一性？",
+    "url": "https://docs.apifox.com/6802276m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "form-data 中字段使用 JSON 值",
+    "url": "https://docs.apifox.com/6839931m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "为什么在 Header 添加 Authorization 会有删除线",
+    "url": "https://docs.apifox.com/6965181m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "如何查看最近创建 / 修改的接口？",
+    "url": "https://docs.apifox.com/7149933m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "如何在 Apifox 中的同一字段处理字符串和文件类型？",
+    "url": "https://docs.apifox.com/7266497m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "接口保存提示 “参数字段长度超过限制”，但未发现单个参数过长，如何解决？",
+    "url": "https://docs.apifox.com/7408490m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "如果同时发送 file 和 json（body请求参数又要有实体类又要有文件）",
+    "url": "https://docs.apifox.com/7466897m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "接口参数值如何设置为 null",
+    "url": "https://docs.apifox.com/7464107m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "Apifox是否可以在打开新接口时，直接打开新的Tab，而不是替换当前Tab",
+    "url": "https://docs.apifox.com/7630851m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "如何指定目录和接口的服务（前置 URL）？",
+    "url": "https://docs.apifox.com/7731906m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "设计 API",
+    "title": "接口参数如何使用表格来呈现？",
+    "url": "https://docs.apifox.com/7767453m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "",
+    "title": "调试 API",
+    "url": "https://docs.apifox.com/49062368f0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "为什么同样的请求在其它工具（比如 Postman）里能正常工作，但在 Apifox 里却不行？",
+    "url": "https://docs.apifox.com/5838500m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "怎么在 Apifox 里用脚本做断言？",
+    "url": "https://docs.apifox.com/5838537m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "JSONPath 只能提取数组，那在 Apifox 里怎么从数组中提取单个元素呢？",
+    "url": "https://docs.apifox.com/5838559m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "在 Apifox 中，不同环境有不同的数据库连接，怎么配置数据库操作？",
+    "url": "https://docs.apifox.com/5838591m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "如何在目录级别添加 header 参数？",
+    "url": "https://docs.apifox.com/5880028m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "如何在自定义脚本中获取服务 baseURL？",
+    "url": "https://docs.apifox.com/5880296m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "如何在 Apifox 自定义脚本中生成动态值？",
+    "url": "https://docs.apifox.com/5981036m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "如何在 Apifox 中查看原始报文？",
+    "url": "https://docs.apifox.com/5985055m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "如何在 Apifox 脚本中发起异步请求？",
+    "url": "https://docs.apifox.com/5987717m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "控制台打印内容大小限制是多少？为什么打印大文件会报错？",
+    "url": "https://docs.apifox.com/5990696m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "如何在接口请求时上传文件？",
+    "url": "https://docs.apifox.com/6019188m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "Apifox 中如何设置请求超时时间？",
+    "url": "https://docs.apifox.com/6062173m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "使用 Windows 版本连接 DB2 数据库时报错怎么解决？",
+    "url": "https://docs.apifox.com/6134121m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "如何批量修改 Header 的 User-Agent 字段",
+    "url": "https://docs.apifox.com/6151324m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "接口带上了非预期的 Cookie 怎么处理？",
+    "url": "https://docs.apifox.com/6151392m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "发送请求失败 “Error: getaddrinfo ENOTFOUND xxx.xxx.xxx.xxx” 的原因及排查方法",
+    "url": "https://docs.apifox.com/6363836m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "为什么Web端发送请求正常，客户端发送请求，出现“read ECONNRESET”？",
+    "url": "https://docs.apifox.com/6531337m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "使用 Apifox 连接 Oracle 数据库报错 NJS-045?",
+    "url": "https://docs.apifox.com/6672036m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "怎么把其它工具的环境迁移到Apifox？",
+    "url": "https://docs.apifox.com/5838520m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "为什么 WebSocket 在 web 端连接正常，在客户端报“1006 Abnormal Closure“？",
+    "url": "https://docs.apifox.com/6803954m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "为什么网络正常，访问 Apifox 提示“连接 Apifox 服务器出错，请检查网络是否异常”？",
+    "url": "https://docs.apifox.com/6808407m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "为什么 curl 请求正常返回 200，但在 Apifox 中请求却返回 400？",
+    "url": "https://docs.apifox.com/6811414m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "为什么在 Apifox 上传文件，后台接收不到？",
+    "url": "https://docs.apifox.com/6818573m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "Dubbo 接口调试时出现 \"The socket was closed.(address:address=>bolt://{ip})\" 错误，如何解决？",
+    "url": "https://docs.apifox.com/6818713m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "如何通过本地解压文件的方式添加 Apifox 浏览器插件？",
+    "url": "https://docs.apifox.com/6834748m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "接口签名使用 AES-GCM 加密",
+    "url": "https://docs.apifox.com/6839988m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "前置脚本如何使用 SHA256withRSA 加密？",
+    "url": "https://docs.apifox.com/6850089m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "Web端运行接口时，报错提示 Get \"http://localhost:3000/test\": dial tcp [::1]:3000: connect: connedtion refused",
+    "url": "https://docs.apifox.com/6888333m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "为什么使用 Web 网页端，通过浏览器插件请求 Ollama 部署的大模型会提示 403？",
+    "url": "https://docs.apifox.com/6926172m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "为什么在 WEB 端中修改 Referer 请求头无效？",
+    "url": "https://docs.apifox.com/7228009m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "接口返回的是 Protobuf 数据，如何正常查看？",
+    "url": "https://docs.apifox.com/7230269m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "接口请求中 Header 携带 Authorization 参数不生效问题",
+    "url": "https://docs.apifox.com/7280161m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "为什么点击 Body 的自动生成 点击不生效，不更新参数值？",
+    "url": "https://docs.apifox.com/7286419m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "为什么直接使用 Apifox 生成的 curl 运行报 “URL using bad/illegal format or missing URL“ ？",
+    "url": "https://docs.apifox.com/7409895m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "Apifox 是否支持 STOMP 协议的 WebSocket 连接？",
+    "url": "https://docs.apifox.com/7409967m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "如何在文件修改后，接口直接读取修改的文件（本地文件路径以变量存储）",
+    "url": "https://docs.apifox.com/7456294m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "Socket 如何使用 GBK 格式发送数据？",
+    "url": "https://docs.apifox.com/7456376m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "为什么参数值中的\"+\"会被解码成空格？",
+    "url": "https://docs.apifox.com/5837806m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "如何在自定义脚本中获取变量时，同时替换该变量的变量值中的变量或动态值",
+    "url": "https://docs.apifox.com/7562187m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "gRPC 请求报 “Request Exception Received message larger than max” 如何解决？",
+    "url": "https://docs.apifox.com/7653433m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "数据库连接报错，该如何排查？",
+    "url": "https://docs.apifox.com/8209235m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "杀毒软件报毒“openapi-generator-cli.jar”如何解决？",
+    "url": "https://docs.apifox.com/8658588m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "为什么变量有值却取不到？",
+    "url": "https://docs.apifox.com/8875297m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "调试 API",
+    "title": "开启兼容带注释 JSON 后仍不生效，如何处理？",
+    "url": "https://docs.apifox.com/8937510m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "",
+    "title": "Mock 数据",
+    "url": "https://docs.apifox.com/49062427f0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Mock 数据",
+    "title": "Apifox支持 Mock WebSocket 接口吗？",
+    "url": "https://docs.apifox.com/5838607m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Mock 数据",
+    "title": "为什么浏览器请求 Mock 接口没有返回内容？",
+    "url": "https://docs.apifox.com/6016634m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Mock 数据",
+    "title": "Mock 数组数据时，如何让生成的数据不重复？",
+    "url": "https://docs.apifox.com/6676371m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Mock 数据",
+    "title": "本地 Mock 服务启动失败怎么办？",
+    "url": "https://docs.apifox.com/7834828m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "",
+    "title": "自动化测试",
+    "url": "https://docs.apifox.com/49062440f0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "自动化测试",
+    "title": "为什么测试场景 Apifox 客户端运行没问题，但在 Apifox CLI 或 Runner 中运行时却出错了？",
+    "url": "https://docs.apifox.com/5838673m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "自动化测试",
+    "title": "为什么无法成功引用前置步骤数据？",
+    "url": "https://docs.apifox.com/5838707m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "自动化测试",
+    "title": "在性能测试中怎么查看实际的请求和响应？",
+    "url": "https://docs.apifox.com/5838722m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "自动化测试",
+    "title": "在 Apifox 中怎么导出性能测试报告？",
+    "url": "https://docs.apifox.com/5838726m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "自动化测试",
+    "title": "如何使用数据库查询得到的数据循环传参给接口运行?",
+    "url": "https://docs.apifox.com/5890939m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "自动化测试",
+    "title": "如何解决 \"Error: unable to verify the first certificate on runner\" 错误？",
+    "url": "https://docs.apifox.com/5925837m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "自动化测试",
+    "title": "为什么在 CLI 执行完生成的测试报告，使用 Apifox 客户端查看报告每个 case 的详情都看不到呢？",
+    "url": "https://docs.apifox.com/6002138m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "自动化测试",
+    "title": "如何在 Apifox Web 版设置通用 Runner 的服务器 Host？",
+    "url": "https://docs.apifox.com/6032295m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "自动化测试",
+    "title": "接口参数是一个上传文件在 Runner、CLI 中找不到怎么办？",
+    "url": "https://docs.apifox.com/6034316m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "自动化测试",
+    "title": "当 Runner 发生问题了，如何查询 Runner 日志用以定位？",
+    "url": "https://docs.apifox.com/6135723m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "自动化测试",
+    "title": "如何查看 runner 版本号？",
+    "url": "https://docs.apifox.com/6045669m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "自动化测试",
+    "title": "使用 Runner 运行测试场景报错，报告提示\"unsafe legacy renegotiation disabled\"?",
+    "url": "https://docs.apifox.com/6002366m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "自动化测试",
+    "title": "用自托管 Runner 执行了任务， 服务器有对应测试报告生成吗？",
+    "url": "https://docs.apifox.com/6710361m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "自动化测试",
+    "title": "为什么linux系统在安装cli后不能直接使用",
+    "url": "https://docs.apifox.com/6164544m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "自动化测试",
+    "title": "为什么测试步骤同步不了接口的参数值？",
+    "url": "https://docs.apifox.com/6165124m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "自动化测试",
+    "title": "为什么接口用例改了，测试步骤没有自动同步？",
+    "url": "https://docs.apifox.com/6166467m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "自动化测试",
+    "title": "如何在 PowerShell 中运行 Apifox CLI 命令",
+    "url": "https://docs.apifox.com/6378958m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "自动化测试",
+    "title": "可以给测试场景下的请求添加统一的前后置操作吗？",
+    "url": "https://docs.apifox.com/6668505m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "自动化测试",
+    "title": "自动化测试中如何让动态值在单次测试中保持一致？",
+    "url": "https://docs.apifox.com/6704429m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "自动化测试",
+    "title": "如何在持续集成中选择多个测试场景一起运行？",
+    "url": "https://docs.apifox.com/6811309m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "自动化测试",
+    "title": "使用 CI/CD 是否支持通知",
+    "url": "https://docs.apifox.com/6967748m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "自动化测试",
+    "title": "为什么使用数据库步骤查看时间数据时，与 Navicat 之类的工具显示格式不一致？",
+    "url": "https://docs.apifox.com/7409844m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "自动化测试",
+    "title": "为什么 Apifox 性能测试中，实际发出的请求数与报告记录数不一致？",
+    "url": "https://docs.apifox.com/7676396m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "自动化测试",
+    "title": "接口有前后置操作，导入到测试场景丢失了，如何排查？",
+    "url": "https://docs.apifox.com/8952930m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "",
+    "title": "发布 API 文档",
+    "url": "https://docs.apifox.com/49062471f0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档",
+    "title": "怎么在发布的文档中隐藏所有 Apifox 的元素（Logo、按钮等）？",
+    "url": "https://docs.apifox.com/5838772m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档",
+    "title": "当在 Apifox 中更新文档内容时，已发布的线上 API 文档会跟着改变吗？",
+    "url": "https://docs.apifox.com/5838811m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档",
+    "title": "自定义域名一直显示未生效怎么办？",
+    "url": "https://docs.apifox.com/5946267m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档",
+    "title": "如何检查 CNAME 配置是否正确？",
+    "url": "https://docs.apifox.com/5946310m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档",
+    "title": "Apifox 自定义域名的 SSL 证书生成失败怎么办？",
+    "url": "https://docs.apifox.com/5946320m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档",
+    "title": "Apifox 发布文档/快捷分享中，如何让使用者修改请求的 Base URL ？",
+    "url": "https://docs.apifox.com/6598703m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档",
+    "title": "如何将 Apifox 发布文档复制到自己的项目中？",
+    "url": "https://docs.apifox.com/6707249m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档",
+    "title": "如何在 Apifox 在线文档中共享 Header（如 Token）？",
+    "url": "https://docs.apifox.com/7110742m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档",
+    "title": "在线文档中调试 http 接口时报错\"Mixed Content request rejected\"？",
+    "url": "https://docs.apifox.com/7233460m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档",
+    "title": "当发布文档中图片显示“该图片来自其他私有项目,不可访问”,如何处理",
+    "url": "https://docs.apifox.com/7309129m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档",
+    "title": "分享文档请求接口报“错误：ELANREFUSED. The agent server refused requests from LAN hosts”，如何解决？",
+    "url": "https://docs.apifox.com/7675714m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "发布 API 文档",
+    "title": "Apifox 自定义域名自动生成 SSL 证书错误如何解决？",
+    "url": "https://docs.apifox.com/9241660m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "",
+    "title": "迭代分支",
+    "url": "https://docs.apifox.com/49062497f0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "迭代分支",
+    "title": "怎么访问迭代分支？",
+    "url": "https://docs.apifox.com/5838852m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "",
+    "title": "管理中心",
+    "url": "https://docs.apifox.com/49062530f0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "管理中心",
+    "title": "Apifox 项目、团队和组织的区别",
+    "url": "https://docs.apifox.com/6026168m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "管理中心",
+    "title": "如何为 Apifox 添加白名单？",
+    "url": "https://docs.apifox.com/6032153m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "管理中心",
+    "title": "如何为 Apifox 中的团队配置「IP 允许访问名单」？",
+    "url": "https://docs.apifox.com/6689669m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "管理中心",
+    "title": "如何设置项目权限？",
+    "url": "https://docs.apifox.com/5838863m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "管理中心",
+    "title": "如何设置团队权限",
+    "url": "https://docs.apifox.com/5838872m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "管理中心",
+    "title": "如何邀请已加入团队的成员进入项目？",
+    "url": "https://docs.apifox.com/6377191m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "IDEA 插件",
+    "title": "为什么通过 idea 插件导入的数据模型名称带有《》？",
+    "url": "https://docs.apifox.com/6132756m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "IDEA 插件",
+    "title": "Apifox IDEA 插件可以上传某个 controller 里的指定接口么？",
+    "url": "https://docs.apifox.com/6900764m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "IDEA 插件",
+    "title": "为什么 IDEA 上更新字段内容后推送到 Apifox 内容没更新？",
+    "url": "https://docs.apifox.com/7409914m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "IDEA 插件",
+    "title": "在 IDEA 上如何标记泛型？",
+    "url": "https://docs.apifox.com/7409869m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "IDEA 插件",
+    "title": "IDEA 插件上传 API 时，如何携带 context-path？",
+    "url": "https://docs.apifox.com/7653086m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "IDEA 插件",
+    "title": "IDEA 插件上传接口时，日志出现乱码，如何解决？",
+    "url": "https://docs.apifox.com/7675731m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "IDEA 插件",
+    "title": "IDEA 插件搜索接口的快捷键是什么？",
+    "url": "https://docs.apifox.com/8209213m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "IDEA 插件",
+    "title": "IDEA 插件如何生成枚举值、名称、说明？",
+    "url": "https://docs.apifox.com/9264171m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "IDEA 插件",
+    "title": "Apifox IDEA 插件安装失败，提示 app.zip 相关错误怎么办？",
+    "url": "https://docs.apifox.com/9285614m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Markdown 相关",
+    "title": "如何在 Apifox 的卡片组件中链接到项目内的文档或接口？",
+    "url": "https://docs.apifox.com/5883079m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Markdown 相关",
+    "title": "如何在 Markdown 文档中插入项目内接口/文档/数据模型/目录？",
+    "url": "https://docs.apifox.com/6709643m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Markdown 相关",
+    "title": "怎么在 Apifox 的 Markdown 中使用透明背景图片？",
+    "url": "https://docs.apifox.com/5838796m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Markdown 相关",
+    "title": "为什么 Markdown 文档中使用多个 $ 时部分内容没有正确显示？",
+    "url": "https://docs.apifox.com/5891165m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Markdown 相关",
+    "title": "如何在 Apifox 的 Markdown 中编写流程图？",
+    "url": "https://docs.apifox.com/5981008m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Markdown 相关",
+    "title": "如何控制 Markdown 表格的列宽？",
+    "url": "https://docs.apifox.com/6002792m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "",
+    "title": "收费与部署",
+    "url": "https://docs.apifox.com/49052074f0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "收费与部署",
+    "title": "Apifox 是否收费？最新免费功能权益有哪些？",
+    "url": "https://docs.apifox.com/5836730m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": "Apifox 是免费的。免费版不限制成员数量，不限制协作人数，也不限制项目数量。所有成员均可免费加入项目并参与协作，无需按人头付费。"
+  },
+  {
+    "category": "收费与部署",
+    "title": "Apifox 免费版常见问题（FAQ）：关于人数、团队与协作限制的说明",
+    "url": "https://docs.apifox.com/8079501m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "收费与部署",
+    "title": "数据是存储在本地还是云端？可否离线使用？可否私有化部署？",
+    "url": "https://docs.apifox.com/5836756m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "收费与部署",
+    "title": "购买【商业专业版】1年，使用半年后升级到【商业旗舰版】，如何计费？",
+    "url": "https://docs.apifox.com/6166498m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "",
+    "title": "Web 端与客户端",
+    "url": "https://docs.apifox.com/49054255f0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Web 端与客户端",
+    "title": "Apifox alpha 版下载",
+    "url": "https://docs.apifox.com/download-alpha.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Web 端与客户端",
+    "title": "Apifox Linux 桌面版下载安装",
+    "url": "https://docs.apifox.com/install-apifox-linux.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Web 端与客户端",
+    "title": "Web 端与客户端有何区别？",
+    "url": "https://docs.apifox.com/5836794m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Web 端与客户端",
+    "title": "Web 端与客户端数据不同步如何处理？",
+    "url": "https://docs.apifox.com/5836815m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Web 端与客户端",
+    "title": "为什么Web端或在线文档请求HTTP接口，Apifox响应显示跨域，但是在客户端运行是正常的？",
+    "url": "https://docs.apifox.com/7630900m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Web 端与客户端",
+    "title": "为什么下载时会跳到百度网盘或天翼网盘？",
+    "url": "https://docs.apifox.com/5922065m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Web 端与客户端",
+    "title": "ApifoxAppAgent 进程的作用是什么？",
+    "url": "https://docs.apifox.com/5836857m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Web 端与客户端",
+    "title": "为何 Apifox 启动会有多个 Helper 进程？",
+    "url": "https://docs.apifox.com/6965746m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Web 端与客户端",
+    "title": "Apifox 闪退、白屏怎么办？",
+    "url": "https://docs.apifox.com/5947012m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Web 端与客户端",
+    "title": "Apifox 如何打开开发者工具？",
+    "url": "https://docs.apifox.com/5947017m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Web 端与客户端",
+    "title": "Apifox 支持 win7 吗?",
+    "url": "https://docs.apifox.com/5984981m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Web 端与客户端",
+    "title": "Win 系统自动更新后打不开可能是什么原因？",
+    "url": "https://docs.apifox.com/6549770m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Web 端与客户端",
+    "title": "为什么 Windows 安装新版本后打开还是旧版本？",
+    "url": "https://docs.apifox.com/6706031m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Web 端与客户端",
+    "title": "微信、手机号提示已经被绑定了怎么办？",
+    "url": "https://docs.apifox.com/5988105m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Web 端与客户端",
+    "title": "为什么安装 Apifox 后启动提示\"无法定位程序输入点DiscardVirtualMemory 于动态链接库KERNEL32.dll\"",
+    "url": "https://docs.apifox.com/6305005m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Web 端与客户端",
+    "title": "Ubuntu 24 无法启动 Apifox，如何处理？",
+    "url": "https://docs.apifox.com/7415138m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Web 端与客户端",
+    "title": "Apifox 启动白屏修复方案（沙箱机制兼容问题）",
+    "url": "https://docs.apifox.com/8818643m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "MCP Server",
+    "title": "Apifox 新增接口目录后，MCP 没有获取到新的目录?",
+    "url": "https://docs.apifox.com/6664716m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "MCP Server",
+    "title": "Apifox MCP 为什么会识别不到本地文档的 API 接口?",
+    "url": "https://docs.apifox.com/6668467m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "MCP Server",
+    "title": "内网私有部署的大模型，能够直接用 apifox 的 mcp 嘛？",
+    "url": "https://docs.apifox.com/6850099m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "MCP Server",
+    "title": "如何让 Apifox MCP Server 的 Tools 名称后面不添加随机字符串",
+    "url": "https://docs.apifox.com/7267427m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "公告",
+    "title": "关于 Apifox 外部 JS 文件受篡改的风险提示与升级公告",
+    "url": "https://docs.apifox.com/8392582m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "离线空间",
+    "title": "如何将 Apifox 项目导入到离线空间里？",
+    "url": "https://docs.apifox.com/6926471m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "离线空间",
+    "title": "如何将离线空间里的数据导入到 Apifox 项目里？",
+    "url": "https://docs.apifox.com/8803651m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "AI 功能",
+    "title": "配置了自定义大模型、非内置服务商，Apifox 提示连接失败该怎么排查？",
+    "url": "https://docs.apifox.com/9142568m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Apifox CLI",
+    "title": "为什么使用 Apifox CLI 时提示 unknown option '--verbose'？",
+    "url": "https://docs.apifox.com/9242788m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Apifox CLI",
+    "title": "如何在 Apifox CLI 中保存和复用运行后的变量值？",
+    "url": "https://docs.apifox.com/9252635m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "Apifox CLI",
+    "title": "Apifox CLI 登录报错 400，如何解决？",
+    "url": "https://docs.apifox.com/9259242m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  },
+  {
+    "category": "WebService",
+    "title": "WebService 接口请求返回 WSDL，而不是业务响应，如何解决？",
+    "url": "https://docs.apifox.com/9257282m0.md?nav=01JHMQ9DFDQ3G5JYCPTZE4EH3J",
+    "description": ""
+  }
+]
