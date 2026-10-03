@@ -2,6 +2,7 @@
 FROM node:22-bookworm-slim AS web
 WORKDIR /source/web
 COPY web/package.json web/package-lock.json ./
+COPY web/patches/ ./patches/
 RUN npm ci
 COPY web/ ./
 RUN npm run build
@@ -9,6 +10,7 @@ RUN npm run build
 FROM rust:1-bookworm AS rust
 WORKDIR /source
 COPY Cargo.toml Cargo.lock ./
+COPY vendor/ ./vendor/
 COPY crates/ ./crates/
 COPY desktop/ ./desktop/
 COPY --from=web /source/web/dist ./web/dist/
