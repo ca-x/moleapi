@@ -500,3 +500,84 @@ async fn cloud_push_scrubs_local_values_and_pull_preserves_stable_native_identit
     );
     server.abort();
 }
+
+#[tokio::test]
+async fn old_server_dropping_live_protocol_cannot_acknowledge_sync_baseline() {
+    use axum::{
+        Json,
+        routing::{get, post},
+    };
+    use std::sync::{Arc, Mutex};
+    let stored = Arc::new(Mutex::new(None::<Value>));
+    let read = stored.clone();
+    let write = stored.clone();
+    let remote=Router::new().route("/api/auth/login",post(||async{Json(json!({"token":"fixture-token"}))}))
+    .route("/api/workspaces/sync-workspace",get(move||{let read=read.clone();async move{
+        match read.lock().unwrap().clone() {Some(w)=>(StatusCode::OK,Json(w)),None=>(StatusCode::NOT_FOUND,Json(json!({"error":"missing"}))) }
+    }})).route("/api/workspaces",post(move|Json(mut body):Json<Value>|{let write=write.clone();async move{
+        // Mimic the previous server's serde schema, which ignores additive protocol fields.
+        for collection in body["data"]["collections"].as_array_mut().unwrap() {
+            for request in collection["requests"].as_array_mut().unwrap() { request.as_object_mut().unwrap().remove("protocol"); }
+        }
+        let w=json!({"id":body["id"],"name":body["name"],"data":body["data"],"revision":1,"updated_at":"2026-10-03T00:00:00Z"});
+        *write.lock().unwrap()=Some(w.clone());Json(w)
+    }}));
+    let (url, server) = serve(remote).await;
+    let dir = tempfile::tempdir().unwrap();
+    let native = common::local(&dir.path().join("native.db")).await.unwrap();
+    let (status, body) = call(
+        &native,
+        "POST",
+        "/api/sync/connect",
+        None,
+        Some(json!({"server_url":url,"username":"old-server","password":"password"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let mut d = example_data();
+    d["collections"][0]["requests"][0]["protocol"] = json!({"kind":"sse"});
+    assert_eq!(
+        call(
+            &native,
+            "POST",
+            "/api/workspaces",
+            None,
+            Some(json!({"id":"sync-workspace","name":"SSE workspace","data":d}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let (status, error) = call(
+        &native,
+        "POST",
+        "/api/workspaces/sync-workspace/sync",
+        None,
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        error["error"]
+            .as_str()
+            .unwrap()
+            .contains("did not preserve")
+    );
+    // Without a committed baseline, the divergent remote triggers a conflict on retry.
+    let (status, result) = call(
+        &native,
+        "POST",
+        "/api/workspaces/sync-workspace/sync",
+        None,
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{result}");
+    assert_eq!(result["status"], "conflict");
+    assert_eq!(
+        result["workspace"]["data"]["collections"][0]["requests"][0]["protocol"]["kind"],
+        "sse"
+    );
+    assert_eq!(result["workspace"]["revision"], 1);
+    server.abort();
+}

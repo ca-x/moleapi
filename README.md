@@ -6,7 +6,7 @@
 
 服务端采用 Rust/Axum/SeaORM：SQLite 默认，PostgreSQL/MySQL 可配置。前端使用 React、Radix UI、TanStack Query、CodeMirror 和可调整面板；桌面端使用 Tauri，通过进程内 IPC 复用服务端 API，本地数据存于 SQLite，不需要另外启动服务端。
 
-当前基础功能包括工作区/集合/请求编辑、环境变量、真实响应和断言、请求历史、响应示例与 Mock、集合测试、OpenAPI3.0/3.1 与 Postman2.1/cURL 导入导出、规范原文保留、可选自托管同步和明确的冲突处理。请求前/响应后脚本、分层变量和本地覆盖值已实现，脚本使用独立 QuickJS 子进程及宿主超时保护。更多协议、完整协作与企业功能等按矩阵继续开发，不能据此宣称已完整替代竞品。
+当前基础功能包括工作区/集合/请求编辑、环境变量、真实响应和断言、请求历史、响应示例与 Mock、集合测试、OpenAPI3.0/3.1 与 Postman2.1/cURL 导入导出、规范原文保留、可选自托管同步和明确的冲突处理。请求前/响应后脚本、分层变量和本地覆盖值已实现；SSE/WebSocket 支持实时连接、消息收发与断开，脚本使用独立 QuickJS 子进程及宿主超时保护。更多协议、完整协作与企业功能等按矩阵继续开发，不能据此宣称已完整替代竞品。
 
 ## 本地构建和运行
 
@@ -55,7 +55,7 @@ GitHub Actions 分别检查应用、在 PostgreSQL16/MySQL8.4 实例上运行共
 
 ## 功能与设计依据
 
-- [完整功能目标矩阵](docs/FEATURE-MATRIX.md)、[能力模块](docs/CAPABILITY-MAP.md)
+- [完整功能目标矩阵](docs/FEATURE-MATRIX.md)、[能力模块](docs/CAPABILITY-MAP.md)、[API 类型覆盖与 Rust 库](docs/PROTOCOL-COVERAGE.md)
 - [Apifox 全部公开目录](docs/APIFOX-CATALOG.md)、[Postman 全部公开目录](docs/POSTMAN-CATALOG.md)
 - [具体 UI/配置选项](docs/CONFIGURATION-OPTIONS.md)、[UI 分析](docs/UI-RESEARCH.md)
 - [调研记录](docs/RESEARCH-NOTES.md)、[原始目录 JSON](docs/feature-options.json)、[功能目标 CSV](docs/features.csv)

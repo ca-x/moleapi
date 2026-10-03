@@ -34,8 +34,18 @@ pub struct Example {
     pub headers: Vec<Pair>,
     pub body: String,
 }
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum Protocol {
+    #[default]
+    Http,
+    Sse,
+    Websocket,
+}
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct RequestSpec {
+    #[serde(default)]
+    pub protocol: Protocol,
     #[serde(default)]
     pub pre_request_script: String,
     #[serde(default)]

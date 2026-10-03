@@ -6,6 +6,7 @@ import type { Workspace } from "../../shared/types";
 import { hasChanges } from "../workspaces/draft";
 import { useAuth } from "../auth/useAuth";
 import { useWorkspace } from "../workspaces/useWorkspace";
+import { useProtocolSession } from "../protocols/useProtocolSession";
 import { useRequests } from "../requests/useRequests";
 import { useRunner } from "../testing/useRunner";
 import { useLocalVariables } from "../variables/useLocalVariables";
@@ -48,9 +49,20 @@ export function useWorkbenchController() {
     setGuard(null);
     setFilter("");
   }, [auth.accountId]);
-  const localVariables=useLocalVariables(workspace);
+  const localVariables = useLocalVariables(workspace);
   const requests = useRequests(workspace, setView, setSidebar, localVariables);
-  const runner = useRunner(workspace,localVariables);
+  const protocolSession = useProtocolSession(
+    workspace,
+    requests.request,
+    localVariables,
+    auth.authenticated,
+  );
+  const sendRequest =
+    requests.request?.protocol?.kind &&
+    requests.request.protocol.kind !== "http"
+      ? protocolSession.connect
+      : requests.send;
+  const runner = useRunner(workspace, localVariables);
   const history = useHistory(
     auth.authenticated,
     workspace.selectedId,
@@ -173,7 +185,7 @@ export function useWorkbenchController() {
         interchange.setContent("");
       } else if (!modal && !guard && event.key === "Enter") {
         event.preventDefault();
-        void requests.send();
+        void sendRequest();
       } else if (event.key.toLowerCase() === "s") {
         event.preventDefault();
         void workspace.save();
@@ -181,7 +193,7 @@ export function useWorkbenchController() {
     };
     window.addEventListener("keydown", listener);
     return () => window.removeEventListener("keydown", listener);
-  }, [requests.send, workspace.save, modal, guard, interchange.setContent]);
+  }, [sendRequest, workspace.save, modal, guard, interchange.setContent]);
   const environment = workspace.draft?.data.environments.find(
     (e) => e.id === workspace.draft?.data.active_environment_id,
   );
@@ -191,6 +203,10 @@ export function useWorkbenchController() {
     ...appearance,
     ...workspace,
     ...requests,
+    protocolSession,
+    send: sendRequest,
+    busy: requests.busy || protocolSession.busy,
+    sending: requests.sending || protocolSession.busy,
     ...runner,
     ...history,
     ...interchange,

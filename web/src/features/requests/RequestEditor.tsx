@@ -1,10 +1,12 @@
+import ProtocolPane from "../protocols/ProtocolPane";
 import RequestScripts from "../scripts/RequestScripts";
 import ExamplesEditor from "./ExamplesEditor";
 import AssertionsEditor from "../testing/AssertionsEditor";
 import { ResponsePane } from "./ResponsePane";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import {
+  Badge,
   Button,
   Checkbox,
   Flex,
@@ -33,6 +35,7 @@ const requestTabs = [
 ];
 export default function RequestEditor({
   request,
+  protocolConnected = false,
   update,
   send,
   save,
@@ -45,6 +48,7 @@ export default function RequestEditor({
   error,
 }: {
   request: RequestSpec;
+  protocolConnected?: boolean;
   update: (patch: Partial<RequestSpec>) => void;
   send: () => void;
   save: () => void;
@@ -57,6 +61,32 @@ export default function RequestEditor({
   error: string;
 }) {
   const [tab, setTab] = useState("query");
+  const kind = request.protocol?.kind || "http";
+  useEffect(() => {
+    if (kind !== "http" && ["body", "assertions", "examples"].includes(tab))
+      setTab("query");
+  }, [kind, tab]);
+  function changeProtocol(value: "http" | "sse" | "websocket") {
+    let url = request.url;
+    try {
+      const parsed = new URL(url);
+      if (value === "websocket") {
+        if (parsed.protocol === "http:") parsed.protocol = "ws:";
+        if (parsed.protocol === "https:") parsed.protocol = "wss:";
+      } else {
+        if (parsed.protocol === "ws:") parsed.protocol = "http:";
+        if (parsed.protocol === "wss:") parsed.protocol = "https:";
+      }
+      url = parsed.toString();
+    } catch {
+      /* Templates are resolved by the selected environment. */
+    }
+    update({
+      protocol: { kind: value },
+      url,
+      ...(value !== "http" ? { method: "GET", body_kind: "none" } : {}),
+    });
+  }
   const copyCurl = async () => {
     try {
       await navigator.clipboard.writeText(curlTemplate(request));
@@ -77,7 +107,11 @@ export default function RequestEditor({
       <header className="request-heading">
         <Flex direction="column" gap="1">
           <Text size="1" color="gray">
-            HTTP 请求
+            {kind === "http"
+              ? "HTTP 请求"
+              : kind === "sse"
+                ? "SSE 事件流"
+                : "WebSocket 会话"}
           </Text>
           <TextField.Root
             className="request-title-input"
@@ -97,18 +131,40 @@ export default function RequestEditor({
             <Save size={15} />
             保存
           </Button>
-          <ToolButton label="复制 cURL 模板" onClick={copyCurl}>
+          <ToolButton
+            label={
+              kind === "http" ? "复制 cURL 模板" : "实时协议暂不提供 cURL 模板"
+            }
+            onClick={copyCurl}
+            disabled={kind !== "http"}
+          >
             <Copy size={17} />
           </ToolButton>
         </Flex>
       </header>
       <div className="url-toolbar">
         <Choice
-          value={request.method}
-          onChange={(method) => update({ method })}
-          options={methods.map((value) => ({ value, label: value }))}
-          label="HTTP 方法"
+          value={kind}
+          onChange={changeProtocol}
+          label="请求协议"
+          options={[
+            { value: "http", label: "HTTP" },
+            { value: "sse", label: "SSE" },
+            { value: "websocket", label: "WebSocket" },
+          ]}
         />
+        {kind !== "http" ? (
+          <Badge className="protocol-handshake" color="gray">
+            GET 握手
+          </Badge>
+        ) : (
+          <Choice
+            value={request.method}
+            onChange={(method) => update({ method })}
+            options={methods.map((value) => ({ value, label: value }))}
+            label="HTTP 方法"
+          />
+        )}
         <TextField.Root
           className="url-input mono"
           size="3"
@@ -121,10 +177,12 @@ export default function RequestEditor({
           size="3"
           loading={busy}
           onClick={send}
-          disabled={!request.url || sending}
+          disabled={
+            !request.url || sending || (kind !== "http" && protocolConnected)
+          }
         >
           <Send size={16} />
-          发送
+          {kind === "http" ? "发送" : protocolConnected ? "已连接" : "连接"}
         </Button>
       </div>
       <Group
@@ -145,26 +203,32 @@ export default function RequestEditor({
             className="request-tabs"
           >
             <Tabs.List>
-              {requestTabs.map((item) => (
-                <Tabs.Trigger key={item.value} value={item.value}>
-                  {item.label}
-                  {(item.value === "query"
-                    ? request.query.length
-                    : item.value === "headers"
-                      ? request.headers.length
-                      : item.value === "assertions"
-                        ? request.assertions.length
-                        : 0) > 0 && (
-                    <span className="count">
-                      {item.value === "query"
-                        ? request.query.length
-                        : item.value === "headers"
-                          ? request.headers.length
-                          : request.assertions.length}
-                    </span>
-                  )}
-                </Tabs.Trigger>
-              ))}
+              {requestTabs
+                .filter(
+                  (item) =>
+                    kind === "http" ||
+                    !["body", "assertions", "examples"].includes(item.value),
+                )
+                .map((item) => (
+                  <Tabs.Trigger key={item.value} value={item.value}>
+                    {item.label}
+                    {(item.value === "query"
+                      ? request.query.length
+                      : item.value === "headers"
+                        ? request.headers.length
+                        : item.value === "assertions"
+                          ? request.assertions.length
+                          : 0) > 0 && (
+                      <span className="count">
+                        {item.value === "query"
+                          ? request.query.length
+                          : item.value === "headers"
+                            ? request.headers.length
+                            : request.assertions.length}
+                      </span>
+                    )}
+                  </Tabs.Trigger>
+                ))}
             </Tabs.List>
             <Tabs.Content value="scripts">
               <RequestScripts request={request} update={update} dark={dark} />
@@ -349,30 +413,34 @@ export default function RequestEditor({
           <span aria-hidden="true" />
         </Separator>
         <Panel id="request-response-panel" defaultSize="65%" minSize="40%">
-          <ResponsePane
-            fill
-            response={response}
-            error={error}
-            dark={dark}
-            busy={busy}
-            onExample={() => {
-              if (response) {
-                update({
-                  examples: [
-                    ...request.examples,
-                    {
-                      id: id(),
-                      name: `${response.status} 示例`,
-                      status: response.status,
-                      headers: response.headers,
-                      body: response.body,
-                    },
-                  ],
-                });
-                toast.success("示例已添加，保存后保留");
-              }
-            }}
-          />
+          {kind !== "http" ? (
+            <ProtocolPane />
+          ) : (
+            <ResponsePane
+              fill
+              response={response}
+              error={error}
+              dark={dark}
+              busy={busy}
+              onExample={() => {
+                if (response) {
+                  update({
+                    examples: [
+                      ...request.examples,
+                      {
+                        id: id(),
+                        name: `${response.status} 示例`,
+                        status: response.status,
+                        headers: response.headers,
+                        body: response.body,
+                      },
+                    ],
+                  });
+                  toast.success("示例已添加，保存后保留");
+                }
+              }}
+            />
+          )}
         </Panel>
       </Group>
     </div>

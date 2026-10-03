@@ -1,3 +1,4 @@
+import { requestLabel } from "../../shared/model";
 import { Button, Text, TextField } from "@radix-ui/themes";
 import { Search } from "lucide-react";
 import { useWorkbench } from "../workbench/context";
@@ -28,7 +29,7 @@ export default function RequestSearch() {
         {draft?.data.collections
           .flatMap((c) => c.requests)
           .filter((r) =>
-            `${r.name} ${r.method} ${r.url}`
+            `${r.name} ${requestLabel(r)} ${r.url}`
               .toLowerCase()
               .includes(content.toLowerCase()),
           )
@@ -44,8 +45,10 @@ export default function RequestSearch() {
                 setModal(null);
               }}
             >
-              <span className={`method method-${r.method.toLowerCase()}`}>
-                {r.method}
+              <span
+                className={`method method-${requestLabel(r).toLowerCase()}`}
+              >
+                {requestLabel(r)}
               </span>
               {r.name}
               <Text size="1" color="gray" className="truncate">

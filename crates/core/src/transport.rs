@@ -12,6 +12,10 @@ pub async fn execute(
     environment: Option<&Environment>,
     policy: NetworkPolicy,
 ) -> Result<Response> {
+    ensure!(
+        request.protocol == Protocol::Http,
+        "Live protocols require the session API"
+    );
     let r = resolve_request(request, environment)?;
     tokio::time::timeout(
         Duration::from_millis(r.timeout_ms),
@@ -30,42 +34,7 @@ async fn execute_inner(r: &RequestSpec, policy: NetworkPolicy) -> Result<Respons
         }
     }
     let mut method = Method::from_bytes(r.method.as_bytes())?;
-    let mut headers = HeaderMap::new();
-    for p in r.headers.iter().filter(|p| p.enabled) {
-        headers.append(
-            HeaderName::from_bytes(p.key.as_bytes())?,
-            HeaderValue::from_str(&p.value)?,
-        );
-    }
-    // Let the transport calculate framing and destination headers.
-    for name in [
-        "host",
-        "content-length",
-        "transfer-encoding",
-        "connection",
-        "proxy-authorization",
-        "proxy-connection",
-        "upgrade",
-        "trailer",
-        "te",
-    ] {
-        headers.remove(name);
-    }
-    if r.auth.kind == "bearer" {
-        headers.insert(
-            "authorization",
-            HeaderValue::from_str(&format!("Bearer {}", r.auth.token))?,
-        );
-    }
-    if r.auth.kind == "basic" {
-        headers.insert(
-            "authorization",
-            HeaderValue::from_str(&format!(
-                "Basic {}",
-                STANDARD.encode(format!("{}:{}", r.auth.username, r.auth.password))
-            ))?,
-        );
-    }
+    let mut headers = request_headers(r)?;
     let mut body = if r.body_kind == "none" {
         None
     } else {
@@ -81,29 +50,7 @@ async fn execute_inner(r: &RequestSpec, policy: NetworkPolicy) -> Result<Respons
         );
     }
     for redirect in 0..=10 {
-        let host = url.host_str().context("URL requires host")?;
-        let host = host.trim_matches(['[', ']']);
-        let port = url.port_or_known_default().context("URL requires port")?;
-        let ips: Vec<_> = tokio::net::lookup_host((host, port))
-            .await
-            .context("DNS lookup failed")?
-            .collect();
-        ensure!(!ips.is_empty(), "DNS returned no addresses");
-        ensure!(
-            policy.allow_private_network || ips.iter().all(|a| public_ip(a.ip())),
-            "Private or reserved network address is blocked"
-        );
-        let client = reqwest::Client::builder()
-            .no_proxy()
-            .redirect(reqwest::redirect::Policy::none())
-            .danger_accept_invalid_certs(!r.verify_tls)
-            .no_gzip()
-            .no_brotli()
-            .no_deflate()
-            .no_zstd()
-            .resolve_to_addrs(host, &ips)
-            .connect_timeout(Duration::from_secs(15))
-            .build()?;
+        let client = checked_client(&url, policy, r.verify_tls).await?;
         let mut builder = client
             .request(method.clone(), url.clone())
             .headers(headers.clone());
@@ -188,4 +135,45 @@ async fn execute_inner(r: &RequestSpec, policy: NetworkPolicy) -> Result<Respons
         return Ok(result);
     }
     bail!("Too many redirects")
+}
+
+/// Shared authentication and forbidden hop-header handling for HTTP and live protocols.
+pub fn request_headers(r: &RequestSpec) -> Result<HeaderMap> {
+    let mut headers = HeaderMap::new();
+    for p in r.headers.iter().filter(|p| p.enabled) {
+        headers.append(
+            HeaderName::from_bytes(p.key.as_bytes())?,
+            HeaderValue::from_str(&p.value)?,
+        );
+    }
+    // Let the transport calculate framing and destination headers.
+    for name in [
+        "host",
+        "content-length",
+        "transfer-encoding",
+        "connection",
+        "proxy-authorization",
+        "proxy-connection",
+        "upgrade",
+        "trailer",
+        "te",
+    ] {
+        headers.remove(name);
+    }
+    if r.auth.kind == "bearer" {
+        headers.insert(
+            "authorization",
+            HeaderValue::from_str(&format!("Bearer {}", r.auth.token))?,
+        );
+    }
+    if r.auth.kind == "basic" {
+        headers.insert(
+            "authorization",
+            HeaderValue::from_str(&format!(
+                "Basic {}",
+                STANDARD.encode(format!("{}:{}", r.auth.username, r.auth.password))
+            ))?,
+        );
+    }
+    Ok(headers)
 }

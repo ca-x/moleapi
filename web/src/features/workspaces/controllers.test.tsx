@@ -483,3 +483,59 @@ it("keeps native blank-name local overrides attached to their row identity", asy
     ),
   ).toEqual(["edited-a", "private-b"]);
 });
+
+it("keeps extracted local values in the environment used by the original request", async () => {
+  const original = makeWorkspace();
+  original.data.environments.push({
+    id: "production",
+    name: "生产",
+    variables: [],
+  });
+  const pending = deferred<ApiResponse>();
+  mockedApi.mockReturnValue(pending.promise);
+  const { result } = renderHook(
+    () => {
+      const workspace = useWorkspace(true);
+      const locals = useLocalVariables(workspace);
+      return {
+        workspace,
+        locals,
+        requests: useRequests(workspace, vi.fn(), vi.fn(), locals),
+      };
+    },
+    { wrapper: harness(original) },
+  );
+  await waitFor(() => expect(result.current.requests.request).toBeDefined());
+  let sending!: Promise<void>;
+  act(() => {
+    sending = result.current.requests.send();
+  });
+  act(() =>
+    result.current.workspace.updateData((data) => ({
+      ...data,
+      active_environment_id: "production",
+    })),
+  );
+  await act(async () => {
+    pending.resolve({
+      ...response,
+      variable_updates: [
+        {
+          scope: "environment",
+          key: "api_token",
+          value: "development-response-token",
+        },
+      ],
+    });
+    await sending;
+  });
+  expect(result.current.locals.read("environment", "local", "api_token")).toBe(
+    "development-response-token",
+  );
+  expect(
+    result.current.locals.read("environment", "production", "api_token"),
+  ).toBeUndefined();
+  expect(result.current.workspace.draft?.data.active_environment_id).toBe(
+    "production",
+  );
+});

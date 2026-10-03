@@ -51,6 +51,16 @@ pub fn import(format: &str, content: &str) -> Result<ImportResult> {
 }
 
 pub fn export(workspace: &Workspace, format: &str, include_secrets: bool) -> Result<ExportResult> {
+    if format != "moleapi"
+        && workspace
+            .data
+            .collections
+            .iter()
+            .flat_map(|collection| &collection.requests)
+            .any(|request| request.protocol != moleapi_core::Protocol::Http)
+    {
+        bail!("该导出格式尚不能保留 SSE/WebSocket 会话配置，请使用 MoleAPI 格式导出");
+    }
     let workspace = if include_secrets {
         workspace.clone()
     } else {

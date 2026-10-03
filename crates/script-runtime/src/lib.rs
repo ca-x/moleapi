@@ -34,6 +34,81 @@ pub struct ScriptOutput {
     pub private_values: BTreeSet<String>,
 }
 
+fn capture_private(
+    ctx: &Ctx<'_>,
+    values: &RefCell<BTreeSet<String>>,
+    complete: &Cell<bool>,
+    value: String,
+) -> rquickjs::Result<()> {
+    let mut values = values.borrow_mut();
+    if !values.contains(&value)
+        && (values.len() >= 5000
+            || values
+                .iter()
+                .map(String::len)
+                .sum::<usize>()
+                .saturating_add(value.len())
+                > 4 * moleapi_core::MAX_VARIABLE_BYTES)
+    {
+        complete.set(false);
+        return Err(Exception::throw_range(
+            ctx,
+            "Private variable history exceeds execution limit",
+        ));
+    }
+    values.insert(value);
+    Ok(())
+}
+fn capture_url(
+    ctx: &Ctx<'_>,
+    values: &RefCell<BTreeSet<String>>,
+    complete: &Cell<bool>,
+    raw: &str,
+) -> rquickjs::Result<()> {
+    if raw.len() > moleapi_core::MAX_BODY {
+        complete.set(false);
+        return Err(Exception::throw_range(
+            ctx,
+            "Request privacy URL exceeds capture limit",
+        ));
+    }
+    let Ok(url) = url::Url::parse(raw) else {
+        return Ok(());
+    };
+    let decode = |value: &str| {
+        percent_encoding::percent_decode_str(value)
+            .decode_utf8_lossy()
+            .into_owned()
+    };
+    if !url.username().is_empty() {
+        capture_private(ctx, values, complete, url.username().into())?;
+        capture_private(ctx, values, complete, decode(url.username()))?;
+    }
+    if let Some(password) = url.password() {
+        capture_private(ctx, values, complete, password.into())?;
+        capture_private(ctx, values, complete, decode(password))?;
+        capture_private(
+            ctx,
+            values,
+            complete,
+            format!("{}:{}", decode(url.username()), decode(password)),
+        )?;
+    }
+    for (index, (key, value)) in url.query_pairs().enumerate() {
+        if index >= 1000 {
+            complete.set(false);
+            return Err(Exception::throw_range(
+                ctx,
+                "Request privacy URL exceeds 1000 query fields",
+            ));
+        }
+        if moleapi_core::sensitive_query_key(&key) {
+            capture_private(ctx, values, complete, value.into_owned())?;
+        }
+    }
+    Ok(())
+}
+
 pub fn run(
     scripts: &[String],
     request: &RequestSpec,
@@ -55,6 +130,8 @@ pub fn run(
     );
     let private_values = Rc::new(RefCell::new(scopes.private_values.clone()));
     let privacy_complete = Rc::new(Cell::new(true));
+    let failure_privacy_complete = Rc::new(Cell::new(true));
+    let active_capture = Rc::new(Cell::new(0usize));
     let result = (|| -> Result<ScriptOutput> {
         let runtime = Runtime::new().context("Create JavaScript runtime")?;
         runtime.set_memory_limit(MEMORY_LIMIT);
@@ -90,27 +167,87 @@ pub fn run(
             let capture = Function::new(
                 ctx.clone(),
                 move |ctx: Ctx<'_>, value: String| -> rquickjs::Result<()> {
-                    let mut values = values.borrow_mut();
-                    if !values.contains(&value)
-                        && (values.len() >= 5000
-                            || values
-                                .iter()
-                                .map(String::len)
-                                .sum::<usize>()
-                                .saturating_add(value.len())
-                                > 4 * moleapi_core::MAX_VARIABLE_BYTES)
-                    {
-                        complete.set(false);
-                        return Err(Exception::throw_range(
-                            &ctx,
-                            "Private variable history exceeds execution limit",
-                        ));
-                    }
-                    values.insert(value);
-                    Ok(())
+                    capture_private(&ctx, &values, &complete, value)
                 },
             )?;
             ctx.globals().set("__moleapiTaint", capture)?;
+            let uncertain = failure_privacy_complete.clone();
+            ctx.globals().set(
+                "__moleapiPrivacyUncertain",
+                Function::new(ctx.clone(), move || {
+                    uncertain.set(false);
+                })?,
+            )?;
+            let active = active_capture.clone();
+            ctx.globals().set(
+                "__moleapiCaptureBegin",
+                Function::new(ctx.clone(), move || {
+                    active.set(active.get().saturating_add(1));
+                })?,
+            )?;
+            let active = active_capture.clone();
+            let failure_complete = failure_privacy_complete.clone();
+            let complete = privacy_complete.clone();
+            ctx.globals().set(
+                "__moleapiCaptureEnd",
+                Function::new(ctx.clone(), move |success: bool| {
+                    if !success {
+                        failure_complete.set(false);
+                        complete.set(false);
+                    }
+                    active.set(active.get().saturating_sub(1));
+                })?,
+            )?;
+            let complete = privacy_complete.clone();
+            ctx.globals().set(
+                "__moleapiPrivacyOverflow",
+                Function::new(ctx.clone(), move |ctx: Ctx<'_>| -> rquickjs::Result<()> {
+                    complete.set(false);
+                    Err(Exception::throw_range(
+                        &ctx,
+                        "Request privacy capture work limit exceeded",
+                    ))
+                })?,
+            )?;
+            let values = private_values.clone();
+            let complete = privacy_complete.clone();
+            let query_values = private_values.clone();
+            let query_complete = privacy_complete.clone();
+            ctx.globals().set(
+                "__moleapiCaptureQuery",
+                Function::new(
+                    ctx.clone(),
+                    move |ctx: Ctx<'_>,
+                          key: String,
+                          value: String,
+                          secret: bool|
+                          -> rquickjs::Result<bool> {
+                        if key.len() > moleapi_core::MAX_BODY
+                            || value.len() > moleapi_core::MAX_BODY
+                        {
+                            query_complete.set(false);
+                            return Err(Exception::throw_range(
+                                &ctx,
+                                "Request privacy query field exceeds capture limit",
+                            ));
+                        }
+                        let sensitive = secret || moleapi_core::sensitive_query_key(&key);
+                        if sensitive {
+                            capture_private(&ctx, &query_values, &query_complete, value)?;
+                        }
+                        Ok(sensitive)
+                    },
+                )?,
+            )?;
+            ctx.globals().set(
+                "__moleapiCaptureUrl",
+                Function::new(
+                    ctx.clone(),
+                    move |ctx: Ctx<'_>, raw: String| -> rquickjs::Result<()> {
+                        capture_url(&ctx, &values, &complete, &raw)
+                    },
+                )?,
+            )?;
             // Bind serialized input as a JS string and parse JSON: evaluating JSON as
             // an object literal would give __proto__ keys different semantics.
             ctx.globals()
@@ -124,6 +261,16 @@ pub fn run(
                 .remove("__moleapiInput")
                 .context("Release script input")?;
             ctx.globals().remove("__moleapiTaint")?;
+            for name in [
+                "__moleapiPrivacyUncertain",
+                "__moleapiPrivacyOverflow",
+                "__moleapiCaptureUrl",
+                "__moleapiCaptureQuery",
+                "__moleapiCaptureBegin",
+                "__moleapiCaptureEnd",
+            ] {
+                ctx.globals().remove(name)?;
+            }
             for script in scripts.iter().filter(|s| !s.trim().is_empty()) {
                 let result = evaluate(script)?;
                 ensure!(
@@ -165,7 +312,7 @@ pub fn run(
             Ok(output)
         })?;
         ensure!(
-            privacy_complete.get(),
+            privacy_complete.get() && active_capture.get() == 0,
             "Private variable history exceeds execution limit"
         );
         ensure!(
@@ -178,7 +325,9 @@ pub fn run(
         anyhow::Error::new(ScriptFailure {
             message: error.to_string(),
             private_values: private_values.borrow().clone(),
-            privacy_complete: privacy_complete.get(),
+            privacy_complete: privacy_complete.get()
+                && failure_privacy_complete.get()
+                && active_capture.get() == 0,
         })
     })
 }

@@ -160,3 +160,10 @@ export function curlTemplate(request: RequestSpec): string {
 export function safeMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
+
+export const requestLabel = (request: RequestSpec) =>
+  request.protocol?.kind === "websocket"
+    ? "WS"
+    : request.protocol?.kind === "sse"
+      ? "SSE"
+      : request.method;

@@ -135,11 +135,11 @@ pub async fn update(
     let mut w = owned(&s, &owner.0, &id).await?;
     w.name = c.name;
     w.data = c.data;
-    Ok(Json(
-        storage::replace(&s.db, &owner.0, w, c.expected_revision)
-            .await?
-            .ok_or_else(|| ApiError::conflict("Workspace revision changed"))?,
-    ))
+    let w = storage::replace(&s.db, &owner.0, w, c.expected_revision)
+        .await?
+        .ok_or_else(|| ApiError::conflict("Workspace revision changed"))?;
+    reconcile_sessions(&s, &owner.0, &w).await;
+    Ok(Json(w))
 }
 pub async fn delete(
     State(s): State<AppState>,
@@ -176,6 +176,7 @@ pub async fn delete(
         .exec(&tx)
         .await?;
     tx.commit().await?;
+    s.protocol_sessions.close_workspace(&owner.0, &id).await;
     Ok(Json(serde_json::json!({"ok":true})))
 }
 pub async fn versions(
@@ -188,4 +189,16 @@ pub async fn versions(
         storage::documents(&s.db, &owner.0, "version", Some(&id), 10000).await?;
     versions.sort_by_key(|w| std::cmp::Reverse(w.revision));
     Ok(Json(versions))
+}
+
+pub(crate) async fn reconcile_sessions(s: &AppState, owner: &str, w: &Workspace) {
+    let ids: Vec<_> = w
+        .data
+        .collections
+        .iter()
+        .flat_map(|c| c.requests.iter().map(|r| r.id.clone()))
+        .collect();
+    s.protocol_sessions
+        .reconcile_workspace(owner, &w.id, &ids)
+        .await;
 }

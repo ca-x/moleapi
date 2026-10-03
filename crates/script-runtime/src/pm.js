@@ -3,6 +3,15 @@
   const stringify = JSON.stringify.bind(JSON), parse = JSON.parse.bind(JSON);
   const source = input.request, scopes = input.scopes;
   const taint = __moleapiTaint;
+  const uncertain = __moleapiPrivacyUncertain, privacyOverflow = __moleapiPrivacyOverflow, captureUrl = __moleapiCaptureUrl, captureQuery = __moleapiCaptureQuery;
+  const captureBegin = __moleapiCaptureBegin, captureEnd = __moleapiCaptureEnd;
+  const captureSafely = action => {
+    captureBegin();let complete = false;
+    try { const result = action();complete = true;return result; }
+    finally { captureEnd(complete); }
+  };
+  let privacyVisits = 0;
+  const privacyVisit = () => { if (++privacyVisits > 16384) privacyOverflow(); };
   for (const name of Object.keys(scopes)) scopes[name] = Object.assign(Object.create(null),scopes[name]);
   const logs = [], tests = [], updates = [];
   const MAX_VALUE = 1024 * 1024, MAX_OUTPUT = 64 * 1024;
@@ -36,18 +45,26 @@
       if (readonly) throw new Error("Execution data is read-only");
       key = String(key); value = checked(value);
       if (!key || key.length > 1024) throw new Error("Invalid variable key");
-      taint(value);
-      scopes[scope][key] = value;
-      if (updates.length >= 1000) throw new Error("Script exceeds 1000 variable updates");
-      updates.push({scope,key,value});
+      return captureSafely(() => {
+        captureCurrentRequest();
+        taint(value);
+        scopes[scope][key] = value;
+        captureCurrentRequest();
+        if (updates.length >= 1000) throw new Error("Script exceeds 1000 variable updates");
+        updates.push({scope,key,value});
+      });
     },
     unset(key) {
       if (readonly) throw new Error("Execution data is read-only");
       key = String(key);
       if (!key || key.length > 1024) throw new Error("Invalid variable key");
-      delete scopes[scope][key];
-      if (updates.length >= 1000) throw new Error("Script exceeds 1000 variable updates");
-      updates.push({scope,key});
+      return captureSafely(() => {
+        captureCurrentRequest();
+        delete scopes[scope][key];
+        captureCurrentRequest();
+        if (updates.length >= 1000) throw new Error("Script exceeds 1000 variable updates");
+        updates.push({scope,key});
+      });
     },
     clear() { for (const key of Object.keys(scopes[scope])) this.unset(key); },
     replaceIn(text) {
@@ -65,26 +82,92 @@
       return result;
     }
   }, scope);
+  const privacyResolve = value => {
+    try { return store("temporary",true).replaceIn(value); }
+    catch (error) {
+      if (error?.message === "Unsupported or unresolved variable") { uncertain(); return undefined; }
+      privacyOverflow();
+    }
+  };
+  const captureHeader = pair => captureSafely(() => {
+    privacyVisit();
+    const keys = [pair.key.toLowerCase()];
+    const resolvedKey = privacyResolve(pair.key);
+    if (resolvedKey !== undefined) keys.push(resolvedKey.toLowerCase());
+    const unknownKey = resolvedKey === undefined;
+    if (unknownKey || pair.secret === true || keys.some(key => ["authorization","proxy-authorization","cookie","x-api-key"].includes(key))) {
+      const values = [pair.value], resolvedValue = privacyResolve(pair.value);
+      if (resolvedValue !== undefined) values.push(resolvedValue);
+      for (const value of new Set(values)) {
+        taint(value);
+        const space = value.indexOf(" ");
+        const scheme = space < 0 ? "" : value.slice(0,space).toLowerCase();
+        if (keys.some(key => ["authorization","proxy-authorization"].includes(key)) || unknownKey && ["bearer","basic"].includes(scheme)) {
+          if (space >= 0) taint(value.slice(space+1).trim());
+        }
+      }
+    }
+  });
+  const captureCurrentUrl = () => {
+    privacyVisit();captureUrl(source.url);
+    const resolved = privacyResolve(source.url);
+    if (resolved !== undefined && resolved !== source.url) captureUrl(resolved);
+  };
+  const captureQueryPair = pair => {
+    privacyVisit();
+    const rawSensitive = captureQuery(pair.key,pair.value,pair.secret === true);
+    const key = privacyResolve(pair.key);
+    const sensitive = rawSensitive || key === undefined || captureQuery(key,pair.value,pair.secret === true);
+    if (sensitive) {
+      if (key === undefined) taint(pair.value);
+      const value = privacyResolve(pair.value);
+      if (value !== undefined) taint(value);
+    }
+  };
+  const captureAuth = () => {
+    privacyVisit();
+    for (const value of [source.auth.token,source.auth.password]) if (value) {
+      taint(value); const resolved = privacyResolve(value);
+      if (resolved !== undefined) taint(resolved);
+    }
+    const kind = privacyResolve(source.auth.kind);
+    if (source.auth.password || kind === "basic") {
+      const value = `${source.auth.username}:${source.auth.password}`;
+      taint(value); const resolved = privacyResolve(value);
+      if (resolved !== undefined) taint(resolved);
+    }
+  };
+  const captureCurrentRequest = () => captureSafely(() => {
+    if (source.headers.length > 1000 || source.query.length > 1000) privacyOverflow();
+    captureAuth();captureCurrentUrl();
+    for (const pair of source.headers) if (pair.enabled) captureHeader(pair);
+    for (const pair of source.query) if (pair.enabled) captureQueryPair(pair);
+  });
   const headerApi = (pairs, mutable) => api({
-    get: key => pairs.find(p => p.enabled && p.key.toLowerCase() === String(key).toLowerCase())?.value,
+    get: key => {
+      const pair = pairs.find(p => p.enabled && p.key.toLowerCase() === String(key).toLowerCase());
+      if (mutable && pair) captureHeader(pair);
+      return pair?.value;
+    },
     has: key => pairs.some(p => p.enabled && p.key.toLowerCase() === String(key).toLowerCase()),
-    toObject: () => Object.fromEntries(pairs.filter(p => p.enabled).map(p => [p.key,p.value])),
-    all: () => pairs.filter(p => p.enabled).map(p => ({key:p.key,value:p.value})),
+    toObject: () => Object.fromEntries(pairs.filter(p => p.enabled).map(p => {if (mutable) captureHeader(p); return [p.key,p.value];})),
+    all: () => pairs.filter(p => p.enabled).map(p => {if (mutable) captureHeader(p); return {key:p.key,value:p.value};}),
     add(pair) {
       if (!mutable) throw new Error("Response headers are read-only");
       if (!pair || typeof pair.key !== "string" || typeof pair.value !== "string") throw new Error("Header requires key and value strings");
-      if (pairs.length >= 1000) throw new Error("Request exceeds 1000 headers");
-      pairs.push({id:`script-header-${pairs.length}`,key:pair.key,value:pair.value,enabled:true});
+      if (pairs.length >= 1000) privacyOverflow();
+      captureHeader(pair);
+      pairs.push({id:`script-header-${pairs.length}`,key:pair.key,value:pair.value,enabled:true,secret:pair.secret === true ? true : undefined});
     },
     remove(key) {
       if (!mutable) throw new Error("Response headers are read-only");
-      for (let i = pairs.length - 1; i >= 0; i--) if (pairs[i].key.toLowerCase() === String(key).toLowerCase()) pairs.splice(i,1);
+      for (let i = pairs.length - 1; i >= 0; i--) if (pairs[i].key.toLowerCase() === String(key).toLowerCase()) {captureHeader(pairs[i]); pairs.splice(i,1);}
     },
     upsert(pair) { this.remove(pair.key); this.add(pair); }
   },"headers");
   const request = {};
   Object.defineProperties(request, {
-    url: {get: () => source.url, set: value => {source.url = checked(value);}},
+    url: {get: () => captureSafely(() => {captureCurrentUrl(); return source.url;}), set: value => captureSafely(() => {captureCurrentRequest(); source.url = checked(value); captureCurrentRequest();})},
     method: {get: () => source.method, set: value => {source.method = checked(value);}},
     headers: {value: headerApi(source.headers,true)},
     body: {value: api({
@@ -197,6 +280,7 @@
     logs.push({level,message:bounded(args.map(v => typeof v === "string" ? v : describe(v)).join(" "))});
   }])),writable:false});
   for (const name of ["require","fetch","setTimeout","setInterval","queueMicrotask"]) globalThis[name] = () => unsupported(name);
+  captureCurrentRequest();
   const exportState = () => stringify({request:source,logs,tests,updates});
   Object.defineProperty(globalThis,"__moleapiExport",{value:exportState,writable:false,configurable:false});
 })

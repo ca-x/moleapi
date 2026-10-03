@@ -1,5 +1,8 @@
 use anyhow::{Context, Result, ensure};
-use std::net::IpAddr;
+use std::{
+    net::{IpAddr, SocketAddr},
+    time::Duration,
+};
 use url::Url;
 #[derive(Clone, Copy)]
 pub struct NetworkPolicy {
@@ -33,6 +36,67 @@ pub fn public_ip(ip: IpAddr) -> bool {
                 && !(seg[0] == 0x3fff && (seg[1] & 0xf000) == 0)
         }
     }
+}
+
+pub fn protocol_url(raw: &str, websocket: bool) -> Result<Url> {
+    let url = Url::parse(raw).context("Invalid request URL")?;
+    ensure!(
+        if websocket {
+            matches!(url.scheme(), "ws" | "wss")
+        } else {
+            matches!(url.scheme(), "http" | "https")
+        },
+        "URL scheme is incompatible with request protocol"
+    );
+    ensure!(url.host_str().is_some(), "URL requires a host");
+    ensure!(
+        url.username().is_empty() && url.password().is_none(),
+        "URL credentials are not supported; use request authentication"
+    );
+    Ok(url)
+}
+
+/// Resolve every address, reject unsafe destinations, and pin the result for this hop.
+pub async fn checked_destination(url: &Url, policy: NetworkPolicy) -> Result<Vec<SocketAddr>> {
+    let host = url
+        .host_str()
+        .context("URL requires host")?
+        .trim_matches(['[', ']']);
+    let port = url.port_or_known_default().context("URL requires port")?;
+    let ips: Vec<_> = tokio::net::lookup_host((host, port))
+        .await
+        .context("DNS lookup failed")?
+        .collect();
+    ensure!(!ips.is_empty(), "DNS returned no addresses");
+    ensure!(
+        policy.allow_private_network || ips.iter().all(|a| public_ip(a.ip())),
+        "Private or reserved network address is blocked"
+    );
+    Ok(ips)
+}
+
+pub async fn checked_client(
+    url: &Url,
+    policy: NetworkPolicy,
+    verify_tls: bool,
+) -> Result<reqwest::Client> {
+    let ips = checked_destination(url, policy).await?;
+    let host = url
+        .host_str()
+        .context("URL requires host")?
+        .trim_matches(['[', ']']);
+    Ok(reqwest::Client::builder()
+        .no_proxy()
+        .http1_only()
+        .redirect(reqwest::redirect::Policy::none())
+        .danger_accept_invalid_certs(!verify_tls)
+        .no_gzip()
+        .no_brotli()
+        .no_deflate()
+        .no_zstd()
+        .resolve_to_addrs(host, &ips)
+        .connect_timeout(Duration::from_secs(15))
+        .build()?)
 }
 
 pub fn valid_url(raw: &str) -> Result<Url> {

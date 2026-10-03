@@ -21,3 +21,11 @@ The current fix round replaces cooperative-only CPU enforcement with one worker 
 ## Continuing work
 
 The full matrix remains the authority. Next work extends the versioned pm compatibility subset and richer authentication/body modes, real SSE/WebSocket protocol sessions and schema editors; then scenario/dataset/Mock/publishing, collaboration/versioning/Git/CLI/AI/enterprise modules. Vendor-marketplace/billing entries retain explicit product-boundary distinctions. No unimplemented feature is labeled complete merely because a component or route exists.
+
+## SSE/WebSocket extension verified locally
+
+Real SSE/WebSocket engines use eventsource-stream and reqwest-websocket with the shared checked/pinned network client. Owner-scoped HTTP/nativeIPC JSON sessions support connect/events/text-binary-Ping/send/close, bounded retention with explicit cursor gaps, timeout/cancellation, logout admission fencing, request/workspace deletion cleanup and script feedback. Live GET/None preserves saved body draft without sending it. Mixed-version native sync detects changed shared-data acknowledgments rather than acknowledging lost protocol configuration.
+
+Final root verification:88 Rust tests,32 frontend tests, all-targets Clippy with warnings denied, rustfmt, TypeScript/production build and env-cleared worker smoke passed. Independent backend/frontend scoped reviews are clean after template/alias/partial-capture and lifecycle fixes. The latest embeddedindex matchesdist. Agent-browser performed SSEid/retry/data+close and WStext/binary send-echo+close/keyboard on real loopback fixtures;390x640 light/dark automatedWCAG checks report0violations and1incompletecount-contrast review, with no viewportoverflow.
+
+This slice does not implement reconnect, durable event history/search, live post/event scripts or complete protocol feature parity. Other API types and dedicated response extraction rules remain pending in PROTOCOL-COVERAGE.md. New platform/three-database CI must validate this extension after push. Script commit11250e1 independently passed actual3databaseCI37082400550, all9platform target/workerchecks37082450280 and nativeDockercontainer/manifestchecks37082450593. Docker still runs only in GitHub Actions.

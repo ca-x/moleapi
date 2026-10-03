@@ -7,7 +7,7 @@ use argon2::{
     password_hash::{PasswordHash, SaltString, rand_core::OsRng},
 };
 use axum::{
-    Json,
+    Extension, Json,
     extract::{Request, State},
     middleware::Next,
     response::{IntoResponse, Response},
@@ -189,8 +189,12 @@ pub async fn guard(State(state): State<AppState>, mut request: Request, next: Ne
 }
 pub async fn logout(
     State(state): State<AppState>,
+    Extension(owner): Extension<Identity>,
     headers: axum::http::HeaderMap,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let gate = state.protocol_admission.owner(&owner.0)?;
+    let mut generation = gate.lock().await;
+    let next = generation.checked_add(1).ok_or_else(ApiError::internal)?;
     if let Some(token) = headers
         .get("authorization")
         .and_then(|v| v.to_str().ok())
@@ -200,7 +204,34 @@ pub async fn logout(
             .exec(&state.db)
             .await?;
     }
+    *generation = next;
+    state.protocol_sessions.close_owner(&owner.0).await;
     Ok(Json(serde_json::json!({"ok":true})))
+}
+
+/// Recheck a previously authenticated call under its owner admission gate.
+pub(crate) async fn still_authenticated(
+    state: &AppState,
+    owner: &str,
+    headers: &axum::http::HeaderMap,
+) -> Result<(), ApiError> {
+    if state.local {
+        return Ok(());
+    }
+    let token = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .ok_or_else(ApiError::unauthorized)?;
+    let active = session::Entity::find_by_id(token_hash(token))
+        .filter(session::Column::Owner.eq(owner))
+        .filter(session::Column::ExpiresAt.gt(chrono::Utc::now().timestamp()))
+        .one(&state.db)
+        .await?;
+    if active.is_none() {
+        return Err(ApiError::unauthorized());
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -227,6 +258,10 @@ mod tests {
             local: false,
             sync_lock: std::sync::Arc::new(tokio::sync::Mutex::new(())),
             script_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
+            protocol_sessions: moleapi_protocols::SessionManager::new(),
+            protocol_admission: std::sync::Arc::new(
+                crate::protocol_admission::AdmissionGates::default(),
+            ),
             script_worker: std::env::current_exe().unwrap(),
         };
         let Json(result) = new_session(&state, "owner", "username").await.unwrap();

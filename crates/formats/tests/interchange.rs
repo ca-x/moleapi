@@ -157,3 +157,23 @@ fn generated_openapi_and_postman_exports_are_importable() {
         );
     }
 }
+
+#[test]
+fn live_protocol_config_roundtrips_in_moleapi_and_cannot_silently_disappear_in_other_formats() {
+    let mut source = workspace(import("postman", &postman().to_string()).unwrap().data);
+    let request = &mut source.data.collections[0].requests[0];
+    request.protocol = moleapi_core::Protocol::Sse;
+    let encoded = export(&source, "moleapi", true).unwrap();
+    let restored = import("moleapi", &encoded.content).unwrap();
+    assert_eq!(
+        restored.data.collections[0].requests[0].protocol,
+        moleapi_core::Protocol::Sse
+    );
+    for format in ["postman", "openapi"] {
+        let error = export(&source, format, true)
+            .err()
+            .expect("unsupported format must report protocol loss")
+            .to_string();
+        assert!(error.contains("MoleAPI"), "{error}");
+    }
+}

@@ -128,6 +128,18 @@ pub fn resolve_request(
     Ok(request)
 }
 
+/// Resolve one field using the same bounded interpolation as complete requests.
+/// Callers can inspect private fields before scripts define unrelated URL/body variables.
+pub fn resolve_value(text: &str, environment: &Environment) -> Result<String> {
+    let vars = environment
+        .variables
+        .iter()
+        .filter(|v| v.enabled)
+        .map(|v| (v.key.as_str(), v.local_value.as_deref().unwrap_or(&v.value)))
+        .collect();
+    interpolate(text, &vars)
+}
+
 #[cfg(test)]
 mod bounds_tests {
     use super::*;

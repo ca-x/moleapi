@@ -228,3 +228,98 @@ pub async fn execute(
         perform(&s, &owner.0, &w, &c.request, collection, &mut scopes).await?,
     ))
 }
+
+/// Prepare a live connection with the same isolated pre-script worker and scoped values.
+pub(crate) async fn prepare_live(
+    s: &AppState,
+    w: &Workspace,
+    r: &RequestSpec,
+    collection: &Collection,
+    scopes: &mut VariableScopes,
+) -> Result<
+    (
+        RequestSpec,
+        moleapi_protocols::PreparedFeedback,
+        Vec<VariableUpdate>,
+        Vec<moleapi_core::RequestUpdate>,
+    ),
+    ApiError,
+> {
+    if [
+        &w.data.post_response_script,
+        &collection.post_response_script,
+        &r.post_response_script,
+    ]
+    .iter()
+    .any(|s| !s.trim().is_empty())
+    {
+        return Err(ApiError::bad(
+            "Post-response scripts are unavailable for live protocols until a per-event script contract exists",
+        ));
+    }
+    moleapi_core::validate_request(r, true).map_err(|e| ApiError::bad(e.to_string()))?;
+    crate::privacy::request_values(r, scopes)?;
+    let scripts = vec![
+        w.data.pre_request_script.clone(),
+        collection.pre_request_script.clone(),
+        r.pre_request_script.clone(),
+    ];
+    let mut request = r.clone();
+    let mut feedback = moleapi_protocols::PreparedFeedback::default();
+    let mut updates = vec![];
+    if scripts.iter().any(|s| !s.trim().is_empty()) {
+        let output = script_phase(s, scripts, r, None, scopes).await.map_err(|failure| {
+            scopes.private_values.extend(failure.private_values);
+            let mut message = serde_json::json!(failure.error.message);
+            if failure.privacy_complete {
+                match crate::privacy::Redactor::new(&scopes.private_values) {
+                    Ok(redactor) => redactor.scrub(&mut message),
+                    Err(_) => message=serde_json::json!("Live pre-script failed; privacy redaction unavailable"),
+                }
+            } else {
+                message=serde_json::json!("Live pre-script failed; details withheld because privacy metadata is incomplete");
+            }
+            ApiError::bad(message.as_str().unwrap_or("Live pre-script failed"))
+        })?;
+        scopes.private_values.extend(output.private_values);
+        scopes
+            .apply(&output.updates)
+            .map_err(|e| ApiError::bad(e.to_string()))?;
+        request = output.request;
+        crate::privacy::request_values(&request, scopes)?;
+        feedback.logs = output.logs;
+        feedback.tests = output.tests;
+        updates = output.updates;
+    }
+    let mut request_updates = vec![];
+    for (field, before, after) in [
+        ("method", r.method.clone(), request.method.clone()),
+        ("url", r.url.clone(), request.url.clone()),
+        ("body_kind", r.body_kind.clone(), request.body_kind.clone()),
+        ("body", r.body.clone(), request.body.clone()),
+        (
+            "headers",
+            serde_json::to_string(&r.headers).map_err(|_| ApiError::internal())?,
+            serde_json::to_string(&request.headers).map_err(|_| ApiError::internal())?,
+        ),
+    ] {
+        if before != after {
+            request_updates.push(moleapi_core::RequestUpdate {
+                field: field.into(),
+                value: after,
+            });
+        }
+    }
+    // None is the execution mode, regardless of retained editor draft text. Scripts
+    // still see that draft above; ignore it only in the execution clone so unrelated
+    // draft templates neither resolve nor become request updates or wire bytes.
+    let effective = scopes.effective();
+    if moleapi_core::resolve_value(&request.body_kind, &effective).is_ok_and(|kind| kind == "none")
+    {
+        request.body.clear();
+    }
+    let resolved = moleapi_core::resolve_request(&request, Some(&effective))
+        .map_err(|e| ApiError::bad(e.to_string()))?;
+    crate::privacy::request_values(&resolved, scopes)?;
+    Ok((resolved, feedback, updates, request_updates))
+}

@@ -7,7 +7,7 @@ mod transport;
 mod validation;
 mod variables;
 pub use assertions::*;
-pub use interpolation::resolve_request;
+pub use interpolation::{resolve_request, resolve_value};
 pub use models::*;
 pub use policy::*;
 pub use redaction::*;

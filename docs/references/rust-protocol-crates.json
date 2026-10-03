@@ -1,0 +1,1226 @@
+{
+  "retrieved_on": "2026-10-03",
+  "source": "https://crates.io/api/v1/crates/{name}",
+  "packages": [
+    {
+      "name": "async-graphql-parser",
+      "version": "7.2.1",
+      "rust_version": null,
+      "repository": "https://github.com/async-graphql/async-graphql",
+      "documentation": "https://docs.rs/async-graphql/",
+      "updated_at": "2026-04-21T22:44:45.262609Z",
+      "description": "GraphQL query parser for async-graphql",
+      "features": {}
+    },
+    {
+      "name": "cynic-introspection",
+      "version": "3.14.0",
+      "rust_version": "1.85",
+      "repository": "https://codeberg.org/obmarg/cynic",
+      "documentation": "https://docs.rs/cynic-introspection",
+      "updated_at": "2026-07-12T14:29:30.424824Z",
+      "description": "GraphQL API introspection for cynic",
+      "features": {
+        "default": [
+          "sdl"
+        ],
+        "sdl": [
+          "indenter"
+        ]
+      }
+    },
+    {
+      "name": "graphql_client",
+      "version": "0.16.0",
+      "rust_version": "1.66.0",
+      "repository": "https://github.com/graphql-rust/graphql-client",
+      "documentation": null,
+      "updated_at": "2026-01-15T18:15:28.038865Z",
+      "description": "Typed GraphQL requests and responses",
+      "features": {
+        "default": [
+          "graphql_query_derive"
+        ],
+        "reqwest": [
+          "reqwest-crate",
+          "reqwest-crate/default-tls"
+        ],
+        "reqwest-blocking": [
+          "reqwest-crate/blocking"
+        ],
+        "reqwest-rustls": [
+          "reqwest-crate",
+          "reqwest-crate/rustls-tls"
+        ]
+      }
+    },
+    {
+      "name": "tonic",
+      "version": "0.14.6",
+      "rust_version": "1.88",
+      "repository": "https://github.com/hyperium/tonic",
+      "documentation": null,
+      "updated_at": "2026-05-07T00:09:48.159613Z",
+      "description": "A gRPC over HTTP/2 implementation focused on high performance, interoperability, and flexibility.\n",
+      "features": {
+        "_tls-any": [
+          "dep:tokio",
+          "tokio?/rt",
+          "tokio?/macros",
+          "tls-connect-info"
+        ],
+        "channel": [
+          "dep:hyper",
+          "hyper?/client",
+          "dep:hyper-util",
+          "hyper-util?/client-legacy",
+          "dep:tower",
+          "tower?/balance",
+          "tower?/buffer",
+          "tower?/discover",
+          "tower?/limit",
+          "tower?/load-shed",
+          "tower?/util",
+          "dep:tokio",
+          "tokio?/time",
+          "dep:hyper-timeout"
+        ],
+        "codegen": [
+          "dep:async-trait"
+        ],
+        "default": [
+          "router",
+          "transport",
+          "codegen"
+        ],
+        "deflate": [
+          "dep:flate2"
+        ],
+        "gzip": [
+          "dep:flate2"
+        ],
+        "router": [
+          "dep:axum",
+          "dep:tower",
+          "tower?/util"
+        ],
+        "server": [
+          "dep:h2",
+          "dep:hyper",
+          "hyper?/server",
+          "dep:hyper-util",
+          "hyper-util?/service",
+          "hyper-util?/server-auto",
+          "dep:socket2",
+          "dep:tokio",
+          "tokio?/macros",
+          "tokio?/net",
+          "tokio?/time",
+          "tokio-stream/net",
+          "dep:tower",
+          "tower?/util",
+          "tower?/limit",
+          "tower?/load-shed"
+        ],
+        "tls-aws-lc": [
+          "_tls-any",
+          "tokio-rustls/aws-lc-rs"
+        ],
+        "tls-connect-info": [
+          "dep:tokio-rustls"
+        ],
+        "tls-native-roots": [
+          "_tls-any",
+          "channel",
+          "dep:rustls-native-certs"
+        ],
+        "tls-ring": [
+          "_tls-any",
+          "tokio-rustls/ring"
+        ],
+        "tls-webpki-roots": [
+          "_tls-any",
+          "channel",
+          "dep:webpki-roots"
+        ],
+        "transport": [
+          "server",
+          "channel"
+        ],
+        "zstd": [
+          "dep:zstd"
+        ]
+      }
+    },
+    {
+      "name": "prost-reflect",
+      "version": "0.16.5",
+      "rust_version": "1.82.0",
+      "repository": "https://github.com/andrewhickman/prost-reflect",
+      "documentation": "https://docs.rs/prost-reflect",
+      "updated_at": "2026-07-09T22:11:04.717484Z",
+      "description": "A protobuf library extending prost with reflection support and dynamic messages.",
+      "features": {
+        "derive": [
+          "dep:prost-reflect-derive"
+        ],
+        "miette": [
+          "dep:miette"
+        ],
+        "serde": [
+          "dep:serde",
+          "dep:base64",
+          "dep:serde-value"
+        ],
+        "text-format": [
+          "dep:logos"
+        ]
+      }
+    },
+    {
+      "name": "protox",
+      "version": "0.9.1",
+      "rust_version": "1.74.0",
+      "repository": "https://github.com/andrewhickman/protox",
+      "documentation": "https://docs.rs/protox",
+      "updated_at": "2025-12-02T18:11:16.670897Z",
+      "description": "A rust implementation of the protobuf compiler.",
+      "features": {
+        "bin": [
+          "dep:clap",
+          "miette/fancy"
+        ]
+      }
+    },
+    {
+      "name": "tonic-reflection",
+      "version": "0.14.6",
+      "rust_version": "1.88",
+      "repository": "https://github.com/hyperium/tonic",
+      "documentation": null,
+      "updated_at": "2026-05-07T00:51:20.432858Z",
+      "description": "Server Reflection module of `tonic` gRPC implementation.\n",
+      "features": {
+        "default": [
+          "server"
+        ],
+        "server": [
+          "dep:prost-types",
+          "dep:tokio",
+          "dep:tokio-stream"
+        ]
+      }
+    },
+    {
+      "name": "rust_socketio",
+      "version": "0.6.0",
+      "rust_version": null,
+      "repository": "https://github.com/1c3t3a/rust-socketio",
+      "documentation": null,
+      "updated_at": "2024-04-16T10:07:00.607410Z",
+      "description": "An implementation of a socketio client written in rust.",
+      "features": {
+        "async": [
+          "async-callbacks",
+          "rust_engineio/async",
+          "tokio",
+          "futures-util",
+          "async-stream"
+        ],
+        "async-callbacks": [
+          "rust_engineio/async-callbacks"
+        ],
+        "default": []
+      }
+    },
+    {
+      "name": "rumqttc",
+      "version": "0.25.1",
+      "rust_version": "1.64.0",
+      "repository": "https://github.com/bytebeamio/rumqtt",
+      "documentation": null,
+      "updated_at": "2025-11-21T17:51:15.795498Z",
+      "description": "An efficient and robust mqtt client for your connected devices",
+      "features": {
+        "default": [
+          "use-rustls"
+        ],
+        "proxy": [
+          "dep:async-http-proxy"
+        ],
+        "use-native-tls": [
+          "dep:tokio-native-tls",
+          "dep:native-tls"
+        ],
+        "use-rustls": [
+          "use-rustls-no-provider",
+          "tokio-rustls/default"
+        ],
+        "use-rustls-no-provider": [
+          "dep:tokio-rustls",
+          "dep:rustls-webpki",
+          "dep:rustls-pemfile",
+          "dep:rustls-native-certs"
+        ],
+        "websocket": [
+          "dep:async-tungstenite",
+          "dep:ws_stream_tungstenite",
+          "dep:http"
+        ]
+      }
+    },
+    {
+      "name": "rmcp",
+      "version": "3.5.0",
+      "rust_version": "1.88",
+      "repository": "https://github.com/modelcontextprotocol/rust-sdk/",
+      "documentation": "https://docs.rs/rmcp",
+      "updated_at": "2026-09-28T00:16:06.911025Z",
+      "description": "Rust SDK for Model Context Protocol",
+      "features": {
+        "__reqwest": [
+          "dep:reqwest"
+        ],
+        "auth": [
+          "dep:async-trait",
+          "dep:oauth2",
+          "__reqwest",
+          "dep:url"
+        ],
+        "auth-client-credentials-jwt": [
+          "auth",
+          "dep:jsonwebtoken",
+          "uuid"
+        ],
+        "auth-enterprise-managed": [
+          "auth",
+          "base64"
+        ],
+        "client": [
+          "dep:tokio-stream"
+        ],
+        "client-side-sse": [
+          "dep:sse-stream",
+          "dep:http",
+          "dep:bytes",
+          "base64"
+        ],
+        "default": [
+          "base64",
+          "macros",
+          "server"
+        ],
+        "elicitation": [
+          "dep:url"
+        ],
+        "local": [
+          "rmcp-macros?/local"
+        ],
+        "macros": [
+          "dep:rmcp-macros",
+          "dep:pastey"
+        ],
+        "request-state": [
+          "dep:hmac",
+          "dep:sha2",
+          "dep:zeroize",
+          "base64"
+        ],
+        "reqwest": [
+          "__reqwest",
+          "reqwest?/rustls"
+        ],
+        "reqwest-native-tls": [
+          "__reqwest",
+          "reqwest?/native-tls"
+        ],
+        "reqwest-tls-no-provider": [
+          "__reqwest",
+          "reqwest?/rustls-no-provider"
+        ],
+        "schemars": [
+          "dep:schemars"
+        ],
+        "server": [
+          "transport-async-rw",
+          "schemars",
+          "dep:pastey",
+          "uuid"
+        ],
+        "server-side-http": [
+          "uuid",
+          "dep:rand",
+          "dep:tokio-stream",
+          "dep:http",
+          "dep:http-body",
+          "dep:http-body-util",
+          "dep:bytes",
+          "dep:sse-stream",
+          "tower",
+          "base64"
+        ],
+        "tower": [
+          "dep:tower-service"
+        ],
+        "transport-async-rw": [
+          "tokio/io-util",
+          "tokio-util/codec"
+        ],
+        "transport-child-process": [
+          "transport-async-rw",
+          "tokio/process",
+          "dep:process-wrap"
+        ],
+        "transport-io": [
+          "transport-async-rw",
+          "tokio/io-std"
+        ],
+        "transport-streamable-http-client": [
+          "client-side-sse",
+          "transport-worker"
+        ],
+        "transport-streamable-http-client-reqwest": [
+          "transport-streamable-http-client",
+          "__reqwest"
+        ],
+        "transport-streamable-http-client-unix-socket": [
+          "transport-streamable-http-client",
+          "dep:hyper",
+          "dep:hyper-util",
+          "dep:http-body-util",
+          "dep:http",
+          "dep:bytes",
+          "tokio/net"
+        ],
+        "transport-streamable-http-server": [
+          "transport-streamable-http-server-session",
+          "server-side-http",
+          "transport-worker"
+        ],
+        "transport-streamable-http-server-session": [
+          "transport-async-rw",
+          "dep:async-trait",
+          "dep:tokio-stream"
+        ],
+        "transport-worker": [
+          "dep:tokio-stream"
+        ],
+        "which-command": [
+          "transport-child-process",
+          "dep:which"
+        ]
+      }
+    },
+    {
+      "name": "a2a-sdk",
+      "version": "0.7.0",
+      "rust_version": null,
+      "repository": "https://github.com/agentgateway/agentgateway",
+      "documentation": null,
+      "updated_at": "2025-08-05T14:45:03.473913Z",
+      "description": "Unofficial Google A2A SDK. Currently supports v0.3.0 of the specification.",
+      "features": {}
+    },
+    {
+      "name": "a2a-protocol",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "name": "dubbo",
+      "version": "0.4.0",
+      "rust_version": null,
+      "repository": "https://github.com/apache/dubbo-rust.git",
+      "documentation": "https://github.com/apache/dubbo-rust",
+      "updated_at": "2024-07-16T02:15:17.386237Z",
+      "description": "dubbo",
+      "features": {}
+    },
+    {
+      "name": "hessian2",
+      "version": "0.0.10",
+      "rust_version": null,
+      "repository": "https://github.com/jjeffcaii/hessian2o3",
+      "documentation": null,
+      "updated_at": "2026-07-22T07:51:17.789673Z",
+      "description": "A Rust implementation of Hessian 2.0 Serialization Protocol.",
+      "features": {}
+    },
+    {
+      "name": "quick-xml",
+      "version": "0.42.0",
+      "rust_version": "1.86",
+      "repository": "https://github.com/tafia/quick-xml",
+      "documentation": "https://docs.rs/quick-xml",
+      "updated_at": "2026-08-22T19:22:01.795943Z",
+      "description": "High performance xml reader and writer",
+      "features": {
+        "async-tokio": [
+          "tokio"
+        ],
+        "default": [],
+        "encoding": [
+          "encoding_rs"
+        ],
+        "escape-html": [],
+        "overlapped-lists": [],
+        "serde-types": [
+          "serde/derive"
+        ],
+        "serialize": [
+          "serde"
+        ]
+      }
+    },
+    {
+      "name": "sqlx",
+      "version": "0.9.0",
+      "rust_version": "1.94.0",
+      "repository": "https://github.com/launchbadge/sqlx",
+      "documentation": "https://docs.rs/sqlx",
+      "updated_at": "2026-05-21T17:35:53.403466Z",
+      "description": "🧰 The Rust SQL Toolkit. An async, pure Rust SQL crate featuring compile-time checked queries without a DSL. Supports PostgreSQL, MySQL, and SQLite.",
+      "features": {
+        "_rt-async-global-executor": [],
+        "_rt-async-std": [],
+        "_rt-smol": [],
+        "_rt-tokio": [],
+        "_sqlite": [],
+        "_unstable-all-types": [
+          "bigdecimal",
+          "rust_decimal",
+          "json",
+          "time",
+          "chrono",
+          "ipnet",
+          "ipnetwork",
+          "mac_address",
+          "uuid",
+          "bit-vec",
+          "bstr"
+        ],
+        "_unstable-docs": [
+          "all-databases",
+          "_unstable-all-types",
+          "sqlx-sqlite/_unstable-docs"
+        ],
+        "all-databases": [
+          "mysql",
+          "sqlite",
+          "postgres",
+          "any"
+        ],
+        "any": [
+          "sqlx-core/any",
+          "sqlx-mysql?/any",
+          "sqlx-postgres?/any",
+          "sqlx-sqlite?/any"
+        ],
+        "bigdecimal": [
+          "sqlx-core/bigdecimal",
+          "sqlx-macros?/bigdecimal",
+          "sqlx-mysql?/bigdecimal",
+          "sqlx-postgres?/bigdecimal"
+        ],
+        "bit-vec": [
+          "sqlx-core/bit-vec",
+          "sqlx-macros?/bit-vec",
+          "sqlx-postgres?/bit-vec"
+        ],
+        "bstr": [
+          "sqlx-core/bstr"
+        ],
+        "chrono": [
+          "sqlx-core/chrono",
+          "sqlx-macros?/chrono",
+          "sqlx-mysql?/chrono",
+          "sqlx-postgres?/chrono",
+          "sqlx-sqlite?/chrono"
+        ],
+        "default": [
+          "any",
+          "macros",
+          "migrate",
+          "json"
+        ],
+        "derive": [
+          "sqlx-macros/derive"
+        ],
+        "ipnet": [
+          "sqlx-core/ipnet",
+          "sqlx-macros?/ipnet",
+          "sqlx-postgres?/ipnet"
+        ],
+        "ipnetwork": [
+          "sqlx-core/ipnetwork",
+          "sqlx-macros?/ipnetwork",
+          "sqlx-postgres?/ipnetwork"
+        ],
+        "json": [
+          "sqlx-core/json",
+          "sqlx-macros?/json",
+          "sqlx-mysql?/json",
+          "sqlx-postgres?/json",
+          "sqlx-sqlite?/json"
+        ],
+        "mac_address": [
+          "sqlx-core/mac_address",
+          "sqlx-macros?/mac_address",
+          "sqlx-postgres?/mac_address"
+        ],
+        "macros": [
+          "derive",
+          "sqlx-macros/macros",
+          "sqlx-core/offline",
+          "sqlx-mysql?/offline",
+          "sqlx-postgres?/offline",
+          "sqlx-sqlite?/offline"
+        ],
+        "migrate": [
+          "sqlx-core/migrate",
+          "sqlx-macros?/migrate",
+          "sqlx-mysql?/migrate",
+          "sqlx-postgres?/migrate",
+          "sqlx-sqlite?/migrate"
+        ],
+        "mysql": [
+          "sqlx-mysql",
+          "sqlx-macros?/mysql"
+        ],
+        "mysql-rsa": [
+          "mysql",
+          "sqlx-mysql/rsa",
+          "sqlx-macros?/mysql-rsa"
+        ],
+        "postgres": [
+          "sqlx-postgres",
+          "sqlx-macros?/postgres"
+        ],
+        "regexp": [
+          "sqlx-sqlite?/regexp"
+        ],
+        "runtime-async-global-executor": [
+          "_rt-async-global-executor",
+          "sqlx-core/_rt-async-global-executor",
+          "sqlx-macros?/_rt-async-global-executor"
+        ],
+        "runtime-async-std": [
+          "_rt-async-std",
+          "sqlx-core/_rt-async-std",
+          "sqlx-macros?/_rt-async-std"
+        ],
+        "runtime-smol": [
+          "_rt-smol",
+          "sqlx-core/_rt-smol",
+          "sqlx-macros?/_rt-smol"
+        ],
+        "runtime-tokio": [
+          "_rt-tokio",
+          "sqlx-core/_rt-tokio",
+          "sqlx-macros?/_rt-tokio"
+        ],
+        "rust_decimal": [
+          "sqlx-core/rust_decimal",
+          "sqlx-macros?/rust_decimal",
+          "sqlx-mysql?/rust_decimal",
+          "sqlx-postgres?/rust_decimal"
+        ],
+        "sqlite": [
+          "sqlite-bundled",
+          "sqlite-deserialize",
+          "sqlite-load-extension",
+          "sqlite-unlock-notify"
+        ],
+        "sqlite-bundled": [
+          "_sqlite",
+          "sqlx-sqlite/bundled",
+          "sqlx-macros?/sqlite"
+        ],
+        "sqlite-deserialize": [
+          "sqlx-sqlite/deserialize"
+        ],
+        "sqlite-load-extension": [
+          "sqlx-sqlite/load-extension",
+          "sqlx-macros?/sqlite-load-extension"
+        ],
+        "sqlite-preupdate-hook": [
+          "sqlx-sqlite/preupdate-hook"
+        ],
+        "sqlite-unbundled": [
+          "_sqlite",
+          "sqlx-sqlite/unbundled",
+          "sqlx-macros?/sqlite-unbundled"
+        ],
+        "sqlite-unlock-notify": [
+          "sqlx-sqlite/unlock-notify"
+        ],
+        "sqlx-toml": [
+          "sqlx-core/sqlx-toml",
+          "sqlx-macros?/sqlx-toml",
+          "sqlx-sqlite?/sqlx-toml"
+        ],
+        "time": [
+          "sqlx-core/time",
+          "sqlx-macros?/time",
+          "sqlx-mysql?/time",
+          "sqlx-postgres?/time",
+          "sqlx-sqlite?/time"
+        ],
+        "tls-native-tls": [
+          "sqlx-core/_tls-native-tls",
+          "sqlx-macros?/_tls-native-tls"
+        ],
+        "tls-none": [],
+        "tls-rustls": [
+          "tls-rustls-ring"
+        ],
+        "tls-rustls-aws-lc-rs": [
+          "sqlx-core/_tls-rustls-aws-lc-rs",
+          "sqlx-macros?/_tls-rustls-aws-lc-rs"
+        ],
+        "tls-rustls-ring": [
+          "tls-rustls-ring-webpki"
+        ],
+        "tls-rustls-ring-native-roots": [
+          "sqlx-core/_tls-rustls-ring-native-roots",
+          "sqlx-macros?/_tls-rustls-ring-native-roots"
+        ],
+        "tls-rustls-ring-webpki": [
+          "sqlx-core/_tls-rustls-ring-webpki",
+          "sqlx-macros?/_tls-rustls-ring-webpki"
+        ],
+        "uuid": [
+          "sqlx-core/uuid",
+          "sqlx-macros?/uuid",
+          "sqlx-mysql?/uuid",
+          "sqlx-postgres?/uuid",
+          "sqlx-sqlite?/uuid"
+        ]
+      }
+    },
+    {
+      "name": "tokio-util",
+      "version": "0.7.19",
+      "rust_version": "1.71",
+      "repository": "https://github.com/tokio-rs/tokio",
+      "documentation": null,
+      "updated_at": "2026-07-21T12:10:46.915710Z",
+      "description": "Additional utilities for working with Tokio.\n",
+      "features": {
+        "__docs_rs": [
+          "futures-util"
+        ],
+        "codec": [
+          "libc"
+        ],
+        "compat": [
+          "futures-io"
+        ],
+        "default": [],
+        "full": [
+          "codec",
+          "compat",
+          "io-util",
+          "time",
+          "net",
+          "rt",
+          "join-map"
+        ],
+        "io": [],
+        "io-util": [
+          "io",
+          "tokio/rt",
+          "tokio/io-util"
+        ],
+        "join-map": [
+          "rt",
+          "hashbrown"
+        ],
+        "net": [
+          "tokio/net"
+        ],
+        "rt": [
+          "tokio/rt",
+          "tokio/sync",
+          "futures-util"
+        ],
+        "time": [
+          "tokio/time",
+          "slab"
+        ]
+      }
+    },
+    {
+      "name": "wsdl",
+      "version": "0.1.3",
+      "description": "Idiomatic Rust wrapper for WSDL",
+      "repository": "https://github.com/DrChat/wsdl-rs",
+      "rust_version": null,
+      "features": {}
+    },
+    {
+      "name": "rsoap",
+      "version": "0.4.0",
+      "description": "A SOAP client library for Rust with compile-time code generation from WSDL files",
+      "repository": "https://github.com/ouertani/rsoap",
+      "rust_version": "1.75",
+      "features": {
+        "blocking": [
+          "tokio/full"
+        ],
+        "default": [
+          "blocking"
+        ],
+        "wss": []
+      }
+    },
+    {
+      "name": "soap-server",
+      "version": "0.1.1",
+      "description": "A WSDL-driven SOAP 1.1/1.2 server library for Rust — document/RPC dispatch, WS-Security UsernameToken, axum-based (the transport under onvif-server)",
+      "repository": "https://github.com/NavistAu/soap-server",
+      "rust_version": "1.85.1",
+      "features": {}
+    },
+    {
+      "name": "datafusion",
+      "version": "55.1.0",
+      "description": "DataFusion is an in-memory query engine that uses Apache Arrow as the memory model",
+      "repository": "https://github.com/apache/datafusion",
+      "rust_version": "1.94.0",
+      "features": {
+        "array_expressions": [
+          "nested_expressions"
+        ],
+        "avro": [
+          "datafusion-datasource-avro"
+        ],
+        "backtrace": [
+          "datafusion-common/backtrace"
+        ],
+        "compression": [
+          "liblzma",
+          "bzip2",
+          "flate2",
+          "zstd",
+          "datafusion-datasource-arrow/compression",
+          "datafusion-datasource/compression"
+        ],
+        "crypto_expressions": [
+          "datafusion-functions/crypto_expressions"
+        ],
+        "datetime_expressions": [
+          "datafusion-functions/datetime_expressions"
+        ],
+        "default": [
+          "nested_expressions",
+          "crypto_expressions",
+          "datetime_expressions",
+          "encoding_expressions",
+          "regex_expressions",
+          "string_expressions",
+          "unicode_expressions",
+          "compression",
+          "parquet",
+          "recursive_protection",
+          "sql"
+        ],
+        "encoding_expressions": [
+          "datafusion-functions/encoding_expressions"
+        ],
+        "extended_tests": [],
+        "force_hash_collisions": [
+          "datafusion-physical-plan/force_hash_collisions",
+          "datafusion-common/force_hash_collisions"
+        ],
+        "math_expressions": [
+          "datafusion-functions/math_expressions"
+        ],
+        "nested_expressions": [
+          "datafusion-functions-nested"
+        ],
+        "parquet": [
+          "datafusion-common/parquet",
+          "dep:parquet",
+          "datafusion-datasource-parquet"
+        ],
+        "parquet_encryption": [
+          "parquet",
+          "parquet/encryption",
+          "datafusion-common/parquet_encryption",
+          "datafusion-datasource-parquet/parquet_encryption"
+        ],
+        "recursive_protection": [
+          "datafusion-common/recursive_protection",
+          "datafusion-expr/recursive_protection",
+          "datafusion-optimizer/recursive_protection",
+          "datafusion-physical-optimizer/recursive_protection",
+          "datafusion-physical-expr/recursive_protection",
+          "datafusion-sql?/recursive_protection",
+          "sqlparser?/recursive-protection"
+        ],
+        "regex_expressions": [
+          "datafusion-functions/regex_expressions"
+        ],
+        "serde": [
+          "dep:serde",
+          "arrow-schema/serde"
+        ],
+        "sql": [
+          "datafusion-common/sql",
+          "datafusion-functions-nested?/sql",
+          "datafusion-sql",
+          "sqlparser"
+        ],
+        "string_expressions": [
+          "datafusion-functions/string_expressions"
+        ],
+        "unicode_expressions": [
+          "datafusion-sql?/unicode_expressions",
+          "datafusion-functions/unicode_expressions"
+        ]
+      }
+    },
+    {
+      "name": "duckdb",
+      "version": "1.10506.0",
+      "description": "Ergonomic wrapper for DuckDB",
+      "repository": "https://github.com/duckdb/duckdb-rs",
+      "rust_version": "1.85.1",
+      "features": {
+        "appender-arrow": [
+          "vtab-arrow"
+        ],
+        "autocomplete": [
+          "libduckdb-sys/autocomplete",
+          "bundled-cmake"
+        ],
+        "buildtime_bindgen": [
+          "libduckdb-sys/buildtime_bindgen"
+        ],
+        "bundled": [
+          "libduckdb-sys/bundled"
+        ],
+        "bundled-cmake": [
+          "bundled",
+          "libduckdb-sys/bundled-cmake",
+          "parquet"
+        ],
+        "default": [],
+        "extensions-full": [
+          "json",
+          "parquet",
+          "vtab-full"
+        ],
+        "icu": [
+          "libduckdb-sys/icu",
+          "bundled-cmake"
+        ],
+        "json": [
+          "libduckdb-sys/json",
+          "bundled"
+        ],
+        "loadable-extension": [
+          "vtab",
+          "duckdb-loadable-macros",
+          "libduckdb-sys/loadable-extension"
+        ],
+        "modern-full": [
+          "chrono",
+          "serde_json",
+          "url",
+          "r2d2",
+          "uuid",
+          "polars",
+          "rust_decimal"
+        ],
+        "parquet": [
+          "libduckdb-sys/parquet",
+          "bundled"
+        ],
+        "polars": [
+          "dep:polars",
+          "dep:polars-core"
+        ],
+        "rust_decimal": [
+          "dep:rust_decimal"
+        ],
+        "tpcds": [
+          "libduckdb-sys/tpcds",
+          "bundled-cmake"
+        ],
+        "tpch": [
+          "libduckdb-sys/tpch",
+          "bundled-cmake"
+        ],
+        "vscalar": [
+          "vtab-arrow"
+        ],
+        "vscalar-arrow": [],
+        "vtab": [],
+        "vtab-arrow": [
+          "vtab",
+          "num"
+        ],
+        "vtab-excel": [
+          "vtab"
+        ],
+        "vtab-full": [
+          "vtab-excel",
+          "vtab-arrow",
+          "appender-arrow"
+        ],
+        "vtab-loadable": [
+          "loadable-extension"
+        ]
+      }
+    },
+    {
+      "name": "graphql-ws-client",
+      "version": "0.13.0",
+      "description": "A graphql over websockets client",
+      "repository": "https://codeberg.org/obmarg/graphql-ws-client",
+      "rust_version": "1.85",
+      "features": {
+        "client-cynic": [
+          "cynic"
+        ],
+        "client-graphql-client": [
+          "graphql_client"
+        ],
+        "default": [
+          "logging"
+        ],
+        "logging": [
+          "dep:log"
+        ],
+        "sink_ext": [],
+        "tungstenite-0.23": [
+          "dep:tungstenite-0-23",
+          "sink_ext"
+        ],
+        "tungstenite-0.24": [
+          "dep:tungstenite-0-24",
+          "sink_ext"
+        ],
+        "tungstenite-0.25": [
+          "dep:tungstenite-0-25",
+          "sink_ext"
+        ],
+        "tungstenite-0.26": [
+          "dep:tungstenite-0-26",
+          "sink_ext"
+        ],
+        "tungstenite-0.27": [
+          "dep:tungstenite-0-27",
+          "sink_ext"
+        ],
+        "tungstenite-0.28": [
+          "dep:tungstenite-0-28",
+          "sink_ext"
+        ],
+        "ws_stream_wasm": [
+          "dep:ws_stream_wasm",
+          "dep:pharos"
+        ]
+      }
+    },
+    {
+      "name": "rust_engineio",
+      "version": "0.6.0",
+      "description": "An implementation of a engineio client written in rust.",
+      "repository": "https://github.com/1c3t3a/rust-socketio",
+      "rust_version": null,
+      "features": {
+        "async": [
+          "async-callbacks"
+        ],
+        "async-callbacks": [],
+        "default": [
+          "async"
+        ]
+      }
+    }
+  ],
+  "search_results": [
+    [
+      "wsdl",
+      [
+        {
+          "name": "wsdl",
+          "version": "0.1.3",
+          "description": "Idiomatic Rust wrapper for WSDL"
+        },
+        {
+          "name": "soap-server",
+          "version": "0.1.1",
+          "description": "A WSDL-driven SOAP 1.1/1.2 server library for Rust — document/RPC dispatch, WS-Security UsernameToken, axum-based (the transport under onvif-server)"
+        },
+        {
+          "name": "rsoap-macros",
+          "version": "0.4.0",
+          "description": "Procedural macros for rsoap — SOAP client code generation from WSDL files"
+        },
+        {
+          "name": "rsoap",
+          "version": "0.4.0",
+          "description": "A SOAP client library for Rust with compile-time code generation from WSDL files"
+        },
+        {
+          "name": "camel-component-cxf",
+          "version": "0.56.0",
+          "description": "CXF/SOAP component for rust-camel via Java bridge"
+        }
+      ]
+    ],
+    [
+      "soap",
+      [
+        {
+          "name": "soap",
+          "version": "0.1.0",
+          "description": "Self organization and plasticity, special neural models."
+        },
+        {
+          "name": "faucet-source-xml",
+          "version": "1.7.0",
+          "description": "XML API source connector for the faucet-stream ecosystem"
+        },
+        {
+          "name": "hl7-3-soap",
+          "version": "0.2.0",
+          "description": "HL7® v3 over SOAP: the envelope, faults, message carriage, WSDL, and acknowledgement evaluation that carry Health Level Seven (HL7) version 3 (v3) messages over HTTP. HL7 v3's own historically dominant transport. HL7®, and FHIR® are the registered trademarks of Health Level Seven International and their use of these trademarks does not constitute an endorsement by HL7. This project is an independent work."
+        },
+        {
+          "name": "hl7-2-soap",
+          "version": "0.2.0",
+          "description": "HL7® v2 over SOAP: the envelope, faults, payload carriage, WSDL, and response evaluation that carry Health Level Seven (HL7) version 2 (v2) messages over HTTP instead of MLLP. HL7®, and FHIR® are the registered trademarks of Health Level Seven International and their use of these trademarks does not constitute an endorsement by HL7. This project is an independent work."
+        },
+        {
+          "name": "soap-server",
+          "version": "0.1.1",
+          "description": "A WSDL-driven SOAP 1.1/1.2 server library for Rust — document/RPC dispatch, WS-Security UsernameToken, axum-based (the transport under onvif-server)"
+        }
+      ]
+    ],
+    [
+      "a2a",
+      [
+        {
+          "name": "a2a",
+          "version": "0.1.0",
+          "description": "A2A (Agent2Agent) Protocol - An open standard for enabling communication and interoperability between AI agent systems"
+        },
+        {
+          "name": "inference-gateway-adk",
+          "version": "0.15.0",
+          "description": "Agent Development Kit (ADK) for building powerful, interoperable AI agents with the Agent-to-Agent (A2A) protocol"
+        },
+        {
+          "name": "a2a-swap-cli",
+          "version": "0.1.7",
+          "description": "A2A-Swap CLI — command-line interface for the A2A-Swap agent-native AMM on Solana"
+        },
+        {
+          "name": "a2a-swap-sdk",
+          "version": "0.1.2",
+          "description": "A2A-Swap Rust SDK — agent-native constant-product AMM client for Solana"
+        },
+        {
+          "name": "a2a-agents",
+          "version": "0.7.0",
+          "description": "Framework for building A2A Protocol agents with declarative configuration"
+        }
+      ]
+    ],
+    [
+      "datafusion",
+      [
+        {
+          "name": "datafusion",
+          "version": "55.1.0",
+          "description": "DataFusion is an in-memory query engine that uses Apache Arrow as the memory model"
+        },
+        {
+          "name": "datafusion-opensearch",
+          "version": "0.2.0",
+          "description": "A DataFusion TableProvider over OpenSearch/Elasticsearch with filter, projection and limit pushdown."
+        },
+        {
+          "name": "datafusion-pg-catalog",
+          "version": "0.18.3",
+          "description": "pg_catalog compatibility for datafusion"
+        },
+        {
+          "name": "datafusion-postgres",
+          "version": "0.18.0",
+          "description": "Exporting datafusion query engine with postgres wire protocol"
+        },
+        {
+          "name": "clickhouse-datafusion",
+          "version": "0.2.0",
+          "description": "High-performance ClickHouse integration for Apache DataFusion with federation support"
+        }
+      ]
+    ],
+    [
+      "duckdb",
+      [
+        {
+          "name": "duckdb",
+          "version": "1.10506.0",
+          "description": "Ergonomic wrapper for DuckDB"
+        },
+        {
+          "name": "quack-rs",
+          "version": "0.18.0",
+          "description": "Rust SDK for building DuckDB loadable extensions on the DuckDB C Extension API"
+        },
+        {
+          "name": "duckdb-loadable-macros",
+          "version": "1.10506.0",
+          "description": "Native bindings to the libduckdb library, C API; build loadable extensions"
+        },
+        {
+          "name": "libduckdb-sys",
+          "version": "1.10506.0",
+          "description": "Native bindings to the libduckdb library, C API"
+        },
+        {
+          "name": "cargo-duckdb-ext-tools",
+          "version": "0.7.0",
+          "description": "A cargo subcommand that packages DuckDB extensions by appending the required extension metadata to a compiled dynamic library."
+        }
+      ]
+    ],
+    [
+      "hessian",
+      [
+        {
+          "name": "hessian",
+          "version": "0.0.1",
+          "description": "[WIP] Hessian in Rust."
+        },
+        {
+          "name": "ripopt",
+          "version": "0.8.2",
+          "description": "A memory-safe interior point optimizer in Rust"
+        },
+        {
+          "name": "hessian2",
+          "version": "0.0.10",
+          "description": "A Rust implementation of Hessian 2.0 Serialization Protocol."
+        },
+        {
+          "name": "hessian2-derive",
+          "version": "0.0.6",
+          "description": "A Rust implementation of Hessian 2.0 Serialization Protocol."
+        },
+        {
+          "name": "echidna",
+          "version": "0.15.0",
+          "description": "A high-performance automatic differentiation library for Rust"
+        }
+      ]
+    ]
+  ]
+}

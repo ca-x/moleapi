@@ -1,6 +1,10 @@
 //! Private execution values are retained only in the live response.
 use crate::ApiError;
 use aho_corasick::{AhoCorasick, MatchKind};
+use base64::{
+    Engine,
+    engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+};
 use std::collections::BTreeSet;
 
 pub(crate) struct HistoryPrivacy<'a> {
@@ -28,6 +32,8 @@ impl Redactor {
         let mut patterns = BTreeSet::new();
         for secret in secrets.iter().filter(|s| !s.is_empty()) {
             patterns.insert(secret.clone());
+            patterns.insert(STANDARD.encode(secret));
+            patterns.insert(URL_SAFE_NO_PAD.encode(secret));
             let form: String = url::form_urlencoded::byte_serialize(secret.as_bytes()).collect();
             patterns.insert(form.clone());
             // Query producers can use %20 rather than + for a space.
@@ -118,6 +124,87 @@ impl Redactor {
         }
     }
 }
+/// Retain raw and currently resolvable credentials before any script can remove them.
+pub(crate) fn request_values(
+    request: &moleapi_core::RequestSpec,
+    scopes: &mut moleapi_core::VariableScopes,
+) -> Result<(), ApiError> {
+    let environment = scopes.effective();
+    let mut capture = |value: &str| {
+        if value.is_empty() {
+            return;
+        }
+        scopes.private_values.insert(value.into());
+        if let Ok(resolved) = moleapi_core::resolve_value(value, &environment)
+            && !resolved.is_empty()
+        {
+            scopes.private_values.insert(resolved);
+        }
+    };
+    capture(&request.auth.token);
+    capture(&request.auth.password);
+    if !request.auth.password.is_empty() {
+        capture(&format!(
+            "{}:{}",
+            request.auth.username, request.auth.password
+        ));
+    }
+    let sensitive_header = |key: &str| {
+        matches!(
+            key.to_ascii_lowercase().as_str(),
+            "authorization" | "cookie" | "proxy-authorization" | "x-api-key"
+        )
+    };
+    let authorization_header = |key: &str| {
+        matches!(
+            key.to_ascii_lowercase().as_str(),
+            "authorization" | "proxy-authorization"
+        )
+    };
+    for header in request.headers.iter().filter(|h| h.enabled) {
+        let resolved_key = moleapi_core::resolve_value(&header.key, &environment).ok();
+        if header.secret == Some(true)
+            || sensitive_header(&header.key)
+            || resolved_key.as_deref().is_some_and(sensitive_header)
+        {
+            capture(&header.value);
+            if (authorization_header(&header.key)
+                || resolved_key.as_deref().is_some_and(authorization_header))
+                && let Some((_, credential)) = header.value.split_once(' ')
+            {
+                capture(credential.trim());
+            }
+        }
+    }
+    for query in request.query.iter().filter(|p| p.enabled) {
+        let resolved_key = moleapi_core::resolve_value(&query.key, &environment).ok();
+        if query.secret == Some(true)
+            || moleapi_core::sensitive_query_key(&query.key)
+            || resolved_key
+                .as_deref()
+                .is_some_and(moleapi_core::sensitive_query_key)
+        {
+            capture(&query.value);
+        }
+    }
+    let resolved_url = moleapi_core::resolve_value(&request.url, &environment).ok();
+    for raw in std::iter::once(request.url.as_str()).chain(resolved_url.as_deref()) {
+        if let Ok(url) = url::Url::parse(raw) {
+            for (key, value) in url.query_pairs() {
+                let resolved_key = moleapi_core::resolve_value(&key, &environment).ok();
+                if moleapi_core::sensitive_query_key(&key)
+                    || resolved_key
+                        .as_deref()
+                        .is_some_and(moleapi_core::sensitive_query_key)
+                {
+                    capture(&value);
+                }
+            }
+        }
+    }
+    scopes.validate().map_err(|e| ApiError::bad(e.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -342,6 +342,11 @@ pub async fn sync(
     if remote_final.id != id {
         return Err(ApiError::bad("Remote workspace ID does not match"));
     }
+    if action == "push" && (remote_final.name != local.name || remote_final.data != cloud_data) {
+        return Err(ApiError::bad(
+            "Sync server did not preserve pushed workspace data; update the remote server before syncing newer capabilities",
+        ));
+    }
     // Fence local changes during the remote request, and commit workspace/base atomically.
     let tx = s.db.begin().await?;
     let active = document::Entity::find_by_id("native-connection")
@@ -388,6 +393,7 @@ pub async fn sync(
     )
     .await?;
     tx.commit().await?;
+    crate::workspaces::reconcile_sessions(&s, "local", &final_local).await;
     Ok(Json(
         serde_json::json!({"status":"synced","workspace":final_local,"message":match action {"push"=>"Pushed local workspace","pull"=>"Pulled remote workspace",_=>"Workspaces already match"}}),
     ))

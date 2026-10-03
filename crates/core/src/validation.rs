@@ -28,7 +28,7 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
     );
     ensure!(r.body.len() <= MAX_BODY, "Request body exceeds 5 MiB");
     if !templates || !r.url.contains("{{") {
-        valid_url(&r.url)?;
+        protocol_url(&r.url, r.protocol == Protocol::Websocket)?;
     }
     if r.body_kind == "json" && (!templates || !r.body.contains("{{")) {
         serde_json::from_str::<serde_json::Value>(&r.body).context("Invalid JSON body")?;

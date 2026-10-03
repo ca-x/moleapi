@@ -1,3 +1,4 @@
+export type ProtocolConfig = { kind: "http" | "sse" | "websocket" };
 export interface Pair {
   id: string;
   key: string;
@@ -27,6 +28,7 @@ export interface Example {
   body: string;
 }
 export interface RequestSpec {
+  protocol?: ProtocolConfig;
   id: string;
   name: string;
   method: string;

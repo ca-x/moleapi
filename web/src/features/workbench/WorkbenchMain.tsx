@@ -26,6 +26,7 @@ export default function WorkbenchMain() {
     dark,
     response,
     requestError,
+    protocolSession,
     addRequest,
     openModal,
     updateData,
@@ -98,6 +99,10 @@ export default function WorkbenchMain() {
               <RequestEditor
                 key={`${draft.id}/${request.id}`}
                 request={request}
+                protocolConnected={
+                  !!protocolSession.session &&
+                  ["connecting", "open"].includes(protocolSession.session.state)
+                }
                 update={updateRequest}
                 send={() => void send()}
                 save={() => void save()}

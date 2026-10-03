@@ -5,6 +5,8 @@ mod formats;
 mod history;
 mod mock;
 mod privacy;
+mod protocol_admission;
+mod protocols;
 mod runner;
 mod storage;
 mod sync;
@@ -40,6 +42,8 @@ struct AppState {
     sync_lock: Arc<tokio::sync::Mutex<()>>,
     script_slots: Arc<tokio::sync::Semaphore>,
     script_worker: PathBuf,
+    protocol_sessions: Arc<moleapi_protocols::SessionManager>,
+    protocol_admission: Arc<protocol_admission::AdmissionGates>,
 }
 #[derive(Debug)]
 struct ApiError {
@@ -145,6 +149,8 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         sync_lock: Arc::new(tokio::sync::Mutex::new(())),
         script_slots: Arc::new(tokio::sync::Semaphore::new(4)),
         script_worker,
+        protocol_sessions: moleapi_protocols::SessionManager::new(),
+        protocol_admission: Arc::new(protocol_admission::AdmissionGates::default()),
     };
     let protected = Router::new()
         .route("/auth/logout", post(auth::logout))
@@ -166,6 +172,14 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         .route("/workspaces/{id}/run", post(runner::run))
         .route("/workspaces/{id}/export", post(formats::export))
         .route("/execute", post(execution::execute))
+        .route("/sessions", post(protocols::create))
+        .route(
+            "/sessions/{id}",
+            get(protocols::get).delete(protocols::delete),
+        )
+        .route("/sessions/{id}/events", get(protocols::events))
+        .route("/sessions/{id}/send", post(protocols::send))
+        .route("/sessions/{id}/close", post(protocols::close))
         .route("/import", post(formats::import))
         .route(
             "/mock/{workspace_id}/{request_id}/{example_id}",

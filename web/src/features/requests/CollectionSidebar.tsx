@@ -1,3 +1,4 @@
+import { requestLabel } from "../../shared/model";
 import {
   Button,
   DropdownMenu,
@@ -141,8 +142,10 @@ export default function CollectionSidebar() {
                       setSidebar(false);
                     }}
                   >
-                    <span className={`method method-${r.method.toLowerCase()}`}>
-                      {r.method}
+                    <span
+                      className={`method method-${requestLabel(r).toLowerCase()}`}
+                    >
+                      {requestLabel(r)}
                     </span>
                     <span className="truncate">{r.name || "未命名请求"}</span>
                   </button>

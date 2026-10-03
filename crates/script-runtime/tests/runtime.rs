@@ -116,3 +116,66 @@ fn negated_property_assertions_negate_the_complete_property_value_condition() {
     let passed: Vec<_> = result.tests.iter().map(|test| test.passed).collect();
     assert_eq!(passed, vec![true, false, true, true, true, false]);
 }
+
+#[test]
+fn caught_request_privacy_capture_limits_remain_fail_closed() {
+    let mut request = request();
+    request.headers = (0..1001)
+        .map(|i| Pair {
+            id: i.to_string(),
+            key: format!("x-field-{i}"),
+            value: "public".into(),
+            enabled: true,
+            secret: None,
+            local_value: None,
+        })
+        .collect();
+    let error = run(
+        &["try {pm.variables.set('alias','Authorization')} catch {}".into()],
+        &request,
+        None,
+        &VariableScopes::default(),
+    )
+    .unwrap_err();
+    let failure = error
+        .downcast_ref::<moleapi_script_runtime::ScriptFailure>()
+        .unwrap();
+    assert!(!failure.privacy_complete);
+    request.headers.pop();
+    let error = run(
+        &["for(let i=0;i<10;i++){try{pm.variables.set('alias','Authorization')}catch{}}".into()],
+        &request,
+        None,
+        &VariableScopes::default(),
+    )
+    .unwrap_err();
+    let failure = error
+        .downcast_ref::<moleapi_script_runtime::ScriptFailure>()
+        .unwrap();
+    assert!(!failure.privacy_complete);
+    let mut request = request.clone();
+    request.headers.clear();
+    request.url = format!(
+        "https://example.com/?{}",
+        (0..1001)
+            .map(|i| format!("q{i}=public"))
+            .collect::<Vec<_>>()
+            .join("&")
+    );
+    let error = run(
+        &["try {pm.variables.set('alias','Authorization')} catch {}".into()],
+        &request,
+        None,
+        &VariableScopes::default(),
+    )
+    .unwrap_err();
+    let failure = error
+        .downcast_ref::<moleapi_script_runtime::ScriptFailure>()
+        .unwrap();
+    assert!(!failure.privacy_complete);
+    let error=evaluate("try {pm.variables.set('alias','{{alias}}'); pm.request.headers.add({key:'{{alias}}',value:'Bearer cycle-credential'})} catch {}").unwrap_err();
+    let failure = error
+        .downcast_ref::<moleapi_script_runtime::ScriptFailure>()
+        .unwrap();
+    assert!(!failure.privacy_complete);
+}
