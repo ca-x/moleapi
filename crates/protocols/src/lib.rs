@@ -4,6 +4,7 @@ pub use grpc::{ReflectionResult, ReflectionStatus, reflect};
 mod engine;
 mod graphql;
 mod models;
+mod socketio;
 use anyhow::{Result, ensure};
 use base64::{Engine, engine::general_purpose::STANDARD};
 pub use models::*;
@@ -29,6 +30,7 @@ fn now() -> String {
     chrono::Utc::now().to_rfc3339()
 }
 pub(crate) enum Command {
+    Socketio(socketio::SocketioCommand),
     Websocket(Message),
     GrpcMessage(prost_reflect::DynamicMessage),
     GrpcHalfClose,
@@ -48,6 +50,7 @@ pub(crate) struct Session {
     done: watch::Sender<bool>,
     commands: mpsc::Sender<Command>,
     receiver: Mutex<Option<mpsc::Receiver<Command>>>,
+    socketio: Mutex<socketio::Control>,
     grpc_method: Mutex<Option<prost_reflect::MethodDescriptor>>,
     grpc_environment: Mutex<Option<moleapi_core::Environment>>,
     grpc_mask: Mutex<Option<PrivacyMask>>,
@@ -55,6 +58,25 @@ pub(crate) struct Session {
 impl Session {
     pub(crate) fn event(&self, direction: &str, message: EventMessage) -> Result<()> {
         let payload_size = match &message {
+            EventMessage::SocketioEvent {
+                arguments,
+                attachments_base64,
+                ..
+            }
+            | EventMessage::SocketioAck {
+                arguments,
+                attachments_base64,
+                ..
+            } => {
+                serde_json::to_vec(arguments)?.len()
+                    + attachments_base64
+                        .iter()
+                        .map(|base64| {
+                            base64.len() / 4 * 3
+                                - base64.bytes().rev().take_while(|b| *b == b'=').count()
+                        })
+                        .sum::<usize>()
+            }
             EventMessage::GrpcMessage { .. }
             | EventMessage::GrpcMetadata { .. }
             | EventMessage::GrpcStatus { .. } => serde_json::to_vec(&message)?.len(),
@@ -260,6 +282,8 @@ impl SessionManager {
             url: safe_url,
             protocol: if request.protocol.is_grpc() {
                 "grpc"
+            } else if request.protocol.is_socketio() {
+                "socketio"
             } else if request.protocol.is_graphql() {
                 "graphql"
             } else if request.protocol == Protocol::Sse {
@@ -296,6 +320,7 @@ impl SessionManager {
             done,
             commands,
             receiver: Mutex::new(Some(rx)),
+            socketio: Mutex::new(socketio::Control::default()),
             grpc_method: Mutex::new(None),
             grpc_environment: Mutex::new(None),
             grpc_mask: Mutex::new(None),
@@ -386,6 +411,25 @@ impl SessionManager {
             earliest_cursor: earliest,
             dropped_count: earliest.saturating_sub(after.saturating_add(1)),
         })
+    }
+    pub fn configure_socketio(
+        &self,
+        owner: &str,
+        id: &str,
+        environment: moleapi_core::Environment,
+        mask: PrivacyMask,
+    ) -> Result<()> {
+        let s = self.owned(owner, id)?;
+        let record = s.record.lock().unwrap();
+        ensure!(
+            record.summary.protocol == "socketio"
+                && record.summary.state == SessionState::Connecting
+                && !s.cancel.is_cancelled(),
+            "Expected connecting Socket.IO session"
+        );
+        *s.grpc_environment.lock().unwrap() = Some(environment);
+        *s.grpc_mask.lock().unwrap() = Some(mask);
+        Ok(())
     }
     pub fn configure_grpc(
         &self,
@@ -511,9 +555,21 @@ impl SessionManager {
             r.summary.client_half_closed |= close;
             return Ok(());
         }
+        if matches!(
+            message,
+            SendMessage::SocketioEmit { .. }
+                | SendMessage::SocketioListen { .. }
+                | SendMessage::SocketioAck { .. }
+        ) {
+            return socketio::send(&s, message);
+        }
         let ping = matches!(&message, SendMessage::Ping { .. });
         let (message, size) = match message {
-            SendMessage::GrpcMessage { .. } | SendMessage::GrpcHalfClose => unreachable!(),
+            SendMessage::SocketioEmit { .. }
+            | SendMessage::SocketioListen { .. }
+            | SendMessage::SocketioAck { .. }
+            | SendMessage::GrpcMessage { .. }
+            | SendMessage::GrpcHalfClose => unreachable!(),
             SendMessage::Text { text } => {
                 ensure!(text.len() <= MAX_MESSAGE, "Message exceeds 1 MiB");
                 let n = text.len();

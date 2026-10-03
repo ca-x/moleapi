@@ -44,6 +44,19 @@ pub struct SessionSummary {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum EventMessage {
+    SocketioEvent {
+        event: String,
+        arguments: Vec<serde_json::Value>,
+        attachments_base64: Vec<String>,
+        ack_id: Option<String>,
+    },
+    SocketioAck {
+        ack_id: String,
+        status: String,
+        arguments: Vec<serde_json::Value>,
+        attachments_base64: Vec<String>,
+        error: Option<String>,
+    },
     GrpcMessage {
         message: serde_json::Value,
     },
@@ -121,14 +134,46 @@ pub struct EventBatch {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SendMessage {
-    GrpcMessage { message_source: String },
+    SocketioEmit {
+        event: String,
+        arguments_source: String,
+        #[serde(default)]
+        attachments_base64: Vec<String>,
+        #[serde(default)]
+        ack_id: Option<String>,
+        #[serde(default = "ack_timeout")]
+        ack_timeout_ms: u64,
+    },
+    SocketioListen {
+        event: String,
+        enabled: bool,
+    },
+    SocketioAck {
+        ack_id: String,
+        arguments_source: String,
+        #[serde(default)]
+        attachments_base64: Vec<String>,
+    },
+    GrpcMessage {
+        message_source: String,
+    },
     GrpcHalfClose,
-    Text { text: String },
-    Binary { base64: String },
-    Ping { base64: String },
+    Text {
+        text: String,
+    },
+    Binary {
+        base64: String,
+    },
+    Ping {
+        base64: String,
+    },
 }
 #[derive(Default)]
 pub struct PreparedFeedback {
     pub logs: Vec<ScriptLog>,
     pub tests: Vec<TestResult>,
+}
+
+fn ack_timeout() -> u64 {
+    5000
 }

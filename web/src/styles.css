@@ -1146,3 +1146,12 @@ kbd {
   .grpc-tabs > .rt-TabsContent[data-state="active"] { padding:12px; overflow:auto; }
   .grpc-events { grid-template-columns:minmax(0,1fr); grid-template-rows:140px minmax(140px,1fr); }
 }
+
+.method-io { color:var(--cyan-12); }
+.socketio-workbench { height:100%; min-height:0; display:flex; flex-direction:column; }
+.socketio-toolbar { padding:12px 20px; border-bottom:1px solid var(--gray-5); }
+.socketio-toolbar .field { flex:1; min-width:160px; }
+.socketio-listeners { display:flex; flex-direction:column; gap:8px; overflow:auto; }
+.socketio-listener { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:var(--gray-3); border-radius:4px; }
+.socketio-workbench .rt-TextArea { font-family:var(--code-font-family); }
+@media(max-width:700px) { .socketio-toolbar {padding:12px;} .socketio-toolbar .field {min-width:130px;} }

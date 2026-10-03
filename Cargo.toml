@@ -1,5 +1,5 @@
 [workspace]
-exclude = ["vendor/graphql-ws-client", "vendor/cynic-introspection", "vendor/protox-parse"]
+exclude = ["vendor/graphql-ws-client", "vendor/cynic-introspection", "vendor/protox-parse", "vendor/rust_socketio", "vendor/rust_engineio"]
 members = ["crates/core", "crates/server", "crates/formats", "crates/script-runtime", "crates/protocols", "desktop"]
 default-members = ["crates/core", "crates/server", "crates/formats", "crates/script-runtime", "crates/protocols"]
 resolver = "3"
@@ -37,3 +37,6 @@ codegen-units = 1
 
 [patch.crates-io]
 protox-parse = { path = "vendor/protox-parse" }
+
+rust_socketio = { path = "vendor/rust_socketio" }
+rust_engineio = { path = "vendor/rust_engineio" }

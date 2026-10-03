@@ -1,0 +1,7 @@
+# MoleAPI Engine.IO SDK patch
+
+Source: crates.io `rust_engineio` 0.6.0, repository https://github.com/1c3t3a/rust-socketio, upstream revision `3434b654c18580785c0d0171bc1acbc0378580c7`, package path `engineio`. Original Cargo manifests and VCS metadata are retained. MIT LICENSE is copied from the upstream repository root.
+
+`ClientBuilder::build_websocket_on` and internal `WebsocketTransport::from_stream` accept an externally connected mature tungstenite WebSocket. The normal SDK Engine.IO handshake, packet stream, ping/pong and state run unchanged. This eliminates unchecked SDK DNS/proxy/fallback paths for MoleAPI; there is no replacement Engine.IO parser or heartbeat. TLS and socket ownership remain with the supplied stream. The injected transport alone enforces a 20 MiB lifetime received-wire cap, counting heartbeat, control and unsolicited packets as well as application payload. Rust cfg/lifetime warning compatibility configuration only accompanies the connector addition.
+
+WebSocket binary frames normalize into the SDK's existing base64 `MessageBinary` packet representation before its existing decoder runs. This fixes upstream rejection of empty frames and corruption of raw byte `0x1e` (previously treated as a polling delimiter). Wire frames remain binary; neither framing nor a parallel parser is implemented in application code. Integration tests roundtrip empty data and all 256 byte values.

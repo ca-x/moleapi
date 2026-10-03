@@ -263,3 +263,84 @@ fn default_native_export_redacts_protocol_draft_credentials_but_explicit_export_
         assert!(!safe.content.contains(secret), "{secret}");
     }
 }
+
+#[test]
+fn socketio_native_drafts_roundtrip_and_default_export_removes_auth_and_argument_credentials() {
+    let mut source = workspace(import("postman", &postman().to_string()).unwrap().data);
+    source.data.collections[0].requests[0].url = "wss://example.com/socket.io".into();
+    source.data.collections[0].requests[0].protocol = serde_json::from_value(json!({"kind":"socketio","namespace":"/fixture","path":"/custom/socket.io/","auth_source":"{\"token\":\"namespace-secret\"}","listeners":["echo"],"event":"echo","arguments_source":"[{\"password\":\"argument-secret\",\"nested\":{\"_placeholder\":true,\"num\":0}}]","attachments_base64":["AP8="],"request_ack":true,"ack_timeout_ms":5000})).unwrap();
+    let explicit = export(&source, "moleapi", true).unwrap();
+    let restored = import("moleapi", &explicit.content).unwrap();
+    assert_eq!(
+        restored.data.collections[0].requests[0].protocol,
+        source.data.collections[0].requests[0].protocol
+    );
+    let safe = export(&source, "moleapi", false).unwrap();
+    assert!(!safe.content.contains("namespace-secret"));
+    assert!(!safe.content.contains("argument-secret"));
+    assert!(safe.content.contains("AP8="));
+    for format in ["postman", "openapi"] {
+        assert!(
+            export(&source, format, true)
+                .err()
+                .expect("Socket.IO configuration must not disappear")
+                .to_string()
+                .contains("MoleAPI")
+        );
+    }
+}
+
+#[test]
+fn default_protocol_export_scrubs_non_string_credentials_without_erasing_schema_definitions() {
+    let mut source = workspace(import("postman", &postman().to_string()).unwrap().data);
+    source.data.collections[0].requests[0].url = "wss://example.com".into();
+    source.data.collections[0].requests[0].protocol = serde_json::from_value(json!({"kind":"socketio","auth_source":"{\"token\":123456,\"password\":654321,\"client_secret\":{\"encoded\":\"structured-secret\"}}","arguments_source":"[{\"api_token\":987654},{\"secret\":true,\"value\":\"marked-row-secret\"}]"})).unwrap();
+    source.data.specifications.push(moleapi_core::Specification {id:"schema-fields".into(),name:"Schema".into(),kind:"openapi".into(),dialect:"3.1.0".into(),source:json!({"openapi":"3.1.0","info":{"title":"Schema","version":"1"},"paths":{},"components":{"schemas":{"Login":{"type":"object","properties":{"password":{"type":"integer"},"token":{"type":"string"}}}}}}).to_string()});
+    let safe = export(&source, "moleapi", false).unwrap();
+    for value in [
+        "123456",
+        "654321",
+        "987654",
+        "structured-secret",
+        "marked-row-secret",
+    ] {
+        assert!(!safe.content.contains(value), "{value}");
+    }
+    let restored = import("moleapi", &safe.content).unwrap();
+    let raw = &restored
+        .data
+        .specifications
+        .iter()
+        .find(|item| item.id == "schema-fields")
+        .unwrap()
+        .source;
+    let schema: serde_json::Value = serde_json::from_str(raw).unwrap();
+    assert_eq!(
+        schema["components"]["schemas"]["Login"]["properties"]["password"]["type"],
+        "integer"
+    );
+    assert_eq!(
+        schema["components"]["schemas"]["Login"]["properties"]["token"]["type"],
+        "string"
+    );
+    let explicit = export(&source, "moleapi", true).unwrap();
+    assert!(explicit.content.contains("123456"));
+}
+
+#[test]
+fn payload_url_and_raw_strings_keep_prior_credential_redaction() {
+    let mut source = workspace(import("postman", &postman().to_string()).unwrap().data);
+    source.data.collections[0].requests[0].url = "wss://example.com".into();
+    source.data.collections[0].requests[0].protocol = serde_json::from_value(json!({"kind":"socketio","auth_source":json!({"url":"https://user:url-password@example.com/?token=query-token","raw":json!({"password":7654321}).to_string()}).to_string(),"arguments_source":json!([{"url":"wss://user:ws-password@example.com/?token=ws-query-token"},{"raw":json!({"token":4567891}).to_string()}]).to_string()})).unwrap();
+    let exported = export(&source, "moleapi", false).unwrap();
+    for value in [
+        "url-password",
+        "query-token",
+        "ws-password",
+        "ws-query-token",
+        "7654321",
+        "4567891",
+    ] {
+        assert!(!exported.content.contains(value), "{value}");
+    }
+}

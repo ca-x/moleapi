@@ -1,3 +1,15 @@
+export interface SocketIoConfig {
+  kind: "socketio";
+  namespace: string;
+  path: string;
+  auth_source: string;
+  listeners: string[];
+  event: string;
+  arguments_source: string;
+  attachments_base64: string[];
+  request_ack: boolean;
+  ack_timeout_ms: number;
+}
 export interface GrpcConfig {
   kind: "grpc";
   service: string;
@@ -14,7 +26,10 @@ export interface GraphQLConfig {
   subscription_url?: string | null;
 }
 export type ProtocolConfig =
-  { kind: "http" | "sse" | "websocket" } | GraphQLConfig | GrpcConfig;
+  | { kind: "http" | "sse" | "websocket" }
+  | GraphQLConfig
+  | GrpcConfig
+  | SocketIoConfig;
 export interface Pair {
   id: string;
   key: string;

@@ -41,6 +41,26 @@ pub enum Protocol {
     Http,
     Sse,
     Websocket,
+    Socketio {
+        #[serde(default = "socketio_namespace")]
+        namespace: String,
+        #[serde(default = "socketio_path")]
+        path: String,
+        #[serde(default = "empty_message_source")]
+        auth_source: String,
+        #[serde(default)]
+        listeners: Vec<String>,
+        #[serde(default = "socketio_event")]
+        event: String,
+        #[serde(default = "socketio_arguments")]
+        arguments_source: String,
+        #[serde(default)]
+        attachments_base64: Vec<String>,
+        #[serde(default)]
+        request_ack: bool,
+        #[serde(default = "socketio_ack_timeout")]
+        ack_timeout_ms: u64,
+    },
     Grpc {
         #[serde(default)]
         service: String,
@@ -64,6 +84,21 @@ pub enum Protocol {
         subscription_url: Option<String>,
     },
 }
+fn socketio_event() -> String {
+    "message".into()
+}
+fn socketio_arguments() -> String {
+    "[]".into()
+}
+fn socketio_ack_timeout() -> u64 {
+    5000
+}
+fn socketio_namespace() -> String {
+    "/".into()
+}
+fn socketio_path() -> String {
+    "/socket.io/".into()
+}
 fn empty_message_source() -> String {
     "{}".into()
 }
@@ -74,6 +109,9 @@ fn empty_object() -> serde_json::Value {
     serde_json::json!({})
 }
 impl Protocol {
+    pub fn is_socketio(&self) -> bool {
+        matches!(self, Self::Socketio { .. })
+    }
     pub fn is_grpc(&self) -> bool {
         matches!(self, Self::Grpc { .. })
     }

@@ -33,6 +33,9 @@ pub(crate) async fn run(
     mut commands: mpsc::Receiver<Command>,
     mask: Arc<dyn Fn(&str) -> String + Send + Sync>,
 ) -> Result<String> {
+    if request.protocol.is_socketio() {
+        return crate::socketio::run(session.clone(), request, policy, commands, mask).await;
+    }
     if request.protocol.is_grpc() {
         return crate::grpc::run(session.clone(), request, policy, commands, mask).await;
     }

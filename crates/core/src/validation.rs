@@ -4,6 +4,70 @@ use reqwest::header::{HeaderName, HeaderValue};
 use std::collections::HashSet;
 pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
     validate_graphql_draft(r, templates)?;
+    if let Protocol::Socketio {
+        namespace,
+        path,
+        auth_source,
+        listeners,
+        event,
+        arguments_source,
+        attachments_base64,
+        ..
+    } = &r.protocol
+    {
+        ensure!(
+            event.len() <= 256
+                && arguments_source.len() <= 1024 * 1024
+                && attachments_base64.len() <= 32
+                && attachments_base64.iter().map(String::len).sum::<usize>() <= 1024 * 1024 * 2,
+            "Socket.IO emit draft exceeds size limit"
+        );
+        ensure!(
+            namespace.len() <= 256 && path.len() <= 1024 && auth_source.len() <= 1024 * 1024,
+            "Socket.IO configuration exceeds size limit"
+        );
+        ensure!(
+            listeners.len() <= 64 && listeners.iter().all(|event| event.len() <= 256),
+            "Socket.IO listener limit reached"
+        );
+        if !templates {
+            ensure!(
+                namespace.starts_with('/')
+                    && !namespace.contains([',', '?', '#'])
+                    && !namespace.chars().any(char::is_control),
+                "Invalid Socket.IO namespace"
+            );
+            ensure!(
+                path.starts_with('/')
+                    && path != "/"
+                    && !path.contains(['?', '#'])
+                    && !path.chars().any(char::is_control),
+                "Invalid Socket.IO path"
+            );
+            let auth: serde_json::Value =
+                serde_json::from_str(auth_source).context("Invalid Socket.IO auth JSON")?;
+            ensure!(auth.is_object(), "Socket.IO auth must be a JSON object");
+            for event in listeners {
+                validate_socketio_event(event)?;
+            }
+            ensure!(
+                r.method == "GET" && r.body_kind == "none",
+                "Socket.IO requires GET with body mode None"
+            );
+            let url = protocol_url(&r.url, true)?;
+            ensure!(
+                !url.query_pairs()
+                    .any(|(key, _)| matches!(key.as_ref(), "EIO" | "transport" | "sid")),
+                "Socket.IO transport query keys are SDK-owned"
+            );
+            ensure!(
+                !r.query
+                    .iter()
+                    .any(|p| p.enabled && matches!(p.key.as_str(), "EIO" | "transport" | "sid")),
+                "Socket.IO transport query keys are SDK-owned"
+            );
+        }
+    }
     if let Protocol::Grpc {
         service,
         method,
@@ -52,7 +116,10 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
     );
     ensure!(r.body.len() <= MAX_BODY, "Request body exceeds 5 MiB");
     if !templates || !r.url.contains("{{") {
-        protocol_url(&r.url, r.protocol == Protocol::Websocket)?;
+        protocol_url(
+            &r.url,
+            r.protocol == Protocol::Websocket || r.protocol.is_socketio(),
+        )?;
     }
     if !r.protocol.is_graphql() && r.body_kind == "json" && (!templates || !r.body.contains("{{")) {
         serde_json::from_str::<serde_json::Value>(&r.body).context("Invalid JSON body")?;
@@ -209,5 +276,26 @@ fn validate_pointer(pointer: &str) -> Result<()> {
             );
         }
     }
+    Ok(())
+}
+
+/// Bound user-controlled names and reject the official Socket.IO reserved event set.
+pub fn validate_socketio_event(event: &str) -> Result<()> {
+    ensure!(
+        !event.is_empty() && event.len() <= 256 && !event.chars().any(char::is_control),
+        "Invalid Socket.IO event name"
+    );
+    ensure!(
+        !matches!(
+            event,
+            "connect"
+                | "connect_error"
+                | "disconnect"
+                | "disconnecting"
+                | "newListener"
+                | "removeListener"
+        ),
+        "Reserved Socket.IO event name"
+    );
     Ok(())
 }

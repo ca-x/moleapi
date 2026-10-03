@@ -93,9 +93,11 @@ pub async fn create(
             "SSE and WebSocket connections require GET with body mode None",
         ));
     }
-    if request.protocol.is_graphql() != c.request.protocol.is_graphql()
+    if request.protocol.is_socketio() != c.request.protocol.is_socketio()
+        || request.protocol.is_graphql() != c.request.protocol.is_graphql()
         || request.protocol.is_grpc() != c.request.protocol.is_grpc()
-        || (!request.protocol.is_graphql()
+        || (!request.protocol.is_socketio()
+            && !request.protocol.is_graphql()
             && !request.protocol.is_grpc()
             && request.protocol != c.request.protocol)
     {
@@ -151,11 +153,14 @@ pub async fn create(
         } => (url.as_str(), true),
         _ => (
             request.url.as_str(),
-            request.protocol == Protocol::Websocket,
+            request.protocol == Protocol::Websocket || request.protocol.is_socketio(),
         ),
     };
     let mut resolved_url =
         moleapi_core::protocol_url(target_url, ws_url).map_err(|e| ApiError::bad(e.to_string()))?;
+    if let Protocol::Socketio { path, .. } = &request.protocol {
+        resolved_url.set_path(path);
+    }
     for query in request.query.iter().filter(|p| p.enabled) {
         resolved_url
             .query_pairs_mut()
@@ -188,6 +193,17 @@ pub async fn create(
             let _ = s.protocol_sessions.remove(&owner.0, &summary.id).await;
             return Err(e);
         }
+    }
+    if request.protocol.is_socketio()
+        && let Err(e) = s.protocol_sessions.configure_socketio(
+            &owner.0,
+            &summary.id,
+            scopes.effective(),
+            mask.clone(),
+        )
+    {
+        let _ = s.protocol_sessions.remove(&owner.0, &summary.id).await;
+        return Err(error(e));
     }
     if let Some(method) = grpc_method {
         if let Err(e) = s.protocol_sessions.configure_grpc(

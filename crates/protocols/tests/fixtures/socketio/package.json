@@ -1,0 +1,1 @@
+{"name":"moleapi-socketio-fixture","private":true,"version":"1.0.0","description":"Official Socket.IO 4 integration fixture","dependencies":{"socket.io":"4.8.1"}}

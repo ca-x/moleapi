@@ -163,6 +163,28 @@ pub(crate) fn request_values(
         }
         strings(connection_params, &mut capture);
     }
+    if let moleapi_core::Protocol::Socketio { auth_source, .. } = &request.protocol {
+        fn capture_auth(value: &serde_json::Value, capture: &mut impl FnMut(&str)) {
+            match value {
+                serde_json::Value::String(text) => capture(text),
+                serde_json::Value::Array(values) => {
+                    for value in values {
+                        capture_auth(value, capture);
+                    }
+                }
+                serde_json::Value::Object(values) => {
+                    for value in values.values() {
+                        capture_auth(value, capture);
+                    }
+                }
+                serde_json::Value::Number(number) => capture(&number.to_string()),
+                _ => {}
+            }
+        }
+        if let Ok(auth) = serde_json::from_str(auth_source) {
+            capture_auth(&auth, &mut capture);
+        }
+    }
     capture(&request.auth.token);
     capture(&request.auth.password);
     if !request.auth.password.is_empty() {

@@ -10,7 +10,7 @@ export interface ProtocolSession {
   id: string;
   workspace_id: string;
   request_id: string;
-  protocol: "sse" | "websocket" | "graphql" | "grpc";
+  protocol: "sse" | "websocket" | "graphql" | "grpc" | "socketio";
   client_half_closed?: boolean;
   url: string;
   state: SessionState;
@@ -25,6 +25,21 @@ export interface ProtocolSession {
   request_updates?: RequestUpdate[];
 }
 export type ProtocolMessage =
+  | {
+      kind: "socketio_event";
+      event: string;
+      arguments: unknown[];
+      attachments_base64: string[];
+      ack_id: string | null;
+    }
+  | {
+      kind: "socketio_ack";
+      ack_id: string;
+      status: "ok" | "timeout" | "error";
+      arguments: unknown[];
+      attachments_base64: string[];
+      error: string | null;
+    }
   | { kind: "grpc_message"; message: unknown }
   | { kind: "grpc_metadata"; phase: "headers" | "trailers"; metadata: Pair[] }
   | {
@@ -66,6 +81,21 @@ export interface EventBatch {
   dropped_count: number;
 }
 export type SendMessage =
+  | {
+      kind: "socketio_emit";
+      event: string;
+      arguments_source: string;
+      attachments_base64: string[];
+      ack_id: string | null;
+      ack_timeout_ms: number;
+    }
+  | { kind: "socketio_listen"; event: string; enabled: boolean }
+  | {
+      kind: "socketio_ack";
+      ack_id: string;
+      arguments_source: string;
+      attachments_base64: string[];
+    }
   | { kind: "grpc_message"; message_source: string }
   | { kind: "grpc_half_close" }
   | { kind: "text"; text: string }

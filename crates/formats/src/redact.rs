@@ -44,6 +44,14 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
             request.url = redact_url(&request.url);
             request.body = redact_embedded_json(&request.body);
             match &mut request.protocol {
+                moleapi_core::Protocol::Socketio {
+                    auth_source,
+                    arguments_source,
+                    ..
+                } => {
+                    *auth_source = redact_protocol_json(auth_source);
+                    *arguments_source = redact_protocol_json_or(arguments_source, "[]");
+                }
                 moleapi_core::Protocol::Grpc { message_source, .. } => {
                     *message_source = redact_protocol_json(message_source);
                 }
@@ -54,11 +62,11 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
                     subscription_url,
                     ..
                 } => {
-                    redact_value(variables);
+                    redact_payload(variables);
                     if let Some(source) = variables_source {
                         *source = redact_protocol_json(source);
                     }
-                    redact_value(connection_params);
+                    redact_payload(connection_params);
                     if let Some(url) = subscription_url {
                         *url = redact_url(url);
                     }
@@ -117,20 +125,64 @@ fn redact_url(raw: &str) -> String {
 // Protocol JSON drafts may be incomplete; unsafe opaque drafts are withheld in
 // a default export rather than treating malformed JSON as screened content.
 fn redact_protocol_json(text: &str) -> String {
+    redact_protocol_json_or(text, "{}")
+}
+fn redact_protocol_json_or(text: &str, fallback: &str) -> String {
     match serde_json::from_str::<Value>(text) {
         Ok(mut value) => {
-            redact_value(&mut value);
+            redact_payload(&mut value);
             serde_json::to_string_pretty(&value).unwrap_or_default()
         }
-        Err(_) => "{}".into(),
+        Err(_) => fallback.into(),
     }
 }
 fn redact_embedded_json(text: &str) -> String {
     let Ok(mut value) = serde_json::from_str::<Value>(text) else {
         return text.into();
     };
-    redact_value(&mut value);
+    redact_payload(&mut value);
     serde_json::to_string_pretty(&value).unwrap_or_default()
+}
+// Payload fields can carry numeric/boolean/structured credentials. Canonical
+// specification definitions use the separate schema-preserving traversal below.
+fn redact_payload(value: &mut Value) {
+    match value {
+        Value::Object(object) => {
+            let private_row = object.get("secret") == Some(&Value::Bool(true))
+                || object.get("type").and_then(Value::as_str) == Some("secret")
+                || object
+                    .get("key")
+                    .and_then(Value::as_str)
+                    .is_some_and(sensitive);
+            if private_row && let Some(value) = object.get_mut("value") {
+                *value = if value.is_string() {
+                    Value::String(String::new())
+                } else {
+                    Value::Null
+                };
+            }
+            for (key, value) in object.iter_mut() {
+                if sensitive(key) && !(private_row && key == "secret" && value.is_boolean()) {
+                    *value = if value.is_string() {
+                        Value::String(String::new())
+                    } else {
+                        Value::Null
+                    };
+                } else if matches!(key.as_str(), "url" | "raw") && value.is_string() {
+                    let replacement = redact_url(value.as_str().unwrap_or_default());
+                    *value = Value::String(redact_embedded_json(&replacement));
+                } else {
+                    redact_payload(value);
+                }
+            }
+        }
+        Value::Array(array) => {
+            for value in array {
+                redact_payload(value);
+            }
+        }
+        _ => {}
+    }
 }
 fn redact_value(value: &mut Value) {
     match value {

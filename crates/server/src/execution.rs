@@ -281,7 +281,11 @@ pub(crate) async fn prepare_live(
         r.pre_request_script.clone(),
     ];
     let prepared = moleapi_core::prepare_graphql(r).map_err(|e| ApiError::bad(e.to_string()))?;
-    let prepared = moleapi_core::prepare_grpc(&prepared);
+    let mut prepared = moleapi_core::prepare_grpc(&prepared);
+    if let moleapi_core::Protocol::Socketio { auth_source, .. } = &prepared.protocol {
+        prepared.body = auth_source.clone();
+        prepared.body_kind = "json".into();
+    }
     let mut request = prepared.clone();
     let mut feedback = moleapi_protocols::PreparedFeedback::default();
     let mut updates = vec![];
@@ -309,8 +313,25 @@ pub(crate) async fn prepare_live(
         feedback.tests = output.tests;
         updates = output.updates;
     }
+    if let moleapi_core::Protocol::Socketio { auth_source, .. } = &mut request.protocol {
+        if request.method != "GET" || request.body_kind != "json" {
+            return Err(ApiError::bad(
+                "Socket.IO pre-scripts must retain GET and JSON auth body mode",
+            ));
+        }
+        *auth_source = request.body.clone();
+        request.body_kind = "none".into();
+    }
     moleapi_core::reconcile_grpc(&mut request).map_err(|e| ApiError::bad(e.to_string()))?;
     let mut request_updates = vec![];
+    if let moleapi_core::Protocol::Socketio { auth_source, .. } = &request.protocol
+        && auth_source != &prepared.body
+    {
+        request_updates.push(moleapi_core::RequestUpdate {
+            field: "protocol.auth_source".into(),
+            value: auth_source.clone(),
+        });
+    }
     for (field, before, after) in [
         ("method", prepared.method.clone(), request.method.clone()),
         ("url", prepared.url.clone(), request.url.clone()),
@@ -326,7 +347,9 @@ pub(crate) async fn prepare_live(
             serde_json::to_string(&request.headers).map_err(|_| ApiError::internal())?,
         ),
     ] {
-        if before != after {
+        if before != after
+            && !(request.protocol.is_socketio() && matches!(field, "body" | "body_kind"))
+        {
             request_updates.push(moleapi_core::RequestUpdate {
                 field: field.into(),
                 value: after,

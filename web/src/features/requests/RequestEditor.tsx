@@ -23,6 +23,7 @@ import type { ApiResponse, RequestSpec } from "../../shared/types";
 
 const GraphQLWorkbench = lazy(() => import("../graphql/GraphQLWorkbench"));
 const GrpcWorkbench = lazy(() => import("../grpc/GrpcWorkbench"));
+const SocketIoWorkbench = lazy(() => import("../socketio/SocketIoWorkbench"));
 const methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
 const requestTabs = [
   { value: "query", label: "参数" },
@@ -66,22 +67,23 @@ export default function RequestEditor({
   const kind = request.protocol?.kind || "http";
   const live = ["sse", "websocket"].includes(kind);
   const grpc = kind === "grpc";
+  const socketio = kind === "socketio";
   useEffect(() => {
     if (
-      (live || grpc) &&
+      (live || grpc || socketio) &&
       ["body", "assertions", "examples", ...(grpc ? ["query"] : [])].includes(
         tab,
       )
     )
       setTab(grpc ? "headers" : "query");
-  }, [live, grpc, tab]);
+  }, [live, grpc, socketio, tab]);
   function changeProtocol(
-    value: "http" | "sse" | "websocket" | "graphql" | "grpc",
+    value: "http" | "sse" | "websocket" | "graphql" | "grpc" | "socketio",
   ) {
     let url = request.url;
     try {
       const parsed = new URL(url);
-      if (value === "websocket") {
+      if (value === "websocket" || value === "socketio") {
         if (parsed.protocol === "http:") parsed.protocol = "ws:";
         if (parsed.protocol === "https:") parsed.protocol = "wss:";
       } else {
@@ -94,16 +96,29 @@ export default function RequestEditor({
     }
     update({
       protocol:
-        value === "grpc"
-          ? { kind: value, service: "", method: "", message_source: "{}" }
-          : value === "graphql"
-            ? {
-                kind: value,
-                document: "",
-                variables: {},
-                connection_params: {},
-              }
-            : { kind: value },
+        value === "socketio"
+          ? {
+              kind: value,
+              namespace: "/",
+              path: "/socket.io/",
+              auth_source: "{}",
+              listeners: ["message"],
+              event: "message",
+              arguments_source: "[]",
+              attachments_base64: [],
+              request_ack: false,
+              ack_timeout_ms: 5000,
+            }
+          : value === "grpc"
+            ? { kind: value, service: "", method: "", message_source: "{}" }
+            : value === "graphql"
+              ? {
+                  kind: value,
+                  document: "",
+                  variables: {},
+                  connection_params: {},
+                }
+              : { kind: value },
       url,
       ...(value === "graphql"
         ? { method: "POST" }
@@ -136,11 +151,13 @@ export default function RequestEditor({
               ? "HTTP 请求"
               : grpc
                 ? "gRPC 请求"
-                : kind === "graphql"
-                  ? "GraphQL 请求"
-                  : kind === "sse"
-                    ? "SSE 事件流"
-                    : "WebSocket 会话"}
+                : socketio
+                  ? "Socket.IO 会话"
+                  : kind === "graphql"
+                    ? "GraphQL 请求"
+                    : kind === "sse"
+                      ? "SSE 事件流"
+                      : "WebSocket 会话"}
           </Text>
           <TextField.Root
             className="request-title-input"
@@ -182,13 +199,14 @@ export default function RequestEditor({
             { value: "websocket", label: "WebSocket" },
             { value: "graphql", label: "GraphQL" },
             { value: "grpc", label: "gRPC" },
+            { value: "socketio", label: "Socket.IO" },
           ]}
         />
         {grpc ? (
           <Badge className="protocol-handshake" color="gray">
             HTTP/2 · gRPC
           </Badge>
-        ) : live ? (
+        ) : live || socketio ? (
           <Badge className="protocol-handshake" color="gray">
             GET 握手
           </Badge>
@@ -213,13 +231,15 @@ export default function RequestEditor({
           loading={busy}
           onClick={send}
           disabled={
-            !request.url || sending || ((live || grpc) && protocolConnected)
+            !request.url ||
+            sending ||
+            ((live || grpc || socketio) && protocolConnected)
           }
         >
           <Send size={16} />
           {grpc
             ? "调用"
-            : !live
+            : !(live || socketio)
               ? "发送"
               : protocolConnected
                 ? "已连接"
@@ -234,7 +254,7 @@ export default function RequestEditor({
       >
         <Panel
           id="request-options-panel"
-          defaultSize={kind === "graphql" || grpc ? "20%" : "35%"}
+          defaultSize={kind === "graphql" || grpc || socketio ? "20%" : "35%"}
           minSize={kind === "graphql" ? "10%" : "25%"}
           className="request-options-panel"
         >
@@ -252,7 +272,7 @@ export default function RequestEditor({
                       ? !["query", "body", "assertions", "examples"].includes(
                           item.value,
                         )
-                      : !live ||
+                      : !(live || socketio) ||
                         !["body", "assertions", "examples"].includes(
                           item.value,
                         ),
@@ -462,10 +482,16 @@ export default function RequestEditor({
         </Separator>
         <Panel
           id="request-response-panel"
-          defaultSize={kind === "graphql" || grpc ? "80%" : "65%"}
+          defaultSize={kind === "graphql" || grpc || socketio ? "80%" : "65%"}
           minSize="40%"
         >
-          {grpc ? (
+          {socketio ? (
+            <Suspense
+              fallback={<Text role="status">正在加载 Socket.IO 客户端…</Text>}
+            >
+              <SocketIoWorkbench />
+            </Suspense>
+          ) : grpc ? (
             <Suspense
               fallback={<Text role="status">正在加载 gRPC 客户端…</Text>}
             >
@@ -477,7 +503,7 @@ export default function RequestEditor({
             >
               <GraphQLWorkbench />
             </Suspense>
-          ) : live ? (
+          ) : live || socketio ? (
             <ProtocolPane />
           ) : (
             <ResponsePane

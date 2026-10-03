@@ -32,7 +32,14 @@ tungstenite = { version = "0.27", default-features = false }
 tokio-util = { version = "0.7", features = ["rt"] }
 url = "2"
 
+rust_socketio = { version = "=0.6.0", features = ["async"] }
+rust_engineio = { version = "=0.6.0", features = ["async"] }
+tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
+native-tls = "0.2"
+bytes = "1"
+
 [dev-dependencies]
+tempfile = "3"
 rcgen = "0.14"
 tonic-prost = "0.14"
 prost-types = "0.14"

@@ -18,7 +18,9 @@ export default function RequestScripts({
         读取变量、修改请求和添加测试。
       </Text>
       {request.protocol?.kind &&
-        ["sse", "websocket", "grpc"].includes(request.protocol.kind) && (
+        ["sse", "websocket", "grpc", "socketio"].includes(
+          request.protocol.kind,
+        ) && (
           <Text as="p" size="1" color="gray">
             实时协议执行请求前脚本，暂不执行响应后或逐条事件脚本。已有响应后脚本需清空后才能连接。
           </Text>
@@ -52,7 +54,7 @@ export default function RequestScripts({
         </Tabs.Content>
       </Tabs.Root>
       <Text size="1" color="gray">
-        {request.protocol?.kind === "grpc"
+        {["grpc", "socketio"].includes(request.protocol?.kind || "")
           ? "请求前示例：pm.environment.set('token', '本地值');"
           : "示例：pm.test('状态为200', () => pm.response.to.have.status(200));"}
       </Text>

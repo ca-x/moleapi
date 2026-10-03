@@ -107,6 +107,17 @@ pub fn resolve_request(
     } else {
         None
     };
+    let socketio = if let Protocol::Socketio { auth_source, .. } = &request.protocol {
+        let auth: serde_json::Value =
+            serde_json::from_str(auth_source).context("Invalid Socket.IO auth JSON")?;
+        value["protocol"]["auth_source"] = "".into();
+        value["protocol"]["event"] = "".into();
+        value["protocol"]["arguments_source"] = "".into();
+        value["protocol"]["attachments_base64"] = serde_json::json!([]);
+        Some(auth)
+    } else {
+        None
+    };
     let graphql = request.protocol.is_graphql();
     let mut graphql_body = if graphql {
         Some(
@@ -132,6 +143,10 @@ pub fn resolve_request(
     }
     let mut budget = 20 * 1024 * 1024;
     replace(&mut value, &vars, &mut budget)?;
+    if let Some(mut auth) = socketio {
+        replace(&mut auth, &vars, &mut budget)?;
+        value["protocol"]["auth_source"] = serde_json::to_string(&auth)?.into();
+    }
     if let Some(mut message) = grpc {
         replace(&mut message, &vars, &mut budget)?;
         let message_source = serde_json::to_string(&message)?;
@@ -179,6 +194,25 @@ pub fn resolve_request(
     resolved.pre_request_script = request.pre_request_script.clone();
     resolved.post_response_script = request.post_response_script.clone();
     reconcile_graphql(&mut resolved)?;
+    if let (
+        Protocol::Socketio {
+            event,
+            arguments_source,
+            attachments_base64,
+            ..
+        },
+        Protocol::Socketio {
+            event: original_event,
+            arguments_source: original_arguments,
+            attachments_base64: original_attachments,
+            ..
+        },
+    ) = (&mut resolved.protocol, &request.protocol)
+    {
+        *event = original_event.clone();
+        *arguments_source = original_arguments.clone();
+        *attachments_base64 = original_attachments.clone();
+    }
     let request = resolved;
     validate_request(&request, false)?;
     Ok(request)

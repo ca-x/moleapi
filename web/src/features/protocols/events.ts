@@ -27,6 +27,9 @@ export function appendEvents(
 export function messageContent(event: ProtocolEvent): string {
   const message = event.message;
   switch (message.kind) {
+    case "socketio_event":
+    case "socketio_ack":
+      return JSON.stringify(message, null, 2);
     case "grpc_message":
       return JSON.stringify(message.message, null, 2);
     case "grpc_metadata":
