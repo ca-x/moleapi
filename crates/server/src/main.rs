@@ -15,8 +15,16 @@ struct Args {
     #[arg(long, env = "MOLEAPI_ALLOW_REGISTRATION", default_value_t = false)]
     allow_registration: bool,
 }
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<()> {
+    if moleapi_server::dispatch_script_worker()? {
+        return Ok(());
+    }
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?
+        .block_on(run())
+}
+async fn run() -> anyhow::Result<()> {
     let args = Args::parse();
     let database_url = match args.database_url {
         Some(url) => url,

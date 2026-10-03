@@ -3,9 +3,7 @@ use common::*;
 #[tokio::test]
 async fn runner_records_assertion_failures_and_request_errors_then_continues() {
     let dir = tempfile::tempdir().unwrap();
-    let router = moleapi_server::local(&dir.path().join("local.db"))
-        .await
-        .unwrap();
+    let router = common::local(&dir.path().join("local.db")).await.unwrap();
     let (url, server) =
         serve(Router::new().route("/", axum::routing::get(|| async { "response" }))).await;
     let mut data = example_data();

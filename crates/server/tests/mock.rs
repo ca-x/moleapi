@@ -3,9 +3,7 @@ use common::*;
 #[tokio::test]
 async fn saved_mock_example_uses_status_body_and_only_safe_headers() {
     let dir = tempfile::tempdir().unwrap();
-    let router = moleapi_server::local(&dir.path().join("local.db"))
-        .await
-        .unwrap();
+    let router = common::local(&dir.path().join("local.db")).await.unwrap();
     call(
         &router,
         "POST",
@@ -43,7 +41,7 @@ async fn saved_mock_example_uses_status_body_and_only_safe_headers() {
 #[tokio::test]
 async fn saved_error_status_example_retains_body_and_headers() {
     let directory = tempfile::tempdir().unwrap();
-    let router = moleapi_server::local(&directory.path().join("errors.db"))
+    let router = common::local(&directory.path().join("errors.db"))
         .await
         .unwrap();
     let mut payload = example_data();

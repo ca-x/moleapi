@@ -111,7 +111,11 @@ fn postman_official_schema_and_inherited_auth() {
         "top-secret-token"
     );
     assert_eq!(result.data.specifications[0].source, source.to_string());
-    assert!(result.warnings.iter().any(|w| w.contains("脚本")));
+    assert!(
+        result.data.collections[0].requests[0]
+            .post_response_script
+            .contains("pm.test")
+    );
     let bad = json!({"info":{"name":7,"schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},"item":[]});
     assert!(import("postman", &bad.to_string()).is_err());
 }

@@ -12,6 +12,7 @@
     "desktop:build": "tauri build --config ../desktop/tauri.conf.json"
   },
   "dependencies": {
+    "@codemirror/lang-javascript": "^6.2.5",
     "@codemirror/lang-json": "^6.0.2",
     "@codemirror/language": "^6.12.4",
     "@codemirror/theme-one-dark": "^6.1.3",

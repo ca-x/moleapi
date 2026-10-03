@@ -27,8 +27,9 @@ struct Base {
     remote_fingerprint: Option<String>,
 }
 fn fingerprint(workspace: &Workspace) -> Result<String, ApiError> {
-    let bytes = serde_json::to_vec(&(&workspace.name, &workspace.data))
-        .map_err(|_| ApiError::internal())?;
+    let mut data = workspace.data.clone();
+    moleapi_core::scrub_local_values(&mut data);
+    let bytes = serde_json::to_vec(&(&workspace.name, &data)).map_err(|_| ApiError::internal())?;
     Ok(hex::encode(Sha256::digest(bytes)))
 }
 #[derive(Deserialize)]
@@ -289,9 +290,11 @@ pub async fn sync(
         .pop();
     let base = base.filter(|b| b.identity == conn.identity);
     let remote_fingerprint = remote_workspace.as_ref().map(fingerprint).transpose()?;
+    let mut cloud_data = local.data.clone();
+    moleapi_core::scrub_local_values(&mut cloud_data);
     let equal = remote_workspace
         .as_ref()
-        .is_some_and(|r| r.name == local.name && r.data == local.data);
+        .is_some_and(|r| r.name == local.name && r.data == cloud_data);
     let action = if let Some(resolution) = c.resolution.as_deref() {
         resolution
     } else if equal {
@@ -322,12 +325,12 @@ pub async fn sync(
             Some(r) => (
                 Method::PUT,
                 path,
-                serde_json::json!({"name":local.name,"data":local.data,"expected_revision":r.revision}),
+                serde_json::json!({"name":local.name,"data":cloud_data,"expected_revision":r.revision}),
             ),
             None => (
                 Method::POST,
                 "api/workspaces".into(),
-                serde_json::json!({"id":local.id,"name":local.name,"data":local.data}),
+                serde_json::json!({"id":local.id,"name":local.name,"data":cloud_data}),
             ),
         };
         remote(&conn, method, &path, Some(body))
@@ -365,6 +368,8 @@ pub async fn sync(
         let mut next = current;
         next.name = remote_final.name.clone();
         next.data = remote_final.data.clone();
+        moleapi_core::scrub_local_values(&mut next.data);
+        moleapi_core::preserve_local_values(&local.data, &mut next.data);
         storage::replace_in(&tx, "local", next, local.revision)
             .await?
             .ok_or_else(|| ApiError::conflict("Local workspace changed during sync"))?

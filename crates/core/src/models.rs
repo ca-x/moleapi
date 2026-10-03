@@ -8,6 +8,8 @@ pub struct Pair {
     pub enabled: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub secret: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_value: Option<String>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Auth {
@@ -34,6 +36,10 @@ pub struct Example {
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct RequestSpec {
+    #[serde(default)]
+    pub pre_request_script: String,
+    #[serde(default)]
+    pub post_response_script: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub specification_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -56,6 +62,12 @@ pub struct RequestSpec {
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Collection {
+    #[serde(default)]
+    pub variables: Vec<Pair>,
+    #[serde(default)]
+    pub pre_request_script: String,
+    #[serde(default)]
+    pub post_response_script: String,
     pub id: String,
     pub name: String,
     pub description: String,
@@ -69,6 +81,12 @@ pub struct Environment {
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct WorkspaceData {
+    #[serde(default)]
+    pub global_variables: Vec<Pair>,
+    #[serde(default)]
+    pub pre_request_script: String,
+    #[serde(default)]
+    pub post_response_script: String,
     #[serde(default)]
     pub specifications: Vec<Specification>,
     pub schema_version: u32,
@@ -94,6 +112,12 @@ pub struct TestResult {
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Response {
+    #[serde(default)]
+    pub request_updates: Vec<RequestUpdate>,
+    #[serde(default)]
+    pub logs: Vec<ScriptLog>,
+    #[serde(default)]
+    pub variable_updates: Vec<VariableUpdate>,
     pub status: u16,
     pub status_text: String,
     pub headers: Vec<Pair>,
@@ -128,4 +152,23 @@ pub struct Specification {
     pub kind: String,
     pub source: String,
     pub dialect: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct ScriptLog {
+    pub level: String,
+    pub message: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct VariableUpdate {
+    pub scope: String,
+    pub key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct RequestUpdate {
+    pub field: String,
+    pub value: String,
 }

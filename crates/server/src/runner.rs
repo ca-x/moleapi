@@ -1,4 +1,4 @@
-use crate::execution::{environment, perform};
+use crate::execution::{environment, perform, variables};
 use crate::{ApiError, AppState, auth::Identity, workspaces::owned};
 use axum::{
     Extension, Json,
@@ -9,6 +9,12 @@ use serde::Deserialize;
 pub struct Run {
     collection_id: String,
     environment_id: Option<String>,
+    #[serde(default)]
+    variables: Vec<moleapi_core::Pair>,
+    #[serde(default)]
+    data: Vec<moleapi_core::Pair>,
+    #[serde(default)]
+    locals: Vec<moleapi_core::VariableUpdate>,
 }
 pub async fn run(
     State(s): State<AppState>,
@@ -24,12 +30,21 @@ pub async fn run(
         .find(|v| v.id == c.collection_id)
         .ok_or_else(ApiError::not_found)?;
     let e = environment(&w, c.environment_id.as_deref())?;
+    let mut scopes = variables(
+        &s,
+        &w,
+        Some(collection),
+        e,
+        &c.data,
+        &c.variables,
+        &c.locals,
+    )?;
     let start = std::time::Instant::now();
     let mut results = vec![];
     let mut passed = 0;
     let mut failed = 0;
     for r in &collection.requests {
-        match perform(&s, &owner.0, &w, r, e).await {
+        match perform(&s, &owner.0, &w, r, Some(collection), &mut scopes).await {
             Ok(response) => {
                 if response.tests.iter().all(|t| t.passed) {
                     passed += 1;

@@ -56,6 +56,11 @@ async fn api(
 }
 
 fn main() {
+    match moleapi_server::dispatch_script_worker() {
+        Ok(true) => return,
+        Ok(false) => {}
+        Err(_) => std::process::exit(1),
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())

@@ -79,11 +79,14 @@ pub fn resolve_request(
             e.variables
                 .iter()
                 .filter(|v| v.enabled)
-                .map(|v| (v.key.as_str(), v.value.as_str()))
+                .map(|v| (v.key.as_str(), v.local_value.as_deref().unwrap_or(&v.value)))
                 .collect()
         })
         .unwrap_or_default();
     let mut value = serde_json::to_value(request)?;
+    // JavaScript is source code, not an interpolated request field.
+    value["pre_request_script"] = "".into();
+    value["post_response_script"] = "".into();
     let form = interpolate(&request.body_kind, &vars)? == "form";
     if form {
         // Decode form fields before interpolation, then encode the resolved values.
@@ -117,7 +120,10 @@ pub fn resolve_request(
         }
         value["body"] = serde_json::Value::String(body);
     }
-    let request = serde_json::from_value(value)?;
+    let mut resolved: RequestSpec = serde_json::from_value(value)?;
+    resolved.pre_request_script = request.pre_request_script.clone();
+    resolved.post_response_script = request.post_response_script.clone();
+    let request = resolved;
     validate_request(&request, false)?;
     Ok(request)
 }

@@ -226,6 +226,8 @@ mod tests {
             },
             local: false,
             sync_lock: std::sync::Arc::new(tokio::sync::Mutex::new(())),
+            script_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
+            script_worker: std::env::current_exe().unwrap(),
         };
         let Json(result) = new_session(&state, "owner", "username").await.unwrap();
         let token = result["token"].as_str().unwrap();

@@ -1,6 +1,6 @@
 [workspace]
-members = ["crates/core", "crates/server", "crates/formats", "desktop"]
-default-members = ["crates/core", "crates/server", "crates/formats"]
+members = ["crates/core", "crates/server", "crates/formats", "crates/script-runtime", "desktop"]
+default-members = ["crates/core", "crates/server", "crates/formats", "crates/script-runtime"]
 resolver = "3"
 
 [workspace.package]

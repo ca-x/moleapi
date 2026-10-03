@@ -1,7 +1,6 @@
 services:
   moleapi:
-    image: ghcr.io/ca-x/moleapi:main
-    build: .
+    image: ${MOLEAPI_IMAGE:-ghcr.io/ca-x/moleapi:feat-application}
     ports: ['8787:8787']
     environment:
       MOLEAPI_BIND: 0.0.0.0:8787

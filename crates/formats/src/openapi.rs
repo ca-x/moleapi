@@ -180,6 +180,9 @@ pub(super) fn import(content: &str) -> Result<ImportResult> {
     let collections = groups
         .into_iter()
         .map(|(name, requests)| Collection {
+            variables: vec![],
+            pre_request_script: String::new(),
+            post_response_script: String::new(),
             id: uid(),
             name,
             description: String::new(),

@@ -9,9 +9,10 @@ import {
   Select,
   Text,
 } from "@radix-ui/themes";
-import { Plus, Trash2, Eye, EyeOff } from "lucide-react";
+import { Plus, Trash2, Eye, EyeOff, Link2 } from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
 import { json } from "@codemirror/lang-json";
+import { javascript } from "@codemirror/lang-javascript";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 import { EditorView } from "@codemirror/view";
@@ -114,6 +115,8 @@ export function Editor({
   readOnly = false,
   jsonMode = false,
   height = "240px",
+  language,
+  label,
 }: {
   value: string;
   onChange?: (value: string) => void;
@@ -121,6 +124,8 @@ export function Editor({
   readOnly?: boolean;
   jsonMode?: boolean;
   height?: string;
+  language?: "json" | "javascript";
+  label?: string;
 }) {
   return (
     <CodeMirror
@@ -131,10 +136,14 @@ export function Editor({
       theme={dark ? [oneDark, accessibleDarkSyntax] : "light"}
       extensions={[
         EditorView.contentAttributes.of({
-          "aria-label": readOnly ? "只读代码" : "代码编辑器",
+          "aria-label": label || (readOnly ? "只读代码" : "代码编辑器"),
           tabindex: "0",
         }),
-        ...(jsonMode ? [json()] : []),
+        ...(language === "javascript"
+          ? [javascript()]
+          : jsonMode || language === "json"
+            ? [json()]
+            : []),
       ]}
       readOnly={readOnly}
       basicSetup={{
@@ -152,22 +161,27 @@ export function PairEditor({
   secrets = false,
   keyLabel = "名称",
   valueLabel = "值",
+  readLocal,
+  writeLocal,
 }: {
   rows: Pair[];
   onChange: (rows: Pair[]) => void;
   secrets?: boolean;
   keyLabel?: string;
   valueLabel?: string;
+  readLocal?: (row: Pair) => string | undefined;
+  writeLocal?: (row: Pair, value: string | undefined) => void;
 }) {
   const [visible, setVisible] = useState<Set<string>>(new Set());
   const patch = (id: string, updates: Partial<Pair>) =>
     onChange(rows.map((row) => (row.id === id ? { ...row, ...updates } : row)));
   return (
-    <div className="pairs">
+    <div className={`pairs ${writeLocal ? "pairs-with-local" : ""}`}>
       <div className="pair-labels">
         <span />
         <span>{keyLabel}</span>
         <span>{valueLabel}</span>
+        {writeLocal && <span>本地覆盖值</span>}
         <span />
       </div>
       {rows.map((row) => (
@@ -218,6 +232,29 @@ export function PairEditor({
               </TextField.Slot>
             )}
           </TextField.Root>
+          {writeLocal && (
+            <TextField.Root
+              className="local-value-cell"
+              aria-label={`本地覆盖值 ${row.key || keyLabel}`}
+              placeholder="跟随共享值"
+              type={row.secret && !visible.has(row.id) ? "password" : "text"}
+              value={readLocal?.(row) ?? ""}
+              onChange={(e) => writeLocal(row, e.target.value)}
+            >
+              <TextField.Slot side="right">
+                <IconButton
+                  size="1"
+                  variant="ghost"
+                  color="gray"
+                  aria-label={`清除 ${row.key || keyLabel} 本地覆盖`}
+                  disabled={readLocal?.(row) === undefined}
+                  onClick={() => writeLocal(row, undefined)}
+                >
+                  <Link2 size={14} />
+                </IconButton>
+              </TextField.Slot>
+            </TextField.Root>
+          )}
           <Flex align="center" gap="2">
             {secrets && (
               <Checkbox

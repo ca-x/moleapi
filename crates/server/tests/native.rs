@@ -4,7 +4,7 @@ use common::*;
 async fn native_router_is_offline_api_with_private_database_permissions() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("native ?#%.db");
-    let router = moleapi_server::local(&path).await.unwrap();
+    let router = common::local(&path).await.unwrap();
     assert_eq!(
         call(&router, "GET", "/api/auth/status", None, None).await.1["mode"],
         "desktop"
@@ -29,9 +29,7 @@ async fn native_router_is_offline_api_with_private_database_permissions() {
 #[tokio::test]
 async fn all_api_errors_are_json_and_hosted_native_endpoints_are_missing() {
     let dir = tempfile::tempdir().unwrap();
-    let native = moleapi_server::local(&dir.path().join("native.db"))
-        .await
-        .unwrap();
+    let native = common::local(&dir.path().join("native.db")).await.unwrap();
     let (status, value) = call(
         &native,
         "POST",
@@ -42,7 +40,7 @@ async fn all_api_errors_are_json_and_hosted_native_endpoints_are_missing() {
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert!(value["error"].is_string());
-    let hosted = moleapi_server::hosted(config(
+    let hosted = common::hosted(config(
         format!(
             "sqlite://{}?mode=rwc",
             dir.path().join("hosted.db").display()
@@ -71,7 +69,7 @@ async fn all_api_errors_are_json_and_hosted_native_endpoints_are_missing() {
 #[tokio::test]
 async fn hosted_embedded_assets_support_spa_paths_while_api_never_falls_back() {
     let dir = tempfile::tempdir().unwrap();
-    let router = moleapi_server::hosted(config(
+    let router = common::hosted(config(
         format!(
             "sqlite://{}?mode=rwc",
             dir.path().join("hosted.db").display()

@@ -4,6 +4,7 @@ export interface Pair {
   value: string;
   enabled: boolean;
   secret?: boolean;
+  local_value?: string | null;
 }
 export interface Auth {
   kind: "none" | "bearer" | "basic";
@@ -43,8 +44,13 @@ export interface RequestSpec {
   examples: Example[];
   specification_id?: string | null;
   operation_id?: string | null;
+  pre_request_script?: string;
+  post_response_script?: string;
 }
 export interface Collection {
+  variables?: Pair[];
+  pre_request_script?: string;
+  post_response_script?: string;
   id: string;
   name: string;
   description: string;
@@ -63,6 +69,9 @@ export interface Specification {
   dialect: string;
 }
 export interface WorkspaceData {
+  global_variables?: Pair[];
+  pre_request_script?: string;
+  post_response_script?: string;
   specifications?: Specification[];
   schema_version: 1;
   collections: Collection[];
@@ -83,7 +92,23 @@ export interface TestResult {
   actual: string;
   expected: string;
 }
+export interface ScriptLog {
+  level: string;
+  message: string;
+}
+export interface VariableUpdate {
+  scope: string;
+  key: string;
+  value?: string;
+}
+export interface RequestUpdate {
+  field: string;
+  value: string;
+}
 export interface ApiResponse {
+  request_updates?: RequestUpdate[];
+  logs?: ScriptLog[];
+  variable_updates?: VariableUpdate[];
   status: number;
   status_text: string;
   headers: Pair[];

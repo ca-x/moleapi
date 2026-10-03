@@ -1,6 +1,8 @@
 import { Button, Card, Flex, Heading, Text, TextField } from "@radix-ui/themes";
 import { Plus, Save, Trash2 } from "lucide-react";
-import { Field, PairEditor, ToolButton } from "../../shared/ui";
+import ProjectVariables from "../variables/ProjectVariables";
+import VariableScopeEditor from "../variables/VariableScopeEditor";
+import { Field, ToolButton } from "../../shared/ui";
 import { id } from "../../shared/model";
 import { useWorkbench } from "../workbench/context";
 
@@ -36,6 +38,10 @@ export default function EnvironmentsPage() {
         {draft.data.environments.map((e) => (
           <Button
             key={e.id}
+            className={
+              environment?.id === e.id ? "environment-selected" : undefined
+            }
+            aria-pressed={environment?.id === e.id}
             variant={environment?.id === e.id ? "soft" : "outline"}
             color={environment?.id === e.id ? "cyan" : "gray"}
             onClick={() =>
@@ -84,9 +90,10 @@ export default function EnvironmentsPage() {
               <Trash2 size={16} />
             </ToolButton>
           </Flex>
-          <PairEditor
+          <VariableScopeEditor
+            scope="environment"
+            target={environment.id}
             rows={environment.variables}
-            secrets
             onChange={(variables) =>
               updateData((data) => ({
                 ...data,
@@ -95,8 +102,6 @@ export default function EnvironmentsPage() {
                 ),
               }))
             }
-            keyLabel="变量名"
-            valueLabel="变量值"
           />
           <Text size="1" color="gray">
             勾选密钥后会隐藏值，导出默认排除密钥。工作区内的值会保存在当前数据库。
@@ -105,6 +110,7 @@ export default function EnvironmentsPage() {
       ) : (
         <Text color="gray">选择或新建一个环境。</Text>
       )}
+      <ProjectVariables />
       <Button loading={saving} disabled={!dirty} onClick={() => void save()}>
         <Save size={16} />
         保存工作区

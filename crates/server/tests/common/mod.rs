@@ -86,3 +86,19 @@ pub async fn rename(router: &Router, token: Option<&str>, name: &str, revision: 
     assert_eq!(status, StatusCode::OK, "{w}");
     w
 }
+
+// Cargo supplies an absolute application binary; scripts never search PATH.
+pub async fn local(path: &std::path::Path) -> anyhow::Result<Router> {
+    moleapi_server::local_with_worker(
+        path,
+        std::path::Path::new(env!("CARGO_BIN_EXE_moleapi-server")),
+    )
+    .await
+}
+pub async fn hosted(config: moleapi_server::Config) -> anyhow::Result<Router> {
+    moleapi_server::hosted_with_worker(
+        config,
+        std::path::Path::new(env!("CARGO_BIN_EXE_moleapi-server")),
+    )
+    .await
+}

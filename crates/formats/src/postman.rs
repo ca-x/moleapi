@@ -33,7 +33,7 @@ pub(super) fn import(content: &str) -> Result<ImportResult> {
         &spec_id,
         &ancestors,
     )?;
-    let variables = source["variable"]
+    let variables: Vec<moleapi_core::Pair> = source["variable"]
         .as_array()
         .into_iter()
         .flatten()
@@ -43,7 +43,12 @@ pub(super) fn import(content: &str) -> Result<ImportResult> {
             result
         })
         .collect();
-    let mut data = data(collections, variables);
+    for collection in &mut collections {
+        collection.variables = variables.clone();
+        collection.pre_request_script = event_script(&source, "prerequest");
+        collection.post_response_script = event_script(&source, "test");
+    }
+    let mut data = data(collections, vec![]);
     data.specifications.push(Specification {
         id: spec_id,
         name: name.clone(),
@@ -167,11 +172,8 @@ fn walk(
                 other => warnings.push(format!("{name}: {other} 鉴权定义已保留，需要对应鉴权配置")),
             }
         }
-        if item.get("event").is_some() {
-            warnings.push(format!(
-                "{name}: 原始脚本已保留，脚本引擎模块将读取原始定义"
-            ));
-        }
+        result.pre_request_script = event_script(item, "prerequest");
+        result.post_response_script = event_script(item, "test");
         for response in item["response"].as_array().into_iter().flatten() {
             if let Some(status) = response["code"].as_u64().filter(|s| *s >= 100 && *s <= 599) {
                 let headers = response["header"]
@@ -193,6 +195,9 @@ fn walk(
     }
     if !requests.is_empty() {
         collections.push(Collection {
+            variables: vec![],
+            pre_request_script: String::new(),
+            post_response_script: String::new(),
             id: uid(),
             name: path.into(),
             description: String::new(),
@@ -200,6 +205,30 @@ fn walk(
         });
     }
     Ok(())
+}
+fn event_script(item: &Value, listen: &str) -> String {
+    item["event"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|event| event["listen"] == listen)
+        .flat_map(|event| {
+            let script = &event["script"]["exec"];
+            if let Some(lines) = script.as_array() {
+                lines
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>()
+            } else {
+                script.as_str().map(str::to_owned).into_iter().collect()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+fn events(pre: &str, post: &str) -> Vec<Value> {
+    [("prerequest",pre),("test",post)].into_iter().filter(|(_,script)|!script.is_empty()).map(|(listen,script)|json!({"listen":listen,"script":{"type":"text/javascript","exec":script.lines().collect::<Vec<_>>()}})).collect()
 }
 fn text(value: &Value) -> String {
     value.as_str().map(str::to_string).unwrap_or_else(|| {
@@ -221,12 +250,12 @@ fn auth_value(auth: &Value, kind: &str, key: &str) -> String {
 }
 
 pub(super) fn export(workspace: &Workspace) -> Result<String> {
-    let items=workspace.data.collections.iter().map(|collection|json!({"name":collection.name,"description":collection.description,"item":collection.requests.iter().map(|r| {
+    let items=workspace.data.collections.iter().map(|collection|json!({"name":collection.name,"description":collection.description,"event":events(&collection.pre_request_script,&collection.post_response_script),"variable":collection.variables.iter().map(|v|json!({"key":v.key,"value":v.value,"type":"string","disabled":!v.enabled})).collect::<Vec<_>>(),"item":collection.requests.iter().map(|r| {
         let mut url=r.url.clone();if !r.query.is_empty(){let values=r.query.iter().filter(|p|p.enabled).map(|p|format!("{}={}",url::form_urlencoded::byte_serialize(p.key.as_bytes()).collect::<String>(),url::form_urlencoded::byte_serialize(p.value.as_bytes()).collect::<String>())).collect::<Vec<_>>().join("&");if !values.is_empty(){url.push(if url.contains('?'){'&'}else{'?'});url.push_str(&values);}}
         let auth=match r.auth.kind.as_str(){"bearer"=>json!({"type":"bearer","bearer":[{"key":"token","value":r.auth.token,"type":"string"}]}),"basic"=>json!({"type":"basic","basic":[{"key":"username","value":r.auth.username,"type":"string"},{"key":"password","value":r.auth.password,"type":"string"}]}),_=>json!({"type":"noauth"})};
         let mut request=json!({"method":r.method,"url":url,"description":r.description,"header":r.headers.iter().map(|h|json!({"key":h.key,"value":h.value,"disabled":!h.enabled})).collect::<Vec<_>>(),"auth":auth});
         if r.body_kind!="none"{request["body"]=json!({"mode":"raw","raw":r.body,"options":{"raw":{"language":if r.body_kind=="json"{"json"}else{"text"}}}});}
-        json!({"name":r.name,"request":request,"response":r.examples.iter().map(|e|json!({"name":e.name,"code":e.status,"body":e.body,"header":e.headers.iter().map(|h|json!({"key":h.key,"value":h.value})).collect::<Vec<_>>(),"originalRequest":request})).collect::<Vec<_>>()})
+        json!({"name":r.name,"request":request,"event":events(&r.pre_request_script,&r.post_response_script),"response":r.examples.iter().map(|e|json!({"name":e.name,"code":e.status,"body":e.body,"header":e.headers.iter().map(|h|json!({"key":h.key,"value":h.value})).collect::<Vec<_>>(),"originalRequest":request})).collect::<Vec<_>>()})
     }).collect::<Vec<_>>() })).collect::<Vec<_>>();
     let variables = workspace
         .data

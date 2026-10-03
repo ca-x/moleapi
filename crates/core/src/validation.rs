@@ -3,6 +3,8 @@ use anyhow::{Context, Result, bail, ensure};
 use reqwest::header::{HeaderName, HeaderValue};
 use std::collections::HashSet;
 pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
+    validate_script(&r.pre_request_script)?;
+    validate_script(&r.post_response_script)?;
     ensure!(
         matches!(
             r.method.as_str(),
@@ -100,6 +102,9 @@ pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
         data.schema_version == 1,
         "Unsupported workspace schema version"
     );
+    validate_variables(&data.global_variables)?;
+    validate_script(&data.pre_request_script)?;
+    validate_script(&data.post_response_script)?;
     let mut specifications = HashSet::new();
     for spec in &data.specifications {
         ensure!(
@@ -112,6 +117,9 @@ pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
     let mut requests = HashSet::new();
     let mut environments = HashSet::new();
     for c in &data.collections {
+        validate_variables(&c.variables)?;
+        validate_script(&c.pre_request_script)?;
+        validate_script(&c.post_response_script)?;
         ensure!(
             !c.id.is_empty() && collections.insert(&c.id),
             "Collection IDs must be unique and nonempty"
@@ -138,6 +146,7 @@ pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
         }
     }
     for e in &data.environments {
+        validate_variables(&e.variables)?;
         ensure!(
             !e.id.is_empty() && environments.insert(&e.id),
             "Environment IDs must be unique and nonempty"

@@ -1,3 +1,4 @@
+import RequestScripts from "../scripts/RequestScripts";
 import ExamplesEditor from "./ExamplesEditor";
 import AssertionsEditor from "../testing/AssertionsEditor";
 import { ResponsePane } from "./ResponsePane";
@@ -25,6 +26,7 @@ const requestTabs = [
   { value: "body", label: "请求体" },
   { value: "auth", label: "鉴权" },
   { value: "assertions", label: "断言" },
+  { value: "scripts", label: "脚本" },
   { value: "docs", label: "文档" },
   { value: "examples", label: "示例" },
   { value: "settings", label: "设置" },
@@ -164,6 +166,9 @@ export default function RequestEditor({
                 </Tabs.Trigger>
               ))}
             </Tabs.List>
+            <Tabs.Content value="scripts">
+              <RequestScripts request={request} update={update} dark={dark} />
+            </Tabs.Content>
             <Tabs.Content value="query">
               <PairEditor
                 rows={request.query}

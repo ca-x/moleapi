@@ -52,6 +52,7 @@ async fn execute_interpolation_query_headers_body_and_json_assertion() {
         value: "{{word}}".into(),
         enabled: true,
         secret: None,
+        local_value: None,
     }];
     r.headers = vec![Pair {
         id: "h".into(),
@@ -59,6 +60,7 @@ async fn execute_interpolation_query_headers_body_and_json_assertion() {
         value: "{{word}}".into(),
         enabled: true,
         secret: None,
+        local_value: None,
     }];
     r.assertions = vec![Assertion {
         id: "a".into(),
@@ -76,6 +78,7 @@ async fn execute_interpolation_query_headers_body_and_json_assertion() {
             value: "value".into(),
             enabled: true,
             secret: None,
+            local_value: None,
         }],
     };
     let response = execute(&r, Some(&env), LOCAL).await.unwrap();
@@ -146,6 +149,7 @@ async fn cross_origin_redirect_strips_credentials_and_post_becomes_get() {
         value: "secret=1".into(),
         enabled: true,
         secret: None,
+        local_value: None,
     });
     assert_eq!(execute(&r, None, LOCAL).await.unwrap().body, "done");
     source_server.abort();
@@ -238,6 +242,7 @@ fn malformed_fields_are_rejected() {
         value: "bad\r\nInjected: x".into(),
         enabled: true,
         secret: None,
+        local_value: None,
     });
     assert!(validate_request(&r, false).is_err());
     r.headers.clear();
@@ -276,6 +281,7 @@ async fn form_interpolation_preserves_delimiters_and_resolves_encoded_templates(
             value: "a&b=x".into(),
             enabled: true,
             secret: None,
+            local_value: None,
         }],
     };
     let mut r = request(format!("{url}/form"));

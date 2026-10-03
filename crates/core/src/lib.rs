@@ -5,6 +5,7 @@ mod policy;
 mod redaction;
 mod transport;
 mod validation;
+mod variables;
 pub use assertions::*;
 pub use interpolation::resolve_request;
 pub use models::*;
@@ -12,6 +13,7 @@ pub use policy::*;
 pub use redaction::*;
 pub use transport::*;
 pub use validation::*;
+pub use variables::*;
 pub const MAX_BODY: usize = 5 * 1024 * 1024;
 #[cfg(test)]
 mod tests {

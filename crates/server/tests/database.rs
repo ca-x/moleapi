@@ -17,13 +17,9 @@ async fn identical_storage_auth_cas_tests_on_every_configured_database() {
         }
     }
     for url in urls {
-        let router = moleapi_server::hosted(config(url.clone(), true))
-            .await
-            .unwrap();
+        let router = common::hosted(config(url.clone(), true)).await.unwrap();
         if call(&router, "GET", "/api/auth/status", None, None).await.1["setup_required"] == true {
-            let closed = moleapi_server::hosted(config(url.clone(), false))
-                .await
-                .unwrap();
+            let closed = common::hosted(config(url.clone(), false)).await.unwrap();
             let prefix = uuid::Uuid::new_v4().simple().to_string();
             let first = json!({"username":format!("admin_a_{prefix}"),"password":"goodpassword123","setup_token":"setup-secret"});
             let second = json!({"username":format!("admin_b_{prefix}"),"password":"goodpassword123","setup_token":"setup-secret"});
@@ -38,7 +34,7 @@ async fn identical_storage_auth_cas_tests_on_every_configured_database() {
             );
         }
         // Running all migrations again must keep both schema and existing content.
-        let router_again = moleapi_server::hosted(config(url, true)).await.unwrap();
+        let router_again = common::hosted(config(url, true)).await.unwrap();
         assert_eq!(
             call(&router, "GET", "/api/health", None, None).await.0,
             StatusCode::OK
@@ -277,7 +273,7 @@ async fn identical_storage_auth_cas_tests_on_every_configured_database() {
 #[tokio::test]
 async fn recreation_keeps_monotonic_revisions_so_stale_updates_cannot_overwrite_it() {
     let directory = tempfile::tempdir().unwrap();
-    let router = moleapi_server::local(&directory.path().join("recreate.db"))
+    let router = common::local(&directory.path().join("recreate.db"))
         .await
         .unwrap();
     let (_, first) = call(

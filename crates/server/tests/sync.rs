@@ -3,7 +3,7 @@ use common::*;
 #[tokio::test]
 async fn native_sync_persists_bases_and_conflicts_without_overwriting() {
     let dir = tempfile::tempdir().unwrap();
-    let hosted = moleapi_server::hosted(config(
+    let hosted = common::hosted(config(
         format!(
             "sqlite://{}?mode=rwc",
             dir.path().join("remote.db").display()
@@ -15,7 +15,7 @@ async fn native_sync_persists_bases_and_conflicts_without_overwriting() {
     let token = register(&hosted, "syncuser").await;
     let (url, server) = serve(hosted.clone()).await;
     let path = dir.path().join("native.db");
-    let native = moleapi_server::local(&path).await.unwrap();
+    let native = common::local(&path).await.unwrap();
     let (status, connected) = call(
         &native,
         "POST",
@@ -68,7 +68,7 @@ async fn native_sync_persists_bases_and_conflicts_without_overwriting() {
     );
     rename(&hosted, Some(&token), "Remote edit", 2).await;
     // A fresh native router proves connection and revision bases survive restarts.
-    let native = moleapi_server::local(&path).await.unwrap();
+    let native = common::local(&path).await.unwrap();
     let (_, result) = call(
         &native,
         "POST",
@@ -152,7 +152,7 @@ async fn native_sync_rejects_local_edits_during_network_wait() {
         atomic::{AtomicBool, Ordering},
     };
     let dir = tempfile::tempdir().unwrap();
-    let hosted = moleapi_server::hosted(config(
+    let hosted = common::hosted(config(
         format!(
             "sqlite://{}?mode=rwc",
             dir.path().join("remote.db").display()
@@ -194,9 +194,7 @@ async fn native_sync_rejects_local_edits_during_network_wait() {
         }
     }));
     let (url, server) = serve(router).await;
-    let native = moleapi_server::local(&dir.path().join("native.db"))
-        .await
-        .unwrap();
+    let native = common::local(&dir.path().join("native.db")).await.unwrap();
     call(
         &native,
         "POST",
@@ -245,9 +243,7 @@ async fn native_sync_rejects_local_edits_during_network_wait() {
 #[tokio::test]
 async fn sync_credentials_never_follow_redirects_or_non_loopback_http() {
     let dir = tempfile::tempdir().unwrap();
-    let native = moleapi_server::local(&dir.path().join("native.db"))
-        .await
-        .unwrap();
+    let native = common::local(&dir.path().join("native.db")).await.unwrap();
     assert_eq!(call(&native,"POST","/api/sync/connect",None,Some(json!({"server_url":"http://192.0.2.1","username":"user","password":"goodpassword123"}))).await.0,StatusCode::BAD_REQUEST);
     let (url, server) = serve(Router::new().route(
         "/api/auth/login",
@@ -284,7 +280,7 @@ async fn sync_fixture(
     tokio::task::JoinHandle<()>,
 ) {
     let dir = tempfile::tempdir().unwrap();
-    let hosted = moleapi_server::hosted(config(
+    let hosted = common::hosted(config(
         format!(
             "sqlite://{}?mode=rwc",
             dir.path().join("remote.db").display()
@@ -295,9 +291,7 @@ async fn sync_fixture(
     .unwrap();
     let token = register(&hosted, "syncuser").await;
     let (url, server) = serve(hosted.clone()).await;
-    let local = moleapi_server::local(&dir.path().join("native.db"))
-        .await
-        .unwrap();
+    let local = common::local(&dir.path().join("native.db")).await.unwrap();
     assert_eq!(
         call(
             &local,
@@ -408,9 +402,7 @@ async fn recreated_remote_with_reused_revision_is_a_conflict_if_local_changed() 
 #[tokio::test]
 async fn ambiguous_dot_workspace_ids_are_rejected() {
     let dir = tempfile::tempdir().unwrap();
-    let local = moleapi_server::local(&dir.path().join("dots.db"))
-        .await
-        .unwrap();
+    let local = common::local(&dir.path().join("dots.db")).await.unwrap();
     for id in [".", ".."] {
         assert_eq!(
             call(
@@ -425,4 +417,86 @@ async fn ambiguous_dot_workspace_ids_are_rejected() {
             StatusCode::BAD_REQUEST
         );
     }
+}
+#[tokio::test]
+async fn cloud_push_scrubs_local_values_and_pull_preserves_stable_native_identity() {
+    let (_dir, local, hosted, token, server) = sync_fixture("sync-workspace").await;
+    let mut original = data();
+    original["global_variables"] = json!([{"id":"project","key":"p","value":"shared-project","local_value":"native-project","enabled":true}]);
+    original["environments"] = json!([{"id":"env","name":"Env","variables":[{"id":"var","key":"key","value":"shared-env","local_value":"native-env","enabled":true,"secret":true}]}]);
+    let (status, _) = call(
+        &local,
+        "PUT",
+        "/api/workspaces/sync-workspace",
+        None,
+        Some(json!({"name":"Original","data":original,"expected_revision":1})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, pushed) = call(
+        &local,
+        "POST",
+        "/api/workspaces/sync-workspace/sync",
+        None,
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(pushed["status"], "synced", "{pushed}");
+    let (_, remote) = call(
+        &hosted,
+        "GET",
+        "/api/workspaces/sync-workspace",
+        Some(&token),
+        None,
+    )
+    .await;
+    assert!(!remote.to_string().contains("native-project"));
+    assert!(!remote.to_string().contains("native-env"));
+    assert_eq!(
+        remote["data"]["environments"][0]["variables"][0]["value"],
+        "shared-env"
+    );
+    let (_, noop) = call(
+        &local,
+        "POST",
+        "/api/workspaces/sync-workspace/sync",
+        None,
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(noop["status"], "synced");
+    assert_eq!(noop["message"], "Workspaces already match");
+    let mut next = remote["data"].clone();
+    next["environments"][0]["variables"][0]["value"] = json!("remote-edit");
+    call(
+        &hosted,
+        "PUT",
+        "/api/workspaces/sync-workspace",
+        Some(&token),
+        Some(json!({"name":"Remote edit","data":next,"expected_revision":1})),
+    )
+    .await;
+    let (_, pulled) = call(
+        &local,
+        "POST",
+        "/api/workspaces/sync-workspace/sync",
+        None,
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(pulled["status"], "synced", "{pulled}");
+    let saved = &pulled["workspace"]["data"];
+    assert_eq!(
+        saved["global_variables"][0]["local_value"],
+        "native-project"
+    );
+    assert_eq!(
+        saved["environments"][0]["variables"][0]["local_value"],
+        "native-env"
+    );
+    assert_eq!(
+        saved["environments"][0]["variables"][0]["value"],
+        "remote-edit"
+    );
+    server.abort();
 }

@@ -3,7 +3,7 @@ use common::*;
 #[tokio::test]
 async fn first_admin_creation_is_serialized_and_requires_setup_token() {
     let dir = tempfile::tempdir().unwrap();
-    let router = moleapi_server::hosted(config(
+    let router = common::hosted(config(
         format!("sqlite://{}?mode=rwc", dir.path().join("auth.db").display()),
         false,
     ))

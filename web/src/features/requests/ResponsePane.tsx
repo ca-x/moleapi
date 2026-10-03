@@ -1,3 +1,4 @@
+import ScriptConsole from "../scripts/ScriptConsole";
 import { useState } from "react";
 import {
   Badge,
@@ -117,7 +118,41 @@ export function ResponsePane({
             <Tabs.Trigger value="tests">
               测试 <span className="count">{response.tests.length}</span>
             </Tabs.Trigger>
+            <Tabs.Trigger value="logs">
+              控制台 <span className="count">{response.logs?.length || 0}</span>
+            </Tabs.Trigger>
           </Tabs.List>
+          <Tabs.Content value="logs">
+            <ScriptConsole logs={response.logs || []} />
+            {!!response.request_updates?.length && (
+              <>
+                <Text as="p" size="2" weight="medium" mt="4">
+                  脚本修改的本次请求
+                </Text>
+                <Text as="p" size="1" color="gray">
+                  以下修改仅用于本次执行。
+                </Text>
+                <Table.Root>
+                  <Table.Header>
+                    <Table.Row>
+                      <Table.ColumnHeaderCell>字段</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>执行值</Table.ColumnHeaderCell>
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body>
+                    {response.request_updates.map((update, index) => (
+                      <Table.Row key={index}>
+                        <Table.Cell className="mono">{update.field}</Table.Cell>
+                        <Table.Cell className="mono wrap-anywhere">
+                          {update.value}
+                        </Table.Cell>
+                      </Table.Row>
+                    ))}
+                  </Table.Body>
+                </Table.Root>
+              </>
+            )}
+          </Tabs.Content>
           <Tabs.Content value="body">
             <div className="code-toolbar">
               <Text size="1" color="gray">

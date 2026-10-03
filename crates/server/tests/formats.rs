@@ -3,9 +3,7 @@ use common::*;
 #[tokio::test]
 async fn import_export_routes_validate_formats_and_default_to_secret_redaction() {
     let dir = tempfile::tempdir().unwrap();
-    let router = moleapi_server::local(&dir.path().join("local.db"))
-        .await
-        .unwrap();
+    let router = common::local(&dir.path().join("local.db")).await.unwrap();
     let(status,imported)=call(&router,"POST","/api/import",None,Some(json!({"format":"curl","content":"curl -X POST 'https://example.com/resource?api_key=private-key' -H 'Authorization: Bearer private-token' --data-raw 'payload'"}))).await;
     assert_eq!(status, StatusCode::OK, "{imported}");
     assert_eq!(

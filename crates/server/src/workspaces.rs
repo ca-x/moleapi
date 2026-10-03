@@ -44,9 +44,12 @@ pub async fn list(
 pub async fn create(
     State(s): State<AppState>,
     Extension(owner): Extension<Identity>,
-    Json(c): Json<Create>,
+    Json(mut c): Json<Create>,
 ) -> Result<Json<Workspace>, ApiError> {
     validate(&c.name, &c.data)?;
+    if !s.local {
+        moleapi_core::scrub_local_values(&mut c.data);
+    }
     let id = c.id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     if id.is_empty()
         || matches!(id.as_str(), "." | "..")
@@ -120,9 +123,12 @@ pub async fn update(
     State(s): State<AppState>,
     Extension(owner): Extension<Identity>,
     Path(id): Path<String>,
-    Json(c): Json<Update>,
+    Json(mut c): Json<Update>,
 ) -> Result<Json<Workspace>, ApiError> {
     validate(&c.name, &c.data)?;
+    if !s.local {
+        moleapi_core::scrub_local_values(&mut c.data);
+    }
     if !(1..i64::MAX).contains(&c.expected_revision) {
         return Err(ApiError::bad("Invalid expected revision"));
     }

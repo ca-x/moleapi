@@ -60,6 +60,8 @@ jobs:
       - run: npm --prefix web ci
       - run: npm --prefix web run build
       - run: cargo build --locked --release -p moleapi-server --target ${{ matrix.target }}
+      - name: Verify standalone server worker dispatch
+        run: python scripts/check-script-worker.py target/${{ matrix.target }}/release/${{ matrix.binary }}
       - name: Archive embedded server executable
         shell: bash
         run: |
@@ -117,6 +119,8 @@ jobs:
           projectPath: desktop
           tauriScript: ../web/node_modules/.bin/tauri
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+      - name: Verify desktop worker without opening a GUI
+        run: python scripts/check-script-worker.py target/${{ matrix.target }}/release/moleapi
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-${{ matrix.target }}

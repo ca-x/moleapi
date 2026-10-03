@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { api, ApiError } from "../../shared/api";
 import { safeMessage } from "../../shared/model";
 import type { Workspace, WorkspaceData } from "../../shared/types";
+import { useCloseGuard } from "./useCloseGuard";
 import { acknowledgeSave, hasChanges, retainLocal } from "./draft";
 import type { DraftState } from "./draft";
 
@@ -29,7 +30,9 @@ export function useWorkspace(authenticated: boolean, accountId = "local") {
   const setDraft = useCallback(
     (
       update:
-        Workspace | null | ((draft: Workspace | null) => Workspace | null),
+        | Workspace
+        | null
+        | ((draft: Workspace | null) => Workspace | null),
     ) => {
       change((current) => ({
         ...current,
@@ -88,16 +91,8 @@ export function useWorkspace(authenticated: boolean, accountId = "local") {
     change,
   ]);
   const dirty = hasChanges(state);
-  useEffect(() => {
-    const listener = (event: BeforeUnloadEvent) => {
-      if (hasChanges(stateRef.current)) {
-        event.preventDefault();
-        event.returnValue = "";
-      }
-    };
-    window.addEventListener("beforeunload", listener);
-    return () => window.removeEventListener("beforeunload", listener);
-  }, []);
+  const hasUnsavedChanges = useCallback(() => hasChanges(stateRef.current), []);
+  useCloseGuard(hasUnsavedChanges);
   const save = useCallback(
     (silent = false): Promise<Workspace | null> => {
       if (pendingSave.current) return pendingSave.current;

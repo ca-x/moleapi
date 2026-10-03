@@ -4,6 +4,7 @@ import { api } from "../../shared/api";
 import { newRequest, safeMessage } from "../../shared/model";
 import type { ApiResponse, RequestSpec } from "../../shared/types";
 import type { useWorkspace } from "../workspaces/useWorkspace";
+import type { useLocalVariables } from "../variables/useLocalVariables";
 import type { View } from "../workbench/navigation";
 
 type Execution = {
@@ -17,6 +18,7 @@ export function useRequests(
   workspace: ReturnType<typeof useWorkspace>,
   setView: (view: View) => void,
   setSidebar: (open: boolean) => void,
+  localVariables?: ReturnType<typeof useLocalVariables>,
 ) {
   const client = useQueryClient();
   const { draft, dirty, save, updateData, stateRef, accountId, accountRef } =
@@ -62,6 +64,11 @@ export function useRequests(
     const workspaceId = draft.id;
     const environmentId = draft.data.active_environment_id;
     const requestId = snapshot.id;
+    const collectionId = draft.data.collections.find((c) =>
+      c.requests.some((r) => r.id === requestId),
+    )?.id;
+    const locals =
+      localVariables?.values(draft, collectionId, environmentId) || [];
     running.current = true;
     setBusy(true);
     setExecution({
@@ -82,7 +89,18 @@ export function useRequests(
         workspace_id: workspaceId,
         request: snapshot,
         environment_id: environmentId,
+        ...(locals.length ? { locals } : {}),
       });
+      if (
+        accountRef.current === accountId &&
+        stateRef.current.draft?.id === workspaceId
+      )
+        localVariables?.apply(
+          draft,
+          collectionId,
+          environmentId,
+          response.variable_updates || [],
+        );
       setExecution({ accountId, workspaceId, requestId, response, error: "" });
       void client.invalidateQueries({ queryKey: ["history", workspaceId] });
     } catch (error) {
@@ -97,7 +115,17 @@ export function useRequests(
       running.current = false;
       setBusy(false);
     }
-  }, [request, draft, dirty, save, client, stateRef, accountId, accountRef]);
+  }, [
+    request,
+    draft,
+    dirty,
+    save,
+    client,
+    stateRef,
+    accountId,
+    accountRef,
+    localVariables,
+  ]);
   const current =
     execution?.accountId === accountId &&
     execution?.workspaceId === draft?.id &&

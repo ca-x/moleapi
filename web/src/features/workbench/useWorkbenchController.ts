@@ -8,6 +8,7 @@ import { useAuth } from "../auth/useAuth";
 import { useWorkspace } from "../workspaces/useWorkspace";
 import { useRequests } from "../requests/useRequests";
 import { useRunner } from "../testing/useRunner";
+import { useLocalVariables } from "../variables/useLocalVariables";
 import { useHistory } from "../history/useHistory";
 import { useSync } from "../sync/useSync";
 import { useInterchange } from "../interchange/useInterchange";
@@ -47,8 +48,9 @@ export function useWorkbenchController() {
     setGuard(null);
     setFilter("");
   }, [auth.accountId]);
-  const requests = useRequests(workspace, setView, setSidebar);
-  const runner = useRunner(workspace);
+  const localVariables=useLocalVariables(workspace);
+  const requests = useRequests(workspace, setView, setSidebar, localVariables);
+  const runner = useRunner(workspace,localVariables);
   const history = useHistory(
     auth.authenticated,
     workspace.selectedId,
@@ -184,6 +186,7 @@ export function useWorkbenchController() {
     (e) => e.id === workspace.draft?.data.active_environment_id,
   );
   return {
+    localVariables,
     ...auth,
     ...appearance,
     ...workspace,

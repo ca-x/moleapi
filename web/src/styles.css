@@ -1083,3 +1083,13 @@ kbd {
 .cm-editor .cm-property-accessible {
   color: var(--code-property);
 }
+
+.request-scripts { display:flex; flex-direction:column; gap:14px; }
+.script-console { display:flex; flex-direction:column; gap:12px; padding:20px 0; }
+
+.pairs-with-local .pair-row,.pairs-with-local .pair-labels {grid-template-columns:20px minmax(100px,1fr) minmax(120px,1fr) minmax(120px,1fr) 64px;}
+.scope-variables-card {padding:22px;}
+.scope-variables-card .rt-TabsContent {padding-top:20px;}
+@media(max-width:700px){.pairs-with-local .pair-row,.pairs-with-local .pair-labels {grid-template-columns:20px minmax(80px,1fr) minmax(100px,1fr) 48px;}.pairs-with-local .pair-labels>span:nth-child(4){display:none;}.pairs-with-local .pair-row>.local-value-cell{grid-column:2/4;grid-row:2;}.pairs-with-local .pair-row>.rt-Flex{grid-column:4;grid-row:1/3;}.scope-variables-card{padding:14px;}}
+
+.environment-selected.rt-Button { color: var(--cyan-12); }

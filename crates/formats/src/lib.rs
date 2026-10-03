@@ -97,6 +97,7 @@ pub(crate) fn pair(key: impl Into<String>, value: impl Into<String>) -> moleapi_
         value: value.into(),
         enabled: true,
         secret: None,
+        local_value: None,
     }
 }
 pub(crate) fn request(
@@ -114,6 +115,9 @@ pub(crate) fn data(
 ) -> WorkspaceData {
     let environment_id = uid();
     WorkspaceData {
+        global_variables: vec![],
+        pre_request_script: String::new(),
+        post_response_script: String::new(),
         schema_version: 1,
         collections,
         environments: vec![moleapi_core::Environment {

@@ -150,6 +150,7 @@ async fn execute_inner(r: &RequestSpec, policy: NetworkPolicy) -> Result<Respons
                 },
                 enabled: true,
                 secret: None,
+                local_value: None,
             })
             .collect();
         let mut bytes = Vec::new();
@@ -167,6 +168,9 @@ async fn execute_inner(r: &RequestSpec, policy: NetworkPolicy) -> Result<Respons
         }
         let text = String::from_utf8_lossy(&bytes).into_owned();
         let mut result = Response {
+            request_updates: vec![],
+            logs: vec![],
+            variable_updates: vec![],
             status: status.as_u16(),
             status_text: status.canonical_reason().unwrap_or("").into(),
             headers: response_headers,

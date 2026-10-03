@@ -14,6 +14,11 @@ export default defineConfig({
       output: {
         manualChunks(moduleId) {
           if (
+            moduleId.includes("/node_modules/@codemirror/lang-javascript/") ||
+            moduleId.includes("/node_modules/@lezer/javascript/")
+          )
+            return "javascript-language";
+          if (
             moduleId.includes("/node_modules/@codemirror/") ||
             moduleId.includes("/node_modules/@uiw/") ||
             moduleId.includes("/node_modules/@lezer/")

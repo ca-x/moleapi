@@ -4,6 +4,7 @@ mod execution;
 mod formats;
 mod history;
 mod mock;
+mod privacy;
 mod runner;
 mod storage;
 mod sync;
@@ -17,8 +18,12 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
+pub use moleapi_script_runtime::dispatch_worker as dispatch_script_worker;
 use sea_orm::DatabaseConnection;
-use std::{path::Path, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 #[derive(Clone)]
 pub struct Config {
@@ -33,6 +38,8 @@ struct AppState {
     config: Config,
     local: bool,
     sync_lock: Arc<tokio::sync::Mutex<()>>,
+    script_slots: Arc<tokio::sync::Semaphore>,
+    script_worker: PathBuf,
 }
 #[derive(Debug)]
 struct ApiError {
@@ -90,6 +97,11 @@ impl IntoResponse for ApiError {
 
 /// Offline API for local IPC only. This function never opens a listening socket.
 pub async fn local(database_path: &Path) -> anyhow::Result<Router> {
+    local_with_worker(database_path, &std::env::current_exe()?).await
+}
+
+/// Embedder entrypoint with an explicitly trusted worker executable.
+pub async fn local_with_worker(database_path: &Path, worker: &Path) -> anyhow::Result<Router> {
     build(
         Config {
             database_url: storage::sqlite_url(database_path)?,
@@ -98,6 +110,7 @@ pub async fn local(database_path: &Path) -> anyhow::Result<Router> {
             allow_private_network: true,
         },
         true,
+        worker.to_owned(),
     )
     .await
 }
@@ -105,7 +118,12 @@ pub fn sqlite_database_url(path: &Path) -> anyhow::Result<String> {
     storage::sqlite_url(path)
 }
 pub async fn hosted(config: Config) -> anyhow::Result<Router> {
-    build(config, false).await
+    hosted_with_worker(config, &std::env::current_exe()?).await
+}
+
+/// Embedder entrypoint with an explicitly trusted worker executable.
+pub async fn hosted_with_worker(config: Config, worker: &Path) -> anyhow::Result<Router> {
+    build(config, false, worker.to_owned()).await
 }
 pub async fn setup_required(database_url: &str) -> anyhow::Result<bool> {
     use sea_orm::EntityTrait;
@@ -114,13 +132,19 @@ pub async fn setup_required(database_url: &str) -> anyhow::Result<bool> {
         .await?
         .is_some_and(|s| s.revision == 0))
 }
-async fn build(config: Config, local: bool) -> anyhow::Result<Router> {
+async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::Result<Router> {
+    anyhow::ensure!(
+        script_worker.is_absolute(),
+        "Script worker executable must be an absolute path"
+    );
     let db = storage::connect(&config.database_url).await?;
     let state = AppState {
         db,
         config,
         local,
         sync_lock: Arc::new(tokio::sync::Mutex::new(())),
+        script_slots: Arc::new(tokio::sync::Semaphore::new(4)),
+        script_worker,
     };
     let protected = Router::new()
         .route("/auth/logout", post(auth::logout))

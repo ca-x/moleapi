@@ -7,16 +7,30 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
         for variable in &mut environment.variables {
             if variable.secret == Some(true) || sensitive(&variable.key) {
                 variable.value.clear();
+                variable.local_value = None;
             }
         }
     }
+    for variable in &mut result.data.global_variables {
+        if variable.secret == Some(true) || sensitive(&variable.key) {
+            variable.value.clear();
+        }
+        variable.local_value = None;
+    }
     for collection in &mut result.data.collections {
+        for variable in &mut collection.variables {
+            if variable.secret == Some(true) || sensitive(&variable.key) {
+                variable.value.clear();
+            }
+            variable.local_value = None;
+        }
         for request in &mut collection.requests {
             request.auth.token.clear();
             request.auth.password.clear();
             for row in request.headers.iter_mut().chain(request.query.iter_mut()) {
                 if row.secret == Some(true) || sensitive(&row.key) {
                     row.value.clear();
+                    row.local_value = None;
                 }
             }
             for example in &mut request.examples {
@@ -29,6 +43,11 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
             }
             request.url = redact_url(&request.url);
             request.body = redact_embedded_json(&request.body);
+        }
+    }
+    for environment in &mut result.data.environments {
+        for variable in &mut environment.variables {
+            variable.local_value = None;
         }
     }
     for specification in &mut result.data.specifications {

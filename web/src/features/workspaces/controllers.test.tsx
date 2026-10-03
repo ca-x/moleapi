@@ -8,11 +8,16 @@ import { initialData } from "../../shared/model";
 import type { ApiResponse, RunResult, Workspace } from "../../shared/types";
 import { useWorkspace } from "./useWorkspace";
 import { useRequests } from "../requests/useRequests";
+import { useLocalVariables } from "../variables/useLocalVariables";
 import { useRunner } from "../testing/useRunner";
 import { useSync } from "../sync/useSync";
+const nativeMode = vi.hoisted(() => ({ enabled: false }));
 vi.mock("../../shared/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../shared/api")>()),
   api: vi.fn(),
+  get native() {
+    return nativeMode.enabled;
+  },
 }));
 vi.mock("sonner", () => ({
   toast: { error: vi.fn(), success: vi.fn(), message: vi.fn() },
@@ -61,7 +66,15 @@ function harness(workspace: Workspace) {
   };
 }
 beforeEach(() => {
+  nativeMode.enabled = false;
   mockedApi.mockReset();
+  const storage = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => storage.set(key, value),
+    removeItem: (key: string) => storage.delete(key),
+    clear: () => storage.clear(),
+  });
 });
 afterEach(cleanup);
 describe("frontend async controllers", () => {
@@ -312,4 +325,161 @@ describe("account boundaries", () => {
     );
     expect(result.current.dirty).toBe(true);
   });
+});
+
+describe("script local variable execution", () => {
+  it("applies collection-run extracted variables locally without mutating the shared draft", async () => {
+    const original = makeWorkspace();
+    mockedApi.mockResolvedValue({
+      results: [
+        {
+          request_id: original.data.collections[0].requests[0].id,
+          request_name: "request",
+          response: {
+            ...response,
+            variable_updates: [
+              { scope: "environment", key: "issued", value: "private-issued" },
+            ],
+          },
+        },
+      ],
+      passed: 1,
+      failed: 0,
+      elapsed_ms: 1,
+    } satisfies RunResult);
+    const { result } = renderHook(
+      () => {
+        const workspace = useWorkspace(true);
+        const locals = useLocalVariables(workspace);
+        return { workspace, locals, runner: useRunner(workspace, locals) };
+      },
+      { wrapper: harness(original) },
+    );
+    await waitFor(() =>
+      expect(result.current.workspace.draft?.id).toBe(original.id),
+    );
+    await act(async () => {
+      await result.current.runner.run();
+    });
+    expect(result.current.locals.read("environment", "local", "issued")).toBe(
+      "private-issued",
+    );
+    expect(result.current.workspace.draft?.data).toEqual(original.data);
+    expect(result.current.workspace.dirty).toBe(false);
+  });
+  it("discards delayed variable changes after switching workspaces", async () => {
+    const original = makeWorkspace();
+    const pending = deferred<ApiResponse>();
+    mockedApi.mockReturnValue(pending.promise);
+    const { result } = renderHook(
+      () => {
+        const workspace = useWorkspace(true);
+        const locals = useLocalVariables(workspace);
+        return {
+          workspace,
+          locals,
+          requests: useRequests(workspace, vi.fn(), vi.fn(), locals),
+        };
+      },
+      { wrapper: harness(original) },
+    );
+    await waitFor(() => expect(result.current.requests.request).toBeDefined());
+    let sending!: Promise<void>;
+    act(() => {
+      sending = result.current.requests.send();
+    });
+    act(() =>
+      result.current.workspace.installWorkspace({
+        ...original,
+        id: "workspace-b",
+      }),
+    );
+    await act(async () => {
+      pending.resolve({
+        ...response,
+        variable_updates: [
+          {
+            scope: "environment",
+            key: "issued",
+            value: "old-workspace-secret",
+          },
+        ],
+      });
+      await sending;
+    });
+    expect(
+      result.current.locals.read("environment", "local", "issued"),
+    ).toBeUndefined();
+    expect(
+      localStorage.getItem("moleapi:local-values:local:workspace-a"),
+    ).toBeNull();
+    expect(
+      localStorage.getItem("moleapi:local-values:local:workspace-b"),
+    ).toBeNull();
+  });
+});
+
+it("retains the rendered draft and old local values when browser storage is full", async () => {
+  const original = makeWorkspace();
+  const { result } = renderHook(
+    () => {
+      const workspace = useWorkspace(true);
+      return { workspace, locals: useLocalVariables(workspace) };
+    },
+    { wrapper: harness(original) },
+  );
+  await waitFor(() =>
+    expect(result.current.workspace.draft?.id).toBe(original.id),
+  );
+  act(() =>
+    result.current.locals.write(
+      "environment",
+      "local",
+      "credential",
+      "previous-private",
+    ),
+  );
+  vi.spyOn(localStorage, "setItem").mockImplementation(() => {
+    throw new DOMException("full", "QuotaExceededError");
+  });
+  expect(() =>
+    act(() =>
+      result.current.locals.write(
+        "environment",
+        "local",
+        "credential",
+        "new-private",
+      ),
+    ),
+  ).not.toThrow();
+  expect(result.current.locals.read("environment", "local", "credential")).toBe(
+    "previous-private",
+  );
+  expect(result.current.workspace.draft).toEqual(original);
+});
+
+it("keeps native blank-name local overrides attached to their row identity", async () => {
+  nativeMode.enabled = true;
+  const original = makeWorkspace();
+  original.data.global_variables = [
+    { id: "a", key: "", value: "", enabled: true, local_value: "private-a" },
+    { id: "b", key: "", value: "", enabled: true, local_value: "private-b" },
+  ];
+  const { result } = renderHook(
+    () => {
+      const workspace = useWorkspace(true);
+      return { workspace, locals: useLocalVariables(workspace) };
+    },
+    { wrapper: harness(original) },
+  );
+  await waitFor(() =>
+    expect(result.current.workspace.draft?.id).toBe(original.id),
+  );
+  expect(result.current.locals.read("project", "", "", "b")).toBe("private-b");
+  act(() => result.current.locals.write("project", "", "", "edited-a", "a"));
+  expect(
+    result.current.workspace.draft?.data.global_variables?.map(
+      (row) => row.local_value,
+    ),
+  ).toEqual(["edited-a", "private-b"]);
 });
