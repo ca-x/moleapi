@@ -13,6 +13,7 @@ import { Plus, Trash2, Eye, EyeOff, Link2 } from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
 import { protobuf } from "@codemirror/legacy-modes/mode/protobuf";
 import { json } from "@codemirror/lang-json";
+import { xml } from "@codemirror/lang-xml";
 import { javascript } from "@codemirror/lang-javascript";
 import {
   HighlightStyle,
@@ -135,7 +136,7 @@ export function Editor({
   readOnly?: boolean;
   jsonMode?: boolean;
   height?: string;
-  language?: "json" | "javascript" | "protobuf";
+  language?: "json" | "javascript" | "protobuf" | "xml";
   label?: string;
 }) {
   return (
@@ -150,13 +151,15 @@ export function Editor({
           "aria-label": label || (readOnly ? "只读代码" : "代码编辑器"),
           tabindex: "0",
         }),
-        ...(language === "protobuf"
-          ? [StreamLanguage.define(protobuf)]
-          : language === "javascript"
-            ? [javascript()]
-            : jsonMode || language === "json"
-              ? [json()]
-              : []),
+        ...(language === "xml"
+          ? [xml()]
+          : language === "protobuf"
+            ? [StreamLanguage.define(protobuf)]
+            : language === "javascript"
+              ? [javascript()]
+              : jsonMode || language === "json"
+                ? [json()]
+                : []),
       ]}
       readOnly={readOnly}
       basicSetup={{

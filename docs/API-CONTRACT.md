@@ -21,7 +21,7 @@ Response {status:number,status_text:string,headers:Pair[],body:string,body_base6
 TestResult {id:string,name:string,passed:boolean,actual:string,expected:string}
 HistoryEntry {id:string,workspace_id:string,request_id:string,request_name:string,method:string,url:string,status:number,elapsed_ms:number,size_bytes:number,created_at:string,response:Response}
 ```
-`expected` for JSON assertions is valid JSON text; `target` is RFC6901 JSON pointer, e.g. `/data/id`. A JSON string is written with quotes. For status/duration expected is numeric string; duration checks <=. Interpolation of all request fields uses enabled environment variables; unresolved variables cause 400. Request protocol allows HTTP/S only. Body max 5MiB; response max 5MiB and truncated flagged. Bound maximum timeout to 120s. GET/POST/PATCH/PUT/DELETE/HEAD/OPTIONS supported. History excludes request auth/headers/body and redacts URL queries for secret variables and common key/token/password query keys; response headers redact set-cookie; response body may contain endpoint-returned sensitive content and UI must document this.
+`expected` for JSON assertions is valid JSON text; `target` is RFC6901 JSON pointer, e.g. `/data/id`. A JSON string is written with quotes. For status/duration expected is numeric string; duration checks <=. Interpolation of all request fields uses enabled environment variables; unresolved variables cause 400. Finite HTTP/GraphQL/SOAP target URLs allow HTTP/S; dedicated live protocol sessions have their own validated transports. Body max 5MiB; response max 5MiB and truncated flagged. Bound maximum timeout to 120s. GET/POST/PATCH/PUT/DELETE/HEAD/OPTIONS supported. History excludes request auth/headers/body and redacts URL queries for secret variables and common key/token/password query keys; response headers redact set-cookie; response body may contain endpoint-returned sensitive content and UI must document this.
 
 ## Server/library constructors
 `moleapi_server::local(database_path: &std::path::Path) -> anyhow::Result<axum::Router>` async. Returns only API routes; local mode bypasses auth, exclusively for IPC. Never expose this router over a network.
@@ -81,3 +81,16 @@ Execution isolation: private worker mode receives JSON only on stdin and emits b
 
 
 Custom library embeddings using script execution call `moleapi_server::dispatch_script_worker()` before normal application startup, as the shipped server and desktop mains do. Existing `local(Path)` and `hosted(Config)` constructors use the current application executable for private worker dispatch. Additive `local_with_worker(database_path: &Path, worker: &Path)` and `hosted_with_worker(config: Config, worker: &Path)` accept an explicit trusted absolute worker executable for embeddings/tests. This path is never exposed as an HTTP input and never resolved through PATH. Private worker stdout/stderr is not an application log channel.
+
+
+## SOAP / WSDL
+
+`Protocol {kind:"soap",version:"1.1"|"1.2",service:string,port:string,operation:string,action:string}` stores protocol metadata; the canonical envelope is ordinary `RequestSpec.body` (`body_kind:"text"`, POST). An incomplete XML draft can save; execution validates after pre-request scripts.
+
+`Specification {kind:"wsdl",dialect:"wsdl1.1",source:string}` preserves a serialized `{entry_file,files:[{path,content}]}` bundle. Relative ASCII paths, supplied imports only, up to32 files/2MiB total; XML node/depth/schema/template limits apply.
+
+Owner-bound `POST /api/soap/import {workspace_id,name,source}` and `/api/soap/import-url {workspace_id,name,url,timeout_ms?,verify_tls?}` return `{specification,schema}` candidates, attached through normal workspace CAS saves. Import may include environment_id/variables/data/locals for private scoped metadata screening. URL imports use checked HTTP GET without redirects or automatic dependency downloads.
+
+`POST /api/soap/schema {workspace_id,specification_id}` reads saved sources. `POST /api/soap/template {workspace_id,specification_id,service,port,operation}` returns `{template,fields,action,version,address}` or an explicit unsupported-template error. Schema has services/ports/bindings/operations, templates and fields; operation metadata includes style/use/input_elements/binding_supported/error.
+
+The finite `/api/execute` pipeline generates version-specific headers, applies shared auth/variables/scripts/network/TLS/timeout/response caps, and validates selected operation plus envelope after pre-scripts. Actual HTTP status/body/headers remain unchanged; optional `Response.soap_fault {version,code,reason,detail,actor?}` describes both200 and error-status Faults. Default history excludes structured Fault and screens private XML; default native exports screen XML payloads and canonical source credential literals/URLs, while explicit include_secrets export preserves originals.

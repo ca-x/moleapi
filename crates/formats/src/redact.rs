@@ -2,6 +2,7 @@ use moleapi_core::Workspace;
 use serde_json::Value;
 
 pub(super) fn workspace(source: &Workspace) -> Workspace {
+    let xml_privacy = XmlPrivacy::new(source);
     let mut result = source.clone();
     for environment in &mut result.data.environments {
         for variable in &mut environment.variables {
@@ -44,6 +45,12 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
             request.url = redact_url(&request.url);
             request.body = redact_embedded_json(&request.body);
             match &mut request.protocol {
+                moleapi_core::Protocol::Soap { .. } => {
+                    request.body = xml_privacy.screen(&request.body, false);
+                    for example in &mut request.examples {
+                        example.body = xml_privacy.screen(&example.body, false);
+                    }
+                }
                 moleapi_core::Protocol::Mqtt { config } => {
                     mqtt_message(&mut config.message);
                     for entry in &mut config.saved_messages {
@@ -114,6 +121,20 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
     }
     for specification in &mut result.data.specifications {
         if let Ok(mut value) = serde_yaml_ng::from_str::<Value>(&specification.source) {
+            if specification.kind == "wsdl"
+                && let Some(files) = value.get_mut("files").and_then(Value::as_array_mut)
+            {
+                for file in files {
+                    if let Some(content) = file.get_mut("content") {
+                        *content = Value::String(
+                            content
+                                .as_str()
+                                .map(|source| xml_privacy.screen(source, true))
+                                .unwrap_or_default(),
+                        );
+                    }
+                }
+            }
             redact_value(&mut value);
             // Redaction changes text; preserve original text only for explicit include_secrets exports.
             if let Ok(text) = serde_json::to_string_pretty(&value) {
@@ -289,4 +310,92 @@ fn sensitive(key: &str) -> bool {
             | "client_secret"
             | "clientsecret"
     )
+}
+
+// XML entity spelling is arbitrary; screen decoded data before default exports.
+struct XmlPrivacy {
+    matcher: Option<aho_corasick::AhoCorasick>,
+    withhold: bool,
+}
+impl XmlPrivacy {
+    fn new(workspace: &Workspace) -> Self {
+        let mut secrets = std::collections::BTreeSet::new();
+        let mut pairs = |rows: &[moleapi_core::Pair]| {
+            for row in rows {
+                if row.secret == Some(true) || sensitive(&row.key) {
+                    secrets.insert(row.value.clone());
+                    if let Some(value) = &row.local_value {
+                        secrets.insert(value.clone());
+                    }
+                }
+            }
+        };
+        pairs(&workspace.data.global_variables);
+        for environment in &workspace.data.environments {
+            pairs(&environment.variables);
+        }
+        for collection in &workspace.data.collections {
+            pairs(&collection.variables);
+            for request in &collection.requests {
+                pairs(&request.headers);
+                pairs(&request.query);
+            }
+        }
+        for collection in &workspace.data.collections {
+            for request in &collection.requests {
+                secrets.insert(request.auth.token.clone());
+                secrets.insert(request.auth.password.clone());
+            }
+        }
+        secrets.remove("");
+        if secrets.iter().any(|value| value.len() > 4096)
+            || secrets.iter().map(String::len).sum::<usize>() > 16384
+        {
+            return Self {
+                matcher: None,
+                withhold: true,
+            };
+        }
+        if secrets.is_empty() {
+            return Self {
+                matcher: None,
+                withhold: false,
+            };
+        }
+        match aho_corasick::AhoCorasick::new(secrets) {
+            Ok(matcher) => Self {
+                matcher: Some(matcher),
+                withhold: false,
+            },
+            Err(_) => Self {
+                matcher: None,
+                withhold: true,
+            },
+        }
+    }
+    fn screen(&self, source: &str, definitions: bool) -> String {
+        let safe = if definitions {
+            moleapi_core::redact_soap_source_xml(source)
+        } else {
+            moleapi_core::redact_soap_xml(source)
+        };
+        let Ok(safe) = safe else {
+            return String::new();
+        };
+        if self.withhold {
+            return String::new();
+        }
+        if let Some(matcher) = &self.matcher {
+            if matcher.is_match(&safe) {
+                return String::new();
+            }
+            let Ok(values) = moleapi_core::soap_xml_data_values(&safe) else {
+                return String::new();
+            };
+            if values.iter().any(|value| matcher.is_match(value)) {
+                return String::new();
+            }
+        }
+        safe
+    }
 }

@@ -65,6 +65,10 @@ pub enum Protocol {
         #[serde(flatten)]
         config: Box<crate::MqttConfig>,
     },
+    Soap {
+        #[serde(flatten)]
+        config: Box<crate::SoapConfig>,
+    },
     Grpc {
         #[serde(default)]
         service: String,
@@ -113,6 +117,9 @@ fn empty_object() -> serde_json::Value {
     serde_json::json!({})
 }
 impl Protocol {
+    pub fn is_soap(&self) -> bool {
+        matches!(self, Self::Soap { .. })
+    }
     pub fn is_mqtt(&self) -> bool {
         matches!(self, Self::Mqtt { .. })
     }
@@ -206,6 +213,8 @@ pub struct TestResult {
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Response {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub soap_fault: Option<crate::SoapFault>,
     #[serde(default)]
     pub request_updates: Vec<RequestUpdate>,
     #[serde(default)]

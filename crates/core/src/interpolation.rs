@@ -156,6 +156,9 @@ pub fn resolve_request(
         value["protocol"]["variables_source"] = serde_json::Value::Null;
         value["protocol"]["operation_name"] = serde_json::Value::Null;
     }
+    if request.protocol.is_soap() {
+        value["body"] = "".into();
+    }
     let form = interpolate(&request.body_kind, &vars)? == "form";
     if form {
         // Decode form fields before interpolation, then encode the resolved values.
@@ -210,6 +213,12 @@ pub fn resolve_request(
             body.push_str(&encoded);
         }
         value["body"] = serde_json::Value::String(body);
+    }
+    if request.protocol.is_soap() {
+        value["body"] = crate::resolve_soap_xml(&request.body, |text| {
+            interpolate_budget_mode(text, &vars, &mut budget, true)
+        })?
+        .into();
     }
     let mut resolved: RequestSpec = serde_json::from_value(value)?;
     resolved.pre_request_script = request.pre_request_script.clone();

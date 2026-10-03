@@ -10,6 +10,7 @@ mod privacy;
 mod protocol_admission;
 mod protocols;
 mod runner;
+mod soap;
 mod storage;
 mod sync;
 mod workspaces;
@@ -174,6 +175,10 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         .route("/workspaces/{id}/run", post(runner::run))
         .route("/workspaces/{id}/export", post(formats::export))
         .route("/execute", post(execution::execute))
+        .route("/soap/import", post(soap::import))
+        .route("/soap/import-url", post(soap::import_url))
+        .route("/soap/schema", post(soap::schema))
+        .route("/soap/template", post(soap::template))
         .route("/graphql/introspect", post(graphql::introspect))
         .route("/graphql/schema", post(graphql::schema))
         .route("/grpc/schema", post(grpc::schema))

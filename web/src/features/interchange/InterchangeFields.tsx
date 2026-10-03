@@ -1,4 +1,4 @@
-import { Button, TextArea } from "@radix-ui/themes";
+import { Button, TextArea, Text } from "@radix-ui/themes";
 import { Upload } from "lucide-react";
 import { Choice, Field } from "../../shared/ui";
 import { pickFile } from "../../shared/api";
@@ -68,6 +68,7 @@ export default function InterchangeFields() {
         </>
       )}
       {modal === "export" && (
+        <>
         <Field label="密钥处理">
           <Choice
             value={includeSecrets ? "include" : "exclude"}
@@ -79,6 +80,10 @@ export default function InterchangeFields() {
             label="导出密钥"
           />
         </Field>
+        {!includeSecrets && <Text size="1" color="gray">
+          含私密值或无法安全处理的 XML 会留空。需要完整备份时请选择包含密钥值，并妥善保管文件。
+        </Text>}
+        </>
       )}
     </>
   );

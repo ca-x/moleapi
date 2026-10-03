@@ -6,7 +6,7 @@
 
 服务端采用 Rust/Axum/SeaORM：SQLite 默认，PostgreSQL/MySQL 可配置。前端使用 React、Radix UI、TanStack Query、CodeMirror 和可调整面板；桌面端使用 Tauri，通过进程内 IPC 复用服务端 API，本地数据存于 SQLite，不需要另外启动服务端。
 
-当前基础功能包括工作区/集合/请求编辑、环境变量、真实响应和断言、请求历史、响应示例与 Mock、集合测试、OpenAPI3.0/3.1 与 Postman2.1/cURL 导入导出、规范原文保留、可选自托管同步和明确的冲突处理。请求前/响应后脚本、分层变量和本地覆盖值已实现；SSE/WebSocket 支持实时连接、消息收发与断开，脚本使用独立 QuickJS 子进程及宿主超时保护。更多协议、完整协作与企业功能等按矩阵继续开发，不能据此宣称已完整替代竞品。
+当前基础功能包括工作区/集合/请求编辑、环境变量、真实响应和断言、请求历史、响应示例与 Mock、集合测试、OpenAPI3.0/3.1 与 Postman2.1/cURL 导入导出、规范原文保留、可选自托管同步和明确的冲突处理。请求前/响应后脚本、分层变量和本地覆盖值已实现；SSE/WebSocket 支持实时连接、消息收发与断开；GraphQL、gRPC 四种调用、Socket.IO 事件与 ACK、MQTT 3.1.1/5 及 SOAP 1.1/1.2 均有专用客户端，具体能力与限制见 [协议覆盖表](docs/PROTOCOL-COVERAGE.md)。脚本使用独立 QuickJS 子进程及宿主超时保护。更多协议、完整协作与企业功能等按矩阵继续开发，不能据此宣称已完整替代竞品。
 
 ## 本地构建和运行
 

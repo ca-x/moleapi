@@ -89,6 +89,7 @@ pub(crate) async fn perform(
     scopes: &mut VariableScopes,
 ) -> Result<Response, ApiError> {
     moleapi_core::validate_request(r, true).map_err(|e| ApiError::bad(e.to_string()))?;
+    crate::privacy::request_values(r, scopes)?;
     let pre = vec![
         w.data.pre_request_script.clone(),
         collection
@@ -103,7 +104,10 @@ pub(crate) async fn perform(
             .unwrap_or_default(),
         w.data.post_response_script.clone(),
     ];
-    let prepared = moleapi_core::prepare_graphql(r).map_err(|e| ApiError::bad(e.to_string()))?;
+    let prepared = moleapi_core::prepare_soap(
+        &moleapi_core::prepare_graphql(r).map_err(|e| ApiError::bad(e.to_string()))?,
+    )
+    .map_err(|e| ApiError::bad(e.to_string()))?;
     let mut request = prepared.clone();
     let mut logs = vec![];
     let mut tests = vec![];
@@ -153,9 +157,16 @@ pub(crate) async fn perform(
             "Pre scripts cannot change the GraphQL protocol",
         ));
     }
+    if request.protocol.is_soap() != r.protocol.is_soap() {
+        return Err(ApiError::bad("Pre scripts cannot change the SOAP protocol"));
+    }
     let effective = scopes.effective();
     let resolved = moleapi_core::resolve_request(&request, Some(&effective))
         .map_err(|e| ApiError::bad(e.to_string()))?;
+    if r.protocol.is_soap() {
+        crate::soap::validate_selected(&w.data, &resolved)
+            .map_err(|e| ApiError::bad(e.to_string()))?;
+    }
     let mut response = moleapi_core::execute(
         &resolved,
         None,
@@ -205,6 +216,7 @@ pub(crate) async fn perform(
     let history_environment = scopes.effective();
     let mut history_request = resolved.clone();
     history_request.id = r.id.clone();
+    history_request.name = r.name.clone();
     crate::history::record(
         s,
         owner,

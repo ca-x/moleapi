@@ -3,6 +3,7 @@ use anyhow::{Context, Result, bail, ensure};
 use reqwest::header::{HeaderName, HeaderValue};
 use std::collections::HashSet;
 pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
+    validate_soap(r, templates)?;
     validate_graphql_draft(r, templates)?;
     validate_mqtt(r, templates)?;
     if let Protocol::Socketio {
@@ -204,6 +205,9 @@ pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
             "Specification IDs must be unique and nonempty"
         );
         ensure!(spec.source.len() <= MAX_BODY, "Specification exceeds 5 MiB");
+        if spec.kind == "wsdl" {
+            soap_schema(spec)?;
+        }
         if spec.kind == "protobuf" {
             protobuf_pool(spec)?;
         }

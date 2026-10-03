@@ -1,3 +1,5 @@
+mod soap;
+pub use soap::*;
 mod mqtt;
 pub use mqtt::*;
 mod assertions;

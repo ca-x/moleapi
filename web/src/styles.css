@@ -436,6 +436,7 @@ kbd {
   text-align: center;
   padding: 25px;
 }
+.response-empty h1,
 .response-empty h2 {
   color: var(--gray-11);
 }
@@ -1167,3 +1168,9 @@ kbd {
 .mqtt-chart { min-width:0; }
 .mqtt-workbench .rt-TabsList { overflow-x:auto; flex-shrink:0; }
 @media(max-width:700px){.mqtt-toolbar{padding:12px;}.mqtt-property-editor>.rt-Flex{flex-wrap:wrap;}.mqtt-message-editor .field{min-width:140px;flex:1;}}
+
+.method-soap { color:var(--cyan-12); }
+.soap-workbench { height:100%; min-height:0; display:flex; flex-direction:column; overflow:auto; }
+.soap-toolbar { padding:12px 20px; border-bottom:1px solid var(--gray-5); flex-shrink:0; }
+.soap-toolbar .rt-SelectTrigger { max-width:340px; }
+@media(max-width:700px){.soap-toolbar{padding:12px;}.soap-toolbar .rt-SelectTrigger{max-width:100%;}.soap-workbench > .grpc-tabs{min-height:360px;flex-shrink:0;}}

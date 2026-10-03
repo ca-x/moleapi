@@ -1,0 +1,4 @@
+spyne==2.14.0
+lxml==6.0.2
+six==1.17.0
+legacy-cgi==2.6.4; python_version >= '3.13'

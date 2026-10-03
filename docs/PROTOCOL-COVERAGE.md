@@ -11,7 +11,7 @@
 | gRPC unary/三种 streaming/Reflection/proto | 两者 |专用客户端、四种实际调用、proto/Reflection、metadata/status/trailers、半关闭/取消已实现并复审；平台分发验证按用户要求留到功能整合阶段 |现用 tonic0.14.6、prost0.14.4、prost-reflect0.16.5、protox0.9.1、tonic-reflection0.14.6 |
 | Socket.IO/Engine.IO/namespace/event/ack | 两者 |实际 namespace/path/Auth/监听/JSON+混合二进制/双向ACK/取消已实现并复审；WebSocket transport，Engine.IO4 / Socket.IO wire5；分发验证留到功能整合阶段 |现用 rust_socketio0.6.0、rust_engineio0.6.0，最小上游SDK连接器/字节/ACK补丁 |
 | MQTT publish/subscribe/QoS/TLS | Postman，Apifox公开目录未定位 |实际3.1.1/5、QoS0/1/2、retain/Will/属性、订阅/重连、TCP/TLS/WS/WSS、保存消息与遥测已实现并复审；分发验证留到功能整合阶段 |现用 rumqttc0.25.1，最小连接地址/额度/PUBREC SDK补丁；真实Mosquitto测试 |
-| SOAP/XML/WSDL | 两者 |HTTP可手工发送XML；专用SOAP/WSDL尚未实现 | wsdl0.1.3用于读取WSDL、quick-xml0.42.0；rsoap0.4.0为编译时生成客户端，不能直接当运行时导入 |
+| SOAP/XML/WSDL | 两者 |专用1.1/1.2客户端、WSDL1.1多文件导入/Service/Port/Operation/XML模板、实际HTTP调用/鉴权/脚本/XML/Fault已实现；真实Spyne服务验证，协议与XML私密值/工作量审查及回归验证通过；分发验证留到功能整合阶段 |现用wsdl0.1.3、roxmltree0.18、quick-xml0.38、xmltree0.11、xsd-parser1.5.2；运行时模型和XML写入均复用成熟库 |
 | MCP调试/客户端/服务端配置 | 两者 |待实现 |官方RustSDK rmcp3.5.0 |
 | A2A/Agent Card/任务与流 | Apifox，Postman专用A2A公开目录未定位 |待实现 | a2a-sdk0.7.0；必须检查其客户端/传输能力，a2a-protocol这一猜测名称返回404，不采用 |
 | TCP Socket/报文处理 | Apifox，Postman公开目录未定位 |待实现 | tokio、tokio-util0.7.19现成 codec、TLS库 |
@@ -28,3 +28,5 @@
 官方库负责协议语法、帧、编解码、schema等；应用代码只负责工作区/授权/生命周期/UI与库的接口。SDK若缺少共享网络策略所需的连接器注入，先核实成熟扩展点或最小依赖补丁，不能退化到未经检查的第二次DNS/重定向，也不能重写协议来绕过库。版本是候选/核实证据，不是必须升级现有依赖；SQLx现有0.8.6仍复用，避免为了新增Data功能升级整个ORM。
 
 [crate API证据](references/rust-protocol-crates.json)保留包版本、MSRV、仓库与features。docs.rs已读取tonic0.14.6、dubbo0.4.0及wsdl0.1.3；wsdl明确是roxmltree上的WSDL接口，SOAP包名不能盲选，搜索命中的soap0.1.0实际上是神经模型。
+
+SOAP 当前边界：WSDL1.1，document/literal；RPC/encoded 与不能可靠生成模板的 XSD choice/derivation/attribute/wildcard 明确报错。允许原始 XML 编辑，但所选 binding、版本、Action 和操作 QName 仍检查。不会自动下载外部 import；需提供依赖文件。尚未实现 WSDL2、WS-Security、完整 XSD facet 校验或专用 XPath 提取。

@@ -32,6 +32,7 @@ impl Redactor {
         let mut patterns = BTreeSet::new();
         for secret in secrets.iter().filter(|s| !s.is_empty()) {
             patterns.insert(secret.clone());
+            patterns.insert(moleapi_core::escape_xml_value(secret));
             patterns.insert(STANDARD.encode(secret));
             patterns.insert(URL_SAFE_NO_PAD.encode(secret));
             let form: String = url::form_urlencoded::byte_serialize(secret.as_bytes()).collect();
@@ -141,6 +142,22 @@ pub(crate) fn request_values(
             scopes.private_values.insert(resolved);
         }
     };
+    if request.protocol.is_soap()
+        && let Ok(doc) = moleapi_core::parse_bounded_xml(&request.body)
+    {
+        for n in doc.descendants().filter(|n| n.is_element()) {
+            if moleapi_core::sensitive_query_key(n.tag_name().name()) {
+                for text in n.descendants().filter_map(|n| n.text()) {
+                    capture(text)
+                }
+            }
+            for attr in n.attributes() {
+                if moleapi_core::sensitive_query_key(attr.name()) {
+                    capture(attr.value())
+                }
+            }
+        }
+    }
     if let moleapi_core::Protocol::Graphql {
         connection_params, ..
     } = &request.protocol

@@ -26,6 +26,13 @@ futures-util = "0.3"
 
 rumqttc = { version = "=0.25.1", default-features = false, features = ["use-rustls-no-provider", "websocket"] }
 
+mime = "0.3"
+wsdl = "=0.1.3"
+roxmltree = "0.18"
+xmltree = "=0.11.0"
+quick-xml = "0.38"
+xsd-parser = "=1.5.2"
+
 [dev-dependencies]
 prost-types = "0.14"
 axum.workspace = true

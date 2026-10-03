@@ -398,3 +398,86 @@ fn mqtt_private_saved_topic_cannot_survive_default_export_as_its_generated_label
             .contains("customer/acme")
     );
 }
+
+#[test]
+fn soap_exports_screen_xml_values_and_preserve_schema_definitions_and_explicit_sources() {
+    let mut source = workspace(import("postman", &postman().to_string()).unwrap().data);
+    let request = &mut source.data.collections[0].requests[0];
+    request.protocol =
+        serde_json::from_value(json!({"kind":"soap","version":"1.1","action":"Echo"})).unwrap();
+    request.body = r#"<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><s:Body><Echo><password>payload-secret</password><text xsi:nil="true" xml:lang="en"/></Echo></s:Body></s:Envelope>"#.into();
+    let definition = include_str!("../../server/tests/fixtures/soap/spyne11.wsdl")
+        .replace(r#"<xs:complexType name="Item">"#, r#"<xs:element name="password" type="xs:string" default="source-password"/><xs:element name="token" type="xs:string"/><xs:complexType name="Item">"#)
+        .replace("http://127.0.0.1:18897/", "https://alice:address-password@example.test/service?api_key=address-token");
+    let original =
+        json!({"entry_file":"entry.wsdl","files":[{"path":"entry.wsdl","content":definition}]})
+            .to_string();
+    source
+        .data
+        .specifications
+        .push(moleapi_core::Specification {
+            id: "wsdl".into(),
+            name: "Service".into(),
+            kind: "wsdl".into(),
+            dialect: "wsdl1.1".into(),
+            source: original.clone(),
+        });
+    let safe = export(&source, "moleapi", false).unwrap();
+    for secret in [
+        "payload-secret",
+        "source-password",
+        "address-password",
+        "address-token",
+        "alice",
+    ] {
+        assert!(!safe.content.contains(secret), "{secret}");
+    }
+    let restored = import("moleapi", &safe.content).unwrap();
+    let bundle: Value =
+        serde_json::from_str(&restored.data.specifications.last().unwrap().source).unwrap();
+    let xml = bundle["files"][0]["content"].as_str().unwrap();
+    assert!(xml.contains("name=\"password\""));
+    assert!(xml.contains("name=\"token\""));
+    assert!(xml.contains("type=\"xs:string\""));
+    assert!(
+        restored.data.collections[0].requests[0]
+            .body
+            .contains("xsi:nil=\"true\"")
+    );
+    let explicit = export(&source, "moleapi", true).unwrap();
+    let restored = import("moleapi", &explicit.content).unwrap();
+    assert_eq!(
+        restored.data.specifications.last().unwrap().source,
+        original
+    );
+    assert_eq!(
+        restored.data.collections[0].requests[0].body,
+        source.data.collections[0].requests[0].body
+    );
+    source.data.collections[0].requests[0].body = "<broken>payload-secret".into();
+    assert!(
+        !export(&source, "moleapi", false)
+            .unwrap()
+            .content
+            .contains("payload-secret")
+    );
+}
+
+#[test]
+fn soap_default_export_withholds_decoded_private_entities_in_plain_data_fields() {
+    let mut source = workspace(import("postman", &postman().to_string()).unwrap().data);
+    source.data.collections[0].variables[0].value = "a&b".into();
+    let request = &mut source.data.collections[0].requests[0];
+    request.protocol = serde_json::from_value(json!({"kind":"soap","version":"1.1"})).unwrap();
+    request.body = r#"<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><text>a&#38;b</text></s:Body></s:Envelope>"#.into();
+    let original = request.body.clone();
+    for body in [original.clone(), r#"<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><!--a&b--><?test a&b?><s:Body><text>public</text></s:Body></s:Envelope>"#.into()] {
+        source.data.collections[0].requests[0].body = body.clone();
+        let safe = export(&source, "moleapi", false).unwrap();
+        let restored = import("moleapi", &safe.content).unwrap();
+        assert!(restored.data.collections[0].requests[0].body.is_empty());
+        let explicit = export(&source, "moleapi", true).unwrap();
+        let restored = import("moleapi", &explicit.content).unwrap();
+        assert_eq!(restored.data.collections[0].requests[0].body, body);
+    }
+}

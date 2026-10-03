@@ -25,6 +25,7 @@ const GraphQLWorkbench = lazy(() => import("../graphql/GraphQLWorkbench"));
 const GrpcWorkbench = lazy(() => import("../grpc/GrpcWorkbench"));
 const SocketIoWorkbench = lazy(() => import("../socketio/SocketIoWorkbench"));
 const MqttWorkbench = lazy(() => import("../mqtt/MqttWorkbench"));
+const SoapWorkbench = lazy(() => import("../soap/SoapWorkbench"));
 import { mqttConfig } from "../mqtt/model";
 const methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
 const requestTabs = [
@@ -71,6 +72,7 @@ export default function RequestEditor({
   const grpc = kind === "grpc";
   const socketio = kind === "socketio";
   const mqtt = kind === "mqtt";
+  const soap = kind === "soap";
   const mqttWebSocket =
     mqtt && (/^wss?:/i.test(request.url) || request.url.includes("{{"));
   useEffect(() => {
@@ -89,7 +91,14 @@ export default function RequestEditor({
   }, [live, grpc, socketio, mqtt, mqttWebSocket, tab]);
   function changeProtocol(
     value:
-      "http" | "sse" | "websocket" | "graphql" | "grpc" | "socketio" | "mqtt",
+      | "http"
+      | "sse"
+      | "websocket"
+      | "graphql"
+      | "grpc"
+      | "socketio"
+      | "mqtt"
+      | "soap",
   ) {
     let url = request.url;
     try {
@@ -110,37 +119,48 @@ export default function RequestEditor({
     }
     update({
       protocol:
-        value === "mqtt"
-          ? mqttConfig()
-          : value === "socketio"
-            ? {
-                kind: value,
-                namespace: "/",
-                path: "/socket.io/",
-                auth_source: "{}",
-                listeners: ["message"],
-                event: "message",
-                arguments_source: "[]",
-                attachments_base64: [],
-                request_ack: false,
-                ack_timeout_ms: 5000,
-              }
-            : value === "grpc"
-              ? { kind: value, service: "", method: "", message_source: "{}" }
-              : value === "graphql"
-                ? {
-                    kind: value,
-                    document: "",
-                    variables: {},
-                    connection_params: {},
-                  }
-                : { kind: value },
+        value === "soap"
+          ? {
+              kind: "soap",
+              version: "1.1",
+              service: "",
+              port: "",
+              operation: "",
+              action: "",
+            }
+          : value === "mqtt"
+            ? mqttConfig()
+            : value === "socketio"
+              ? {
+                  kind: value,
+                  namespace: "/",
+                  path: "/socket.io/",
+                  auth_source: "{}",
+                  listeners: ["message"],
+                  event: "message",
+                  arguments_source: "[]",
+                  attachments_base64: [],
+                  request_ack: false,
+                  ack_timeout_ms: 5000,
+                }
+              : value === "grpc"
+                ? { kind: value, service: "", method: "", message_source: "{}" }
+                : value === "graphql"
+                  ? {
+                      kind: value,
+                      document: "",
+                      variables: {},
+                      connection_params: {},
+                    }
+                  : { kind: value },
       url,
-      ...(value === "graphql"
-        ? { method: "POST" }
-        : value !== "http"
-          ? { method: "GET", body_kind: "none" }
-          : {}),
+      ...(value === "soap"
+        ? { method: "POST", body_kind: "text" }
+        : value === "graphql"
+          ? { method: "POST" }
+          : value !== "http"
+            ? { method: "GET", body_kind: "none" }
+            : {}),
     });
   }
   const copyCurl = async () => {
@@ -167,15 +187,17 @@ export default function RequestEditor({
               ? "HTTP 请求"
               : grpc
                 ? "gRPC 请求"
-                : mqtt
-                  ? "MQTT 会话"
-                  : socketio
-                    ? "Socket.IO 会话"
-                    : kind === "graphql"
-                      ? "GraphQL 请求"
-                      : kind === "sse"
-                        ? "SSE 事件流"
-                        : "WebSocket 会话"}
+                : soap
+                  ? "SOAP 请求"
+                  : mqtt
+                    ? "MQTT 会话"
+                    : socketio
+                      ? "Socket.IO 会话"
+                      : kind === "graphql"
+                        ? "GraphQL 请求"
+                        : kind === "sse"
+                          ? "SSE 事件流"
+                          : "WebSocket 会话"}
           </Text>
           <TextField.Root
             className="request-title-input"
@@ -219,6 +241,7 @@ export default function RequestEditor({
             { value: "grpc", label: "gRPC" },
             { value: "socketio", label: "Socket.IO" },
             { value: "mqtt", label: "MQTT" },
+            { value: "soap", label: "SOAP" },
           ]}
         />
         {mqtt ? (
@@ -278,7 +301,9 @@ export default function RequestEditor({
         <Panel
           id="request-options-panel"
           defaultSize={
-            kind === "graphql" || grpc || socketio || mqtt ? "20%" : "35%"
+            kind === "graphql" || grpc || socketio || mqtt || soap
+              ? "20%"
+              : "35%"
           }
           minSize={kind === "graphql" ? "10%" : "25%"}
           className="request-options-panel"
@@ -291,7 +316,7 @@ export default function RequestEditor({
             <Tabs.List>
               {requestTabs
                 .filter((item) =>
-                  kind === "graphql"
+                  kind === "graphql" || soap
                     ? item.value !== "body"
                     : grpc || mqtt
                       ? ![
@@ -514,11 +539,19 @@ export default function RequestEditor({
         <Panel
           id="request-response-panel"
           defaultSize={
-            kind === "graphql" || grpc || socketio || mqtt ? "80%" : "65%"
+            kind === "graphql" || grpc || socketio || mqtt || soap
+              ? "80%"
+              : "65%"
           }
           minSize="40%"
         >
-          {mqtt ? (
+          {soap ? (
+            <Suspense
+              fallback={<Text role="status">正在加载 SOAP 客户端…</Text>}
+            >
+              <SoapWorkbench />
+            </Suspense>
+          ) : mqtt ? (
             <Suspense
               fallback={<Text role="status">正在加载 MQTT 客户端…</Text>}
             >

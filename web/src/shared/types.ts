@@ -1,3 +1,4 @@
+import type { SoapConfig, SoapFault } from "../features/soap/types";
 import type { MqttConfig } from "../features/mqtt/types";
 export interface SocketIoConfig {
   kind: "socketio";
@@ -31,7 +32,8 @@ export type ProtocolConfig =
   | GraphQLConfig
   | GrpcConfig
   | SocketIoConfig
-  | MqttConfig;
+  | MqttConfig
+  | SoapConfig;
 export interface Pair {
   id: string;
   key: string;
@@ -144,6 +146,7 @@ export interface ApiResponse {
   request_updates?: RequestUpdate[];
   logs?: ScriptLog[];
   variable_updates?: VariableUpdate[];
+  soap_fault?: SoapFault | null;
   status: number;
   status_text: string;
   headers: Pair[];

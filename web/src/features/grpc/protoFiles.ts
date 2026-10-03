@@ -1,3 +1,4 @@
+import { readBoundedTextFiles } from "../../shared/readBoundedTextFiles";
 import { native } from "../../shared/api";
 import type { ProtoFile } from "./types";
 export const MAX_PROTO_BYTES = 2 * 1024 * 1024;
@@ -34,25 +35,11 @@ export function checkedProtoFiles(files: ProtoFile[]): ProtoFile[] {
   }
   return files;
 }
-/** Retain import-relative folders while discarding the user's absolute paths. */
-export function relativeProtoPaths(paths: string[]): string[] {
-  const parts = paths.map((path) => path.replaceAll("\\", "/").split("/"));
-  const common = parts[0]?.slice(0, -1) || [];
-  while (
-    common.length &&
-    !parts.every((path) => common.every((part, index) => path[index] === part))
-  )
-    common.pop();
-  return parts.map((path) =>
-    (common.length ? path.slice(common.length) : path.slice(-1)).join("/"),
-  );
-}
+export { relativeFilePaths as relativeProtoPaths } from "../../shared/relativeFilePaths";
+import { relativeFilePaths } from "../../shared/relativeFilePaths";
 export async function pickProtoFiles(): Promise<ProtoFile[] | null> {
   if (native) {
-    const [{ open }, { readTextFile }] = await Promise.all([
-      import("@tauri-apps/plugin-dialog"),
-      import("@tauri-apps/plugin-fs"),
-    ]);
+    const { open } = await import("@tauri-apps/plugin-dialog");
     const selected = await open({
       multiple: true,
       filters: [{ name: "Protocol Buffers", extensions: ["proto"] }],
@@ -60,15 +47,11 @@ export async function pickProtoFiles(): Promise<ProtoFile[] | null> {
     if (!selected) return null;
     const paths = typeof selected === "string" ? [selected] : selected;
     if (paths.length > 32) throw new Error("一次最多导入 32 个 proto 文件。");
-    const names = relativeProtoPaths(paths);
-    return checkedProtoFiles(
-      await Promise.all(
-        paths.map(async (path, index) => ({
-          path: names[index],
-          content: await readTextFile(path),
-        })),
-      ),
-    );
+    const names = relativeFilePaths(paths);
+    const contents = await readBoundedTextFiles(paths, MAX_PROTO_BYTES, MAX_PROTO_FILE_BYTES);
+    return checkedProtoFiles(paths.map((_, index) => ({
+      path: names[index], content: contents[index],
+    })));
   }
   return new Promise((resolve, reject) => {
     const input = document.createElement("input");

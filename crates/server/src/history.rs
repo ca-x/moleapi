@@ -119,6 +119,22 @@ pub(crate) async fn record(
         stored.body_base64 = None;
         stored.body = "[REDACTED binary response]".into();
     }
+    if r.protocol.is_soap() {
+        if let Ok(decoded) = moleapi_core::soap_xml_data_values(&stored.body) {
+            let mut data = serde_json::json!(decoded);
+            let before = data.clone();
+            redactor.scrub(&mut data);
+            if data != before {
+                stored.body = "[WITHHELD: private SOAP XML values]".into();
+            }
+        }
+        stored.soap_fault = None;
+        stored.body_base64 = None;
+        if stored.body != "[WITHHELD: private SOAP XML values]" {
+            stored.body = moleapi_core::redact_soap_xml(&stored.body)
+                .unwrap_or_else(|_| "[WITHHELD: malformed/opaque SOAP XML]".into());
+        }
+    }
     let mut value = serde_json::to_value(&stored).map_err(|_| ApiError::internal())?;
     redactor.scrub(&mut value);
     stored = serde_json::from_value(value).map_err(|_| ApiError::internal())?;

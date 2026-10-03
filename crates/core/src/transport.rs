@@ -13,11 +13,14 @@ pub async fn execute(
     policy: NetworkPolicy,
 ) -> Result<Response> {
     ensure!(
-        request.protocol == Protocol::Http || request.protocol.is_graphql(),
+        request.protocol == Protocol::Http
+            || request.protocol.is_graphql()
+            || request.protocol.is_soap(),
         "Live protocols require the session API"
     );
-    let prepared = prepare_graphql(request)?;
+    let prepared = prepare_soap(&prepare_graphql(request)?)?;
     let r = resolve_request(&prepared, environment)?;
+    validate_soap(&r, false)?;
     if r.protocol.is_graphql() {
         ensure!(
             !graphql_is_subscription(&r)?,
@@ -73,6 +76,16 @@ async fn execute_inner(r: &RequestSpec, policy: NetworkPolicy) -> Result<Respons
             ensure!(redirect < 10, "Too many redirects");
             let next = url.join(location.to_str().context("Invalid redirect location")?)?;
             valid_url(next.as_str())?;
+            if r.protocol.is_soap() {
+                ensure!(
+                    matches!(status.as_u16(), 307 | 308),
+                    "SOAP redirects must preserve POST (307/308)"
+                );
+                ensure!(
+                    url.origin() == next.origin(),
+                    "Cross-origin SOAP redirects are blocked to protect envelope credentials"
+                );
+            }
             ensure!(
                 url.scheme() != "https" || next.scheme() == "https",
                 "HTTPS downgrade redirect blocked"
@@ -122,6 +135,7 @@ async fn execute_inner(r: &RequestSpec, policy: NetworkPolicy) -> Result<Respons
         }
         let text = String::from_utf8_lossy(&bytes).into_owned();
         let mut result = Response {
+            soap_fault: None,
             request_updates: vec![],
             logs: vec![],
             variable_updates: vec![],
@@ -138,6 +152,9 @@ async fn execute_inner(r: &RequestSpec, policy: NetworkPolicy) -> Result<Respons
             url: url.to_string(),
             tests: vec![],
         };
+        if r.protocol.is_soap() && !result.truncated {
+            result.soap_fault = soap_fault(&result.body);
+        }
         result.tests = assertions(&r.assertions, &result);
         return Ok(result);
     }

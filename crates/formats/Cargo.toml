@@ -18,3 +18,5 @@ jsonschema = { version = "0.33", default-features = false }
 shell-words = "1"
 url = "2"
 async-graphql-parser = "7.2.1"
+
+aho-corasick = "1"

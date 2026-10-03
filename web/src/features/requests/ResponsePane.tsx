@@ -40,6 +40,13 @@ export function ResponsePane({
   } catch {
     /* Non-JSON remains readable text. */
   }
+  const isXml =
+    !response?.body_base64 &&
+    response?.headers.some(
+      (header) =>
+        header.key.toLowerCase() === "content-type" &&
+        header.value.toLowerCase().includes("xml"),
+    );
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(response?.body || "");
@@ -180,6 +187,7 @@ export function ResponsePane({
               value={response.body_base64 || content}
               dark={dark}
               jsonMode={isJson}
+              language={isXml ? "xml" : undefined}
               readOnly
               height={fill ? "100%" : "300px"}
             />
