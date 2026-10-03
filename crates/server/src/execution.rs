@@ -313,6 +313,18 @@ pub(crate) async fn prepare_live(
         feedback.tests = output.tests;
         updates = output.updates;
     }
+    if request.protocol.is_mqtt()
+        && (request.method != prepared.method
+            || request.body_kind != prepared.body_kind
+            || request.body != prepared.body
+            || request.headers != prepared.headers
+            || request.query != prepared.query
+            || request.protocol != prepared.protocol)
+    {
+        return Err(ApiError::bad(
+            "MQTT pre-scripts can edit connection URL/auth and variables; HTTP body/headers/query/method or MQTT draft mutations are unsupported",
+        ));
+    }
     if let moleapi_core::Protocol::Socketio { auth_source, .. } = &mut request.protocol {
         if request.method != "GET" || request.body_kind != "json" {
             return Err(ApiError::bad(

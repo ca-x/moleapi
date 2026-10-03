@@ -62,7 +62,7 @@ export function useWorkbenchController() {
     requests.request?.protocol?.kind === "graphql"
       ? () => graphqlRun.current?.()
       : requests.request?.protocol?.kind &&
-          ["sse", "websocket", "grpc", "socketio"].includes(
+          ["sse", "websocket", "grpc", "socketio", "mqtt"].includes(
             requests.request.protocol.kind,
           )
         ? protocolSession.connect

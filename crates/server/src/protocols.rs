@@ -86,17 +86,20 @@ pub async fn create(
                 "GraphQL query/mutation requests use the execute API",
             ));
         }
-    } else if !request.protocol.is_grpc()
+    } else if !request.protocol.is_mqtt()
+        && !request.protocol.is_grpc()
         && (request.method != "GET" || request.body_kind != "none")
     {
         return Err(ApiError::bad(
             "SSE and WebSocket connections require GET with body mode None",
         ));
     }
-    if request.protocol.is_socketio() != c.request.protocol.is_socketio()
+    if request.protocol.is_mqtt() != c.request.protocol.is_mqtt()
+        || request.protocol.is_socketio() != c.request.protocol.is_socketio()
         || request.protocol.is_graphql() != c.request.protocol.is_graphql()
         || request.protocol.is_grpc() != c.request.protocol.is_grpc()
-        || (!request.protocol.is_socketio()
+        || (!request.protocol.is_mqtt()
+            && !request.protocol.is_socketio()
             && !request.protocol.is_graphql()
             && !request.protocol.is_grpc()
             && request.protocol != c.request.protocol)
@@ -156,8 +159,12 @@ pub async fn create(
             request.protocol == Protocol::Websocket || request.protocol.is_socketio(),
         ),
     };
-    let mut resolved_url =
-        moleapi_core::protocol_url(target_url, ws_url).map_err(|e| ApiError::bad(e.to_string()))?;
+    let mut resolved_url = if request.protocol.is_mqtt() {
+        moleapi_core::mqtt_url(target_url)
+    } else {
+        moleapi_core::protocol_url(target_url, ws_url)
+    }
+    .map_err(|e| ApiError::bad(e.to_string()))?;
     if let Protocol::Socketio { path, .. } = &request.protocol {
         resolved_url.set_path(path);
     }
@@ -193,6 +200,18 @@ pub async fn create(
             let _ = s.protocol_sessions.remove(&owner.0, &summary.id).await;
             return Err(e);
         }
+    }
+    if let Protocol::Mqtt { config } = &request.protocol
+        && let Err(e) = s.protocol_sessions.configure_mqtt(
+            &owner.0,
+            &summary.id,
+            *config.clone(),
+            scopes.effective(),
+            mask.clone(),
+        )
+    {
+        let _ = s.protocol_sessions.remove(&owner.0, &summary.id).await;
+        return Err(error(e));
     }
     if request.protocol.is_socketio()
         && let Err(e) = s.protocol_sessions.configure_socketio(

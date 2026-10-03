@@ -10,7 +10,7 @@
 | GraphQL Query/Mutation/Introspection/Subscription | 两者 |专用 GraphiQL 客户端、Rust query/mutation、保存/恢复 schema、graphql-transport-ws subscription 已实现；真实服务与复审通过，当前变更平台 CI 待运行 | 现用 async-graphql-parser7.2.1、cynic-introspection3.14.0、graphql-ws-client0.13.0、apollo-parser0.8.6 |
 | gRPC unary/三种 streaming/Reflection/proto | 两者 |专用客户端、四种实际调用、proto/Reflection、metadata/status/trailers、半关闭/取消已实现并复审；平台分发验证按用户要求留到功能整合阶段 |现用 tonic0.14.6、prost0.14.4、prost-reflect0.16.5、protox0.9.1、tonic-reflection0.14.6 |
 | Socket.IO/Engine.IO/namespace/event/ack | 两者 |实际 namespace/path/Auth/监听/JSON+混合二进制/双向ACK/取消已实现并复审；WebSocket transport，Engine.IO4 / Socket.IO wire5；分发验证留到功能整合阶段 |现用 rust_socketio0.6.0、rust_engineio0.6.0，最小上游SDK连接器/字节/ACK补丁 |
-| MQTT publish/subscribe/QoS/TLS | Postman，Apifox公开目录未定位 |待实现 | rumqttc0.25.1 |
+| MQTT publish/subscribe/QoS/TLS | Postman，Apifox公开目录未定位 |实际3.1.1/5、QoS0/1/2、retain/Will/属性、订阅/重连、TCP/TLS/WS/WSS、保存消息与遥测已实现并复审；分发验证留到功能整合阶段 |现用 rumqttc0.25.1，最小连接地址/额度/PUBREC SDK补丁；真实Mosquitto测试 |
 | SOAP/XML/WSDL | 两者 |HTTP可手工发送XML；专用SOAP/WSDL尚未实现 | wsdl0.1.3用于读取WSDL、quick-xml0.42.0；rsoap0.4.0为编译时生成客户端，不能直接当运行时导入 |
 | MCP调试/客户端/服务端配置 | 两者 |待实现 |官方RustSDK rmcp3.5.0 |
 | A2A/Agent Card/任务与流 | Apifox，Postman专用A2A公开目录未定位 |待实现 | a2a-sdk0.7.0；必须检查其客户端/传输能力，a2a-protocol这一猜测名称返回404，不采用 |

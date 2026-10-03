@@ -1155,3 +1155,15 @@ kbd {
 .socketio-listener { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:var(--gray-3); border-radius:4px; }
 .socketio-workbench .rt-TextArea { font-family:var(--code-font-family); }
 @media(max-width:700px) { .socketio-toolbar {padding:12px;} .socketio-toolbar .field {min-width:130px;} }
+
+.method-mqtt { color:var(--cyan-12); }
+.mqtt-workbench { height:100%; min-height:0; display:flex; flex-direction:column; }
+.mqtt-toolbar { padding:12px 20px; border-bottom:1px solid var(--gray-5); }
+.mqtt-settings,.mqtt-subscriptions { display:flex; flex-direction:column; gap:16px; }
+.mqtt-property-editor { display:flex; flex-direction:column; gap:8px; }
+.mqtt-message-editor { display:flex; flex-direction:column; gap:12px; min-height:0; }
+.mqtt-message-properties { padding-top:12px; display:flex; flex-direction:column; gap:12px; }
+.mqtt-telemetry { min-height:0; display:flex; flex-direction:column; gap:16px; }
+.mqtt-chart { min-width:0; }
+.mqtt-workbench .rt-TabsList { overflow-x:auto; flex-shrink:0; }
+@media(max-width:700px){.mqtt-toolbar{padding:12px;}.mqtt-property-editor>.rt-Flex{flex-wrap:wrap;}.mqtt-message-editor .field{min-width:140px;flex:1;}}

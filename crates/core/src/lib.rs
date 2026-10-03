@@ -1,3 +1,5 @@
+mod mqtt;
+pub use mqtt::*;
 mod assertions;
 mod grpc;
 pub use grpc::*;
@@ -11,7 +13,7 @@ mod transport;
 mod validation;
 mod variables;
 pub use assertions::*;
-pub use interpolation::{resolve_grpc_source, resolve_request, resolve_value};
+pub use interpolation::{resolve_grpc_source, resolve_mqtt_source, resolve_request, resolve_value};
 pub use models::*;
 pub use policy::*;
 pub use redaction::*;

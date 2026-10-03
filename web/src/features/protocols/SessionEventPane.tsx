@@ -13,6 +13,10 @@ import { messageContent } from "./events";
 import type { ProtocolEvent } from "./types";
 const eventLabel = (event: ProtocolEvent) => {
   switch (event.message.kind) {
+    case "mqtt_message":
+      return event.message.topic;
+    case "mqtt_status":
+      return event.message.operation + " " + event.message.status;
     case "socketio_event":
       return event.message.event;
     case "socketio_ack":

@@ -53,7 +53,7 @@ impl Decoder for DynamicDecoder {
 // Explicit opt-out of certificate trust/hostname validation; rustls still performs
 // TLS framing, encryption, SNI and cryptographic handshake-signature validation.
 #[derive(Debug)]
-struct UnverifiedCertificate;
+pub(crate) struct UnverifiedCertificate;
 impl rustls::client::danger::ServerCertVerifier for UnverifiedCertificate {
     fn verify_server_cert(
         &self,
@@ -319,7 +319,7 @@ pub(crate) async fn run(
                         tx.send(message).await.context("gRPC input stream closed")?;
                     }
                     Command::GrpcHalfClose => break,
-                    Command::Websocket(_) | Command::Socketio(_) => {
+                    Command::Websocket(_) | Command::Mqtt(_) | Command::Socketio(_) => {
                         anyhow::bail!("Unexpected protocol command")
                     }
                 }

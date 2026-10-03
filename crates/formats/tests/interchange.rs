@@ -344,3 +344,57 @@ fn payload_url_and_raw_strings_keep_prior_credential_redaction() {
         assert!(!exported.content.contains(value), "{value}");
     }
 }
+
+#[test]
+fn mqtt_native_drafts_preserve_messages_properties_and_will_with_explicit_private_exports() {
+    let mut source = workspace(import("postman", &postman().to_string()).unwrap().data);
+    let request = &mut source.data.collections[0].requests[0];
+    request.url = "mqtt://example.com:1883".into();
+    request.headers.clear();
+    request.query.clear();
+    request.protocol=serde_json::from_value(json!({"kind":"mqtt","version":"5","client_id":"draft-client","message":{"topic":"private-topic","topic_secret":true,"payload_source":"private-payload","payload_secret":true,"encoding":"text","qos":2,"retain":true,"properties":{"user_properties":[{"key":"tenant","value":"property-secret","secret":true}]}},"subscriptions":[{"filter":"private-filter/#","filter_secret":true}],"saved_messages":[{"id":"sample","name":"Sample","message":{"topic":"demo","encoding":"json","payload_source":"{\"password\":1234567}","properties":{"user_properties":[{"key":"token","value":"saved-prop-secret","secret":false}]}}}],"will":{"message":{"topic":"will-topic","payload_source":"will-secret","payload_secret":true},"delay_interval":1}})).unwrap();
+    let explicit = export(&source, "moleapi", true).unwrap();
+    let restored = import("moleapi", &explicit.content).unwrap();
+    assert_eq!(
+        restored.data.collections[0].requests[0].protocol,
+        source.data.collections[0].requests[0].protocol
+    );
+    let safe = export(&source, "moleapi", false).unwrap();
+    for value in [
+        "private-topic",
+        "private-payload",
+        "property-secret",
+        "private-filter",
+        "1234567",
+        "saved-prop-secret",
+        "will-secret",
+    ] {
+        assert!(!safe.content.contains(value), "{value}");
+    }
+    for format in ["postman", "openapi"] {
+        assert!(
+            export(&source, format, true)
+                .err()
+                .expect("MQTT must be explicit unsupported")
+                .to_string()
+                .contains("MoleAPI")
+        );
+    }
+}
+
+#[test]
+fn mqtt_private_saved_topic_cannot_survive_default_export_as_its_generated_label() {
+    let mut source = workspace(import("postman", &postman().to_string()).unwrap().data);
+    let request = &mut source.data.collections[0].requests[0];
+    request.url = "mqtt://example.com".into();
+    request.headers.clear();
+    request.protocol=serde_json::from_value(json!({"kind":"mqtt","saved_messages":[{"id":"saved","name":"customer/acme","message":{"topic":"customer/acme","topic_secret":true}}]})).unwrap();
+    let safe = export(&source, "moleapi", false).unwrap();
+    assert!(!safe.content.contains("customer/acme"));
+    assert!(
+        export(&source, "moleapi", true)
+            .unwrap()
+            .content
+            .contains("customer/acme")
+    );
+}

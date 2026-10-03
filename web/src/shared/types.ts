@@ -1,3 +1,4 @@
+import type { MqttConfig } from "../features/mqtt/types";
 export interface SocketIoConfig {
   kind: "socketio";
   namespace: string;
@@ -29,7 +30,8 @@ export type ProtocolConfig =
   | { kind: "http" | "sse" | "websocket" }
   | GraphQLConfig
   | GrpcConfig
-  | SocketIoConfig;
+  | SocketIoConfig
+  | MqttConfig;
 export interface Pair {
   id: string;
   key: string;

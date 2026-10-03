@@ -1,0 +1,9 @@
+# rumqttc 0.25.1 checked destinations
+
+Upstream: https://github.com/bytebeamio/rumqtt (Apache-2.0, LICENSE retained).
+
+The connection extension adds NetworkOptions::set_pinned_addresses and lets socket_connect use this address vector instead of resolving DNS. It applies to MQTT 3.1.1/5 and TCP/TLS/WebSocket transports. The application vets every address with its network policy before each bounded reconnection. broker_addr remains the original hostname for TLS SNI/certificate checks and WebSocket Host. Some(empty) fails closed. No packet parsing or QoS state changes.
+
+A second narrow extension attaches shared TrafficBudget counters at the SDK Network read/write boundary, counting SDK Packet::size before state mutation. It includes CONNECT, PING and ACK as well as messages, enforces per-direction byte and total packet ceilings across reconnect, and leaves SDK parsing/state untouched. Bytes count encoded MQTT packets, excluding TCP/TLS/WebSocket transport overhead. Outgoing accounting happens before buffering; reports track packets accepted for SDK transmission, including any unflushed final buffer.
+
+One upstream correctness fix releases the outgoing inflight slot on a negative MQTT 5 PUBREC, which terminates the QoS 2 exchange without PUBREL. rumqttc 0.25.1 took the outgoing publish but returned before decrementing inflight, so 16 denied QoS 2 publishes permanently exhausted the configured window. A real Mosquitto ACL regression test proves more than 16 rejected exchanges followed by an accepted publish. Enum variants are interpreted as SDK enum variants, never cast as MQTT numeric reason codes (their Rust discriminants are ordinal).

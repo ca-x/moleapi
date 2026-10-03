@@ -44,6 +44,38 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
             request.url = redact_url(&request.url);
             request.body = redact_embedded_json(&request.body);
             match &mut request.protocol {
+                moleapi_core::Protocol::Mqtt { config } => {
+                    mqtt_message(&mut config.message);
+                    for entry in &mut config.saved_messages {
+                        for value in [
+                            entry
+                                .message
+                                .topic_secret
+                                .then_some(entry.message.topic.as_str()),
+                            entry
+                                .message
+                                .payload_secret
+                                .then_some(entry.message.payload_source.as_str()),
+                        ]
+                        .into_iter()
+                        .flatten()
+                        .filter(|value| !value.is_empty())
+                        {
+                            entry.name = entry.name.replace(value, "[REDACTED]");
+                        }
+                        mqtt_message(&mut entry.message);
+                    }
+                    if let Some(will) = &mut config.will {
+                        mqtt_message(&mut will.message);
+                    }
+                    mqtt_properties(&mut config.user_properties);
+                    for subscription in &mut config.subscriptions {
+                        if subscription.filter_secret {
+                            subscription.filter.clear();
+                        }
+                        mqtt_properties(&mut subscription.user_properties);
+                    }
+                }
                 moleapi_core::Protocol::Socketio {
                     auth_source,
                     arguments_source,
@@ -94,11 +126,32 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
     }
     result
 }
+fn mqtt_properties(values: &mut [moleapi_core::MqttProperty]) {
+    for value in values {
+        if value.secret || sensitive(&value.key) {
+            value.value.clear();
+        }
+    }
+}
+fn mqtt_message(value: &mut moleapi_core::MqttMessage) {
+    if value.topic_secret {
+        value.topic.clear();
+    }
+    if value.payload_secret {
+        value.payload_source.clear();
+    } else {
+        value.payload_source = redact_embedded_json(&value.payload_source);
+    }
+    mqtt_properties(&mut value.properties.user_properties);
+}
 fn redact_url(raw: &str) -> String {
     let Ok(mut url) = url::Url::parse(raw) else {
         return raw.into();
     };
-    if !matches!(url.scheme(), "http" | "https" | "ws" | "wss") {
+    if !matches!(
+        url.scheme(),
+        "http" | "https" | "ws" | "wss" | "mqtt" | "mqtts"
+    ) {
         return raw.into();
     }
     let _ = url.set_password(None);

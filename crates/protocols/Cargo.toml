@@ -37,6 +37,9 @@ rust_engineio = { version = "=0.6.0", features = ["async"] }
 tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
 native-tls = "0.2"
 bytes = "1"
+rustls-native-certs = "0.8"
+
+rumqttc = { version = "=0.25.1", default-features = false, features = ["use-rustls-no-provider", "websocket"] }
 
 [dev-dependencies]
 tempfile = "3"

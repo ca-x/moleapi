@@ -44,6 +44,26 @@ pub struct SessionSummary {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum EventMessage {
+    MqttMessage {
+        topic: String,
+        payload_base64: String,
+        payload_text: Option<String>,
+        qos: u8,
+        retain: bool,
+        duplicate: bool,
+        packet_id: u16,
+        properties: serde_json::Value,
+        topic_redacted: bool,
+        payload_redacted: bool,
+        properties_redacted: bool,
+    },
+    MqttStatus {
+        operation: String,
+        status: String,
+        packet_id: Option<u16>,
+        reason_codes: Vec<String>,
+        details: serde_json::Value,
+    },
     SocketioEvent {
         event: String,
         arguments: Vec<serde_json::Value>,
@@ -134,6 +154,16 @@ pub struct EventBatch {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SendMessage {
+    MqttPublish {
+        message: moleapi_core::MqttMessage,
+    },
+    MqttSubscribe {
+        subscription: moleapi_core::MqttSubscription,
+    },
+    MqttUnsubscribe {
+        filter: String,
+    },
+    MqttAbort,
     SocketioEmit {
         event: String,
         arguments_source: String,

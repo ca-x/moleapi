@@ -27,6 +27,9 @@ export function appendEvents(
 export function messageContent(event: ProtocolEvent): string {
   const message = event.message;
   switch (message.kind) {
+    case "mqtt_message":
+    case "mqtt_status":
+      return JSON.stringify(message, null, 2);
     case "socketio_event":
     case "socketio_ack":
       return JSON.stringify(message, null, 2);

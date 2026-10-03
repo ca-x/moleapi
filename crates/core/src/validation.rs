@@ -4,6 +4,7 @@ use reqwest::header::{HeaderName, HeaderValue};
 use std::collections::HashSet;
 pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
     validate_graphql_draft(r, templates)?;
+    validate_mqtt(r, templates)?;
     if let Protocol::Socketio {
         namespace,
         path,
@@ -115,7 +116,7 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
         "Unsupported authentication kind"
     );
     ensure!(r.body.len() <= MAX_BODY, "Request body exceeds 5 MiB");
-    if !templates || !r.url.contains("{{") {
+    if !r.protocol.is_mqtt() && (!templates || !r.url.contains("{{")) {
         protocol_url(
             &r.url,
             r.protocol == Protocol::Websocket || r.protocol.is_socketio(),

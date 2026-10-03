@@ -24,6 +24,8 @@ url = "2"
 base64 = "0.22"
 futures-util = "0.3"
 
+rumqttc = { version = "=0.25.1", default-features = false, features = ["use-rustls-no-provider", "websocket"] }
+
 [dev-dependencies]
 prost-types = "0.14"
 axum.workspace = true

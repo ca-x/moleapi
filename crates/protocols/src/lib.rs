@@ -1,5 +1,6 @@
 //! Volatile owner-scoped protocol sessions. Event cursors order delivery independently of clocks.
 mod grpc;
+mod mqtt;
 pub use grpc::{ReflectionResult, ReflectionStatus, reflect};
 mod engine;
 mod graphql;
@@ -30,6 +31,7 @@ fn now() -> String {
     chrono::Utc::now().to_rfc3339()
 }
 pub(crate) enum Command {
+    Mqtt(mqtt::MqttCommand),
     Socketio(socketio::SocketioCommand),
     Websocket(Message),
     GrpcMessage(prost_reflect::DynamicMessage),
@@ -50,6 +52,7 @@ pub(crate) struct Session {
     done: watch::Sender<bool>,
     commands: mpsc::Sender<Command>,
     receiver: Mutex<Option<mpsc::Receiver<Command>>>,
+    mqtt: Mutex<mqtt::Control>,
     socketio: Mutex<socketio::Control>,
     grpc_method: Mutex<Option<prost_reflect::MethodDescriptor>>,
     grpc_environment: Mutex<Option<moleapi_core::Environment>>,
@@ -58,6 +61,15 @@ pub(crate) struct Session {
 impl Session {
     pub(crate) fn event(&self, direction: &str, message: EventMessage) -> Result<()> {
         let payload_size = match &message {
+            EventMessage::MqttMessage { payload_base64, .. } => {
+                payload_base64.len() / 4 * 3
+                    - payload_base64
+                        .bytes()
+                        .rev()
+                        .take_while(|b| *b == b'=')
+                        .count()
+            }
+            EventMessage::MqttStatus { .. } => serde_json::to_vec(&message)?.len(),
             EventMessage::SocketioEvent {
                 arguments,
                 attachments_base64,
@@ -280,7 +292,9 @@ impl SessionManager {
             workspace_id: workspace.into(),
             request_id: request.id.clone(),
             url: safe_url,
-            protocol: if request.protocol.is_grpc() {
+            protocol: if request.protocol.is_mqtt() {
+                "mqtt"
+            } else if request.protocol.is_grpc() {
                 "grpc"
             } else if request.protocol.is_socketio() {
                 "socketio"
@@ -320,6 +334,7 @@ impl SessionManager {
             done,
             commands,
             receiver: Mutex::new(Some(rx)),
+            mqtt: Mutex::new(mqtt::Control::default()),
             socketio: Mutex::new(socketio::Control::default()),
             grpc_method: Mutex::new(None),
             grpc_environment: Mutex::new(None),
@@ -412,6 +427,27 @@ impl SessionManager {
             dropped_count: earliest.saturating_sub(after.saturating_add(1)),
         })
     }
+    pub fn configure_mqtt(
+        &self,
+        owner: &str,
+        id: &str,
+        config: moleapi_core::MqttConfig,
+        environment: moleapi_core::Environment,
+        mask: PrivacyMask,
+    ) -> Result<()> {
+        let s = self.owned(owner, id)?;
+        let r = s.record.lock().unwrap();
+        ensure!(
+            r.summary.protocol == "mqtt"
+                && r.summary.state == SessionState::Connecting
+                && !s.cancel.is_cancelled(),
+            "Expected connecting MQTT session"
+        );
+        *s.mqtt.lock().unwrap() = mqtt::Control::new(config);
+        *s.grpc_environment.lock().unwrap() = Some(environment);
+        *s.grpc_mask.lock().unwrap() = Some(mask);
+        Ok(())
+    }
     pub fn configure_socketio(
         &self,
         owner: &str,
@@ -493,6 +529,15 @@ impl SessionManager {
         let s = self.owned(owner, id)?;
         if matches!(
             message,
+            SendMessage::MqttPublish { .. }
+                | SendMessage::MqttSubscribe { .. }
+                | SendMessage::MqttUnsubscribe { .. }
+                | SendMessage::MqttAbort
+        ) {
+            return mqtt::send(&s, message);
+        }
+        if matches!(
+            message,
             SendMessage::GrpcMessage { .. } | SendMessage::GrpcHalfClose
         ) {
             let mut r = s.record.lock().unwrap();
@@ -565,7 +610,11 @@ impl SessionManager {
         }
         let ping = matches!(&message, SendMessage::Ping { .. });
         let (message, size) = match message {
-            SendMessage::SocketioEmit { .. }
+            SendMessage::MqttPublish { .. }
+            | SendMessage::MqttSubscribe { .. }
+            | SendMessage::MqttUnsubscribe { .. }
+            | SendMessage::MqttAbort
+            | SendMessage::SocketioEmit { .. }
             | SendMessage::SocketioListen { .. }
             | SendMessage::SocketioAck { .. }
             | SendMessage::GrpcMessage { .. }

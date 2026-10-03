@@ -1,3 +1,4 @@
+import type { MqttMessage, MqttSubscription } from "../mqtt/types";
 import type {
   Pair,
   RequestUpdate,
@@ -10,7 +11,7 @@ export interface ProtocolSession {
   id: string;
   workspace_id: string;
   request_id: string;
-  protocol: "sse" | "websocket" | "graphql" | "grpc" | "socketio";
+  protocol: "sse" | "websocket" | "graphql" | "grpc" | "socketio" | "mqtt";
   client_half_closed?: boolean;
   url: string;
   state: SessionState;
@@ -25,6 +26,28 @@ export interface ProtocolSession {
   request_updates?: RequestUpdate[];
 }
 export type ProtocolMessage =
+  | {
+      kind: "mqtt_message";
+      topic: string;
+      payload_base64: string;
+      payload_text: string | null;
+      qos: number;
+      retain: boolean;
+      duplicate: boolean;
+      packet_id: number | null;
+      properties: Record<string, unknown>;
+      topic_redacted: boolean;
+      payload_redacted: boolean;
+      properties_redacted: boolean;
+    }
+  | {
+      kind: "mqtt_status";
+      operation: string;
+      status: string;
+      packet_id: number | null;
+      reason_codes: string[];
+      details: Record<string, unknown>;
+    }
   | {
       kind: "socketio_event";
       event: string;
@@ -81,6 +104,10 @@ export interface EventBatch {
   dropped_count: number;
 }
 export type SendMessage =
+  | { kind: "mqtt_publish"; message: MqttMessage }
+  | { kind: "mqtt_subscribe"; subscription: MqttSubscription }
+  | { kind: "mqtt_unsubscribe"; filter: string }
+  | { kind: "mqtt_abort" }
   | {
       kind: "socketio_emit";
       event: string;

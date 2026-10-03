@@ -61,6 +61,10 @@ pub enum Protocol {
         #[serde(default = "socketio_ack_timeout")]
         ack_timeout_ms: u64,
     },
+    Mqtt {
+        #[serde(flatten)]
+        config: Box<crate::MqttConfig>,
+    },
     Grpc {
         #[serde(default)]
         service: String,
@@ -109,6 +113,9 @@ fn empty_object() -> serde_json::Value {
     serde_json::json!({})
 }
 impl Protocol {
+    pub fn is_mqtt(&self) -> bool {
+        matches!(self, Self::Mqtt { .. })
+    }
     pub fn is_socketio(&self) -> bool {
         matches!(self, Self::Socketio { .. })
     }

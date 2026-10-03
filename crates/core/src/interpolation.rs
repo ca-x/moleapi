@@ -98,6 +98,27 @@ pub fn resolve_request(
     // JavaScript is source code, not an interpolated request field.
     value["pre_request_script"] = "".into();
     value["post_response_script"] = "".into();
+    let mqtt_will = if let Protocol::Mqtt { config } = &request.protocol {
+        config.will.as_ref().map(|w| w.message.clone())
+    } else {
+        None
+    };
+    if request.protocol.is_mqtt() {
+        if mqtt_will.is_some() {
+            value["protocol"]["will"]["message"]["payload_source"] = "".into();
+        }
+        value["protocol"]["message"] = serde_json::json!({});
+        value["protocol"]["saved_messages"] = serde_json::json!([]);
+        if let Protocol::Mqtt { config } = &request.protocol {
+            value["protocol"]["subscriptions"] = serde_json::to_value(
+                config
+                    .subscriptions
+                    .iter()
+                    .filter(|s| s.enabled)
+                    .collect::<Vec<_>>(),
+            )?;
+        }
+    }
     let grpc = if let Protocol::Grpc { message_source, .. } = &request.protocol {
         let message: serde_json::Value =
             serde_json::from_str(message_source).context("Invalid gRPC JSON draft")?;
@@ -213,6 +234,20 @@ pub fn resolve_request(
         *arguments_source = original_arguments.clone();
         *attachments_base64 = original_attachments.clone();
     }
+    if let (Protocol::Mqtt { config }, Protocol::Mqtt { config: original }) =
+        (&mut resolved.protocol, &request.protocol)
+    {
+        if let (Some(will), Some(original_message)) = (&mut config.will, mqtt_will.as_ref()) {
+            will.message.payload_source = environment
+                .map(|environment| {
+                    resolve_mqtt_source(&original_message.payload_source, environment)
+                })
+                .transpose()?
+                .unwrap_or_else(|| original_message.payload_source.clone());
+        }
+        config.message = original.message.clone();
+        config.saved_messages = original.saved_messages.clone();
+    }
     let request = resolved;
     validate_request(&request, false)?;
     Ok(request)
@@ -246,6 +281,18 @@ pub fn resolve_grpc_source(source: &str, environment: &Environment) -> Result<St
     let source = serde_json::to_string(&value)?;
     ensure!(source.len() <= 1024 * 1024, "gRPC JSON exceeds 1 MiB");
     Ok(source)
+}
+
+/// Interpolate payload source verbatim without coercing JSON numbers or treating JSON closing braces as templates.
+pub fn resolve_mqtt_source(text: &str, environment: &Environment) -> Result<String> {
+    let vars = environment
+        .variables
+        .iter()
+        .filter(|v| v.enabled)
+        .map(|v| (v.key.as_str(), v.local_value.as_deref().unwrap_or(&v.value)))
+        .collect();
+    let mut budget = MAX_BODY;
+    interpolate_budget_mode(text, &vars, &mut budget, true)
 }
 
 #[cfg(test)]

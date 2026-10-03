@@ -185,6 +185,40 @@ pub(crate) fn request_values(
             capture_auth(&auth, &mut capture);
         }
     }
+    if let moleapi_core::Protocol::Mqtt { config } = &request.protocol {
+        let properties = |items: &[moleapi_core::MqttProperty], capture: &mut dyn FnMut(&str)| {
+            for p in items {
+                if p.secret {
+                    capture(&p.value);
+                }
+            }
+        };
+        let message = |m: &moleapi_core::MqttMessage, capture: &mut dyn FnMut(&str)| {
+            if m.topic_secret {
+                capture(&m.topic);
+            }
+            if m.payload_secret {
+                capture(&m.payload_source);
+                if m.encoding == "base64"
+                    && let Ok(bytes) = STANDARD.decode(&m.payload_source)
+                    && let Ok(text) = std::str::from_utf8(&bytes)
+                {
+                    capture(text);
+                }
+            }
+            properties(&m.properties.user_properties, capture);
+        };
+        properties(&config.user_properties, &mut capture);
+        if let Some(will) = &config.will {
+            message(&will.message, &mut capture);
+        }
+        for subscription in &config.subscriptions {
+            if subscription.filter_secret {
+                capture(&subscription.filter);
+            }
+            properties(&subscription.user_properties, &mut capture);
+        }
+    }
     capture(&request.auth.token);
     capture(&request.auth.password);
     if !request.auth.password.is_empty() {
