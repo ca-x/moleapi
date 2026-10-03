@@ -13,10 +13,17 @@ pub async fn execute(
     policy: NetworkPolicy,
 ) -> Result<Response> {
     ensure!(
-        request.protocol == Protocol::Http,
+        request.protocol == Protocol::Http || request.protocol.is_graphql(),
         "Live protocols require the session API"
     );
-    let r = resolve_request(request, environment)?;
+    let prepared = prepare_graphql(request)?;
+    let r = resolve_request(&prepared, environment)?;
+    if r.protocol.is_graphql() {
+        ensure!(
+            !graphql_is_subscription(&r)?,
+            "GraphQL subscriptions require the session API"
+        );
+    }
     tokio::time::timeout(
         Duration::from_millis(r.timeout_ms),
         execute_inner(&r, policy),

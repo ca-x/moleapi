@@ -177,3 +177,30 @@ fn live_protocol_config_roundtrips_in_moleapi_and_cannot_silently_disappear_in_o
         assert!(error.contains("MoleAPI"), "{error}");
     }
 }
+
+#[test]
+fn postman_graphql_body_preserves_document_variables_and_scripts() {
+    let source = json!({"info":{"name":"GraphQL","schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},"item":[{"name":"Hello","request":{"method":"POST","url":"https://example.com/graphql","body":{"mode":"graphql","graphql":{"query":"query Hello($name:String!){hello(name:$name)}","variables":"{\"name\":\"MoleAPI\"}"}}},"event":[{"listen":"test","script":{"type":"text/javascript","exec":["console.log('graphql');"]}}]}]});
+    let imported = import("postman", &source.to_string()).unwrap();
+    assert!(imported.warnings.is_empty());
+    let request = &imported.data.collections[0].requests[0];
+    let moleapi_core::Protocol::Graphql {
+        document,
+        variables,
+        variables_source,
+        ..
+    } = &request.protocol
+    else {
+        panic!("GraphQL mode was lost")
+    };
+    assert!(document.contains("hello(name:$name)"));
+    assert_eq!(variables["name"], "MoleAPI");
+    assert!(variables_source.as_ref().unwrap().contains("MoleAPI"));
+    assert!(request.post_response_script.contains("graphql"));
+    let exported = export(&workspace(imported.data), "postman", true).unwrap();
+    let roundtrip = import("postman", &exported.content).unwrap();
+    assert!(matches!(
+        roundtrip.data.collections[0].requests[0].protocol,
+        moleapi_core::Protocol::Graphql { .. }
+    ));
+}

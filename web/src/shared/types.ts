@@ -1,4 +1,15 @@
-export type ProtocolConfig = { kind: "http" | "sse" | "websocket" };
+export interface GraphQLConfig {
+  kind: "graphql";
+  document: string;
+  variables: Record<string, unknown>;
+  variables_source?: string | null;
+  operation_name?: string | null;
+  connection_params: Record<string, unknown>;
+  subscription_url?: string | null;
+}
+export type ProtocolConfig =
+  | { kind: "http" | "sse" | "websocket" }
+  | GraphQLConfig;
 export interface Pair {
   id: string;
   key: string;

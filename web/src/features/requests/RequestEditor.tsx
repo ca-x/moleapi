@@ -3,7 +3,7 @@ import RequestScripts from "../scripts/RequestScripts";
 import ExamplesEditor from "./ExamplesEditor";
 import AssertionsEditor from "../testing/AssertionsEditor";
 import { ResponsePane } from "./ResponsePane";
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import {
   Badge,
@@ -21,6 +21,7 @@ import { Choice, Editor, Field, PairEditor, ToolButton } from "../../shared/ui";
 import { curlTemplate, id, safeMessage } from "../../shared/model";
 import type { ApiResponse, RequestSpec } from "../../shared/types";
 
+const GraphQLWorkbench = lazy(() => import("../graphql/GraphQLWorkbench"));
 const methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
 const requestTabs = [
   { value: "query", label: "参数" },
@@ -62,11 +63,12 @@ export default function RequestEditor({
 }) {
   const [tab, setTab] = useState("query");
   const kind = request.protocol?.kind || "http";
+  const live = ["sse", "websocket"].includes(kind);
   useEffect(() => {
-    if (kind !== "http" && ["body", "assertions", "examples"].includes(tab))
+    if (live && ["body", "assertions", "examples"].includes(tab))
       setTab("query");
-  }, [kind, tab]);
-  function changeProtocol(value: "http" | "sse" | "websocket") {
+  }, [live, tab]);
+  function changeProtocol(value: "http" | "sse" | "websocket" | "graphql") {
     let url = request.url;
     try {
       const parsed = new URL(url);
@@ -82,9 +84,16 @@ export default function RequestEditor({
       /* Templates are resolved by the selected environment. */
     }
     update({
-      protocol: { kind: value },
+      protocol:
+        value === "graphql"
+          ? { kind: value, document: "", variables: {}, connection_params: {} }
+          : { kind: value },
       url,
-      ...(value !== "http" ? { method: "GET", body_kind: "none" } : {}),
+      ...(value === "graphql"
+        ? { method: "POST" }
+        : value !== "http"
+          ? { method: "GET", body_kind: "none" }
+          : {}),
     });
   }
   const copyCurl = async () => {
@@ -109,9 +118,11 @@ export default function RequestEditor({
           <Text size="1" color="gray">
             {kind === "http"
               ? "HTTP 请求"
-              : kind === "sse"
-                ? "SSE 事件流"
-                : "WebSocket 会话"}
+              : kind === "graphql"
+                ? "GraphQL 请求"
+                : kind === "sse"
+                  ? "SSE 事件流"
+                  : "WebSocket 会话"}
           </Text>
           <TextField.Root
             className="request-title-input"
@@ -133,7 +144,7 @@ export default function RequestEditor({
           </Button>
           <ToolButton
             label={
-              kind === "http" ? "复制 cURL 模板" : "实时协议暂不提供 cURL 模板"
+              kind === "http" ? "复制 cURL 模板" : "此类型暂不提供 cURL 模板"
             }
             onClick={copyCurl}
             disabled={kind !== "http"}
@@ -151,9 +162,10 @@ export default function RequestEditor({
             { value: "http", label: "HTTP" },
             { value: "sse", label: "SSE" },
             { value: "websocket", label: "WebSocket" },
+            { value: "graphql", label: "GraphQL" },
           ]}
         />
-        {kind !== "http" ? (
+        {live ? (
           <Badge className="protocol-handshake" color="gray">
             GET 握手
           </Badge>
@@ -177,12 +189,10 @@ export default function RequestEditor({
           size="3"
           loading={busy}
           onClick={send}
-          disabled={
-            !request.url || sending || (kind !== "http" && protocolConnected)
-          }
+          disabled={!request.url || sending || (live && protocolConnected)}
         >
           <Send size={16} />
-          {kind === "http" ? "发送" : protocolConnected ? "已连接" : "连接"}
+          {!live ? "发送" : protocolConnected ? "已连接" : "连接"}
         </Button>
       </div>
       <Group
@@ -193,8 +203,8 @@ export default function RequestEditor({
       >
         <Panel
           id="request-options-panel"
-          defaultSize="35%"
-          minSize="25%"
+          defaultSize={kind === "graphql" ? "20%" : "35%"}
+          minSize={kind === "graphql" ? "10%" : "25%"}
           className="request-options-panel"
         >
           <Tabs.Root
@@ -204,10 +214,11 @@ export default function RequestEditor({
           >
             <Tabs.List>
               {requestTabs
-                .filter(
-                  (item) =>
-                    kind === "http" ||
-                    !["body", "assertions", "examples"].includes(item.value),
+                .filter((item) =>
+                  kind === "graphql"
+                    ? item.value !== "body"
+                    : !live ||
+                      !["body", "assertions", "examples"].includes(item.value),
                 )
                 .map((item) => (
                   <Tabs.Trigger key={item.value} value={item.value}>
@@ -412,8 +423,18 @@ export default function RequestEditor({
         >
           <span aria-hidden="true" />
         </Separator>
-        <Panel id="request-response-panel" defaultSize="65%" minSize="40%">
-          {kind !== "http" ? (
+        <Panel
+          id="request-response-panel"
+          defaultSize={kind === "graphql" ? "80%" : "65%"}
+          minSize="40%"
+        >
+          {kind === "graphql" ? (
+            <Suspense
+              fallback={<Text role="status">正在加载 GraphQL 编辑器…</Text>}
+            >
+              <GraphQLWorkbench />
+            </Suspense>
+          ) : live ? (
             <ProtocolPane />
           ) : (
             <ResponsePane

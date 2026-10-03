@@ -6,6 +6,11 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+apollo-parser.workspace = true
+cynic-parser.workspace = true
+async-graphql-parser.workspace = true
+cynic.workspace = true
+cynic-introspection.workspace = true
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true

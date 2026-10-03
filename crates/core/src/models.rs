@@ -41,6 +41,31 @@ pub enum Protocol {
     Http,
     Sse,
     Websocket,
+    Graphql {
+        #[serde(default)]
+        document: String,
+        #[serde(default = "empty_boxed_object")]
+        variables: Box<serde_json::Value>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        variables_source: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        operation_name: Option<String>,
+        #[serde(default = "empty_object")]
+        connection_params: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        subscription_url: Option<String>,
+    },
+}
+fn empty_boxed_object() -> Box<serde_json::Value> {
+    Box::new(empty_object())
+}
+fn empty_object() -> serde_json::Value {
+    serde_json::json!({})
+}
+impl Protocol {
+    pub fn is_graphql(&self) -> bool {
+        matches!(self, Self::Graphql { .. })
+    }
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct RequestSpec {

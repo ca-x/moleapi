@@ -7,6 +7,7 @@ rust-version.workspace = true
 
 [dependencies]
 moleapi-core = { path = "../core" }
+graphql-ws-client.workspace = true
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true

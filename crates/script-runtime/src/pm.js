@@ -109,9 +109,13 @@
     }
   });
   const captureCurrentUrl = () => {
-    privacyVisit();captureUrl(source.url);
-    const resolved = privacyResolve(source.url);
-    if (resolved !== undefined && resolved !== source.url) captureUrl(resolved);
+    const targets = [source.url];
+    if (source.protocol?.kind === "graphql" && typeof source.protocol.subscription_url === "string") targets.push(source.protocol.subscription_url);
+    for (const target of targets) {
+      privacyVisit();captureUrl(target);
+      const resolved = privacyResolve(target);
+      if (resolved !== undefined && resolved !== target) captureUrl(resolved);
+    }
   };
   const captureQueryPair = pair => {
     privacyVisit();

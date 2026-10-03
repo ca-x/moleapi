@@ -10,7 +10,7 @@ export interface ProtocolSession {
   id: string;
   workspace_id: string;
   request_id: string;
-  protocol: "sse" | "websocket";
+  protocol: "sse" | "websocket" | "graphql";
   url: string;
   state: SessionState;
   reason: string | null;
@@ -24,6 +24,11 @@ export interface ProtocolSession {
   request_updates?: RequestUpdate[];
 }
 export type ProtocolMessage =
+  | {
+      kind: "graphql_next" | "graphql_error" | "graphql_complete";
+      operation_id: string;
+      payload: unknown;
+    }
   | {
       kind: "sse";
       event: string;

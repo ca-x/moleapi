@@ -17,11 +17,12 @@ export default function RequestScripts({
         脚本在隔离的 JavaScript 运行时执行，可使用 pm
         读取变量、修改请求和添加测试。
       </Text>
-      {request.protocol?.kind && request.protocol.kind !== "http" && (
-        <Text as="p" size="1" color="gray">
-          实时协议执行请求前脚本，暂不执行响应后或逐条事件脚本。已有响应后脚本需清空后才能连接。
-        </Text>
-      )}
+      {request.protocol?.kind &&
+        ["sse", "websocket"].includes(request.protocol.kind) && (
+          <Text as="p" size="1" color="gray">
+            实时协议执行请求前脚本，暂不执行响应后或逐条事件脚本。已有响应后脚本需清空后才能连接。
+          </Text>
+        )}
       <Tabs.Root defaultValue="pre">
         <Tabs.List>
           <Tabs.Trigger value="pre">请求前</Tabs.Trigger>

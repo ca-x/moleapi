@@ -113,6 +113,22 @@ fn walk(
         }
         let mode = raw["body"]["mode"].as_str().unwrap_or("");
         match mode {
+            "graphql" => {
+                let gql = &raw["body"]["graphql"];
+                let raw_variables = gql.get("variables").cloned().unwrap_or_else(|| json!({}));
+                let source = if let Some(value) = raw_variables.as_str() {
+                    value.to_owned()
+                } else {
+                    raw_variables.to_string()
+                };
+                let variables = serde_json::from_str::<Value>(&source)
+                    .ok()
+                    .filter(Value::is_object)
+                    .unwrap_or_else(|| json!({}));
+                result.protocol = serde_json::from_value(
+                    json!({"kind":"graphql","document":gql["query"].as_str().unwrap_or(""),"variables":variables,"variables_source":source,"connection_params":{}}),
+                )?;
+            }
             "raw" => {
                 result.body = text(&raw["body"]["raw"]);
                 result.body_kind = if raw["body"]["options"]["raw"]["language"] == "json"
@@ -254,7 +270,9 @@ pub(super) fn export(workspace: &Workspace) -> Result<String> {
         let mut url=r.url.clone();if !r.query.is_empty(){let values=r.query.iter().filter(|p|p.enabled).map(|p|format!("{}={}",url::form_urlencoded::byte_serialize(p.key.as_bytes()).collect::<String>(),url::form_urlencoded::byte_serialize(p.value.as_bytes()).collect::<String>())).collect::<Vec<_>>().join("&");if !values.is_empty(){url.push(if url.contains('?'){'&'}else{'?'});url.push_str(&values);}}
         let auth=match r.auth.kind.as_str(){"bearer"=>json!({"type":"bearer","bearer":[{"key":"token","value":r.auth.token,"type":"string"}]}),"basic"=>json!({"type":"basic","basic":[{"key":"username","value":r.auth.username,"type":"string"},{"key":"password","value":r.auth.password,"type":"string"}]}),_=>json!({"type":"noauth"})};
         let mut request=json!({"method":r.method,"url":url,"description":r.description,"header":r.headers.iter().map(|h|json!({"key":h.key,"value":h.value,"disabled":!h.enabled})).collect::<Vec<_>>(),"auth":auth});
-        if r.body_kind!="none"{request["body"]=json!({"mode":"raw","raw":r.body,"options":{"raw":{"language":if r.body_kind=="json"{"json"}else{"text"}}}});}
+        if let moleapi_core::Protocol::Graphql{document,variables,variables_source,..}=&r.protocol {
+            request["body"]=json!({"mode":"graphql","graphql":{"query":document,"variables":variables_source.as_deref().map(str::to_owned).unwrap_or_else(||variables.to_string())}});
+        } else if r.body_kind!="none"{request["body"]=json!({"mode":"raw","raw":r.body,"options":{"raw":{"language":if r.body_kind=="json"{"json"}else{"text"}}}});}
         json!({"name":r.name,"request":request,"event":events(&r.pre_request_script,&r.post_response_script),"response":r.examples.iter().map(|e|json!({"name":e.name,"code":e.status,"body":e.body,"header":e.headers.iter().map(|h|json!({"key":h.key,"value":h.value})).collect::<Vec<_>>(),"originalRequest":request})).collect::<Vec<_>>()})
     }).collect::<Vec<_>>() })).collect::<Vec<_>>();
     let variables = workspace

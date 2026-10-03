@@ -179,3 +179,27 @@ fn caught_request_privacy_capture_limits_remain_fail_closed() {
         .unwrap();
     assert!(!failure.privacy_complete);
 }
+
+#[test]
+fn graphql_subscription_url_alias_changes_capture_credentials_before_throw() {
+    let mut request = request();
+    request.protocol = serde_json::from_value(serde_json::json!({
+        "kind":"graphql", "document":"subscription { ticks }", "subscription_url":"wss://example.com/graphql?{{alias}}=subscription-runtime-secret"
+    })).unwrap();
+    let mut scopes = VariableScopes::default();
+    scopes.project.insert("alias".into(), "opaque".into());
+    let failure = moleapi_script_runtime::run(
+        &["pm.globals.set('alias','access_token'); pm.globals.set('alias','opaque'); throw new Error('subscription-runtime-secret');".into()],
+        &request,None,&scopes,
+    ).unwrap_err();
+    let failure = failure
+        .downcast_ref::<moleapi_script_runtime::ScriptFailure>()
+        .unwrap();
+    assert!(failure.privacy_complete);
+    assert!(
+        failure
+            .private_values
+            .contains("subscription-runtime-secret"),
+        "{failure:?}"
+    );
+}

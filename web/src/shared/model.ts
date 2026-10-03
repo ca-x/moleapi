@@ -162,8 +162,10 @@ export function safeMessage(error: unknown): string {
 }
 
 export const requestLabel = (request: RequestSpec) =>
-  request.protocol?.kind === "websocket"
-    ? "WS"
-    : request.protocol?.kind === "sse"
-      ? "SSE"
-      : request.method;
+  request.protocol?.kind === "graphql"
+    ? "GQL"
+    : request.protocol?.kind === "websocket"
+      ? "WS"
+      : request.protocol?.kind === "sse"
+        ? "SSE"
+        : request.method;

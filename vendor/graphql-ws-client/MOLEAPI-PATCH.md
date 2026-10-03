@@ -1,0 +1,3 @@
+Upstream: graphql-ws-client 0.13.0, Apache-2.0, https://codeberg.org/obmarg/graphql-ws-client
+
+Small integration patch: expose the existing protocol module and add a default Connection::on_event observer hook invoked only after the mature actor routes an event to an active subscription (without duplicating protocol parsing or state); remove subscriptions after terminal Error events per graphql-transport-ws; replace invalid normal shutdown code100 with1000; require exact canonical subscription ID identity instead of accepting numeric string aliases such as01/+1. Logging is disabled to prevent connection parameters and payloads reaching logs. All handshakes, ping/pong, operation routing, cancellation and protocol serialization remain upstream library code.

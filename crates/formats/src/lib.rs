@@ -51,15 +51,56 @@ pub fn import(format: &str, content: &str) -> Result<ImportResult> {
 }
 
 pub fn export(workspace: &Workspace, format: &str, include_secrets: bool) -> Result<ExportResult> {
-    if format != "moleapi"
-        && workspace
-            .data
-            .collections
-            .iter()
-            .flat_map(|collection| &collection.requests)
-            .any(|request| request.protocol != moleapi_core::Protocol::Http)
-    {
-        bail!("该导出格式尚不能保留 SSE/WebSocket 会话配置，请使用 MoleAPI 格式导出");
+    let unsupported = workspace
+        .data
+        .collections
+        .iter()
+        .flat_map(|collection| &collection.requests)
+        .any(|request| match &request.protocol {
+            moleapi_core::Protocol::Http => false,
+            moleapi_core::Protocol::Graphql {
+                document,
+                variables,
+                variables_source,
+                operation_name,
+                connection_params,
+                subscription_url,
+            } => {
+                if format != "postman" {
+                    return true;
+                }
+                let actual = match variables_source {
+                    Some(source) => serde_json::from_str(source)
+                        .ok()
+                        .filter(serde_json::Value::is_object),
+                    None => Some((**variables).clone()),
+                };
+                let selected = actual.and_then(|variables| {
+                    moleapi_core::GraphqlPayload {
+                        query: document.clone(),
+                        variables,
+                        operation_name: operation_name.clone(),
+                    }
+                    .selected_operation()
+                    .ok()
+                });
+                operation_name.is_some()
+                    || !connection_params
+                        .as_object()
+                        .is_some_and(|map| map.is_empty())
+                    || subscription_url.is_some()
+                    || !matches!(
+                        selected,
+                        Some(
+                            async_graphql_parser::types::OperationType::Query
+                                | async_graphql_parser::types::OperationType::Mutation
+                        )
+                    )
+            }
+            _ => true,
+        });
+    if matches!(format, "postman" | "openapi") && unsupported {
+        bail!("该导出格式尚不能保留当前 GraphQL/SSE/WebSocket 配置，请使用 MoleAPI 格式导出");
     }
     let workspace = if include_secrets {
         workspace.clone()

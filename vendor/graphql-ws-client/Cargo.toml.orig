@@ -1,0 +1,103 @@
+[package]
+name = "graphql-ws-client"
+version = "0.13.0"
+authors = ["Graeme Coupar <graeme@polyandglot.dev>"]
+edition = "2024"
+resolver = "2"
+description = "A graphql over websockets client"
+keywords = ["graphql", "client", "api", "websockets", "subscriptions"]
+categories = [
+    "asynchronous",
+    "network-programming",
+    "wasm",
+    "web-programming",
+    "web-programming::websocket",
+]
+license = "Apache-2.0"
+autoexamples = false
+documentation = "https://docs.rs/graphql-ws-client"
+readme = "README.md"
+repository = "https://codeberg.org/obmarg/graphql-ws-client"
+rust-version = "1.85"
+
+[workspace]
+members = ["examples", "examples-wasm"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = ["logging"]
+logging = ["dep:log"]
+sink_ext = []
+
+client-cynic = ["cynic"]
+client-graphql-client = ["graphql_client"]
+
+ws_stream_wasm = ["dep:ws_stream_wasm", "dep:pharos"]
+
+"tungstenite-0.23" = ["dep:tungstenite-0-23", "sink_ext"]
+"tungstenite-0.24" = ["dep:tungstenite-0-24", "sink_ext"]
+"tungstenite-0.25" = ["dep:tungstenite-0-25", "sink_ext"]
+"tungstenite-0.26" = ["dep:tungstenite-0-26", "sink_ext"]
+"tungstenite-0.27" = ["dep:tungstenite-0-27", "sink_ext"]
+"tungstenite-0.28" = ["dep:tungstenite-0-28", "sink_ext"]
+
+[dependencies]
+async-channel = "2"
+futures-lite = "2"
+futures-sink = "0.3"
+futures-timer = "3"
+log = { version = "0.4", optional = true }
+pin-project = "1.1.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0.16"
+
+# Client specific optional deps
+cynic = { version = "3", optional = true }
+graphql_client = { version = "0.16.0", optional = true , default-features = false }
+
+# Websocket specific optional deps
+ws_stream_wasm = { version = "0.7", optional = true }
+pharos = { version = "0.5.2", optional = true }
+
+# Tungstenite versions
+tungstenite-0-23 = { version = "0.23", optional = true, package = "tungstenite" }
+tungstenite-0-24 = { version = "0.24", optional = true, package = "tungstenite" }
+tungstenite-0-25 = { version = "0.25", optional = true, package = "tungstenite" }
+tungstenite-0-26 = { version = "0.26", optional = true, package = "tungstenite" }
+tungstenite-0-27 = { version = "0.27", optional = true, package = "tungstenite" }
+tungstenite-0-28 = { version = "0.28", optional = true, package = "tungstenite" }
+
+[dev-dependencies]
+assert_matches = "1.5"
+async-graphql = "=7.0.16"
+async-graphql-axum = "7"
+async-tungstenite = { version = "0.31", features = ["tokio-runtime"] }
+axum = "0.8.4"
+axum-macros = "0.5.0"
+cynic = { version = "3" }
+tokio = { version = "1", features = ["macros"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+
+graphql-ws-client.path = "."
+
+graphql-ws-client.features = [
+    "client-cynic",
+    "client-graphql-client",
+    "tungstenite-0.27",
+]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+cargo = { level = "warn", priority = -1 }
+multiple_crate_versions = "allow"
+
+[lints]
+workspace = true

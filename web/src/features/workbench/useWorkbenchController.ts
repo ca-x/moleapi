@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "../../shared/api";
 import { id, initialData, safeMessage } from "../../shared/model";
@@ -57,9 +57,13 @@ export function useWorkbenchController() {
     localVariables,
     auth.authenticated,
   );
+  const graphqlRun = useRef<(() => void) | null>(null);
   const sendRequest =
+    requests.request?.protocol?.kind === "graphql"
+      ? () => graphqlRun.current?.()
+      :
     requests.request?.protocol?.kind &&
-    requests.request.protocol.kind !== "http"
+    ["sse", "websocket"].includes(requests.request.protocol.kind)
       ? protocolSession.connect
       : requests.send;
   const runner = useRunner(workspace, localVariables);
@@ -183,7 +187,7 @@ export function useWorkbenchController() {
         event.preventDefault();
         setModal("search");
         interchange.setContent("");
-      } else if (!modal && !guard && event.key === "Enter") {
+      } else if (!modal && !guard && !event.defaultPrevented && event.key === "Enter") {
         event.preventDefault();
         void sendRequest();
       } else if (event.key.toLowerCase() === "s") {
@@ -204,6 +208,7 @@ export function useWorkbenchController() {
     ...workspace,
     ...requests,
     protocolSession,
+    graphqlRun,
     send: sendRequest,
     busy: requests.busy || protocolSession.busy,
     sending: requests.sending || protocolSession.busy,

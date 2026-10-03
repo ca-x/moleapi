@@ -1,13 +1,13 @@
 # API 类型覆盖与 Rust 库复用
 
-用户要求：覆盖 Apifox/Postman 当前支持的类型，优先使用现成 Rust crate，不能用普通 HTTP/菜单占位代替专用协议实现。公开产品证据来自2026-10-02已读取的官方目录/正文；crate 元数据于2026-10-03从 crates.io API 查询，另通过 agent-browser 阅读 docs.rs。仓库当前发布分支提交11250e1与本地开发中的实时协议扩展必须区分。
+用户要求：覆盖 Apifox/Postman 当前支持的类型，优先使用现成 Rust crate，不能用普通 HTTP/菜单占位代替专用协议实现。公开产品证据来自2026-10-02已读取的官方目录/正文；crate 元数据于2026-10-03从 crates.io API 查询，另通过 agent-browser 阅读 docs.rs。仓库已推送实时协议提交 b1ffce7；下表区分已验证实现、GitHub Actions 分发与仍待实现的类型。
 
 | 类型/专用客户端 | 官方产品证据 | MoleAPI 当前状态 | Rust 库方向 |
 | --- | --- | --- | --- |
-| HTTP/REST | 两者 |11250e1已验证并构建 | reqwest、url、现有公共网络策略 |
-| SSE | 两者 |真实连接/事件/断开已跑通；扩展复审及88Rust/32前端测试通过，平台CI待重跑 |现用 eventsource-stream0.2.3、reqwest |
-| WebSocket | 两者 |真实文本/二进制收发/消息/断开已跑通；扩展复审及88Rust/32前端测试通过，平台CI待重跑 |现用 reqwest-websocket0.5.1、tungstenite |
-| GraphQL Query/Mutation/Introspection/Subscription | 两者 |待实现专用 schema/operation 客户端 | async-graphql-parser7.2.1、cynic-introspection3.14.0、graphql-ws-client0.13.0 |
+| HTTP/REST | 两者 |已验证并构建 | reqwest、url、现有公共网络策略 |
+| SSE | 两者 |真实连接/事件/断开已跑通；b1ffce7 平台及 Docker Actions 已通过 |现用 eventsource-stream0.2.3、reqwest |
+| WebSocket | 两者 |真实文本/二进制收发/消息/断开已跑通；b1ffce7 平台及 Docker Actions 已通过 |现用 reqwest-websocket0.5.1、tungstenite |
+| GraphQL Query/Mutation/Introspection/Subscription | 两者 |专用 GraphiQL 客户端、Rust query/mutation、保存/恢复 schema、graphql-transport-ws subscription 已实现；真实服务与复审通过，当前变更平台 CI 待运行 | 现用 async-graphql-parser7.2.1、cynic-introspection3.14.0、graphql-ws-client0.13.0、apollo-parser0.8.6 |
 | gRPC unary/三种 streaming/Reflection/proto | 两者 |待实现 | tonic0.14.6、prost-reflect0.16.5、protox0.9.1、tonic-reflection0.14.6 |
 | Socket.IO/Engine.IO/namespace/event/ack | 两者 |待实现；原生WebSocket不算Socket.IO | rust_socketio0.6.0、rust_engineio0.6.0 |
 | MQTT publish/subscribe/QoS/TLS | Postman，Apifox公开目录未定位 |待实现 | rumqttc0.25.1 |

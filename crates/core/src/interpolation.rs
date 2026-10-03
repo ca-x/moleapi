@@ -23,6 +23,14 @@ fn interpolate_budget(
     variables: &HashMap<&str, &str>,
     budget: &mut usize,
 ) -> Result<String> {
+    interpolate_budget_mode(text, variables, budget, false)
+}
+fn interpolate_budget_mode(
+    text: &str,
+    variables: &HashMap<&str, &str>,
+    budget: &mut usize,
+    graphql: bool,
+) -> Result<String> {
     let mut result = String::new();
     let mut rest = text;
     while let Some(start) = rest.find("{{") {
@@ -41,10 +49,13 @@ fn interpolate_budget(
         )?;
         rest = &tail[end + 2..];
     }
-    ensure!(!rest.contains("}}"), "Unsupported or unresolved variable");
+    ensure!(
+        graphql || !rest.contains("}}"),
+        "Unsupported or unresolved variable"
+    );
     append(&mut result, rest, budget)?;
     ensure!(
-        !result.contains("{{") && !result.contains("}}"),
+        !result.contains("{{") && (graphql || !result.contains("}}")),
         "Unsupported or unresolved variable"
     );
     Ok(result)
@@ -87,6 +98,23 @@ pub fn resolve_request(
     // JavaScript is source code, not an interpolated request field.
     value["pre_request_script"] = "".into();
     value["post_response_script"] = "".into();
+    let graphql = request.protocol.is_graphql();
+    let mut graphql_body = if graphql {
+        Some(
+            serde_json::from_str::<serde_json::Value>(&request.body)
+                .context("Invalid GraphQL request envelope")?,
+        )
+    } else {
+        None
+    };
+    if graphql {
+        value["body"] = "".into();
+        // The script-edited wire envelope is authoritative; avoid resolving stale document text twice.
+        value["protocol"]["document"] = "".into();
+        value["protocol"]["variables"] = serde_json::json!({});
+        value["protocol"]["variables_source"] = serde_json::Value::Null;
+        value["protocol"]["operation_name"] = serde_json::Value::Null;
+    }
     let form = interpolate(&request.body_kind, &vars)? == "form";
     if form {
         // Decode form fields before interpolation, then encode the resolved values.
@@ -95,6 +123,18 @@ pub fn resolve_request(
     }
     let mut budget = 20 * 1024 * 1024;
     replace(&mut value, &vars, &mut budget)?;
+    if let Some(body) = &mut graphql_body {
+        let query = body
+            .get("query")
+            .and_then(serde_json::Value::as_str)
+            .context("GraphQL envelope query must be a string")?
+            .to_owned();
+        body["query"] = "".into();
+        replace(body, &vars, &mut budget)?;
+        // Adjacent closing braces are ordinary GraphQL syntax, not broken template tokens.
+        body["query"] = interpolate_budget_mode(&query, &vars, &mut budget, true)?.into();
+        value["body"] = serde_json::to_string(body)?.into();
+    }
     if form {
         let mut body = String::new();
         for (key, field) in url::form_urlencoded::parse(request.body.as_bytes()) {
@@ -123,6 +163,7 @@ pub fn resolve_request(
     let mut resolved: RequestSpec = serde_json::from_value(value)?;
     resolved.pre_request_script = request.pre_request_script.clone();
     resolved.post_response_script = request.post_response_script.clone();
+    reconcile_graphql(&mut resolved)?;
     let request = resolved;
     validate_request(&request, false)?;
     Ok(request)

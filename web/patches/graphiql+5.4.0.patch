@@ -1,0 +1,12 @@
+diff --git a/node_modules/graphiql/dist/GraphiQL.js b/node_modules/graphiql/dist/GraphiQL.js
+--- a/node_modules/graphiql/dist/GraphiQL.js
++++ b/node_modules/graphiql/dist/GraphiQL.js
+@@ -683,7 +683,7 @@
+   let t40;
+   if ($[103] !== activeTabIndex || $[104] !== handleTabClick || $[105] !== handleTabClose || $[106] !== tabs) {
+     t40 = tabs.map((tab, index_1, arr) => /* @__PURE__ */ jsxs(Tab, { dragConstraints: tabContainerRef, value: tab, isActive: index_1 === activeTabIndex, children: [
+-      /* @__PURE__ */ jsx(Tab.Button, { "aria-controls": "graphiql-session", id: `graphiql-session-tab-${index_1}`, title: tab.title, onClick: handleTabClick, children: tab.title }),
++      /* @__PURE__ */ jsx(Tab.Button, { role: "tab", "aria-selected": index_1 === activeTabIndex, "aria-controls": "graphiql-session", id: `graphiql-session-tab-${index_1}`, title: tab.title, onClick: handleTabClick, children: tab.title }),
+       arr.length > 1 && /* @__PURE__ */ jsx(Tab.Close, { onClick: handleTabClose })
+     ] }, tab.id));
+     $[103] = activeTabIndex;

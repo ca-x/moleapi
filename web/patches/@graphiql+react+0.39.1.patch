@@ -1,0 +1,39 @@
+diff --git a/node_modules/@graphiql/react/dist/components/operation-editor.js b/node_modules/@graphiql/react/dist/components/operation-editor.js
+--- a/node_modules/@graphiql/react/dist/components/operation-editor.js
++++ b/node_modules/@graphiql/react/dist/components/operation-editor.js
+@@ -24,8 +24,10 @@
+ 		$[0] = t1;
+ 	} else t1 = $[0];
+ 	const { initialQuery, schema, customScalarSchemas, referencePlugin, operations, operationName, externalFragments, uriInstanceId, storage, monacoTheme } = useGraphiQL(t1);
++	const latestFacts = useRef({ schema, operations, operationName, experimentalFragmentArguments: undefined });
+ 	const ref = useRef(null);
+ 	const { monacoGraphQL, monaco } = useMonaco();
++	latestFacts.current = { schema, operations, operationName, experimentalFragmentArguments: monacoGraphQL?.experimentalFragmentArguments };
+ 	const onClickReferenceRef = useRef(null);
+ 	let t2;
+ 	let t3;
+@@ -45,8 +47,8 @@
+ 	let t4;
+ 	if ($[4] !== monacoGraphQL?.experimentalFragmentArguments || $[5] !== operationName || $[6] !== operations || $[7] !== schema || $[8] !== setOperationFacts) {
+ 		t4 = function getAndUpdateOperationFacts(editorInstance) {
+-			const operationFacts = getOperationFacts(schema, editorInstance.getValue(), { experimentalFragmentArguments: monacoGraphQL?.experimentalFragmentArguments });
+-			const newOperationName = getSelectedOperationName(operations, operationName, operationFacts?.operations);
++			const operationFacts = getOperationFacts(latestFacts.current.schema, editorInstance.getValue(), { experimentalFragmentArguments: latestFacts.current.experimentalFragmentArguments });
++			const newOperationName = getSelectedOperationName(latestFacts.current.operations, latestFacts.current.operationName, operationFacts?.operations);
+ 			setOperationFacts({
+ 				documentAST: operationFacts?.documentAST,
+ 				operationName: newOperationName,
+diff --git a/node_modules/@graphiql/react/dist/components/tabs/index.js b/node_modules/@graphiql/react/dist/components/tabs/index.js
+--- a/node_modules/@graphiql/react/dist/components/tabs/index.js
++++ b/node_modules/@graphiql/react/dist/components/tabs/index.js
+@@ -43,9 +43,8 @@
+ 			...props,
+ 			ref,
+ 			value,
+-			"aria-selected": isActive,
+ 			dragElastic: false,
+-			role: "tab",
++			role: "presentation",
+ 			className: t2,
+ 			children
+ 		});

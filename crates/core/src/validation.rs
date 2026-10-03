@@ -3,6 +3,7 @@ use anyhow::{Context, Result, bail, ensure};
 use reqwest::header::{HeaderName, HeaderValue};
 use std::collections::HashSet;
 pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
+    validate_graphql_draft(r, templates)?;
     validate_script(&r.pre_request_script)?;
     validate_script(&r.post_response_script)?;
     ensure!(
@@ -30,7 +31,7 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
     if !templates || !r.url.contains("{{") {
         protocol_url(&r.url, r.protocol == Protocol::Websocket)?;
     }
-    if r.body_kind == "json" && (!templates || !r.body.contains("{{")) {
+    if !r.protocol.is_graphql() && r.body_kind == "json" && (!templates || !r.body.contains("{{")) {
         serde_json::from_str::<serde_json::Value>(&r.body).context("Invalid JSON body")?;
     }
     for h in &r.headers {
@@ -112,6 +113,9 @@ pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
             "Specification IDs must be unique and nonempty"
         );
         ensure!(spec.source.len() <= MAX_BODY, "Specification exceeds 5 MiB");
+        if matches!(spec.kind.as_str(), "graphql-sdl" | "graphql-introspection") {
+            graphql_schema_sdl(spec)?;
+        }
     }
     let mut collections = HashSet::new();
     let mut requests = HashSet::new();

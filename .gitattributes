@@ -1,0 +1,3 @@
+# Preserve upstream license/snapshot formatting and unified-diff context bytes.
+vendor/** -whitespace
+web/patches/*.patch -whitespace

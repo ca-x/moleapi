@@ -48,6 +48,18 @@ pub enum EventMessage {
         id: String,
         retry: Option<u64>,
     },
+    GraphqlNext {
+        operation_id: String,
+        payload: serde_json::Value,
+    },
+    GraphqlError {
+        operation_id: String,
+        payload: serde_json::Value,
+    },
+    GraphqlComplete {
+        operation_id: String,
+        payload: serde_json::Value,
+    },
     Text {
         text: String,
     },

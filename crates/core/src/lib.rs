@@ -1,4 +1,6 @@
 mod assertions;
+mod graphql;
+pub use graphql::*;
 mod interpolation;
 mod models;
 mod policy;

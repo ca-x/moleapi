@@ -5,7 +5,7 @@ use futures_util::{SinkExt, StreamExt};
 use moleapi_core::{Pair, checked_client, protocol_url, request_headers};
 use reqwest_websocket::RequestBuilderExt;
 
-fn headers(response: &reqwest::Response, mask: &dyn Fn(&str) -> String) -> Vec<Pair> {
+pub(crate) fn headers(response: &reqwest::Response, mask: &dyn Fn(&str) -> String) -> Vec<Pair> {
     response
         .headers()
         .iter()
@@ -27,12 +27,15 @@ fn headers(response: &reqwest::Response, mask: &dyn Fn(&str) -> String) -> Vec<P
         .collect()
 }
 pub(crate) async fn run(
-    session: &Session,
+    session: &Arc<Session>,
     request: RequestSpec,
     policy: NetworkPolicy,
     mut commands: mpsc::Receiver<Message>,
     mask: Arc<dyn Fn(&str) -> String + Send + Sync>,
 ) -> Result<String> {
+    if request.protocol.is_graphql() {
+        return crate::graphql::run(session.clone(), request, policy, mask).await;
+    }
     ensure!(
         request.method == "GET" && request.body_kind == "none",
         "SSE and WebSocket connections require GET with body mode None"

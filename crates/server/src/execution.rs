@@ -103,7 +103,8 @@ pub(crate) async fn perform(
             .unwrap_or_default(),
         w.data.post_response_script.clone(),
     ];
-    let mut request = r.clone();
+    let prepared = moleapi_core::prepare_graphql(r).map_err(|e| ApiError::bad(e.to_string()))?;
+    let mut request = prepared.clone();
     let mut logs = vec![];
     let mut tests = vec![];
     let mut updates = vec![];
@@ -126,13 +127,17 @@ pub(crate) async fn perform(
     }
     let mut request_updates = vec![];
     for (field, before, after) in [
-        ("method", r.method.clone(), request.method.clone()),
-        ("url", r.url.clone(), request.url.clone()),
-        ("body_kind", r.body_kind.clone(), request.body_kind.clone()),
-        ("body", r.body.clone(), request.body.clone()),
+        ("method", prepared.method.clone(), request.method.clone()),
+        ("url", prepared.url.clone(), request.url.clone()),
+        (
+            "body_kind",
+            prepared.body_kind.clone(),
+            request.body_kind.clone(),
+        ),
+        ("body", prepared.body.clone(), request.body.clone()),
         (
             "headers",
-            serde_json::to_string(&r.headers).map_err(|_| ApiError::internal())?,
+            serde_json::to_string(&prepared.headers).map_err(|_| ApiError::internal())?,
             serde_json::to_string(&request.headers).map_err(|_| ApiError::internal())?,
         ),
     ] {
@@ -142,6 +147,11 @@ pub(crate) async fn perform(
                 value: after,
             });
         }
+    }
+    if request.protocol.is_graphql() != r.protocol.is_graphql() {
+        return Err(ApiError::bad(
+            "Pre scripts cannot change the GraphQL protocol",
+        ));
     }
     let effective = scopes.effective();
     let resolved = moleapi_core::resolve_request(&request, Some(&effective))
@@ -216,6 +226,12 @@ pub async fn execute(
     Json(c): Json<Execute>,
 ) -> Result<Json<Response>, ApiError> {
     let w = owned(&s, &owner.0, &c.workspace_id).await?;
+    if c.request.protocol.is_graphql()
+        && let Some(id) = &c.request.specification_id
+        && !w.data.specifications.iter().any(|s| &s.id == id)
+    {
+        return Err(ApiError::not_found());
+    }
     let e = environment(&w, c.environment_id.as_deref())?;
     let collection = w.data.collections.iter().find(|collection| {
         collection
@@ -264,11 +280,12 @@ pub(crate) async fn prepare_live(
         collection.pre_request_script.clone(),
         r.pre_request_script.clone(),
     ];
-    let mut request = r.clone();
+    let prepared = moleapi_core::prepare_graphql(r).map_err(|e| ApiError::bad(e.to_string()))?;
+    let mut request = prepared.clone();
     let mut feedback = moleapi_protocols::PreparedFeedback::default();
     let mut updates = vec![];
     if scripts.iter().any(|s| !s.trim().is_empty()) {
-        let output = script_phase(s, scripts, r, None, scopes).await.map_err(|failure| {
+        let output = script_phase(s, scripts, &request, None, scopes).await.map_err(|failure| {
             scopes.private_values.extend(failure.private_values);
             let mut message = serde_json::json!(failure.error.message);
             if failure.privacy_complete {
@@ -293,13 +310,17 @@ pub(crate) async fn prepare_live(
     }
     let mut request_updates = vec![];
     for (field, before, after) in [
-        ("method", r.method.clone(), request.method.clone()),
-        ("url", r.url.clone(), request.url.clone()),
-        ("body_kind", r.body_kind.clone(), request.body_kind.clone()),
-        ("body", r.body.clone(), request.body.clone()),
+        ("method", prepared.method.clone(), request.method.clone()),
+        ("url", prepared.url.clone(), request.url.clone()),
+        (
+            "body_kind",
+            prepared.body_kind.clone(),
+            request.body_kind.clone(),
+        ),
+        ("body", prepared.body.clone(), request.body.clone()),
         (
             "headers",
-            serde_json::to_string(&r.headers).map_err(|_| ApiError::internal())?,
+            serde_json::to_string(&prepared.headers).map_err(|_| ApiError::internal())?,
             serde_json::to_string(&request.headers).map_err(|_| ApiError::internal())?,
         ),
     ] {

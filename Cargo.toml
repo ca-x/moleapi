@@ -1,4 +1,5 @@
 [workspace]
+exclude = ["vendor/graphql-ws-client", "vendor/cynic-introspection"]
 members = ["crates/core", "crates/server", "crates/formats", "crates/script-runtime", "crates/protocols", "desktop"]
 default-members = ["crates/core", "crates/server", "crates/formats", "crates/script-runtime", "crates/protocols"]
 resolver = "3"
@@ -16,6 +17,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 uuid = { version = "1", features = ["v4", "serde"] }
+apollo-parser = "=0.8.6"
+cynic-parser = { version = "=0.11.2", features = ["pretty"] }
+async-graphql-parser = "=7.2.1"
+cynic = "=3.14.0"
+cynic-introspection = { version = "=3.14.0", path = "vendor/cynic-introspection" }
+graphql-ws-client = { version = "=0.13.0", path = "vendor/graphql-ws-client", default-features = false }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream", "gzip", "brotli", "deflate"] }
 
 [profile.release]

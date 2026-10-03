@@ -27,6 +27,10 @@ export function appendEvents(
 export function messageContent(event: ProtocolEvent): string {
   const message = event.message;
   switch (message.kind) {
+    case "graphql_next":
+    case "graphql_error":
+    case "graphql_complete":
+      return JSON.stringify(message.payload, null, 2);
     case "sse":
       return message.data;
     case "text":

@@ -1,5 +1,6 @@
 //! Volatile owner-scoped protocol sessions. Event cursors order delivery independently of clocks.
 mod engine;
+mod graphql;
 mod models;
 use anyhow::{Result, ensure};
 use base64::{Engine, engine::general_purpose::STANDARD};
@@ -45,6 +46,18 @@ impl Session {
             EventMessage::Sse {
                 event, data, id, ..
             } => event.len() + data.len() + id.len(),
+            EventMessage::GraphqlNext {
+                operation_id,
+                payload,
+            }
+            | EventMessage::GraphqlError {
+                operation_id,
+                payload,
+            }
+            | EventMessage::GraphqlComplete {
+                operation_id,
+                payload,
+            } => operation_id.len() + serde_json::to_vec(payload)?.len(),
             EventMessage::Text { text } => text.len(),
             EventMessage::Binary { base64 }
             | EventMessage::Ping { base64 }
@@ -210,7 +223,9 @@ impl SessionManager {
             workspace_id: workspace.into(),
             request_id: request.id.clone(),
             url: safe_url,
-            protocol: if request.protocol == Protocol::Sse {
+            protocol: if request.protocol.is_graphql() {
+                "graphql"
+            } else if request.protocol == Protocol::Sse {
                 "sse"
             } else {
                 "websocket"

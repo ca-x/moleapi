@@ -1,4 +1,4 @@
-import { Badge, Button, Flex, Text } from "@radix-ui/themes";
+import { Badge, Button, Flex, Text, Heading } from "@radix-ui/themes";
 import {
   Cloud,
   CloudOff,
@@ -41,9 +41,9 @@ export default function WorkbenchHeader() {
           <Menu size={18} />
         </ToolButton>
         <img src="/logo.png" alt="" width="36" height="36" />
-        <Text weight="bold" size="3">
+        <Heading as="h1" weight="bold" size="3">
           MoleAPI
-        </Text>
+        </Heading>
         <span className="header-divider" />
         {workspaces.data?.length ? (
           <Choice

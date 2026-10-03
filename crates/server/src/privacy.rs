@@ -141,6 +141,28 @@ pub(crate) fn request_values(
             scopes.private_values.insert(resolved);
         }
     };
+    if let moleapi_core::Protocol::Graphql {
+        connection_params, ..
+    } = &request.protocol
+    {
+        fn strings(value: &serde_json::Value, capture: &mut impl FnMut(&str)) {
+            match value {
+                serde_json::Value::String(s) => capture(s),
+                serde_json::Value::Array(items) => {
+                    for item in items {
+                        strings(item, capture);
+                    }
+                }
+                serde_json::Value::Object(items) => {
+                    for item in items.values() {
+                        strings(item, capture);
+                    }
+                }
+                _ => {}
+            }
+        }
+        strings(connection_params, &mut capture);
+    }
     capture(&request.auth.token);
     capture(&request.auth.password);
     if !request.auth.password.is_empty() {
@@ -187,17 +209,29 @@ pub(crate) fn request_values(
             capture(&query.value);
         }
     }
-    let resolved_url = moleapi_core::resolve_value(&request.url, &environment).ok();
-    for raw in std::iter::once(request.url.as_str()).chain(resolved_url.as_deref()) {
-        if let Ok(url) = url::Url::parse(raw) {
-            for (key, value) in url.query_pairs() {
-                let resolved_key = moleapi_core::resolve_value(&key, &environment).ok();
-                if moleapi_core::sensitive_query_key(&key)
-                    || resolved_key
-                        .as_deref()
-                        .is_some_and(moleapi_core::sensitive_query_key)
-                {
-                    capture(&value);
+    let subscription_url = match &request.protocol {
+        moleapi_core::Protocol::Graphql {
+            subscription_url, ..
+        } => subscription_url.as_deref(),
+        _ => None,
+    };
+    for target in std::iter::once(request.url.as_str()).chain(subscription_url) {
+        let resolved_url = moleapi_core::resolve_value(target, &environment).ok();
+        for raw in std::iter::once(target).chain(resolved_url.as_deref()) {
+            if let Ok(url) = url::Url::parse(raw) {
+                capture(url.username());
+                if let Some(password) = url.password() {
+                    capture(password);
+                }
+                for (key, value) in url.query_pairs() {
+                    let resolved_key = moleapi_core::resolve_value(&key, &environment).ok();
+                    if moleapi_core::sensitive_query_key(&key)
+                        || resolved_key
+                            .as_deref()
+                            .is_some_and(moleapi_core::sensitive_query_key)
+                    {
+                        capture(&value);
+                    }
                 }
             }
         }

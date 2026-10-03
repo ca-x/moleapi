@@ -1,0 +1,54 @@
+name: Release-plz
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  # Create a PR with the new versions and changelog, preparing the next release.
+  release-plz-pr:
+    name: Release-plz PR
+    runs-on: debian-trixie
+    if: ${{ github.repository_owner == 'obmarg' }}
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: release-plz-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set git identity
+        run: |
+          git config --global user.email "graphql-ws-releases@grambo.me.uk"
+          git config --global user.name "GraphQl Release Bot"
+
+      - uses: https://github.com/dtolnay/rust-toolchain@1.85.0
+
+      - uses: https://github.com/cargo-bins/cargo-binstall@bc432b49369a3f25c8c8b19578a82060c18a5dd6
+        with:
+          version: 1.17.6
+
+      - name: Install cargo-semver-checks
+        run: cargo binstall cargo-semver-checks
+
+      - name: Install release-plz
+        shell: bash
+        run: |
+          cargo-binstall \
+            release-plz@0.3.156\
+            --force\
+            --strategies=crate-meta-data,compile\
+            --no-confirm
+
+      - name: Run release-plz
+        shell: bash
+        run: |
+          release-plz release-pr \
+            --git-token ${GITHUB_TOKEN} \
+            --repo-url https://codeberg.org/${FORGEJO_REPOSITORY} \
+            --forge gitea

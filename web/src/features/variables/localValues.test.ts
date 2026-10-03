@@ -132,3 +132,21 @@ it("preserves private overrides through a temporarily empty name and drops them 
   );
   expect(JSON.stringify(deleted)).not.toContain("private");
 });
+
+it("switching development and production selects independent overrides for the same variable", () => {
+  const source = workspace();
+  source.data.environments = [
+    {id: "dev", name: "开发", variables: [{id: "d", key: "token", value: "dev-shared", enabled: true}]},
+    {id: "prod", name: "生产", variables: [{id: "p", key: "token", value: "prod-shared", enabled: true}]},
+  ];
+  let buckets = assignLocal({}, "environment", "dev", "token", "dev-login");
+  buckets = assignLocal(buckets, "environment", "prod", "token", "prod-login");
+  expect(executionLocals(source, undefined, "dev", buckets, false)).toEqual([
+    {scope: "environment", key: "token", value: "dev-login"},
+  ]);
+  expect(executionLocals(source, undefined, "prod", buckets, false)).toEqual([
+    {scope: "environment", key: "token", value: "prod-login"},
+  ]);
+  expect(executionLocals(source, undefined, null, buckets, false)).toEqual([]);
+  expect(source.data.environments.map((env) => env.variables[0].value)).toEqual(["dev-shared", "prod-shared"]);
+});

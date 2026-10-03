@@ -68,17 +68,32 @@ pub async fn create(
     if c.request.protocol == Protocol::Http {
         return Err(ApiError::bad("HTTP requests use the execute API"));
     }
+    if let Some(id) = &c.request.specification_id
+        && !w.data.specifications.iter().any(|s| &s.id == id)
+    {
+        return Err(ApiError::not_found());
+    }
     let environment = execution::environment(&w, c.environment_id.as_deref())?;
     let mut scopes =
         execution::variables(&s, &w, Some(collection), environment, &[], &[], &c.locals)?;
     let (request, mut feedback, mut updates, mut request_updates) =
         execution::prepare_live(&s, &w, &c.request, collection, &mut scopes).await?;
-    if request.method != "GET" || request.body_kind != "none" {
+    if request.protocol.is_graphql() {
+        if !moleapi_core::graphql_is_subscription(&request)
+            .map_err(|e| ApiError::bad(e.to_string()))?
+        {
+            return Err(ApiError::bad(
+                "GraphQL query/mutation requests use the execute API",
+            ));
+        }
+    } else if request.method != "GET" || request.body_kind != "none" {
         return Err(ApiError::bad(
             "SSE and WebSocket connections require GET with body mode None",
         ));
     }
-    if request.protocol != c.request.protocol {
+    if request.protocol.is_graphql() != c.request.protocol.is_graphql()
+        || (!request.protocol.is_graphql() && request.protocol != c.request.protocol)
+    {
         return Err(ApiError::bad("Pre scripts cannot change the live protocol"));
     }
     let redactor = Arc::new(Redactor::new(&scopes.private_values)?);
@@ -101,9 +116,18 @@ pub async fn create(
             && u.value.as_ref().is_none_or(|v| mask(v) == *v)
     });
     request_updates.retain(|u| mask(&u.value) == u.value);
+    let (target_url, ws_url) = match &request.protocol {
+        Protocol::Graphql {
+            subscription_url: Some(url),
+            ..
+        } => (url.as_str(), true),
+        _ => (
+            request.url.as_str(),
+            request.protocol == Protocol::Websocket,
+        ),
+    };
     let mut resolved_url =
-        moleapi_core::protocol_url(&request.url, request.protocol == Protocol::Websocket)
-            .map_err(|e| ApiError::bad(e.to_string()))?;
+        moleapi_core::protocol_url(target_url, ws_url).map_err(|e| ApiError::bad(e.to_string()))?;
     for query in request.query.iter().filter(|p| p.enabled) {
         resolved_url
             .query_pairs_mut()

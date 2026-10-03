@@ -2,6 +2,7 @@ mod auth;
 mod entities;
 mod execution;
 mod formats;
+mod graphql;
 mod history;
 mod mock;
 mod privacy;
@@ -172,6 +173,8 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         .route("/workspaces/{id}/run", post(runner::run))
         .route("/workspaces/{id}/export", post(formats::export))
         .route("/execute", post(execution::execute))
+        .route("/graphql/introspect", post(graphql::introspect))
+        .route("/graphql/schema", post(graphql::schema))
         .route("/sessions", post(protocols::create))
         .route(
             "/sessions/{id}",
