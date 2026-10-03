@@ -1,4 +1,6 @@
 mod assertions;
+mod grpc;
+pub use grpc::*;
 mod graphql;
 pub use graphql::*;
 mod interpolation;
@@ -9,7 +11,7 @@ mod transport;
 mod validation;
 mod variables;
 pub use assertions::*;
-pub use interpolation::{resolve_request, resolve_value};
+pub use interpolation::{resolve_grpc_source, resolve_request, resolve_value};
 pub use models::*;
 pub use policy::*;
 pub use redaction::*;

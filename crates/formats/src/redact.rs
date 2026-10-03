@@ -43,6 +43,28 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
             }
             request.url = redact_url(&request.url);
             request.body = redact_embedded_json(&request.body);
+            match &mut request.protocol {
+                moleapi_core::Protocol::Grpc { message_source, .. } => {
+                    *message_source = redact_protocol_json(message_source);
+                }
+                moleapi_core::Protocol::Graphql {
+                    variables,
+                    variables_source,
+                    connection_params,
+                    subscription_url,
+                    ..
+                } => {
+                    redact_value(variables);
+                    if let Some(source) = variables_source {
+                        *source = redact_protocol_json(source);
+                    }
+                    redact_value(connection_params);
+                    if let Some(url) = subscription_url {
+                        *url = redact_url(url);
+                    }
+                }
+                _ => {}
+            }
         }
     }
     for environment in &mut result.data.environments {
@@ -68,7 +90,7 @@ fn redact_url(raw: &str) -> String {
     let Ok(mut url) = url::Url::parse(raw) else {
         return raw.into();
     };
-    if !matches!(url.scheme(), "http" | "https") {
+    if !matches!(url.scheme(), "http" | "https" | "ws" | "wss") {
         return raw.into();
     }
     let _ = url.set_password(None);
@@ -91,6 +113,17 @@ fn redact_url(raw: &str) -> String {
         url.query_pairs_mut().clear().extend_pairs(pairs);
     }
     url.to_string()
+}
+// Protocol JSON drafts may be incomplete; unsafe opaque drafts are withheld in
+// a default export rather than treating malformed JSON as screened content.
+fn redact_protocol_json(text: &str) -> String {
+    match serde_json::from_str::<Value>(text) {
+        Ok(mut value) => {
+            redact_value(&mut value);
+            serde_json::to_string_pretty(&value).unwrap_or_default()
+        }
+        Err(_) => "{}".into(),
+    }
 }
 fn redact_embedded_json(text: &str) -> String {
     let Ok(mut value) = serde_json::from_str::<Value>(text) else {

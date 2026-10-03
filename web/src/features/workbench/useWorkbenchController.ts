@@ -61,11 +61,10 @@ export function useWorkbenchController() {
   const sendRequest =
     requests.request?.protocol?.kind === "graphql"
       ? () => graphqlRun.current?.()
-      :
-    requests.request?.protocol?.kind &&
-    ["sse", "websocket"].includes(requests.request.protocol.kind)
-      ? protocolSession.connect
-      : requests.send;
+      : requests.request?.protocol?.kind &&
+          ["sse", "websocket", "grpc"].includes(requests.request.protocol.kind)
+        ? protocolSession.connect
+        : requests.send;
   const runner = useRunner(workspace, localVariables);
   const history = useHistory(
     auth.authenticated,
@@ -187,7 +186,12 @@ export function useWorkbenchController() {
         event.preventDefault();
         setModal("search");
         interchange.setContent("");
-      } else if (!modal && !guard && !event.defaultPrevented && event.key === "Enter") {
+      } else if (
+        !modal &&
+        !guard &&
+        !event.defaultPrevented &&
+        event.key === "Enter"
+      ) {
         event.preventDefault();
         void sendRequest();
       } else if (event.key.toLowerCase() === "s") {

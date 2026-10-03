@@ -99,8 +99,13 @@ pub fn export(workspace: &Workspace, format: &str, include_secrets: bool) -> Res
             }
             _ => true,
         });
-    if matches!(format, "postman" | "openapi") && unsupported {
-        bail!("该导出格式尚不能保留当前 GraphQL/SSE/WebSocket 配置，请使用 MoleAPI 格式导出");
+    let unsupported_specification = workspace
+        .data
+        .specifications
+        .iter()
+        .any(|spec| spec.kind == "protobuf");
+    if matches!(format, "postman" | "openapi") && (unsupported || unsupported_specification) {
+        bail!("该导出格式尚不能保留当前专用协议或服务定义配置，请使用 MoleAPI 格式导出");
     }
     let workspace = if include_secrets {
         workspace.clone()

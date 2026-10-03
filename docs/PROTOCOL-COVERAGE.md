@@ -8,7 +8,7 @@
 | SSE | 两者 |真实连接/事件/断开已跑通；b1ffce7 平台及 Docker Actions 已通过 |现用 eventsource-stream0.2.3、reqwest |
 | WebSocket | 两者 |真实文本/二进制收发/消息/断开已跑通；b1ffce7 平台及 Docker Actions 已通过 |现用 reqwest-websocket0.5.1、tungstenite |
 | GraphQL Query/Mutation/Introspection/Subscription | 两者 |专用 GraphiQL 客户端、Rust query/mutation、保存/恢复 schema、graphql-transport-ws subscription 已实现；真实服务与复审通过，当前变更平台 CI 待运行 | 现用 async-graphql-parser7.2.1、cynic-introspection3.14.0、graphql-ws-client0.13.0、apollo-parser0.8.6 |
-| gRPC unary/三种 streaming/Reflection/proto | 两者 |待实现 | tonic0.14.6、prost-reflect0.16.5、protox0.9.1、tonic-reflection0.14.6 |
+| gRPC unary/三种 streaming/Reflection/proto | 两者 |专用客户端、四种实际调用、proto/Reflection、metadata/status/trailers、半关闭/取消已实现并复审；平台分发验证按用户要求留到功能整合阶段 |现用 tonic0.14.6、prost0.14.4、prost-reflect0.16.5、protox0.9.1、tonic-reflection0.14.6 |
 | Socket.IO/Engine.IO/namespace/event/ack | 两者 |待实现；原生WebSocket不算Socket.IO | rust_socketio0.6.0、rust_engineio0.6.0 |
 | MQTT publish/subscribe/QoS/TLS | Postman，Apifox公开目录未定位 |待实现 | rumqttc0.25.1 |
 | SOAP/XML/WSDL | 两者 |HTTP可手工发送XML；专用SOAP/WSDL尚未实现 | wsdl0.1.3用于读取WSDL、quick-xml0.42.0；rsoap0.4.0为编译时生成客户端，不能直接当运行时导入 |

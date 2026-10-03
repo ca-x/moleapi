@@ -1,3 +1,9 @@
+export interface GrpcConfig {
+  kind: "grpc";
+  service: string;
+  method: string;
+  message_source: string;
+}
 export interface GraphQLConfig {
   kind: "graphql";
   document: string;
@@ -8,8 +14,7 @@ export interface GraphQLConfig {
   subscription_url?: string | null;
 }
 export type ProtocolConfig =
-  | { kind: "http" | "sse" | "websocket" }
-  | GraphQLConfig;
+  { kind: "http" | "sse" | "websocket" } | GraphQLConfig | GrpcConfig;
 export interface Pair {
   id: string;
   key: string;

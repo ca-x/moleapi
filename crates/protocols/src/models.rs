@@ -34,6 +34,8 @@ pub struct SessionSummary {
     pub sent_bytes: u64,
     pub event_count: u64,
     pub handshake: Option<Handshake>,
+    #[serde(default)]
+    pub client_half_closed: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub variable_updates: Vec<VariableUpdate>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -42,6 +44,20 @@ pub struct SessionSummary {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum EventMessage {
+    GrpcMessage {
+        message: serde_json::Value,
+    },
+    GrpcMetadata {
+        phase: String,
+        metadata: Vec<Pair>,
+    },
+    GrpcStatus {
+        code: u32,
+        name: String,
+        message: String,
+        details_base64: String,
+        metadata: Vec<Pair>,
+    },
     Sse {
         event: String,
         data: String,
@@ -103,8 +119,10 @@ pub struct EventBatch {
     pub dropped_count: u64,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "lowercase", deny_unknown_fields)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SendMessage {
+    GrpcMessage { message_source: String },
+    GrpcHalfClose,
     Text { text: String },
     Binary { base64: String },
     Ping { base64: String },

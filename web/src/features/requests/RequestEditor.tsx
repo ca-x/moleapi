@@ -22,6 +22,7 @@ import { curlTemplate, id, safeMessage } from "../../shared/model";
 import type { ApiResponse, RequestSpec } from "../../shared/types";
 
 const GraphQLWorkbench = lazy(() => import("../graphql/GraphQLWorkbench"));
+const GrpcWorkbench = lazy(() => import("../grpc/GrpcWorkbench"));
 const methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
 const requestTabs = [
   { value: "query", label: "参数" },
@@ -64,11 +65,19 @@ export default function RequestEditor({
   const [tab, setTab] = useState("query");
   const kind = request.protocol?.kind || "http";
   const live = ["sse", "websocket"].includes(kind);
+  const grpc = kind === "grpc";
   useEffect(() => {
-    if (live && ["body", "assertions", "examples"].includes(tab))
-      setTab("query");
-  }, [live, tab]);
-  function changeProtocol(value: "http" | "sse" | "websocket" | "graphql") {
+    if (
+      (live || grpc) &&
+      ["body", "assertions", "examples", ...(grpc ? ["query"] : [])].includes(
+        tab,
+      )
+    )
+      setTab(grpc ? "headers" : "query");
+  }, [live, grpc, tab]);
+  function changeProtocol(
+    value: "http" | "sse" | "websocket" | "graphql" | "grpc",
+  ) {
     let url = request.url;
     try {
       const parsed = new URL(url);
@@ -85,9 +94,16 @@ export default function RequestEditor({
     }
     update({
       protocol:
-        value === "graphql"
-          ? { kind: value, document: "", variables: {}, connection_params: {} }
-          : { kind: value },
+        value === "grpc"
+          ? { kind: value, service: "", method: "", message_source: "{}" }
+          : value === "graphql"
+            ? {
+                kind: value,
+                document: "",
+                variables: {},
+                connection_params: {},
+              }
+            : { kind: value },
       url,
       ...(value === "graphql"
         ? { method: "POST" }
@@ -118,11 +134,13 @@ export default function RequestEditor({
           <Text size="1" color="gray">
             {kind === "http"
               ? "HTTP 请求"
-              : kind === "graphql"
-                ? "GraphQL 请求"
-                : kind === "sse"
-                  ? "SSE 事件流"
-                  : "WebSocket 会话"}
+              : grpc
+                ? "gRPC 请求"
+                : kind === "graphql"
+                  ? "GraphQL 请求"
+                  : kind === "sse"
+                    ? "SSE 事件流"
+                    : "WebSocket 会话"}
           </Text>
           <TextField.Root
             className="request-title-input"
@@ -163,9 +181,14 @@ export default function RequestEditor({
             { value: "sse", label: "SSE" },
             { value: "websocket", label: "WebSocket" },
             { value: "graphql", label: "GraphQL" },
+            { value: "grpc", label: "gRPC" },
           ]}
         />
-        {live ? (
+        {grpc ? (
+          <Badge className="protocol-handshake" color="gray">
+            HTTP/2 · gRPC
+          </Badge>
+        ) : live ? (
           <Badge className="protocol-handshake" color="gray">
             GET 握手
           </Badge>
@@ -189,10 +212,18 @@ export default function RequestEditor({
           size="3"
           loading={busy}
           onClick={send}
-          disabled={!request.url || sending || (live && protocolConnected)}
+          disabled={
+            !request.url || sending || ((live || grpc) && protocolConnected)
+          }
         >
           <Send size={16} />
-          {!live ? "发送" : protocolConnected ? "已连接" : "连接"}
+          {grpc
+            ? "调用"
+            : !live
+              ? "发送"
+              : protocolConnected
+                ? "已连接"
+                : "连接"}
         </Button>
       </div>
       <Group
@@ -203,7 +234,7 @@ export default function RequestEditor({
       >
         <Panel
           id="request-options-panel"
-          defaultSize={kind === "graphql" ? "20%" : "35%"}
+          defaultSize={kind === "graphql" || grpc ? "20%" : "35%"}
           minSize={kind === "graphql" ? "10%" : "25%"}
           className="request-options-panel"
         >
@@ -217,12 +248,18 @@ export default function RequestEditor({
                 .filter((item) =>
                   kind === "graphql"
                     ? item.value !== "body"
-                    : !live ||
-                      !["body", "assertions", "examples"].includes(item.value),
+                    : grpc
+                      ? !["query", "body", "assertions", "examples"].includes(
+                          item.value,
+                        )
+                      : !live ||
+                        !["body", "assertions", "examples"].includes(
+                          item.value,
+                        ),
                 )
                 .map((item) => (
                   <Tabs.Trigger key={item.value} value={item.value}>
-                    {item.label}
+                    {grpc && item.value === "headers" ? "Metadata" : item.label}
                     {(item.value === "query"
                       ? request.query.length
                       : item.value === "headers"
@@ -425,10 +462,16 @@ export default function RequestEditor({
         </Separator>
         <Panel
           id="request-response-panel"
-          defaultSize={kind === "graphql" ? "80%" : "65%"}
+          defaultSize={kind === "graphql" || grpc ? "80%" : "65%"}
           minSize="40%"
         >
-          {kind === "graphql" ? (
+          {grpc ? (
+            <Suspense
+              fallback={<Text role="status">正在加载 gRPC 客户端…</Text>}
+            >
+              <GrpcWorkbench />
+            </Suspense>
+          ) : kind === "graphql" ? (
             <Suspense
               fallback={<Text role="status">正在加载 GraphQL 编辑器…</Text>}
             >

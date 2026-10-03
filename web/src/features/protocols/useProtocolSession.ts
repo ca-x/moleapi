@@ -206,6 +206,15 @@ export function useProtocolSession(
     }
   }
   async function close() {
+    const ticket = scopeKey();
+    if (operations.current.has(ticket)) {
+      // A completed prior call can still have a retained sessionId. Cancel the
+      // pending creation first; its late session is closed on arrival.
+      generation.current++;
+      operations.current.delete(ticket);
+      setConnecting([...operations.current]);
+      return;
+    }
     if (!sessionId) return;
     const origin = identity;
     const epoch = generation.current;
@@ -234,7 +243,7 @@ export function useProtocolSession(
       live?.session.state !== "open" ||
       sends.current.has(scopeKey())
     )
-      return;
+      return false;
     const origin = identity;
     const epoch = generation.current;
     const ticket = scopeKey();
@@ -246,11 +255,15 @@ export function useProtocolSession(
         "POST",
         message,
       );
-      if (current(origin, epoch) && sessionRef.current === sessionId)
+      if (current(origin, epoch) && sessionRef.current === sessionId) {
         void poll.refetch();
+        return true;
+      }
+      return false;
     } catch (caught) {
       if (current(origin, epoch) && sessionRef.current === sessionId)
         toast.error(safeMessage(caught));
+      return false;
     } finally {
       sends.current.delete(ticket);
       if (mounted.current) setSendingFor([...sends.current]);

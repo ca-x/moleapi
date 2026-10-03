@@ -1,4 +1,6 @@
 //! Volatile owner-scoped protocol sessions. Event cursors order delivery independently of clocks.
+mod grpc;
+pub use grpc::{ReflectionResult, ReflectionStatus, reflect};
 mod engine;
 mod graphql;
 mod models;
@@ -15,6 +17,7 @@ use std::{
 use tokio::sync::{mpsc, watch};
 use tokio_util::sync::CancellationToken;
 
+type PrivacyMask = Arc<dyn Fn(&str) -> String + Send + Sync>;
 pub const MAX_MESSAGE: usize = 1024 * 1024;
 pub const MAX_WIRE: usize = 8 * 1024 * 1024;
 const MAX_INPUT: usize = 20 * 1024 * 1024;
@@ -25,24 +28,36 @@ const RETENTION: Duration = Duration::from_secs(10 * 60);
 fn now() -> String {
     chrono::Utc::now().to_rfc3339()
 }
+pub(crate) enum Command {
+    Websocket(Message),
+    GrpcMessage(prost_reflect::DynamicMessage),
+    GrpcHalfClose,
+}
 struct Record {
     summary: SessionSummary,
     events: VecDeque<(SessionEvent, usize)>,
     bytes: usize,
     last_change: Instant,
     input: usize,
+    grpc_input_messages: usize,
 }
 pub(crate) struct Session {
     owner: String,
     record: Mutex<Record>,
     cancel: CancellationToken,
     done: watch::Sender<bool>,
-    commands: mpsc::Sender<Message>,
-    receiver: Mutex<Option<mpsc::Receiver<Message>>>,
+    commands: mpsc::Sender<Command>,
+    receiver: Mutex<Option<mpsc::Receiver<Command>>>,
+    grpc_method: Mutex<Option<prost_reflect::MethodDescriptor>>,
+    grpc_environment: Mutex<Option<moleapi_core::Environment>>,
+    grpc_mask: Mutex<Option<PrivacyMask>>,
 }
 impl Session {
     pub(crate) fn event(&self, direction: &str, message: EventMessage) -> Result<()> {
         let payload_size = match &message {
+            EventMessage::GrpcMessage { .. }
+            | EventMessage::GrpcMetadata { .. }
+            | EventMessage::GrpcStatus { .. } => serde_json::to_vec(&message)?.len(),
             EventMessage::Sse {
                 event, data, id, ..
             } => event.len() + data.len() + id.len(),
@@ -138,6 +153,26 @@ impl Session {
 pub struct SessionManager {
     records: Mutex<HashMap<String, Arc<Session>>>,
 }
+/// Temporary owner/workspace-bound admission and cancellation for Reflection.
+/// It shares live session quotas, but leaves no retained record after the response.
+pub struct ReflectionLease {
+    manager: Arc<SessionManager>,
+    session: Arc<Session>,
+    id: String,
+}
+impl ReflectionLease {
+    pub async fn cancelled(&self) {
+        self.session.cancel.cancelled().await;
+    }
+}
+impl Drop for ReflectionLease {
+    fn drop(&mut self) {
+        self.session.cancel.cancel();
+        self.session
+            .finish(SessionState::Closed, "Reflection finished".into());
+        self.manager.records.lock().unwrap().remove(&self.id);
+    }
+}
 impl Default for SessionManager {
     fn default() -> Self {
         Self {
@@ -223,7 +258,9 @@ impl SessionManager {
             workspace_id: workspace.into(),
             request_id: request.id.clone(),
             url: safe_url,
-            protocol: if request.protocol.is_graphql() {
+            protocol: if request.protocol.is_grpc() {
+                "grpc"
+            } else if request.protocol.is_graphql() {
                 "graphql"
             } else if request.protocol == Protocol::Sse {
                 "sse"
@@ -239,6 +276,7 @@ impl SessionManager {
             sent_bytes: 0,
             event_count: 0,
             handshake: None,
+            client_half_closed: false,
             variable_updates: vec![],
             request_updates: vec![],
         };
@@ -252,11 +290,15 @@ impl SessionManager {
                 bytes: 0,
                 last_change: Instant::now(),
                 input: 0,
+                grpc_input_messages: usize::from(request.protocol.is_grpc()),
             }),
             cancel: CancellationToken::new(),
             done,
             commands,
             receiver: Mutex::new(Some(rx)),
+            grpc_method: Mutex::new(None),
+            grpc_environment: Mutex::new(None),
+            grpc_mask: Mutex::new(None),
         });
         session.event(
             "system",
@@ -280,6 +322,27 @@ impl SessionManager {
         let summary = session.record.lock().unwrap().summary.clone();
         records.insert(summary.id.clone(), session);
         Ok(summary)
+    }
+    pub fn reserve_reflection(
+        self: &Arc<Self>,
+        owner: &str,
+        workspace: &str,
+        request: &RequestSpec,
+        safe_url: String,
+    ) -> Result<ReflectionLease> {
+        let summary = self.register(
+            owner,
+            workspace,
+            request,
+            safe_url,
+            PreparedFeedback::default(),
+        )?;
+        let session = self.owned(owner, &summary.id)?;
+        Ok(ReflectionLease {
+            manager: self.clone(),
+            session,
+            id: summary.id,
+        })
     }
     fn owned(&self, owner: &str, id: &str) -> Result<Arc<Session>> {
         self.prune();
@@ -324,6 +387,26 @@ impl SessionManager {
             dropped_count: earliest.saturating_sub(after.saturating_add(1)),
         })
     }
+    pub fn configure_grpc(
+        &self,
+        owner: &str,
+        id: &str,
+        method: prost_reflect::MethodDescriptor,
+        environment: moleapi_core::Environment,
+        mask: Arc<dyn Fn(&str) -> String + Send + Sync>,
+    ) -> Result<()> {
+        let s = self.owned(owner, id)?;
+        let mut r = s.record.lock().unwrap();
+        ensure!(
+            r.summary.protocol == "grpc" && r.summary.state == SessionState::Connecting,
+            "Expected connecting gRPC session"
+        );
+        r.summary.client_half_closed = !method.is_client_streaming();
+        *s.grpc_method.lock().unwrap() = Some(method);
+        *s.grpc_environment.lock().unwrap() = Some(environment);
+        *s.grpc_mask.lock().unwrap() = Some(mask);
+        Ok(())
+    }
     pub fn start(
         &self,
         owner: &str,
@@ -364,8 +447,73 @@ impl SessionManager {
     }
     pub fn send(&self, owner: &str, id: &str, message: SendMessage) -> Result<()> {
         let s = self.owned(owner, id)?;
+        if matches!(
+            message,
+            SendMessage::GrpcMessage { .. } | SendMessage::GrpcHalfClose
+        ) {
+            let mut r = s.record.lock().unwrap();
+            ensure!(
+                r.summary.protocol == "grpc" && r.summary.state.live(),
+                "Expected live gRPC session"
+            );
+            ensure!(
+                !r.summary.client_half_closed,
+                "gRPC send side is half-closed"
+            );
+            let method = s
+                .grpc_method
+                .lock()
+                .unwrap()
+                .clone()
+                .ok_or_else(|| anyhow::anyhow!("gRPC method is not configured"))?;
+            ensure!(
+                method.is_client_streaming(),
+                "gRPC method does not accept client streaming"
+            );
+            if matches!(&message, SendMessage::GrpcMessage { .. }) {
+                ensure!(
+                    r.grpc_input_messages < 10_000,
+                    "gRPC sent-message limit reached (10000)"
+                );
+            }
+            let (command, size, close) = match message {
+                SendMessage::GrpcMessage { message_source } => {
+                    let environment = s.grpc_environment.lock().unwrap();
+                    let mask = s.grpc_mask.lock().unwrap();
+                    let prepared = environment
+                        .as_ref()
+                        .map(|environment| {
+                            moleapi_core::resolve_grpc_source(&message_source, environment)
+                        })
+                        .transpose()
+                        .map_err(|_| anyhow::anyhow!("Invalid or unresolved gRPC JSON message"))?
+                        .unwrap_or(message_source);
+                    let dynamic =
+                        moleapi_core::grpc_message(method.input(), &prepared).map_err(|error| {
+                            anyhow::anyhow!(mask.as_ref().map_or_else(
+                                || "Invalid gRPC message".into(),
+                                |mask| mask(&error.to_string())
+                            ))
+                        })?;
+                    (Command::GrpcMessage(dynamic), prepared.len(), false)
+                }
+                _ => (Command::GrpcHalfClose, 0, true),
+            };
+            ensure!(
+                r.input + size <= MAX_INPUT,
+                "Session input limit reached (20 MiB)"
+            );
+            s.commands
+                .try_send(command)
+                .map_err(|_| anyhow::anyhow!("Session command queue is full or closed"))?;
+            r.input += size;
+            r.grpc_input_messages += usize::from(!close);
+            r.summary.client_half_closed |= close;
+            return Ok(());
+        }
         let ping = matches!(&message, SendMessage::Ping { .. });
         let (message, size) = match message {
+            SendMessage::GrpcMessage { .. } | SendMessage::GrpcHalfClose => unreachable!(),
             SendMessage::Text { text } => {
                 ensure!(text.len() <= MAX_MESSAGE, "Message exceeds 1 MiB");
                 let n = text.len();
@@ -404,7 +552,7 @@ impl SessionManager {
             "Session input limit reached (20 MiB)"
         );
         s.commands
-            .try_send(message)
+            .try_send(Command::Websocket(message))
             .map_err(|_| anyhow::anyhow!("Session command queue is full or closed"))?;
         r.input += size;
         Ok(())

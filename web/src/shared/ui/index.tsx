@@ -11,9 +11,14 @@ import {
 } from "@radix-ui/themes";
 import { Plus, Trash2, Eye, EyeOff, Link2 } from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
+import { protobuf } from "@codemirror/legacy-modes/mode/protobuf";
 import { json } from "@codemirror/lang-json";
 import { javascript } from "@codemirror/lang-javascript";
-import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import {
+  HighlightStyle,
+  syntaxHighlighting,
+  StreamLanguage,
+} from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 import { EditorView } from "@codemirror/view";
 import { oneDark } from "@codemirror/theme-one-dark";
@@ -89,14 +94,20 @@ export function Choice<T extends string>({
   onChange,
   options,
   label,
+  disabled = false,
 }: {
   value: T;
   onChange: (value: T) => void;
   options: { value: T; label: string }[];
   label: string;
+  disabled?: boolean;
 }) {
   return (
-    <Select.Root value={value} onValueChange={(value) => onChange(value as T)}>
+    <Select.Root
+      value={value}
+      disabled={disabled}
+      onValueChange={(value) => onChange(value as T)}
+    >
       <Select.Trigger aria-label={label} />
       <Select.Content>
         {options.map((item) => (
@@ -124,7 +135,7 @@ export function Editor({
   readOnly?: boolean;
   jsonMode?: boolean;
   height?: string;
-  language?: "json" | "javascript";
+  language?: "json" | "javascript" | "protobuf";
   label?: string;
 }) {
   return (
@@ -139,11 +150,13 @@ export function Editor({
           "aria-label": label || (readOnly ? "只读代码" : "代码编辑器"),
           tabindex: "0",
         }),
-        ...(language === "javascript"
-          ? [javascript()]
-          : jsonMode || language === "json"
-            ? [json()]
-            : []),
+        ...(language === "protobuf"
+          ? [StreamLanguage.define(protobuf)]
+          : language === "javascript"
+            ? [javascript()]
+            : jsonMode || language === "json"
+              ? [json()]
+              : []),
       ]}
       readOnly={readOnly}
       basicSetup={{

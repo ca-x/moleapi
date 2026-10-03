@@ -281,6 +281,7 @@ pub(crate) async fn prepare_live(
         r.pre_request_script.clone(),
     ];
     let prepared = moleapi_core::prepare_graphql(r).map_err(|e| ApiError::bad(e.to_string()))?;
+    let prepared = moleapi_core::prepare_grpc(&prepared);
     let mut request = prepared.clone();
     let mut feedback = moleapi_protocols::PreparedFeedback::default();
     let mut updates = vec![];
@@ -308,6 +309,7 @@ pub(crate) async fn prepare_live(
         feedback.tests = output.tests;
         updates = output.updates;
     }
+    moleapi_core::reconcile_grpc(&mut request).map_err(|e| ApiError::bad(e.to_string()))?;
     let mut request_updates = vec![];
     for (field, before, after) in [
         ("method", prepared.method.clone(), request.method.clone()),

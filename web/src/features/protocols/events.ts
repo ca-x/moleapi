@@ -27,6 +27,16 @@ export function appendEvents(
 export function messageContent(event: ProtocolEvent): string {
   const message = event.message;
   switch (message.kind) {
+    case "grpc_message":
+      return JSON.stringify(message.message, null, 2);
+    case "grpc_metadata":
+      return JSON.stringify(
+        { phase: message.phase, metadata: message.metadata },
+        null,
+        2,
+      );
+    case "grpc_status":
+      return JSON.stringify(message, null, 2);
     case "graphql_next":
     case "graphql_error":
     case "graphql_complete":

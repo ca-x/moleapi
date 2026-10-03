@@ -11,6 +11,7 @@ default = ["web"]
 web = ["dep:rust-embed", "dep:mime_guess"]
 
 [dependencies]
+tonic.workspace = true
 moleapi-protocols = { path = "../protocols" }
 moleapi-core = { path = "../core" }
 moleapi-script-runtime = { path = "../script-runtime" }
@@ -39,6 +40,12 @@ rust-embed = { version = "8", optional = true, features = ["interpolate-folder-p
 mime_guess = { version = "2", optional = true }
 
 [dev-dependencies]
+rcgen = "0.14"
+tonic-reflection.workspace = true
+prost.workspace = true
+prost-types = "0.14"
+tonic-prost = "0.14"
+tokio-stream = { version = "0.1", features = ["net"] }
 async-graphql = { version = "=7.2.1", default-features = false }
 async-graphql-axum = "=7.2.1"
 axum = { workspace = true, features = ["ws"] }

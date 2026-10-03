@@ -4,6 +4,29 @@ use reqwest::header::{HeaderName, HeaderValue};
 use std::collections::HashSet;
 pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
     validate_graphql_draft(r, templates)?;
+    if let Protocol::Grpc {
+        service,
+        method,
+        message_source,
+    } = &r.protocol
+    {
+        ensure!(
+            service.len() <= 256 && method.len() <= 256 && message_source.len() <= 1024 * 1024,
+            "gRPC draft exceeds size limit"
+        );
+        if !templates {
+            ensure!(
+                !service.is_empty() && !method.is_empty(),
+                "Select a gRPC service and method"
+            );
+            serde_json::from_str::<serde_json::Value>(message_source)
+                .context("Invalid gRPC JSON draft")?;
+            ensure!(
+                r.query.iter().all(|p| !p.enabled),
+                "gRPC endpoints do not support URL query parameters"
+            );
+        }
+    }
     validate_script(&r.pre_request_script)?;
     validate_script(&r.post_response_script)?;
     ensure!(
@@ -113,6 +136,9 @@ pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
             "Specification IDs must be unique and nonempty"
         );
         ensure!(spec.source.len() <= MAX_BODY, "Specification exceeds 5 MiB");
+        if spec.kind == "protobuf" {
+            protobuf_pool(spec)?;
+        }
         if matches!(spec.kind.as_str(), "graphql-sdl" | "graphql-introspection") {
             graphql_schema_sdl(spec)?;
         }

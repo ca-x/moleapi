@@ -154,3 +154,81 @@ it("stops polling and hides the live session when authentication expires", async
       .mock.calls.filter(([path]) => path === "/api/sessions/session-a"),
   ).toHaveLength(before);
 });
+
+it.each([false, true])(
+  "Stop fences pending gRPC creation with retained terminal session=%s",
+  async (retained) => {
+    const grpcRequest = {
+      ...request,
+      protocol: {
+        kind: "grpc" as const,
+        service: "Fixture",
+        method: "Unary",
+        message_source: "{}",
+      },
+    };
+    const grpcSession = {
+      ...session,
+      protocol: "grpc" as const,
+      state: "closed" as const,
+    };
+    let resolve!: (value: ProtocolSession) => void;
+    let creations = 0;
+    vi.mocked(api).mockImplementation(async (path) => {
+      if (path === "/api/sessions") {
+        creations++;
+        if (retained && creations === 1) return grpcSession;
+        return new Promise<ProtocolSession>((done) => {
+          resolve = done;
+        });
+      }
+      if (path.includes("/events"))
+        return {
+          events: [],
+          next_cursor: 0,
+          earliest_cursor: 1,
+          dropped_count: 0,
+        };
+      return grpcSession;
+    });
+    const apply = vi.fn();
+    const workspace = {
+      accountId: "account-a",
+      draft,
+      dirty: false,
+      save: vi.fn(),
+    } as unknown as ReturnType<typeof useWorkspace>;
+    const locals = { values: () => [], apply } as unknown as ReturnType<
+      typeof useLocalVariables
+    >;
+    const hook = renderHook(
+      () => useProtocolSession(workspace, grpcRequest, locals, true),
+      { wrapper: Wrapper },
+    );
+    if (retained)
+      await act(async () => {
+        await hook.result.current.connect();
+      });
+    apply.mockClear();
+    let pending!: Promise<void>;
+    act(() => {
+      pending = hook.result.current.connect();
+    });
+    expect(hook.result.current.busy).toBe(true);
+    await act(async () => {
+      await hook.result.current.close();
+    });
+    expect(hook.result.current.busy).toBe(false);
+    await act(async () => {
+      resolve({ ...grpcSession, id: "late-grpc", state: "open" });
+      await pending;
+    });
+    expect(hook.result.current.session).toBeNull();
+    expect(apply).not.toHaveBeenCalled();
+    expect(api).toHaveBeenCalledWith(
+      "/api/sessions/late-grpc/close",
+      "POST",
+      {},
+    );
+  },
+);

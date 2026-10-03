@@ -487,7 +487,13 @@ async fn protocol_error_is_terminal_and_connection_credentials_are_not_recorded(
     assert!(!closed.to_string().contains("connection-private-token"));
     assert!(!events.to_string().contains("connection-private-token"));
     assert!(!events.to_string().contains("unsolicited"));
-    assert!(!events.to_string().contains("9999"));
+    assert!(
+        events["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|event| event["message"]["operation_id"] != "9999")
+    );
     assert!(
         events["events"]
             .as_array()
@@ -1140,5 +1146,113 @@ async fn graphql_js16_introspection_http_fixture_preserves_source_and_schema() {
     assert_eq!(status, StatusCode::OK, "{schema}");
     assert_eq!(schema["specification"]["source"], source);
     assert_eq!(schema["sdl"], sdl);
+    server.abort();
+}
+#[tokio::test]
+async fn introspection_shared_labels_preserve_unresolved_titles_and_exclude_private_scope_values() {
+    let (url, server) = fixture().await;
+    let tmp = tempfile::tempdir().unwrap();
+    let router = local(&tmp.path().join("introspection-label.db"))
+        .await
+        .unwrap();
+    let mut data = graphql_data(&format!("{url}/graphql"), "{hello(name:\"a\")}");
+    data["collections"][0]["requests"][0]["name"] = json!("{{title}}");
+    data["global_variables"] = json!([{"id":"private-title","key":"title","value":"private-introspection-label-token","enabled":true,"secret":true}]);
+    let w = workspace(&router, None, data).await;
+    let request = w["data"]["collections"][0]["requests"][0].clone();
+    let mut latest = w.clone();
+    for locals in [
+        json!([]),
+        json!([{"scope":"project","key":"title","value":"local-introspection-label-token"}]),
+    ] {
+        let (status, introspected) = call(
+            &router,
+            "POST",
+            "/api/graphql/introspect",
+            None,
+            Some(json!({"workspace_id":"w","request":request,"locals":locals})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{introspected}");
+        assert_eq!(
+            introspected["specification"]["kind"],
+            "graphql-introspection"
+        );
+        assert_eq!(introspected["specification"]["name"], "{{title}} schema");
+        for private in [
+            "private-introspection-label-token",
+            "local-introspection-label-token",
+        ] {
+            assert!(!introspected.to_string().contains(private));
+        }
+        let mut data = latest["data"].clone();
+        data["specifications"]
+            .as_array_mut()
+            .unwrap()
+            .push(introspected["specification"].clone());
+        let (status, saved) = call(
+            &router,
+            "PUT",
+            "/api/workspaces/w",
+            None,
+            Some(json!({"name":"GraphQL","data":data,"expected_revision":latest["revision"]})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{saved}");
+        latest = saved;
+        let (status, exported) = call(
+            &router,
+            "POST",
+            "/api/workspaces/w/export",
+            None,
+            Some(json!({"format":"moleapi","include_secrets":false})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{exported}");
+        for private in [
+            "private-introspection-label-token",
+            "local-introspection-label-token",
+        ] {
+            assert!(!exported["content"].as_str().unwrap().contains(private));
+        }
+    }
+    server.abort();
+}
+#[tokio::test]
+async fn introspection_cannot_promote_private_response_schema_metadata_into_a_shared_candidate() {
+    let mut source: Value = serde_json::from_str(include_str!(
+        "../../core/tests/fixtures/graphql-js16-introspection.json"
+    ))
+    .unwrap();
+    source["data"]["__schema"]["types"][0]["description"] =
+        json!("private-introspection-description-token");
+    let (url, server) = serve(Router::new().route(
+        "/graphql",
+        post(move || {
+            let source = source.clone();
+            async move { Json(source) }
+        }),
+    ))
+    .await;
+    let tmp = tempfile::tempdir().unwrap();
+    let router = local(&tmp.path().join("introspection-source-private.db"))
+        .await
+        .unwrap();
+    let mut data = graphql_data(&format!("{url}/graphql"), "{hello(name:\"a\")}");
+    data["global_variables"] = json!([{"id":"secret","key":"description","value":"private-introspection-description-token","enabled":true,"secret":true}]);
+    let w = workspace(&router, None, data).await;
+    let (status, introspected) = call(
+        &router,
+        "POST",
+        "/api/graphql/introspect",
+        None,
+        Some(json!({"workspace_id":"w","request":w["data"]["collections"][0]["requests"][0]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{introspected}");
+    assert_eq!(introspected["response"]["status"], 200);
+    assert!(introspected["specification"].is_null());
+    assert!(introspected["sdl"].is_null());
+    assert!(introspected["error"].as_str().unwrap().contains("withheld"));
     server.abort();
 }

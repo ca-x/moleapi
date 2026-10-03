@@ -98,6 +98,15 @@ pub fn resolve_request(
     // JavaScript is source code, not an interpolated request field.
     value["pre_request_script"] = "".into();
     value["post_response_script"] = "".into();
+    let grpc = if let Protocol::Grpc { message_source, .. } = &request.protocol {
+        let message: serde_json::Value =
+            serde_json::from_str(message_source).context("Invalid gRPC JSON draft")?;
+        value["protocol"]["message_source"] = "".into();
+        value["body"] = "".into();
+        Some(message)
+    } else {
+        None
+    };
     let graphql = request.protocol.is_graphql();
     let mut graphql_body = if graphql {
         Some(
@@ -123,6 +132,12 @@ pub fn resolve_request(
     }
     let mut budget = 20 * 1024 * 1024;
     replace(&mut value, &vars, &mut budget)?;
+    if let Some(mut message) = grpc {
+        replace(&mut message, &vars, &mut budget)?;
+        let message_source = serde_json::to_string(&message)?;
+        value["protocol"]["message_source"] = message_source.clone().into();
+        value["body"] = message_source.into();
+    }
     if let Some(body) = &mut graphql_body {
         let query = body
             .get("query")
@@ -179,6 +194,24 @@ pub fn resolve_value(text: &str, environment: &Environment) -> Result<String> {
         .map(|v| (v.key.as_str(), v.local_value.as_deref().unwrap_or(&v.value)))
         .collect();
     interpolate(text, &vars)
+}
+
+/// Resolve JSON string values without treating adjacent JSON braces as template tokens.
+pub fn resolve_grpc_source(source: &str, environment: &Environment) -> Result<String> {
+    ensure!(source.len() <= 1024 * 1024, "gRPC JSON exceeds 1 MiB");
+    let mut value: serde_json::Value =
+        serde_json::from_str(source).context("Invalid gRPC JSON draft")?;
+    let vars = environment
+        .variables
+        .iter()
+        .filter(|v| v.enabled)
+        .map(|v| (v.key.as_str(), v.local_value.as_deref().unwrap_or(&v.value)))
+        .collect();
+    let mut budget = 1024 * 1024;
+    replace(&mut value, &vars, &mut budget)?;
+    let source = serde_json::to_string(&value)?;
+    ensure!(source.len() <= 1024 * 1024, "gRPC JSON exceeds 1 MiB");
+    Ok(source)
 }
 
 #[cfg(test)]

@@ -1,0 +1,1 @@
+Upstream protox-parse 0.9.0, MIT/Apache-2.0 licenses retained. Source: https://github.com/andrewhickman/protox . Patch: bound nesting to 32 and token count to 100000 through upstream Logos lexer before recursive parsing/generation; no replacement parser.

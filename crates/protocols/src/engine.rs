@@ -30,9 +30,12 @@ pub(crate) async fn run(
     session: &Arc<Session>,
     request: RequestSpec,
     policy: NetworkPolicy,
-    mut commands: mpsc::Receiver<Message>,
+    mut commands: mpsc::Receiver<Command>,
     mask: Arc<dyn Fn(&str) -> String + Send + Sync>,
 ) -> Result<String> {
+    if request.protocol.is_grpc() {
+        return crate::grpc::run(session.clone(), request, policy, commands, mask).await;
+    }
     if request.protocol.is_graphql() {
         return crate::graphql::run(session.clone(), request, policy, mask).await;
     }
@@ -122,7 +125,7 @@ pub(crate) async fn run(
                     return Ok("Session closed by client".into());
                 }
                 command = commands.recv() => {
-                    let Some(command) = command else { return Ok("Session command channel closed".into()) };
+                    let Some(Command::Websocket(command)) = command else { return Ok("Session command channel closed".into()) };
                     let (event,size) = message_event(&command);
                     tokio::select! {
                         _=session.cancel.cancelled()=>return Ok("Session closed while sending".into()),

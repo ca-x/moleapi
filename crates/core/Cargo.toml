@@ -6,6 +6,9 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+prost.workspace = true
+prost-reflect.workspace = true
+protox.workspace = true
 apollo-parser.workspace = true
 cynic-parser.workspace = true
 async-graphql-parser.workspace = true
@@ -22,4 +25,5 @@ base64 = "0.22"
 futures-util = "0.3"
 
 [dev-dependencies]
+prost-types = "0.14"
 axum.workspace = true

@@ -1119,3 +1119,30 @@ kbd {
 .graphql-ide .graphiql-container { height:100%; }
 .method-gql { color:var(--cyan-12); }
 .graphql-ide .graphiql-container .graphiql-logo .graphiql-logo-link { color: var(--gray-12); }
+
+.method-grpc { color: var(--cyan-12); }
+.grpc-workbench { height:100%; min-height:0; display:flex; flex-direction:column; }
+.grpc-definition-toolbar { padding:12px 20px; border-bottom:1px solid var(--gray-5); }
+.grpc-definition-toolbar .rt-SelectTrigger { max-width:360px; }
+.grpc-reason { padding:8px 20px; }
+.grpc-tabs { flex:1; min-height:0; display:flex; flex-direction:column; }
+.grpc-tabs > .rt-TabsContent[data-state="active"] { flex:1; min-height:0; display:flex; flex-direction:column; padding:16px 20px; gap:12px; }
+.grpc-tabs > .rt-TabsContent > .code-editor { flex:1; min-height:120px; }
+.grpc-input-toolbar { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.grpc-input-help { padding-top:4px; }
+.grpc-event-pane { flex:1; display:flex; flex-direction:column; min-height:0; gap:12px; }
+.grpc-event-controls .rt-TextFieldRoot { flex:1; }
+.grpc-source-grid { display:grid; grid-template-columns:minmax(160px,25%) minmax(0,1fr); gap:20px; margin-top:20px; }
+.grpc-source-files { max-height:420px; overflow:auto; }
+.grpc-source-editor { min-width:0; }
+.grpc-file-row { width:100%; border:0; border-radius:4px; background:transparent; color:var(--gray-12); padding:10px; text-align:left; display:flex; justify-content:space-between; gap:10px; cursor:pointer; overflow-wrap:anywhere; }
+.grpc-file-row.selected { background:var(--gray-4); }
+@media (max-width:700px) {
+  .grpc-definition-toolbar { padding:12px; }
+  .grpc-definition-toolbar .rt-SelectTrigger { max-width:100%; }
+  .grpc-input-toolbar { align-items:start; flex-direction:column; }
+  .grpc-source-grid { grid-template-columns:minmax(0,1fr); }
+  .grpc-source-files { max-height:140px; }
+  .grpc-tabs > .rt-TabsContent[data-state="active"] { padding:12px; overflow:auto; }
+  .grpc-events { grid-template-columns:minmax(0,1fr); grid-template-rows:140px minmax(140px,1fr); }
+}

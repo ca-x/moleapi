@@ -86,13 +86,18 @@ pub async fn create(
                 "GraphQL query/mutation requests use the execute API",
             ));
         }
-    } else if request.method != "GET" || request.body_kind != "none" {
+    } else if !request.protocol.is_grpc()
+        && (request.method != "GET" || request.body_kind != "none")
+    {
         return Err(ApiError::bad(
             "SSE and WebSocket connections require GET with body mode None",
         ));
     }
     if request.protocol.is_graphql() != c.request.protocol.is_graphql()
-        || (!request.protocol.is_graphql() && request.protocol != c.request.protocol)
+        || request.protocol.is_grpc() != c.request.protocol.is_grpc()
+        || (!request.protocol.is_graphql()
+            && !request.protocol.is_grpc()
+            && request.protocol != c.request.protocol)
     {
         return Err(ApiError::bad("Pre scripts cannot change the live protocol"));
     }
@@ -102,6 +107,29 @@ pub async fn create(
         redactor.scrub(&mut value);
         value.as_str().unwrap_or("[REDACTED]").into()
     });
+    let grpc_method = if request.protocol.is_grpc() {
+        let id = request
+            .specification_id
+            .as_ref()
+            .ok_or_else(|| ApiError::bad("Select a protobuf specification"))?;
+        let spec = w
+            .data
+            .specifications
+            .iter()
+            .find(|spec| &spec.id == id)
+            .ok_or_else(ApiError::not_found)?;
+        let pool = moleapi_core::protobuf_pool(spec).map_err(|e| ApiError::bad(e.to_string()))?;
+        let method =
+            moleapi_core::grpc_method(&pool, &request).map_err(|e| ApiError::bad(e.to_string()))?;
+        let Protocol::Grpc { message_source, .. } = &request.protocol else {
+            unreachable!()
+        };
+        moleapi_core::grpc_message(method.input(), message_source)
+            .map_err(|e| ApiError::bad(mask(&e.to_string())))?;
+        Some(method)
+    } else {
+        None
+    };
     for log in &mut feedback.logs {
         log.message = mask(&log.message);
     }
@@ -160,6 +188,22 @@ pub async fn create(
             let _ = s.protocol_sessions.remove(&owner.0, &summary.id).await;
             return Err(e);
         }
+    }
+    if let Some(method) = grpc_method {
+        if let Err(e) = s.protocol_sessions.configure_grpc(
+            &owner.0,
+            &summary.id,
+            method,
+            scopes.effective(),
+            mask.clone(),
+        ) {
+            let _ = s.protocol_sessions.remove(&owner.0, &summary.id).await;
+            return Err(error(e));
+        }
+        summary = s
+            .protocol_sessions
+            .summary(&owner.0, &summary.id)
+            .map_err(error)?;
     }
     if let Err(e) = s.protocol_sessions.start(
         &owner.0,

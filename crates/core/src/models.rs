@@ -41,6 +41,14 @@ pub enum Protocol {
     Http,
     Sse,
     Websocket,
+    Grpc {
+        #[serde(default)]
+        service: String,
+        #[serde(default)]
+        method: String,
+        #[serde(default = "empty_message_source")]
+        message_source: String,
+    },
     Graphql {
         #[serde(default)]
         document: String,
@@ -56,6 +64,9 @@ pub enum Protocol {
         subscription_url: Option<String>,
     },
 }
+fn empty_message_source() -> String {
+    "{}".into()
+}
 fn empty_boxed_object() -> Box<serde_json::Value> {
     Box::new(empty_object())
 }
@@ -63,6 +74,9 @@ fn empty_object() -> serde_json::Value {
     serde_json::json!({})
 }
 impl Protocol {
+    pub fn is_grpc(&self) -> bool {
+        matches!(self, Self::Grpc { .. })
+    }
     pub fn is_graphql(&self) -> bool {
         matches!(self, Self::Graphql { .. })
     }

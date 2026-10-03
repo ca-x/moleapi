@@ -204,3 +204,62 @@ fn postman_graphql_body_preserves_document_variables_and_scripts() {
         moleapi_core::Protocol::Graphql { .. }
     ));
 }
+
+#[test]
+fn retained_protobuf_sources_cannot_silently_disappear_when_requests_switch_to_http() {
+    let mut source = workspace(import("postman", &postman().to_string()).unwrap().data);
+    let definition = moleapi_core::Specification {
+        id: "protobuf-source".into(), name: "Proto source".into(), kind: "protobuf".into(), dialect: "proto3".into(),
+        source: json!({"kind":"proto","files":[{"path":"service.proto","content":"syntax = \"proto3\"; message Payload { string text = 1; } service Endpoint { rpc Send(Payload) returns (Payload); }"}],"entry_files":["service.proto"]}).to_string(),
+    };
+    source.data.specifications.push(definition.clone());
+    for format in ["postman", "openapi"] {
+        assert!(
+            export(&source, format, true)
+                .err()
+                .expect("foreign export must reject source loss")
+                .to_string()
+                .contains("MoleAPI")
+        );
+    }
+    let encoded = export(&source, "moleapi", true).unwrap();
+    let restored = import("moleapi", &encoded.content).unwrap();
+    assert_eq!(
+        restored
+            .data
+            .specifications
+            .iter()
+            .find(|spec| spec.id == definition.id)
+            .unwrap()
+            .source,
+        definition.source
+    );
+}
+
+#[test]
+fn default_native_export_redacts_protocol_draft_credentials_but_explicit_export_preserves_them() {
+    let mut source = workspace(import("postman", &postman().to_string()).unwrap().data);
+    source.data.collections[0].requests[0].protocol = moleapi_core::Protocol::Grpc {
+        service: "Service".into(),
+        method: "Call".into(),
+        message_source:
+            r#"{"password":"grpc-secret","nested":{"token":"nested-secret"},"text":"keep"}"#.into(),
+    };
+    let safe = export(&source, "moleapi", false).unwrap();
+    assert!(!safe.content.contains("grpc-secret"));
+    assert!(!safe.content.contains("nested-secret"));
+    assert!(safe.content.contains("keep"));
+    let explicit = export(&source, "moleapi", true).unwrap();
+    assert!(explicit.content.contains("grpc-secret"));
+    source.data.collections[0].requests[0].protocol = serde_json::from_value(json!({"kind":"graphql","document":"query {value}","variables":{"password":"gql-secret"},"variables_source":"{\"token\":\"gql-source-secret\"}","connection_params":{"token":"gql-connection-secret"},"subscription_url":"wss://user:password@example.com/graphql?token=gql-url-secret"})).unwrap();
+    let safe = export(&source, "moleapi", false).unwrap();
+    for secret in [
+        "gql-secret",
+        "gql-source-secret",
+        "gql-connection-secret",
+        "gql-url-secret",
+        "user:password",
+    ] {
+        assert!(!safe.content.contains(secret), "{secret}");
+    }
+}

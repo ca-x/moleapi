@@ -3,6 +3,7 @@ mod entities;
 mod execution;
 mod formats;
 mod graphql;
+mod grpc;
 mod history;
 mod mock;
 mod privacy;
@@ -175,6 +176,9 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         .route("/execute", post(execution::execute))
         .route("/graphql/introspect", post(graphql::introspect))
         .route("/graphql/schema", post(graphql::schema))
+        .route("/grpc/schema", post(grpc::schema))
+        .route("/grpc/import", post(grpc::import))
+        .route("/grpc/reflect", post(grpc::reflect))
         .route("/sessions", post(protocols::create))
         .route(
             "/sessions/{id}",

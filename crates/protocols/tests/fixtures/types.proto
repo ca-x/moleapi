@@ -1,0 +1,5 @@
+syntax = "proto3";
+package moleapi.fixture;
+import "google/protobuf/timestamp.proto";
+message Echo { string text = 1; int64 count = 2; bytes blob = 3; Mode mode = 4; oneof choice { string label = 5; int32 number = 6; } google.protobuf.Timestamp at = 7; Echo nested = 8; }
+enum Mode { DEFAULT = 0; SPECIAL = 1; }

@@ -1,5 +1,5 @@
 //! Owner-scoped GraphQL schema operations through the shared execution pipeline.
-use crate::{ApiError, AppState, auth::Identity, execution, workspaces::owned};
+use crate::{ApiError, AppState, auth::Identity, execution, privacy::Redactor, workspaces::owned};
 use axum::{Extension, Json, extract::State};
 use moleapi_core::{Pair, Protocol, RequestSpec, Response, Specification, VariableUpdate};
 use serde::{Deserialize, Serialize};
@@ -78,19 +78,40 @@ pub async fn introspect(
             }
         ));
     } else {
+        let redactor = Redactor::new(&scopes.private_values)?;
+        let scrub = |text: &str| {
+            let mut value = serde_json::json!(text);
+            redactor.scrub(&mut value);
+            value.as_str().unwrap_or("[REDACTED]").to_owned()
+        };
         let spec = Specification {
             id: uuid::Uuid::new_v4().to_string(),
-            name: format!("{} schema", request.name),
+            // This request retains its original title; perform resolves an execution clone.
+            name: scrub(&format!("{} schema", request.name)),
             kind: "graphql-introspection".into(),
             source: result.response.body.clone(),
             dialect: "graphql-june2018".into(),
         };
-        match moleapi_core::graphql_schema_sdl(&spec) {
-            Ok(sdl) => {
-                result.sdl = Some(sdl);
-                result.specification = Some(spec);
+        if scrub(&spec.source) != spec.source
+            || serde_json::to_string(&spec).is_ok_and(|text| scrub(&text) != text)
+        {
+            result.error = Some(
+                "Introspection source contains private execution values; source withheld".into(),
+            );
+        } else {
+            match moleapi_core::graphql_schema_sdl(&spec) {
+                Ok(sdl) if scrub(&sdl) == sdl => {
+                    result.sdl = Some(sdl);
+                    result.specification = Some(spec);
+                }
+                Ok(_) => {
+                    result.error = Some(
+                        "Introspection schema contains private execution values; source withheld"
+                            .into(),
+                    )
+                }
+                Err(error) => result.error = Some(scrub(&error.to_string())),
             }
-            Err(error) => result.error = Some(error.to_string()),
         }
     }
     Ok(Json(result))
