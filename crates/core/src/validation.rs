@@ -95,6 +95,7 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
             );
         }
     }
+    crate::validate_tcp(r, templates)?;
     validate_script(&r.pre_request_script)?;
     validate_script(&r.post_response_script)?;
     ensure!(
@@ -121,6 +122,7 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
     ensure!(r.body.len() <= MAX_BODY, "Request body exceeds 5 MiB");
     if !(templates && r.protocol.is_a2a() && r.url.is_empty())
         && !r.protocol.is_mqtt()
+        && !r.protocol.is_tcp()
         && !matches!(&r.protocol, Protocol::Mcp { config } if config.transport == "stdio" || templates && r.url.is_empty())
         && (!templates || !r.url.contains("{{"))
     {
@@ -128,6 +130,9 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
             &r.url,
             r.protocol == Protocol::Websocket || r.protocol.is_socketio(),
         )?;
+    }
+    if r.protocol.is_tcp() && (!templates || !r.url.contains("{{")) {
+        crate::tcp_url(&r.url)?;
     }
     if !r.protocol.is_graphql() && r.body_kind == "json" && (!templates || !r.body.contains("{{")) {
         serde_json::from_str::<serde_json::Value>(&r.body).context("Invalid JSON body")?;

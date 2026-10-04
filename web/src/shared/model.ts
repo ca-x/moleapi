@@ -1,3 +1,4 @@
+import stableStringify from "fast-json-stable-stringify";
 import type { Pair, RequestSpec, WorkspaceData } from "./types";
 export const id = () => crypto.randomUUID();
 export const pair = (key = "", value = "", secret = false): Pair => ({
@@ -88,7 +89,7 @@ function nativeBase() {
   return "https://echo.apifox.com";
 }
 export const fingerprint = (data: { name: string; data: WorkspaceData }) =>
-  JSON.stringify({ name: data.name, data: data.data });
+  stableStringify({ name: data.name, data: data.data });
 export const bytes = (value: number) =>
   value < 1024
     ? `${value} B`
@@ -162,7 +163,7 @@ export function safeMessage(error: unknown): string {
 }
 
 export const requestLabel = (request: RequestSpec) =>
-  request.protocol?.kind === "a2a" ? "A2A" : request.protocol?.kind === "mcp" ? "MCP" : request.protocol?.kind === "soap"
+  request.protocol?.kind === "tcp" ? "TCP" : request.protocol?.kind === "a2a" ? "A2A" : request.protocol?.kind === "mcp" ? "MCP" : request.protocol?.kind === "soap"
     ? "SOAP"
     : request.protocol?.kind === "mqtt"
       ? "MQTT"

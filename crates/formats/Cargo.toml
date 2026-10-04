@@ -22,3 +22,6 @@ async-graphql-parser = "7.2.1"
 aho-corasick = "1"
 
 base64 = "0.22"
+
+[dev-dependencies]
+hex = "0.4"

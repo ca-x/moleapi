@@ -630,3 +630,78 @@ fn a2a_canonical_card_source_default_export_excludes_copied_private_data() {
     .unwrap();
     assert_eq!(restored.data.specifications.last().unwrap().source, card);
 }
+
+#[test]
+fn tcp_native_full_drafts_restore_and_default_binary_copies_are_withheld() {
+    let mut workspace = workspace(import("curl", "curl https://example.com").unwrap().data);
+    workspace.data.global_variables.push(moleapi_core::Pair {
+        id: "private".into(),
+        key: "seed".into(),
+        value: "private-seed".into(),
+        enabled: true,
+        secret: Some(true),
+        local_value: None,
+    });
+    let request = &mut workspace.data.collections[0].requests[0];
+    request.protocol=serde_json::from_value(serde_json::json!({"kind":"tcp","framing":"length_le","message":{"encoding":"hex","payload_source":"70 72 69 76 61 74 65 2d 73 65 65 64"}})).unwrap();
+    request.url = "tcp://localhost:1234".into();
+    request.body_kind = "none".into();
+    let full = moleapi_formats::export(&workspace, "moleapi", true).unwrap();
+    let restored = moleapi_formats::import("moleapi", &full.content).unwrap();
+    assert_eq!(restored.data, workspace.data);
+    let safe = moleapi_formats::export(&workspace, "moleapi", false).unwrap();
+    let value: serde_json::Value = serde_json::from_str(&safe.content).unwrap();
+    assert_eq!(
+        value["data"]["collections"][0]["requests"][0]["protocol"]["message"]["payload_source"],
+        ""
+    );
+}
+
+#[test]
+fn tcp_encoded_json_private_fields_and_copies_are_removed_from_default_export() {
+    let mut w = workspace(import("curl", "curl https://example.com").unwrap().data);
+    for encoding in ["hex", "base64"] {
+        let body = b"{\"password\":\"only-in-this-payload\",\"copy\":\"only-in-this-payload\"}";
+        let source = if encoding == "hex" {
+            hex::encode(body)
+        } else {
+            use base64::Engine;
+            base64::engine::general_purpose::STANDARD.encode(body)
+        };
+        let r = &mut w.data.collections[0].requests[0];
+        r.url = "tcp://localhost:1234".into();
+        r.body_kind = "none".into();
+        r.protocol = serde_json::from_value(
+            json!({"kind":"tcp","message":{"encoding":encoding,"payload_source":source}}),
+        )
+        .unwrap();
+        let safe = export(&w, "moleapi", false).unwrap();
+        let value: Value = serde_json::from_str(&safe.content).unwrap();
+        assert_eq!(
+            value["data"]["collections"][0]["requests"][0]["protocol"]["message"]["payload_source"],
+            ""
+        );
+        let full = export(&w, "moleapi", true).unwrap();
+        assert_eq!(import("moleapi", &full.content).unwrap().data, w.data);
+    }
+}
+
+#[test]
+fn tcp_opaque_binary_draft_requires_explicit_full_export() {
+    let mut w = workspace(import("curl", "curl https://example.com").unwrap().data);
+    let r = &mut w.data.collections[0].requests[0];
+    r.url = "tcp://localhost:1234".into();
+    r.body_kind = "none".into();
+    r.protocol = serde_json::from_value(
+        json!({"kind":"tcp","message":{"encoding":"hex","payload_source":"00 ff 41"}}),
+    )
+    .unwrap();
+    let safe = export(&w, "moleapi", false).unwrap();
+    let value: Value = serde_json::from_str(&safe.content).unwrap();
+    assert_eq!(
+        value["data"]["collections"][0]["requests"][0]["protocol"]["message"]["payload_source"],
+        ""
+    );
+    let full = export(&w, "moleapi", true).unwrap();
+    assert_eq!(import("moleapi", &full.content).unwrap().data, w.data);
+}

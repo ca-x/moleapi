@@ -319,7 +319,9 @@ pub(crate) async fn run(
                         tx.send(message).await.context("gRPC input stream closed")?;
                     }
                     Command::GrpcHalfClose => break,
-                    Command::A2a(_)
+                    Command::TcpData(_)
+                    | Command::TcpHalfClose
+                    | Command::A2a(_)
                     | Command::Mcp(_)
                     | Command::Websocket(_)
                     | Command::Mqtt(_)

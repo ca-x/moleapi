@@ -1,3 +1,5 @@
+mod tcp;
+pub use tcp::*;
 mod a2a;
 pub use a2a::*;
 mod mcp;

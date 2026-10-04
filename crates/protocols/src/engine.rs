@@ -33,6 +33,9 @@ pub(crate) async fn run(
     mut commands: mpsc::Receiver<Command>,
     mask: Arc<dyn Fn(&str) -> String + Send + Sync>,
 ) -> Result<String> {
+    if request.protocol.is_tcp() {
+        return crate::tcp::run(session.clone(), request, policy, commands, mask).await;
+    }
     if request.protocol.is_a2a() {
         return crate::a2a::run(session.clone(), request, policy, commands, mask).await;
     }

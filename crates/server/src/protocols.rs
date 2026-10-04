@@ -117,6 +117,7 @@ pub async fn create(
         || request.protocol.is_mcp() != c.request.protocol.is_mcp()
         || matches!((&request.protocol, &c.request.protocol), (Protocol::Mcp { config }, Protocol::Mcp { config: original }) if config.transport != original.transport)
         || request.protocol.is_mqtt() != c.request.protocol.is_mqtt()
+        || request.protocol.is_tcp() != c.request.protocol.is_tcp()
         || request.protocol.is_socketio() != c.request.protocol.is_socketio()
         || request.protocol.is_graphql() != c.request.protocol.is_graphql()
         || request.protocol.is_grpc() != c.request.protocol.is_grpc()
@@ -203,6 +204,8 @@ pub async fn create(
         matches!(&request.protocol, Protocol::Mcp { config } if config.transport == "stdio");
     let mut resolved_url = if stdio {
         moleapi_core::protocol_url("http://mcp.invalid/", false)
+    } else if request.protocol.is_tcp() {
+        moleapi_core::tcp_url(target_url)
     } else if request.protocol.is_mqtt() {
         moleapi_core::mqtt_url(target_url)
     } else {
@@ -248,6 +251,18 @@ pub async fn create(
             let _ = s.protocol_sessions.remove(&owner.0, &summary.id).await;
             return Err(e);
         }
+    }
+    if request.protocol.is_tcp()
+        && let Err(e) = s.protocol_sessions.configure_tcp(
+            &owner.0,
+            &summary.id,
+            &request,
+            scopes.effective(),
+            scopes.private_values.iter().any(|value| !value.is_empty()),
+        )
+    {
+        let _ = s.protocol_sessions.remove(&owner.0, &summary.id).await;
+        return Err(error(e));
     }
     if let Protocol::Mqtt { config } = &request.protocol
         && let Err(e) = s.protocol_sessions.configure_mqtt(

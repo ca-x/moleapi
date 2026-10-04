@@ -64,7 +64,7 @@ export function useWorkbenchController() {
     requests.request?.protocol?.kind === "a2a" ? () => a2aRun.current?.() : requests.request?.protocol?.kind === "mcp" ? () => mcpRun.current?.() : requests.request?.protocol?.kind === "graphql"
       ? () => graphqlRun.current?.()
       : requests.request?.protocol?.kind &&
-          ["sse", "websocket", "grpc", "socketio", "mqtt", "mcp"].includes(
+          ["tcp", "sse", "websocket", "grpc", "socketio", "mqtt", "mcp"].includes(
             requests.request.protocol.kind,
           )
         ? protocolSession.connect

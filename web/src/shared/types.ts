@@ -1,3 +1,4 @@
+import type { TcpConfig } from "../features/tcp/types";
 import type { A2aConfig } from "../features/a2a/types";
 import type { McpConfig } from "../features/mcp/types";
 import type { SoapConfig, SoapFault } from "../features/soap/types";
@@ -30,6 +31,7 @@ export interface GraphQLConfig {
   subscription_url?: string | null;
 }
 export type ProtocolConfig =
+  | TcpConfig
   | { kind: "http" | "sse" | "websocket" }
   | GraphQLConfig
   | GrpcConfig

@@ -3,6 +3,7 @@ use serde_json::Value;
 
 pub(super) fn workspace(source: &Workspace) -> Workspace {
     let privacy = ExportPrivacy::new(source);
+    let tcp_privacy = ExportPrivacy::from_workspace(source, true);
     let mut result = source.clone();
     for environment in &mut result.data.environments {
         for variable in &mut environment.variables {
@@ -45,6 +46,36 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
             request.url = redact_url(&request.url);
             request.body = redact_embedded_json(&request.body);
             match &mut request.protocol {
+                moleapi_core::Protocol::Tcp { config } => {
+                    request.url = tcp_privacy.screen_text(&request.url);
+                    config.message.payload_source = if config.message.secret || tcp_privacy.withhold
+                    {
+                        String::new()
+                    } else if config.message.encoding == "text" {
+                        tcp_privacy.screen_generation_json(&redact_embedded_json(
+                            &config.message.payload_source,
+                        ))
+                    } else if template_reference(&config.message.payload_source) {
+                        config.message.payload_source.clone()
+                    } else if let Ok(bytes) = moleapi_core::tcp_payload(&config.message) {
+                        if let Ok(original) = serde_json::from_slice::<Value>(&bytes) {
+                            let text = std::str::from_utf8(&bytes).unwrap_or_default();
+                            let screened =
+                                tcp_privacy.screen_generation_json(&redact_embedded_json(text));
+                            if serde_json::from_str::<Value>(&screened)
+                                .is_ok_and(|value| value == original)
+                            {
+                                config.message.payload_source.clone()
+                            } else {
+                                String::new()
+                            }
+                        } else {
+                            String::new()
+                        }
+                    } else {
+                        String::new()
+                    };
+                }
                 moleapi_core::Protocol::A2a { config } => {
                     request.url = privacy.screen_text(&request.url);
                     for row in request.headers.iter_mut().chain(request.query.iter_mut()) {
@@ -473,6 +504,21 @@ impl ExportPrivacy {
                 }
             }
             for request in workspace.data.collections.iter().flat_map(|c| &c.requests) {
+                if let moleapi_core::Protocol::Tcp { config } = &request.protocol {
+                    if config.message.secret {
+                        secrets.insert(config.message.payload_source.clone());
+                    }
+                    if let Ok(bytes) = moleapi_core::tcp_payload(&config.message)
+                        && let Ok(text) = std::str::from_utf8(&bytes)
+                    {
+                        if config.message.secret {
+                            secrets.insert(text.to_owned());
+                        }
+                        if let Ok(value) = serde_json::from_str::<Value>(text) {
+                            collect(&value, &mut secrets);
+                        }
+                    }
+                }
                 secrets.insert(request.auth.username.clone());
                 if request.auth.kind == "basic"
                     && !(request.auth.username.is_empty() && request.auth.password.is_empty())

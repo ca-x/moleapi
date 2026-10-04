@@ -54,3 +54,12 @@ describe("workspace draft lifecycle", () => {
     expect(hasChanges(result)).toBe(true);
   });
 });
+
+it("equivalent server key ordering does not keep a successfully saved draft dirty",()=>{
+  const original=workspace();
+  function reordered(value:unknown):unknown {if(Array.isArray(value))return value.map(reordered);if(value&&typeof value==="object")return Object.fromEntries(Object.entries(value).reverse().map(([key,item])=>[key,reordered(item)]));return value;}
+  const server={...original,data:reordered(original.data) as Workspace["data"],revision:2};
+  expect(server.data).toEqual(original.data);
+  const result=acknowledgeSave({draft:original,saved:original},server);
+  expect(hasChanges(result)).toBe(false);
+});

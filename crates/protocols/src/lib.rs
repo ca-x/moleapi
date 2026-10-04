@@ -3,6 +3,7 @@ pub mod a2a;
 mod grpc;
 mod mcp;
 mod mqtt;
+mod tcp;
 pub use grpc::{ReflectionResult, ReflectionStatus, reflect};
 mod engine;
 mod graphql;
@@ -33,6 +34,8 @@ fn now() -> String {
     chrono::Utc::now().to_rfc3339()
 }
 pub(crate) enum Command {
+    TcpData(Vec<u8>),
+    TcpHalfClose,
     A2a(SendMessage),
     Mcp(SendMessage),
     Mqtt(mqtt::MqttCommand),
@@ -56,6 +59,7 @@ pub(crate) struct Session {
     done: watch::Sender<bool>,
     commands: mpsc::Sender<Command>,
     receiver: Mutex<Option<mpsc::Receiver<Command>>>,
+    tcp: Mutex<tcp::Control>,
     mqtt: Mutex<mqtt::Control>,
     socketio: Mutex<socketio::Control>,
     a2a_environment: Mutex<Option<moleapi_core::Environment>>,
@@ -124,6 +128,8 @@ impl Session {
                 operation_id,
                 payload,
             } => operation_id.len() + serde_json::to_vec(payload)?.len(),
+            EventMessage::TcpData { bytes, .. } => *bytes,
+            EventMessage::TcpHalfClosed => 0,
             EventMessage::Text { text } => text.len(),
             EventMessage::Binary { base64 }
             | EventMessage::Ping { base64 }
@@ -320,7 +326,9 @@ impl SessionManager {
             workspace_id: workspace.into(),
             request_id: request.id.clone(),
             url: safe_url,
-            protocol: if request.protocol.is_a2a() {
+            protocol: if request.protocol.is_tcp() {
+                "tcp"
+            } else if request.protocol.is_a2a() {
                 "a2a"
             } else if request.protocol.is_mcp() {
                 "mcp"
@@ -366,6 +374,7 @@ impl SessionManager {
             done,
             commands,
             receiver: Mutex::new(Some(rx)),
+            tcp: Mutex::new(tcp::Control::default()),
             mqtt: Mutex::new(mqtt::Control::default()),
             socketio: Mutex::new(socketio::Control::default()),
             a2a_environment: Mutex::new(None),
@@ -460,6 +469,25 @@ impl SessionManager {
             earliest_cursor: earliest,
             dropped_count: earliest.saturating_sub(after.saturating_add(1)),
         })
+    }
+    pub fn configure_tcp(
+        &self,
+        owner: &str,
+        id: &str,
+        request: &RequestSpec,
+        environment: moleapi_core::Environment,
+        private: bool,
+    ) -> Result<()> {
+        let session = self.owned(owner, id)?;
+        let Protocol::Tcp { config } = &request.protocol else {
+            anyhow::bail!("Expected TCP configuration")
+        };
+        *session.tcp.lock().unwrap() = tcp::Control::new(
+            (**config).clone(),
+            environment,
+            private || config.message.secret,
+        );
+        Ok(())
     }
     pub fn configure_mqtt(
         &self,
@@ -587,6 +615,12 @@ impl SessionManager {
         let s = self.owned(owner, id)?;
         if matches!(
             &message,
+            SendMessage::TcpSend { .. } | SendMessage::TcpHalfClose
+        ) {
+            return tcp::send(&s, message);
+        }
+        if matches!(
+            &message,
             SendMessage::A2aRequest { .. } | SendMessage::A2aStop { .. }
         ) {
             return a2a::send(&s, message);
@@ -682,7 +716,9 @@ impl SessionManager {
         }
         let ping = matches!(&message, SendMessage::Ping { .. });
         let (message, size) = match message {
-            SendMessage::A2aRequest { .. }
+            SendMessage::TcpSend { .. }
+            | SendMessage::TcpHalfClose
+            | SendMessage::A2aRequest { .. }
             | SendMessage::A2aStop { .. }
             | SendMessage::McpRequest { .. }
             | SendMessage::McpCallback { .. }

@@ -1,3 +1,4 @@
+import { base64, hex } from "@scure/base";
 import type { EventBatch, ProtocolEvent } from "./types";
 const MAX_EVENTS = 256;
 const MAX_BYTES = 8 * 1024 * 1024;
@@ -27,6 +28,12 @@ export function appendEvents(
 export function messageContent(event: ProtocolEvent): string {
   const message = event.message;
   switch (message.kind) {
+    case "tcp_data": {
+      if(message.redacted)return `私密载荷已隐藏 · ${message.bytes} 字节`;
+      try {return [message.text!==null ? `UTF8:\n${message.text}` : "UTF8: 非文本数据",`Hex:\n${hex.encode(base64.decode(message.base64))}`,`Base64:\n${message.base64}`].join("\n\n");}
+      catch {return JSON.stringify(message,null,2);}
+    }
+    case "tcp_half_closed": return "TCP 发送端已半关闭，继续接收";
     case "a2a_ready":
     case "a2a_result":
     case "a2a_stream":

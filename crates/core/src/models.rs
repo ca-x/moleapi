@@ -39,6 +39,10 @@ pub struct Example {
 pub enum Protocol {
     #[default]
     Http,
+    Tcp {
+        #[serde(flatten)]
+        config: Box<crate::TcpConfig>,
+    },
     Sse,
     Websocket,
     Socketio {
@@ -125,6 +129,10 @@ fn empty_object() -> serde_json::Value {
     serde_json::json!({})
 }
 impl Protocol {
+    pub fn is_tcp(&self) -> bool {
+        matches!(self, Self::Tcp { .. })
+    }
+
     pub fn is_a2a(&self) -> bool {
         matches!(self, Self::A2a { .. })
     }

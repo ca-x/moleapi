@@ -44,6 +44,13 @@ pub struct SessionSummary {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum EventMessage {
+    TcpData {
+        base64: String,
+        text: Option<String>,
+        bytes: usize,
+        redacted: bool,
+    },
+    TcpHalfClosed,
     A2aReady {
         dialect: String,
         transport: String,
@@ -205,6 +212,10 @@ pub struct EventBatch {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SendMessage {
+    TcpSend {
+        message: moleapi_core::TcpMessage,
+    },
+    TcpHalfClose,
     A2aRequest {
         request_id: String,
         method: String,

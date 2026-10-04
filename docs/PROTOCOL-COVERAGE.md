@@ -14,7 +14,7 @@
 | SOAP/XML/WSDL | 两者 |专用1.1/1.2客户端、WSDL1.1多文件导入/Service/Port/Operation/XML模板、实际HTTP调用/鉴权/脚本/XML/Fault已实现；真实Spyne服务验证，协议与XML私密值/工作量审查及回归验证通过；分发验证留到功能整合阶段 |现用wsdl0.1.3、roxmltree0.18、quick-xml0.38、xmltree0.11、xsd-parser1.5.2；运行时模型和XML写入均复用成熟库 |
 | MCP调试/客户端/服务端配置 | 两者 |真实Streamable HTTP/STDIO客户端、工具/资源/模板/提示词、通知/进度/取消、sampling/elicitation/roots手动回调、Host配置导入导出已实现并复审；OAuth、Apps、服务端发布与更高协议版本仍待共享模块补齐 |官方RustSDK rmcp3.5.0，严格复用其协议解析与状态机；有来源/许可记录的输入额度与进程清理补丁 |
 | A2A/Agent Card/任务与流 | Apifox，Postman专用A2A公开目录未定位 |0.3 JSONRPC及1.0 JSONRPC/HTTP+JSON真实客户端、原始Card导入/发现/显式端点选择、消息/任务/流/产物/继续任务/推送配置CRUD/取消已实现并复审；分发验证留到功能整合阶段 |a2a-client0.1/0.2实际注入客户端；a2a-types，a2a-rs0.10仅用于真实1.0 fixture；有许可和来源记录的输入预算/SDK语义补丁 |
-| TCP Socket/报文处理 | Apifox，Postman公开目录未定位 |待实现 | tokio、tokio-util0.7.19现成 codec、TLS库 |
+| TCP Socket/报文处理 | Apifox，Postman公开目录未定位 |真实TCP/TLS、文本/Hex/Base64、原始块/行/32位大小端长度分帧、半关闭/读取/取消/空闲限制、原始草稿/安全导出已实现；实际fixture及浏览器验证，分发验证留到整合 |Tokio、tokio-util BytesCodec/LinesCodec/LengthDelimitedCodec、tokio-rustls/rustls、hex/base64；浏览器Hex显示复用@scure/base |
 | Dubbo | Apifox，Postman公开目录未定位 |待实现 |Apache dubbo0.4.0；确认Triple与经典Dubbo/Hessian覆盖，hessian2仅是序列化库，不能据此宣称完整Dubbo客户端 |
 | Webhook监听/检查/重放 | 两者 |待实现专用入口 | Axum、现有HTTP客户端及成熟请求/解析库 |
 | Data request：PG/MySQL、local/remote file SQL | Postman，Apifox公开目录未定位 |待实现；应用存储支持三种数据库不算Data客户端 |已有SQLx0.8.6优先复用；DataFusion/DuckDB候选需评估文件SQL、网络/文件访问限制和分发体积 |
@@ -34,3 +34,5 @@ SOAP 当前边界：WSDL1.1，document/literal；RPC/encoded 与不能可靠生�
 MCP 当前边界：已验证协商协议2025-11-25；不把SDK版本号当成支持所有后续协议版本。HTTP不自动跟随重定向；STDIO需要绝对可执行路径，独立服务端需管理员配置允许路径，原生客户端显式连接才启动。JSONHTTP/单帧/STDIO行1MiB、流/标准输出8MiB，会话命令512、回调数/事件数等有明确上限。手動sampling不调用LLM、roots不自动读取文件；外部资源URI/HTML/SVG不会自动执行或获取。
 
 A2A 当前边界：明确选择0.3或1.0，0.3仅JSONRPC，1.0支持JSONRPC与HTTP+JSON；未实现A2A gRPC绑定、OAuth交互调试或自动推送接收。仅显式操作注册推送，message配置中的隐式注册会被拒绝。任务取消是远端操作，本地Stop终止当前请求而不伪造任务取消。Card不自动选择地址、不下载file URI；原文保存与显式含私密值导出保留原始数据，默认导出屏蔽已知私密值。真实SDK测试9项、原文/私密值互换2项及浏览器实际调用/流/任务/本地Stop已验证。
+
+TCP当前边界：只连接tcp://或tcps://显式端口；共享权限/预脚本/环境快照、检查并固定DNS地址。原始读取块不是对端报文边界；长度字段固定4字节，行编解码遵循成熟SDK。TLS实际线缆字节包括握手/记录开销。限制512发送命令、4096接收帧、20MiB输入/线缆、1MiB帧，实际配额/阻塞发送取消测试通过。已知非空私密值/私密发送会保守隐藏本次会话后续载荷；空私密变量不误隐藏。默认导出屏蔽敏感JSON/副本和不能可靠筛查的编码二进制草稿；显式完整导出保留原文。自定义分帧脚本/长度偏移、自动重连、mTLS管理、事件脚本、持久流历史仍待实现。
