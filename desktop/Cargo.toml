@@ -15,10 +15,15 @@ axum.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 moleapi-server = { path = "../crates/server", default-features = false }
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
+tauri-plugin-single-instance = "2"
 tower = { version = "0.5", features = ["util"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libloading = "0.8"
+zbus = "5.9"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
