@@ -3,6 +3,7 @@ mod auth;
 mod entities;
 mod execution;
 mod formats;
+mod generation;
 mod graphql;
 mod grpc;
 mod history;
@@ -45,6 +46,7 @@ struct AppState {
     local: bool,
     sync_lock: Arc<tokio::sync::Mutex<()>>,
     script_slots: Arc<tokio::sync::Semaphore>,
+    generation_slots: Arc<tokio::sync::Semaphore>,
     script_worker: PathBuf,
     protocol_sessions: Arc<moleapi_protocols::SessionManager>,
     protocol_admission: Arc<protocol_admission::AdmissionGates>,
@@ -153,6 +155,7 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         local,
         sync_lock: Arc::new(tokio::sync::Mutex::new(())),
         script_slots: Arc::new(tokio::sync::Semaphore::new(4)),
+        generation_slots: Arc::new(tokio::sync::Semaphore::new(4)),
         script_worker,
         protocol_sessions: moleapi_protocols::SessionManager::new(),
         protocol_admission: Arc::new(protocol_admission::AdmissionGates::default()),
@@ -178,6 +181,8 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         .route("/workspaces/{id}/run", post(runner::run))
         .route("/workspaces/{id}/export", post(formats::export))
         .route("/execute", post(execution::execute))
+        .route("/generation/snippets/catalog", get(generation::catalog))
+        .route("/generation/snippets", post(generation::generate))
         .route("/soap/import", post(soap::import))
         .route("/soap/import-url", post(soap::import_url))
         .route("/soap/schema", post(soap::schema))

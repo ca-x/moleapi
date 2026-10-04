@@ -1,6 +1,6 @@
 # Multi-language code generation scope
 
-Authority: FEATURE-MATRIX generation-001..007, CAPABILITY-MAP generation module; user2026-10-04 explicitly requires other languages before calling code generation complete. Existing implementation is HTTP cURL only. This is a required functional module, not deferred optional polish or distribution work.
+Authority: FEATURE-MATRIX generation-001..007, CAPABILITY-MAP generation module; user2026-10-04 explicitly requires other languages before calling code generation complete. Current implementation includes portable multi-language HTTP request snippets; typed SDK/server generation remains incomplete. See ../SNIPPET-COVERAGE.md for exact per-target evidence. This is a required functional module, not deferred optional polish or distribution work.
 
 ## Completion rule
 

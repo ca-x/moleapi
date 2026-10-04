@@ -1,0 +1,20 @@
+[package]
+name = "moleapi-generation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+moleapi-core = { path = "../core" }
+moleapi-formats = { path = "../formats" }
+rquickjs = { version = "0.14.0", default-features = false, features = ["std"] }
+url = "2"
+base64 = "0.22"
+
+[build-dependencies]
+sha2 = "0.10"
+serde_json.workspace = true

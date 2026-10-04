@@ -373,9 +373,15 @@ struct ExportPrivacy {
 }
 impl ExportPrivacy {
     fn new(workspace: &Workspace) -> Self {
+        Self::from_workspace(workspace, false)
+    }
+    fn from_workspace(workspace: &Workspace, generation: bool) -> Self {
         let mut secrets = std::collections::BTreeSet::new();
         let mut pairs = |rows: &[moleapi_core::Pair]| {
             for row in rows {
+                if generation && let Some(value) = &row.local_value {
+                    secrets.insert(value.clone());
+                }
                 if row.secret == Some(true) || sensitive(&row.key) {
                     secrets.insert(row.value.clone());
                     if let Some(value) = &row.local_value {
@@ -425,6 +431,89 @@ impl ExportPrivacy {
                 }
             }
         }
+        if generation {
+            fn collect(value: &Value, secrets: &mut std::collections::BTreeSet<String>) {
+                match value {
+                    Value::Object(rows) => {
+                        for (key, value) in rows {
+                            if sensitive(key) {
+                                collect_literal(value, secrets);
+                            } else {
+                                collect(value, secrets);
+                            }
+                        }
+                    }
+                    Value::Array(values) => {
+                        for value in values {
+                            collect(value, secrets);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            fn collect_literal(value: &Value, secrets: &mut std::collections::BTreeSet<String>) {
+                match value {
+                    Value::String(text) => {
+                        secrets.insert(text.clone());
+                    }
+                    Value::Number(_) | Value::Bool(_) => {
+                        secrets.insert(value.to_string());
+                    }
+                    Value::Array(values) => {
+                        for value in values {
+                            collect_literal(value, secrets);
+                        }
+                    }
+                    Value::Object(rows) => {
+                        for value in rows.values() {
+                            collect_literal(value, secrets);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            for request in workspace.data.collections.iter().flat_map(|c| &c.requests) {
+                secrets.insert(request.auth.username.clone());
+                if request.auth.kind == "basic"
+                    && !(request.auth.username.is_empty() && request.auth.password.is_empty())
+                {
+                    secrets.insert(format!(
+                        "{}:{}",
+                        request.auth.username, request.auth.password
+                    ));
+                }
+                if let Some((_, query)) = request.url.split_once('?') {
+                    for (key, value) in url::form_urlencoded::parse(
+                        query.split('#').next().unwrap_or_default().as_bytes(),
+                    ) {
+                        if sensitive(&key) {
+                            secrets.insert(value.into_owned());
+                        }
+                    }
+                }
+                if let Ok(url) = url::Url::parse(&request.url) {
+                    secrets.insert(url.username().into());
+                    if let Some(password) = url.password() {
+                        secrets.insert(password.into());
+                    }
+                    for (key, value) in url.query_pairs() {
+                        if sensitive(&key) {
+                            secrets.insert(value.into_owned());
+                        }
+                    }
+                }
+                if request.body_kind == "form" {
+                    for (key, value) in url::form_urlencoded::parse(request.body.as_bytes()) {
+                        if sensitive(&key) {
+                            secrets.insert(value.into_owned());
+                        }
+                    }
+                } else if let Ok(value) = serde_json::from_str::<Value>(&request.body) {
+                    collect(&value, &mut secrets);
+                }
+            }
+            secrets.retain(|text| !template_reference(text));
+        }
         secrets.remove("");
         if secrets.iter().any(|value| value.len() > 4096)
             || secrets.iter().map(String::len).sum::<usize>() > 16384
@@ -433,6 +522,33 @@ impl ExportPrivacy {
                 matcher: None,
                 withhold: true,
             };
+        }
+        if generation {
+            use base64::{
+                Engine,
+                engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+            };
+            let mut patterns = std::collections::BTreeSet::new();
+            for text in &secrets {
+                patterns.insert(text.clone());
+                patterns.insert(STANDARD.encode(text));
+                patterns.insert(URL_SAFE_NO_PAD.encode(text));
+                let form: String = url::form_urlencoded::byte_serialize(text.as_bytes()).collect();
+                patterns.insert(form.clone());
+                patterns.insert(form.replace('+', "%20"));
+                patterns.insert(form.to_ascii_lowercase());
+                if let Ok(mut url) = url::Url::parse("https://privacy.invalid/") {
+                    url.set_path(text);
+                    patterns.insert(url.path().trim_start_matches('/').into());
+                }
+            }
+            if patterns.iter().map(String::len).sum::<usize>() > 65536 {
+                return Self {
+                    matcher: None,
+                    withhold: true,
+                };
+            }
+            secrets = patterns;
         }
         if secrets.is_empty() {
             return Self {
@@ -499,6 +615,55 @@ impl ExportPrivacy {
         };
         visit(&mut value, self);
         serde_json::to_string_pretty(&value).unwrap_or_default()
+    }
+    fn screen_generation_text(&self, text: &str) -> String {
+        use base64::{
+            Engine,
+            engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+        };
+        let literal = self.screen_text(text);
+        if literal != text {
+            return literal;
+        }
+        // Whole string values and explicit Basic header values can carry an old
+        // username plus a still-private password. Decode with the mature codec;
+        // never scan arbitrary encodings or expose decoded data in output.
+        let encoded = text.strip_prefix("Basic ").unwrap_or(text);
+        if encoded.len() >= 8
+            && encoded.len() <= 16384
+            && let Ok(bytes) = STANDARD
+                .decode(encoded)
+                .or_else(|_| URL_SAFE_NO_PAD.decode(encoded))
+            && let Ok(decoded) = std::str::from_utf8(&bytes)
+            && self.screen_text(decoded) != decoded
+        {
+            return "[REDACTED]".into();
+        }
+        literal
+    }
+    fn screen_generation_json(&self, text: &str) -> String {
+        let Ok(mut value) = serde_json::from_str::<Value>(text) else {
+            return self.screen_generation_text(text);
+        };
+        fn walk(value: &mut Value, privacy: &ExportPrivacy) {
+            match value {
+                Value::String(text) => *text = privacy.screen_generation_text(text),
+                Value::Array(values) => {
+                    for value in values {
+                        walk(value, privacy);
+                    }
+                }
+                Value::Object(rows) => {
+                    rows.retain(|key, _| privacy.screen_generation_text(key) == *key);
+                    for value in rows.values_mut() {
+                        walk(value, privacy);
+                    }
+                }
+                _ => {}
+            }
+        }
+        walk(&mut value, self);
+        self.screen_json(&serde_json::to_string(&value).unwrap_or_default())
     }
     fn screen_xml(&self, source: &str, definitions: bool) -> String {
         let safe = if definitions {
@@ -582,4 +747,133 @@ fn collect_mcp_private_args(args: &[String], secrets: &mut std::collections::BTr
             hidden = true;
         }
     }
+}
+
+pub(super) fn generation_request(
+    source: &Workspace,
+    request_id: &str,
+    include_secrets: bool,
+) -> anyhow::Result<moleapi_core::RequestSpec> {
+    let request = source
+        .data
+        .collections
+        .iter()
+        .flat_map(|c| &c.requests)
+        .find(|r| r.id == request_id)
+        .ok_or_else(|| anyhow::anyhow!("Request not found"))?;
+    if include_secrets {
+        return Ok(request.clone());
+    }
+    let privacy = ExportPrivacy::from_workspace(source, true);
+    anyhow::ensure!(
+        !privacy.withhold,
+        "Request privacy budget exceeded; default generation withheld"
+    );
+    let mut request = request.clone();
+    if !template_reference(&request.auth.token) {
+        request.auth.token = "{{TOKEN}}".into();
+    }
+    if !template_reference(&request.auth.username) {
+        request.auth.username = "{{USERNAME}}".into();
+    }
+    if !template_reference(&request.auth.password) {
+        request.auth.password = "{{PASSWORD}}".into();
+    }
+    request.url = if let Ok(mut url) = url::Url::parse(&request.url) {
+        let _ = url.set_username("");
+        let _ = url.set_password(None);
+        let rows = url
+            .query_pairs()
+            .map(|(key, value)| {
+                let hidden = sensitive(&key);
+                (
+                    privacy.screen_generation_text(&key),
+                    if hidden {
+                        "{{REDACTED}}".into()
+                    } else {
+                        privacy.screen_generation_text(&value)
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+        if !rows.is_empty() {
+            url.query_pairs_mut().clear().extend_pairs(rows);
+        }
+        url.to_string()
+    } else if let Some((base, query)) = request.url.split_once('?') {
+        let (query, fragment) = query
+            .split_once('#')
+            .map(|(q, f)| (q, Some(f)))
+            .unwrap_or((query, None));
+        let query = url::form_urlencoded::Serializer::new(String::new())
+            .extend_pairs(
+                url::form_urlencoded::parse(query.as_bytes()).map(|(key, value)| {
+                    let hidden = sensitive(&key);
+                    (
+                        privacy.screen_generation_text(&key),
+                        if hidden {
+                            "{{REDACTED}}".into()
+                        } else {
+                            privacy.screen_generation_text(&value)
+                        },
+                    )
+                }),
+            )
+            .finish();
+        let mut result = format!("{}?{query}", privacy.screen_text(base));
+        if let Some(fragment) = fragment {
+            result.push('#');
+            result.push_str(&privacy.screen_text(fragment));
+        }
+        result
+    } else {
+        privacy.screen_text(&request.url)
+    };
+    request.body = if request.body_kind == "form" {
+        url::form_urlencoded::Serializer::new(String::new())
+            .extend_pairs(url::form_urlencoded::parse(request.body.as_bytes()).map(
+                |(key, value)| {
+                    let hidden = sensitive(&key);
+                    (
+                        privacy.screen_generation_text(&key),
+                        if hidden {
+                            "{{REDACTED}}".into()
+                        } else {
+                            privacy.screen_generation_text(&value)
+                        },
+                    )
+                },
+            ))
+            .finish()
+    } else {
+        redact_embedded_json(&request.body)
+    };
+    for row in request.headers.iter_mut().chain(request.query.iter_mut()) {
+        row.local_value = None;
+        if row.secret == Some(true) || sensitive(&row.key) {
+            row.value = "{{REDACTED}}".into();
+        }
+    }
+    // Screen user data, never the fixed RequestSpec/Pair/Auth schema keys.
+    // A common credential such as "user" must not delete auth.username.
+    request.url = privacy.screen_text(&request.url);
+    request.body = if serde_json::from_str::<Value>(&request.body).is_ok() {
+        privacy.screen_generation_json(&request.body)
+    } else {
+        privacy.screen_generation_text(&request.body)
+    };
+    for row in request.headers.iter_mut().chain(request.query.iter_mut()) {
+        row.key = privacy.screen_generation_text(&row.key);
+        row.value = privacy.screen_generation_text(&row.value);
+    }
+    request.auth.username = privacy.screen_text(&request.auth.username);
+    request.auth.password = privacy.screen_text(&request.auth.password);
+    request.auth.token = privacy.screen_text(&request.auth.token);
+    Ok(request)
+}
+
+fn template_reference(text: &str) -> bool {
+    text.strip_prefix("{{")
+        .and_then(|s| s.strip_suffix("}}"))
+        .is_some_and(|key| !key.trim().is_empty() && !key.contains(['{', '}']))
 }

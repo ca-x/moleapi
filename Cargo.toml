@@ -1,7 +1,7 @@
 [workspace]
 exclude = ["vendor/a2a-rs","vendor/a2a-types","vendor/a2a-client", "vendor/a2a-client-legacy", "vendor/rmcp", "vendor/graphql-ws-client", "vendor/cynic-introspection", "vendor/protox-parse", "vendor/rust_socketio", "vendor/rust_engineio", "vendor/rumqttc", "vendor/wsdl"]
-members = ["crates/core", "crates/server", "crates/formats", "crates/script-runtime", "crates/protocols", "desktop"]
-default-members = ["crates/core", "crates/server", "crates/formats", "crates/script-runtime", "crates/protocols"]
+members = ["crates/core", "crates/server", "crates/formats", "crates/script-runtime", "crates/protocols", "crates/generation", "desktop"]
+default-members = ["crates/core", "crates/server", "crates/formats", "crates/script-runtime", "crates/protocols", "crates/generation"]
 resolver = "3"
 
 [workspace.package]

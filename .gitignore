@@ -18,3 +18,5 @@ __pycache__/
 *.tsbuildinfo
 /desktop/icons/android/
 /desktop/icons/ios/
+
+/tools/snippets/node_modules

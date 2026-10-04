@@ -25,6 +25,7 @@ const GraphQLWorkbench = lazy(() => import("../graphql/GraphQLWorkbench"));
 const GrpcWorkbench = lazy(() => import("../grpc/GrpcWorkbench"));
 const SocketIoWorkbench = lazy(() => import("../socketio/SocketIoWorkbench"));
 const MqttWorkbench = lazy(() => import("../mqtt/MqttWorkbench"));
+const GenerationDialog = lazy(() => import("../generation/GenerationDialog"));
 const A2aWorkbench = lazy(() => import("../a2a/A2aWorkbench"));
 import { a2aConfig } from "../a2a/model";
 const McpWorkbench = lazy(() => import("../mcp/McpWorkbench"));
@@ -71,6 +72,7 @@ export default function RequestEditor({
   error: string;
 }) {
   const [tab, setTab] = useState("query");
+  const [generationOpen, setGenerationOpen] = useState(false);
   const kind = request.protocol?.kind || "http";
   const live = ["sse", "websocket"].includes(kind);
   const grpc = kind === "grpc";
@@ -189,6 +191,7 @@ export default function RequestEditor({
   };
   return (
     <div className="request-workspace">
+      {generationOpen && <Suspense fallback={null}><GenerationDialog open={generationOpen} onOpenChange={setGenerationOpen} /></Suspense>}
       <header className="request-heading">
         <Flex direction="column" gap="1">
           <Text size="1" color="gray">
@@ -226,6 +229,7 @@ export default function RequestEditor({
             <Save size={15} />
             保存
           </Button>
+          <Button variant="soft" color="gray" disabled={kind !== "http"} onClick={() => setGenerationOpen(true)}>生成代码</Button>
           <ToolButton
             label={
               kind === "http" ? "复制 cURL 模板" : "此类型暂不提供 cURL 模板"

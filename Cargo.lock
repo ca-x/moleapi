@@ -3802,6 +3802,7 @@ dependencies = [
  "aho-corasick",
  "anyhow",
  "async-graphql-parser",
+ "base64 0.22.1",
  "jsonschema 0.33.0",
  "moleapi-core",
  "oas3",
@@ -3812,6 +3813,21 @@ dependencies = [
  "shell-words",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "moleapi-generation"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "moleapi-core",
+ "moleapi-formats",
+ "rquickjs",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "url",
 ]
 
 [[package]]
@@ -3905,6 +3921,7 @@ dependencies = [
  "mime_guess",
  "moleapi-core",
  "moleapi-formats",
+ "moleapi-generation",
  "moleapi-protocols",
  "moleapi-script-runtime",
  "percent-encoding",

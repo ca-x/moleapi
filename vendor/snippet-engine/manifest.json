@@ -1,0 +1,6 @@
+{
+  "engine": "@scalar/snippetz",
+  "version": "0.10.5",
+  "polyfills": "core-js@3.49.0",
+  "sha256": "fbe5f10fd8ceb7ae3aba032050aa74c42ec0ad8ae4b36adcc43d4352d93da304"
+}

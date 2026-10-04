@@ -185,3 +185,12 @@ pub(crate) fn data(
         specifications: vec![],
     }
 }
+
+/// Screen a saved HTTP request for generated previews without resolving variables.
+pub fn generation_request(
+    workspace: &Workspace,
+    request_id: &str,
+    include_secrets: bool,
+) -> Result<moleapi_core::RequestSpec> {
+    redact::generation_request(workspace, request_id, include_secrets)
+}

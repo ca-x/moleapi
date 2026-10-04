@@ -20,3 +20,5 @@ url = "2"
 async-graphql-parser = "7.2.1"
 
 aho-corasick = "1"
+
+base64 = "0.22"

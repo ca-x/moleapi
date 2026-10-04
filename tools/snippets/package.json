@@ -1,0 +1,1 @@
+{"name":"moleapi-snippet-engine","private":true,"type":"module","scripts":{"build":"node build.mjs"},"dependencies":{"@scalar/snippetz":"0.10.5","core-js":"3.49.0"},"devDependencies":{"esbuild":"0.25.12"}}

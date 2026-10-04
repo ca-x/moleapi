@@ -258,6 +258,7 @@ mod tests {
             local: false,
             sync_lock: std::sync::Arc::new(tokio::sync::Mutex::new(())),
             script_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
+            generation_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
             protocol_sessions: moleapi_protocols::SessionManager::new(),
             a2a_sources: std::sync::Arc::new(crate::a2a::Sources::default()),
             protocol_admission: std::sync::Arc::new(
