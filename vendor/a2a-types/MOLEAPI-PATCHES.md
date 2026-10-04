@@ -1,0 +1,1 @@
+Upstream a2a-types 0.2.0 Apache-2.0. Use pbjson_build supported ignore_unknown_fields to inspect Agent Cards carrying vendor fields. Canonical originals and raw card JSON remain preserved separately. No field renaming or protocol translation.

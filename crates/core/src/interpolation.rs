@@ -119,6 +119,10 @@ pub fn resolve_request(
             )?;
         }
     }
+    if request.protocol.is_a2a() {
+        value["protocol"]["params_source"] = "{}".into();
+        value["protocol"]["card_source"] = serde_json::Value::Null;
+    }
     if request.protocol.is_mcp() {
         value["protocol"]["arguments_source"] = "{}".into();
         value["protocol"]["config_source"] = serde_json::Value::Null;
@@ -230,6 +234,12 @@ pub fn resolve_request(
     {
         config.arguments_source = original.arguments_source.clone();
         config.config_source = original.config_source.clone();
+    }
+    if let (Protocol::A2a { config }, Protocol::A2a { config: original }) =
+        (&mut resolved.protocol, &request.protocol)
+    {
+        config.params_source = original.params_source.clone();
+        config.card_source = original.card_source.clone();
     }
     resolved.pre_request_script = request.pre_request_script.clone();
     resolved.post_response_script = request.post_response_script.clone();

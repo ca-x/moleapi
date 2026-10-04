@@ -1,0 +1,66 @@
+//! Error types for client adapters
+
+use crate::adapter::error::describe_transport_error;
+use crate::domain::A2AError;
+use std::io;
+use thiserror::Error;
+
+/// Error type for HTTP client adapter
+#[derive(Error, Debug)]
+#[cfg(any(feature = "http-client", feature = "jsonrpc-client", feature = "auth"))]
+pub enum HttpClientError {
+    /// Reqwest client error
+    #[error("HTTP client error: {0}")]
+    Reqwest(#[from] reqwest::Error),
+
+    /// IO error during HTTP operations
+    #[error("IO error: {0}")]
+    Io(#[from] io::Error),
+
+    /// Error during request processing
+    #[error("Request error: {0}")]
+    Request(String),
+
+    /// Error with HTTP response
+    #[error("Response error: {status} - {message}")]
+    Response { status: u16, message: String },
+
+    /// Connection timeout
+    #[error("Connection timeout")]
+    Timeout,
+}
+
+/// A `reqwest::Client`, built rather than `Client::new()`-ed. `new()` unwraps
+/// the builder, and since reqwest 0.13 the builder fails on a machine with no
+/// CA bundle ("No CA certificates were loaded from the system") — a
+/// deployment fault, which is an error to report, not a panic to hit in a
+/// constructor. Every reqwest client in this crate comes through here.
+#[cfg(any(feature = "http-client", feature = "jsonrpc-client", feature = "auth"))]
+pub(crate) fn http_client() -> Result<reqwest::Client, A2AError> {
+    reqwest::Client::builder()
+        .build()
+        .map_err(|e| HttpClientError::Reqwest(e).into())
+}
+
+// Conversion from adapter errors to domain errors
+#[cfg(any(feature = "http-client", feature = "jsonrpc-client", feature = "auth"))]
+impl From<HttpClientError> for A2AError {
+    fn from(error: HttpClientError) -> Self {
+        match error {
+            // Flattened to a string here, so the cause has to come with it —
+            // `reqwest::Error` prints none of it on its own.
+            HttpClientError::Reqwest(e) => A2AError::Internal(format!(
+                "HTTP client error: {}",
+                describe_transport_error(&e)
+            )),
+            HttpClientError::Io(e) => A2AError::Io(e),
+            HttpClientError::Request(msg) => {
+                A2AError::Internal(format!("HTTP request error: {}", msg))
+            }
+            HttpClientError::Response { status, message } => {
+                A2AError::Internal(format!("HTTP response error: {} - {}", status, message))
+            }
+            HttpClientError::Timeout => A2AError::Internal("HTTP request timeout".to_string()),
+        }
+    }
+}

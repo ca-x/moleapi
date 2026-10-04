@@ -27,6 +27,12 @@ export function appendEvents(
 export function messageContent(event: ProtocolEvent): string {
   const message = event.message;
   switch (message.kind) {
+    case "a2a_ready":
+    case "a2a_result":
+    case "a2a_stream":
+    case "a2a_error":
+    case "a2a_finished":
+      return JSON.stringify(message, null, 2);
     case "mcp_initialized":
     case "mcp_capabilities":
     case "mcp_result":

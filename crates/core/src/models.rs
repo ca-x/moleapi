@@ -65,6 +65,10 @@ pub enum Protocol {
         #[serde(flatten)]
         config: Box<crate::MqttConfig>,
     },
+    A2a {
+        #[serde(flatten)]
+        config: Box<crate::A2aConfig>,
+    },
     Mcp {
         #[serde(flatten)]
         config: Box<crate::McpConfig>,
@@ -121,6 +125,9 @@ fn empty_object() -> serde_json::Value {
     serde_json::json!({})
 }
 impl Protocol {
+    pub fn is_a2a(&self) -> bool {
+        matches!(self, Self::A2a { .. })
+    }
     pub fn is_mcp(&self) -> bool {
         matches!(self, Self::Mcp { .. })
     }

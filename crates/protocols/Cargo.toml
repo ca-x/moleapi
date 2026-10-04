@@ -48,6 +48,12 @@ sse-stream = "0.2.6"
 process-wrap = { version = "10", features = ["tokio1"] }
 jsonschema = { version = "=0.58.5", default-features = false }
 
+
+a2a-client = { path = "../../vendor/a2a-client" }
+a2a-client-legacy = { path = "../../vendor/a2a-client-legacy" }
+a2a-types = "=0.2.0"
+a2a-types-legacy = { package = "a2a-types", version = "=0.1.1" }
+
 [dev-dependencies]
 tempfile = "3"
 rcgen = "0.14"

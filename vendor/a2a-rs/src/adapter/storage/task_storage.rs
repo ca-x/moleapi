@@ -1,0 +1,1387 @@
+//! In-memory task storage implementation
+
+// This module is already conditionally compiled with #[cfg(feature = "server")] in mod.rs
+
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
+use tokio::sync::Mutex; // Changed from std::sync::Mutex
+
+use crate::adapter::business::push_notification::{
+    PushNotificationRegistry, PushNotificationSender,
+};
+
+#[cfg(feature = "http-client")]
+use crate::adapter::business::push_notification::HttpPushNotificationSender;
+#[cfg(not(feature = "http-client"))]
+use crate::adapter::business::push_notification::NoopPushNotificationSender;
+use crate::domain::{
+    A2AError, ContextId, ContextState, Conversation, Digest, Message, ReadRefresh, Remembered,
+    RetentionPolicy, Seq, SequencedMessage, StateKey, StateScope, Swept, Task, TaskId,
+    TaskPushNotificationConfig, TaskState, TaskStateExt, VersionedTask,
+};
+use crate::port::{
+    AsyncContextStateStore, AsyncConversationStore, AsyncNotificationManager, AsyncPushNotifier,
+    AsyncRetention, AsyncTaskLifecycle, AsyncTaskQuery, AsyncTaskVersioning,
+    context_state::scope_key,
+};
+
+/// The state bag's buckets: a scope and what that scope files under, to the
+/// names and values kept there.
+type StateBuckets = HashMap<(StateScope, String), HashMap<String, String>>;
+
+/// Simple in-memory task storage for testing and example purposes.
+///
+/// Persistence-only: streaming fan-out lives in
+/// [`InMemoryStreamingHandler`](crate::adapter::InMemoryStreamingHandler) and
+/// push-webhook delivery behind the [`AsyncPushNotifier`] port (this struct hands
+/// out its registry via [`push_notifier`](Self::push_notifier)). The store still
+/// owns push-config CRUD ([`AsyncNotificationManager`]) because that is config
+/// *persistence*.
+pub struct InMemoryTaskStorage {
+    /// Tasks stored by ID
+    pub(crate) tasks: Arc<Mutex<HashMap<String, Task>>>,
+    /// Per-task optimistic-concurrency version, bumped on every mutation.
+    ///
+    /// A separate map keyed by the same task id. Mutators always lock `tasks`
+    /// first and `versions` second, so the two stay consistent and never
+    /// deadlock (see [`AsyncTaskVersioning`]).
+    pub(crate) versions: Arc<Mutex<HashMap<String, u64>>>,
+    /// The conversation log, keyed by context id.
+    ///
+    /// A separate append-only list rather than something derived from `tasks`,
+    /// mirroring what the SQL adapter keeps in `task_history`. Deriving it would
+    /// need a total order across tasks that `Task` does not carry, and the point
+    /// of having both adapters is that they model the same thing.
+    ///
+    /// The lock order is `tasks` → `versions` → `conversations` → `digests` →
+    /// `context_owners` → `context_state` → `context_touched` →
+    /// `principal_touched`. `update_status` takes the first three in that order
+    /// and [`sweep`](AsyncRetention::sweep) takes all of them; every other
+    /// caller takes one at a time.
+    pub(crate) conversations: Arc<Mutex<HashMap<String, Vec<SequencedMessage>>>>,
+    /// Appended digests, keyed by context id. Newest wins on load, by watermark
+    /// rather than by position, since two concurrent compactions can append out
+    /// of watermark order.
+    pub(crate) digests: Arc<Mutex<HashMap<String, Vec<Digest>>>>,
+    /// The principal that first wrote to each context. `None` is unowned and
+    /// stays readable by anyone.
+    pub(crate) context_owners: Arc<Mutex<HashMap<String, Option<String>>>>,
+    /// The state bag, in the two buckets it is partitioned into: keyed by scope
+    /// and by whatever that scope files under — a context id for
+    /// [`StateScope::Context`], a principal for [`StateScope::User`]. Held apart
+    /// from `conversations` because a `user:` bucket belongs to no context.
+    pub(crate) context_state: Arc<Mutex<StateBuckets>>,
+    /// When each context was last **written** to, which is what
+    /// [`RetentionPolicy`] measures idleness from.
+    ///
+    /// A separate map because nothing else here carries a wall-clock time a
+    /// sweep could read: `SequencedMessage` has a `Seq` and no timestamp, and
+    /// the state bag has values and no timestamps. It mirrors what the SQL
+    /// adapter gets for free from `updated_at` columns — including that reads
+    /// do not bump it, so both stores expire a read-only context alike.
+    pub(crate) context_touched: Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
+    /// When each principal's `user:`-scoped state was last written.
+    ///
+    /// Apart from `context_touched` for the reason the scope exists: a `user:`
+    /// bucket outlives every context it was written from, so no context's
+    /// idleness says whether it is stale. The SQL adapter reads the same thing
+    /// as `MAX(updated_at)` over the principal's rows.
+    pub(crate) principal_touched: Arc<Mutex<HashMap<String, DateTime<Utc>>>>,
+    /// Whether a read of a principal's `user:` bag refreshes `principal_touched`.
+    ///
+    /// [`ReadRefresh::never`] by default, which is the behaviour every other
+    /// timestamp here has: reads record nothing. The SQL adapter carries the
+    /// same value and applies it to the same bucket.
+    pub(crate) read_refresh: ReadRefresh,
+    /// Hands out conversation sequence numbers. Shared across contexts, which is
+    /// harmless: `Seq` only has to be monotonic *within* one.
+    pub(crate) next_seq: Arc<AtomicU64>,
+    /// Push notification registry (config store + delivery backend)
+    pub(crate) push_notification_registry: Arc<PushNotificationRegistry>,
+}
+
+impl InMemoryTaskStorage {
+    /// Create a new empty task storage
+    pub fn new() -> Self {
+        // Use the appropriate push notification sender based on available features
+        #[cfg(feature = "http-client")]
+        let push_sender = HttpPushNotificationSender::new();
+        #[cfg(not(feature = "http-client"))]
+        let push_sender = NoopPushNotificationSender;
+
+        let push_registry = PushNotificationRegistry::new(push_sender);
+
+        Self {
+            tasks: Arc::new(Mutex::new(HashMap::new())),
+            versions: Arc::new(Mutex::new(HashMap::new())),
+            conversations: Arc::new(Mutex::new(HashMap::new())),
+            digests: Arc::new(Mutex::new(HashMap::new())),
+            context_owners: Arc::new(Mutex::new(HashMap::new())),
+            context_state: Arc::new(Mutex::new(HashMap::new())),
+            context_touched: Arc::new(Mutex::new(HashMap::new())),
+            principal_touched: Arc::new(Mutex::new(HashMap::new())),
+            read_refresh: ReadRefresh::never(),
+            next_seq: Arc::new(AtomicU64::new(1)),
+            push_notification_registry: Arc::new(push_registry),
+        }
+    }
+
+    /// Create a new task storage with a custom push notification sender
+    pub fn with_push_sender(push_sender: impl PushNotificationSender + 'static) -> Self {
+        let push_registry = PushNotificationRegistry::new(push_sender);
+
+        Self {
+            tasks: Arc::new(Mutex::new(HashMap::new())),
+            versions: Arc::new(Mutex::new(HashMap::new())),
+            conversations: Arc::new(Mutex::new(HashMap::new())),
+            digests: Arc::new(Mutex::new(HashMap::new())),
+            context_owners: Arc::new(Mutex::new(HashMap::new())),
+            context_state: Arc::new(Mutex::new(HashMap::new())),
+            context_touched: Arc::new(Mutex::new(HashMap::new())),
+            principal_touched: Arc::new(Mutex::new(HashMap::new())),
+            read_refresh: ReadRefresh::never(),
+            next_seq: Arc::new(AtomicU64::new(1)),
+            push_notification_registry: Arc::new(push_registry),
+        }
+    }
+
+    /// Let a read of a principal's `user:` bag count as keeping it alive.
+    ///
+    /// Off by default. See [`ReadRefresh`] for what it costs and why the window
+    /// is not a bool; pair it with the [`RetentionPolicy`] a sweep will run
+    /// under, which [`ReadRefresh::halfway_through`] does from the policy
+    /// itself.
+    #[must_use]
+    pub fn with_read_refresh(mut self, read_refresh: ReadRefresh) -> Self {
+        self.read_refresh = read_refresh;
+        self
+    }
+
+    /// Bump (or initialize) the stored version for a task, returning the new
+    /// value. Callers already hold the `tasks` lock; this acquires `versions`
+    /// second, preserving the global lock order.
+    async fn bump_version(&self, task_id: &str) -> u64 {
+        let mut versions = self.versions.lock().await;
+        let v = versions.entry(task_id.to_string()).or_insert(0);
+        *v += 1;
+        *v
+    }
+
+    /// Hand out this store's push-notification registry as an
+    /// [`AsyncPushNotifier`].
+    ///
+    /// The returned notifier shares the same config registry the store writes to
+    /// via [`AsyncNotificationManager::set_config`], so a config registered on
+    /// the store is immediately visible to the notifier at the composition edge.
+    pub fn push_notifier(&self) -> Arc<dyn AsyncPushNotifier> {
+        self.push_notification_registry.clone()
+    }
+}
+
+impl Default for InMemoryTaskStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl InMemoryTaskStorage {
+    /// Record `message` at the end of `context_id`'s conversation.
+    ///
+    /// Callers hold the `tasks` lock; this takes `conversations` after it,
+    /// preserving the order documented on the field.
+    async fn append_to_conversation(&self, context_id: &str, message: Message) {
+        let seq = Seq::new(self.next_seq.fetch_add(1, Ordering::Relaxed));
+        let mut conversations = self.conversations.lock().await;
+        conversations
+            .entry(context_id.to_string())
+            .or_default()
+            .push(SequencedMessage { seq, message });
+    }
+
+    /// Record that `context_id` was written to, for the retention sweep.
+    ///
+    /// Called from the mutators only. A read must not refresh idleness — the SQL
+    /// adapter's `updated_at` columns are not bumped by one either, and two
+    /// stores that disagree about what "idle" means are two retention policies.
+    async fn touch_context(&self, context_id: &str) {
+        let now = Utc::now();
+        let mut touched = self.context_touched.lock().await;
+        // `max`, not overwrite: two turns of one conversation can land out of
+        // order, and the newer write is the one idleness is measured from.
+        touched
+            .entry(context_id.to_string())
+            .and_modify(|at| *at = (*at).max(now))
+            .or_insert(now);
+    }
+
+    /// Record that `principal` had a `user:`-scoped key written.
+    async fn touch_principal(&self, principal: &str) {
+        let now = Utc::now();
+        let mut touched = self.principal_touched.lock().await;
+        touched
+            .entry(principal.to_string())
+            .and_modify(|at| *at = (*at).max(now))
+            .or_insert(now);
+    }
+
+    /// Let this read count as keeping `principal`'s `user:` bag alive, if the
+    /// store was configured to and the bag is old enough to need it.
+    ///
+    /// The one place a read writes a timestamp, and it does so under a rule the
+    /// domain owns rather than one this adapter invented — see [`ReadRefresh`].
+    /// Bumps only an entry that exists: a principal that never wrote a `user:`
+    /// key has no bag to keep alive, and inserting one here would invent a
+    /// write that never happened.
+    ///
+    /// Takes `principal_touched` last, which is the order documented on
+    /// `conversations`.
+    async fn refresh_principal(&self, principal: &str) {
+        if self.read_refresh.after_window().is_none() {
+            return;
+        }
+        let now = Utc::now();
+        let mut touched = self.principal_touched.lock().await;
+        if let Some(at) = touched.get_mut(principal)
+            && self.read_refresh.due(*at, now)
+        {
+            *at = now;
+        }
+    }
+
+    /// Claim `context_id` for `caller` if nobody holds it, then refuse a caller
+    /// that is not the holder.
+    ///
+    /// One method because claim and check race otherwise: two first-turn
+    /// requests would both see "unclaimed" and both write an owner.
+    async fn claim_or_check_context(
+        &self,
+        context_id: &str,
+        caller: Option<&str>,
+    ) -> Result<(), A2AError> {
+        let mut owners = self.context_owners.lock().await;
+        match owners.get(context_id) {
+            // Unowned, either because nothing claimed it or because it was
+            // claimed with no principal. Both stay open.
+            Some(None) => Ok(()),
+            Some(Some(owner)) if Some(owner.as_str()) == caller => Ok(()),
+            Some(Some(_)) => Err(A2AError::ContextAccessDenied {
+                context_id: context_id.to_string(),
+            }),
+            None => {
+                owners.insert(context_id.to_string(), caller.map(str::to_string));
+                drop(owners);
+                // The claim itself is a write — it is what inserts the SQL
+                // adapter's `contexts` row — so a context opened and then only
+                // read is idle from the moment it was opened, not never.
+                self.touch_context(context_id).await;
+                Ok(())
+            }
+        }
+    }
+}
+
+#[async_trait]
+impl AsyncConversationStore for InMemoryTaskStorage {
+    async fn load(
+        &self,
+        context_id: &ContextId,
+        caller: Option<&str>,
+        limit: Option<u32>,
+    ) -> Result<Conversation, A2AError> {
+        let context_id = context_id.as_str();
+        // Claims on read, not only on write. A handler loads history at the top
+        // of every turn, so the first turn of a conversation is what establishes
+        // who owns it; claiming only on compaction would leave a context
+        // readable by anyone until it first grew long enough to summarize.
+        self.claim_or_check_context(context_id, caller).await?;
+
+        // Highest watermark, not newest appended: two concurrent compactions can
+        // land out of order, and the one covering more is the one to use.
+        let digest = {
+            let digests = self.digests.lock().await;
+            digests.get(context_id).and_then(|digests| {
+                digests
+                    .iter()
+                    .max_by_key(|digest| digest.covers_through)
+                    .cloned()
+            })
+        };
+
+        let watermark = digest
+            .as_ref()
+            .map(|digest| digest.covers_through)
+            .unwrap_or(Seq::START);
+
+        let conversations = self.conversations.lock().await;
+        let mut tail: Vec<SequencedMessage> = conversations
+            .get(context_id)
+            .map(|log| {
+                log.iter()
+                    .filter(|entry| entry.seq > watermark)
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        // Keep the newest when limiting: the older part is what a summary
+        // stands in for, and dropping the recent end would leave the model
+        // answering with the least relevant half of the conversation.
+        if let Some(limit) = limit {
+            let limit = limit as usize;
+            if tail.len() > limit {
+                tail.drain(..tail.len() - limit);
+            }
+        }
+
+        Ok(Conversation { digest, tail })
+    }
+
+    async fn compact(
+        &self,
+        context_id: &ContextId,
+        caller: Option<&str>,
+        digest: Digest,
+    ) -> Result<(), A2AError> {
+        let context_id = context_id.as_str();
+        self.claim_or_check_context(context_id, caller).await?;
+
+        {
+            let mut digests = self.digests.lock().await;
+            digests
+                .entry(context_id.to_string())
+                .or_default()
+                .push(digest);
+        }
+        self.touch_context(context_id).await;
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl AsyncContextStateStore for InMemoryTaskStorage {
+    async fn load_state(
+        &self,
+        context_id: &ContextId,
+        caller: Option<&str>,
+    ) -> Result<ContextState, A2AError> {
+        let context_id = context_id.as_str();
+        // Claimed on read for the same reason the conversation is: whoever holds
+        // a context id would otherwise read what was remembered in it.
+        self.claim_or_check_context(context_id, caller).await?;
+
+        let state = self.context_state.lock().await;
+        let mut loaded = ContextState::new();
+        // The context's own keys, then the caller's. A principal has none when
+        // the agent authenticates nobody, and nothing could have been written
+        // under one either.
+        let buckets = [
+            Some((StateScope::Context, context_id)),
+            caller.map(|caller| (StateScope::User, caller)),
+        ];
+        for (scope, scope_key) in buckets.into_iter().flatten() {
+            let Some(bucket) = state.get(&(scope, scope_key.to_string())) else {
+                continue;
+            };
+            for (name, value) in bucket {
+                match StateKey::scoped(scope, name) {
+                    Ok(key) => loaded.insert(key, value.clone()),
+                    Err(_e) => {
+                        #[cfg(feature = "tracing")]
+                        tracing::warn!("ignoring unusable state key '{name}': {_e}");
+                    }
+                }
+            }
+        }
+        drop(state);
+
+        if let Some(caller) = caller {
+            self.refresh_principal(caller).await;
+        }
+        Ok(loaded)
+    }
+
+    async fn remember(
+        &self,
+        context_id: &ContextId,
+        caller: Option<&str>,
+        key: &StateKey,
+        value: &str,
+    ) -> Result<Remembered, A2AError> {
+        let context_id = context_id.as_str();
+        self.claim_or_check_context(context_id, caller).await?;
+
+        // `None` is `temp:`, which is stored nowhere.
+        let Some(scope_key) = scope_key(key.scope(), context_id, caller, key)? else {
+            return Ok(Remembered::NotStored);
+        };
+
+        let previous = {
+            let mut state = self.context_state.lock().await;
+            state
+                .entry((key.scope(), scope_key.to_string()))
+                .or_default()
+                .insert(key.name().to_string(), value.to_string())
+        };
+
+        // Which clock this write advances follows the scope, not the context it
+        // was written from: a `user:` key outlives every context that touches it.
+        // Advanced even when the value did not move: a write reached the store,
+        // and idleness measures writes.
+        match key.scope() {
+            StateScope::User => self.touch_principal(scope_key).await,
+            _ => self.touch_context(context_id).await,
+        }
+
+        Ok(match previous {
+            None => Remembered::Stored,
+            Some(previous) if previous == value => Remembered::Unchanged,
+            Some(previous) => Remembered::Replaced { previous },
+        })
+    }
+
+    async fn forget(
+        &self,
+        context_id: &ContextId,
+        caller: Option<&str>,
+        key: &StateKey,
+    ) -> Result<bool, A2AError> {
+        let context_id = context_id.as_str();
+        self.claim_or_check_context(context_id, caller).await?;
+
+        let Some(scope_key) = scope_key(key.scope(), context_id, caller, key)? else {
+            return Ok(false);
+        };
+
+        let mut state = self.context_state.lock().await;
+        Ok(state
+            .get_mut(&(key.scope(), scope_key.to_string()))
+            .is_some_and(|bucket| bucket.remove(key.name()).is_some()))
+    }
+}
+
+#[async_trait]
+impl AsyncTaskLifecycle for InMemoryTaskStorage {
+    async fn create(&self, id: &TaskId, context_id: &ContextId) -> Result<Task, A2AError> {
+        let task_id = id.as_str();
+        let context_id = context_id.as_str();
+        let mut tasks_guard = self.tasks.lock().await;
+
+        if tasks_guard.contains_key(task_id) {
+            return Err(A2AError::TaskNotFound(format!(
+                "Task {} already exists",
+                task_id
+            )));
+        }
+
+        let task = Task::new(task_id.to_string(), context_id.to_string());
+        tasks_guard.insert(task_id.to_string(), task.clone());
+        self.bump_version(task_id).await; // version 0 -> 1
+        drop(tasks_guard);
+        self.touch_context(context_id).await;
+
+        Ok(task)
+    }
+
+    async fn update_status(
+        &self,
+        id: &TaskId,
+        state: TaskState,
+        message: Option<Message>,
+    ) -> Result<Task, A2AError> {
+        let task_id = id.as_str();
+        let mut tasks_guard = self.tasks.lock().await;
+
+        let task = tasks_guard
+            .get_mut(task_id)
+            .ok_or_else(|| A2AError::TaskNotFound(task_id.to_string()))?;
+
+        let context_id = task.context_id.clone();
+        let logged = message.clone();
+
+        // Update the task status with the optional message
+        task.update_status(state, message);
+        let updated = task.clone();
+        self.bump_version(task_id).await;
+
+        // The same message goes onto the context's conversation log, which is
+        // what a later turn reads back as history. Only messages: a status
+        // transition carrying none has nothing to record.
+        if let Some(message) = logged {
+            self.append_to_conversation(&context_id, message).await;
+        }
+        drop(tasks_guard);
+        self.touch_context(&context_id).await;
+
+        // Persistence only: announcing the change to streaming subscribers is
+        // the orchestration layer's job (see `TaskStatusBroadcast`), not a side
+        // effect of the mutator.
+        Ok(updated)
+    }
+
+    async fn exists(&self, id: &TaskId) -> Result<bool, A2AError> {
+        let task_id = id.as_str();
+        let tasks_guard = self.tasks.lock().await;
+        Ok(tasks_guard.contains_key(task_id))
+    }
+
+    async fn get(&self, id: &TaskId, history_length: Option<u32>) -> Result<Task, A2AError> {
+        let task_id = id.as_str();
+        // Get the task
+        let task = {
+            let tasks_guard = self.tasks.lock().await;
+
+            let Some(task) = tasks_guard.get(task_id) else {
+                return Err(A2AError::TaskNotFound(task_id.to_string()));
+            };
+
+            // Apply history length limitation if specified
+            task.with_limited_history(history_length)
+        }; // Lock is dropped here
+
+        Ok(task)
+    }
+
+    async fn cancel(&self, id: &TaskId) -> Result<Task, A2AError> {
+        let task_id = id.as_str();
+        let mut tasks_guard = self.tasks.lock().await;
+
+        let Some(task) = tasks_guard.get(task_id) else {
+            return Err(A2AError::TaskNotFound(task_id.to_string()));
+        };
+
+        let mut updated_task = task.clone();
+
+        // Anything that has not finished can be canceled — a queued
+        // (`Submitted`) task most of all, and an `InputRequired` one, where
+        // cancelling is how a client says "never mind". See
+        // `TaskState::is_cancelable`.
+        if !updated_task.status.state.is_cancelable() {
+            return Err(A2AError::TaskNotCancelable(format!(
+                "Task {} has already finished in state {:?} and cannot be canceled",
+                task_id, updated_task.status.state
+            )));
+        }
+
+        // Create a cancellation message to add to history
+        let cancel_message = Message {
+            role: ::buffa::EnumValue::from(crate::domain::Role::Agent),
+            parts: vec![crate::domain::Part::text(format!(
+                "Task {} canceled.",
+                task_id
+            ))],
+            message_id: uuid::Uuid::new_v4().to_string(),
+            task_id: task_id.to_string(),
+            context_id: updated_task.context_id.clone(),
+            ..Default::default()
+        };
+
+        // Update the status with the cancellation message to track in history
+        updated_task.update_status(TaskState::Canceled, Some(cancel_message));
+        let context_id = updated_task.context_id.clone();
+        tasks_guard.insert(task_id.to_string(), updated_task.clone());
+        self.bump_version(task_id).await;
+        drop(tasks_guard);
+        self.touch_context(&context_id).await;
+
+        // Persistence only: the orchestration layer announces the cancellation
+        // to streaming subscribers (see `TaskStatusBroadcast`).
+        Ok(updated_task)
+    }
+}
+
+#[async_trait]
+impl AsyncTaskVersioning for InMemoryTaskStorage {
+    async fn version(&self, id: &TaskId) -> Result<u64, A2AError> {
+        let task_id = id.as_str();
+        let tasks_guard = self.tasks.lock().await;
+        if !tasks_guard.contains_key(task_id) {
+            return Err(A2AError::TaskNotFound(task_id.to_string()));
+        }
+        let versions = self.versions.lock().await;
+        Ok(versions.get(task_id).copied().unwrap_or(0))
+    }
+
+    async fn get_versioned(
+        &self,
+        id: &TaskId,
+        history_length: Option<u32>,
+    ) -> Result<VersionedTask, A2AError> {
+        let task_id = id.as_str();
+        let tasks_guard = self.tasks.lock().await;
+        let Some(task) = tasks_guard.get(task_id) else {
+            return Err(A2AError::TaskNotFound(task_id.to_string()));
+        };
+        let task = task.with_limited_history(history_length);
+        let versions = self.versions.lock().await;
+        let version = versions.get(task_id).copied().unwrap_or(0);
+        Ok(VersionedTask::new(task, version))
+    }
+
+    async fn update_status_checked(
+        &self,
+        id: &TaskId,
+        expected: u64,
+        state: TaskState,
+        message: Option<Message>,
+    ) -> Result<VersionedTask, A2AError> {
+        let task_id = id.as_str();
+        // Lock order: tasks, then versions — the compare-and-swap holds both so
+        // the check and the bump are atomic against every other mutator.
+        let mut tasks_guard = self.tasks.lock().await;
+        let task = tasks_guard
+            .get_mut(task_id)
+            .ok_or_else(|| A2AError::TaskNotFound(task_id.to_string()))?;
+        let mut versions = self.versions.lock().await;
+        let current = versions.get(task_id).copied().unwrap_or(0);
+        if current != expected {
+            return Err(A2AError::VersionConflict {
+                id: task_id.to_string(),
+                expected,
+                actual: current,
+            });
+        }
+        task.update_status(state, message);
+        let new_version = current + 1;
+        versions.insert(task_id.to_string(), new_version);
+        Ok(VersionedTask::new(task.clone(), new_version))
+    }
+}
+
+#[async_trait]
+impl AsyncTaskQuery for InMemoryTaskStorage {
+    async fn list(
+        &self,
+        params: &crate::domain::ListTasksParams,
+    ) -> Result<crate::domain::ListTasksResult, A2AError> {
+        use crate::domain::ListTasksResult;
+
+        let tasks_guard = self.tasks.lock().await;
+
+        // Filter tasks based on parameters
+        let mut filtered_tasks: Vec<_> = tasks_guard
+            .values()
+            .filter(|task| {
+                // Filter by context_id if provided
+                if let Some(ref context_id) = params.context_id
+                    && &task.context_id != context_id
+                {
+                    return false;
+                }
+
+                // Filter by status if provided
+                if let Some(ref status) = params.status
+                    && &task.status.state != status
+                {
+                    return false;
+                }
+
+                // Filter by status_timestamp_after if provided
+                if let Some(status_timestamp_after) = &params.status_timestamp_after
+                    && let Ok(after_dt) =
+                        chrono::DateTime::parse_from_rfc3339(status_timestamp_after)
+                    && let Some(timestamp) = task.status.timestamp_utc()
+                    && timestamp <= after_dt.with_timezone(&chrono::Utc)
+                {
+                    return false;
+                }
+
+                true
+            })
+            .cloned()
+            .collect();
+
+        // Sort by timestamp (most recent first)
+        filtered_tasks.sort_by(|a, b| {
+            let a_time = a
+                .status
+                .timestamp_utc()
+                .map(|t| t.timestamp_millis())
+                .unwrap_or(0);
+            let b_time = b
+                .status
+                .timestamp_utc()
+                .map(|t| t.timestamp_millis())
+                .unwrap_or(0);
+            b_time.cmp(&a_time)
+        });
+
+        let total_size = filtered_tasks.len() as i32;
+
+        // Handle pagination
+        let page_size = params.page_size.unwrap_or(50).clamp(1, 100) as usize;
+        let page_start = if let Some(ref token) = params.page_token {
+            // Parse page token as a number (simple implementation)
+            token.parse::<usize>().unwrap_or(0)
+        } else {
+            0
+        };
+
+        let page_end = (page_start + page_size).min(filtered_tasks.len());
+        let has_more = page_end < filtered_tasks.len();
+
+        // Get the page of tasks
+        let mut page_tasks: Vec<_> = filtered_tasks[page_start..page_end].to_vec();
+
+        // Apply history length limit
+        let history_length = params.history_length.unwrap_or(0);
+        for task in &mut page_tasks {
+            *task = task.with_limited_history(Some(history_length as u32));
+
+            // Remove artifacts if not requested
+            if !params.include_artifacts.unwrap_or(false) {
+                task.artifacts.clear();
+            }
+        }
+
+        // Generate next page token
+        let next_page_token = if has_more {
+            page_end.to_string()
+        } else {
+            String::new()
+        };
+
+        Ok(ListTasksResult {
+            tasks: page_tasks,
+            total_size,
+            page_size: page_size as i32,
+            next_page_token,
+        })
+    }
+}
+
+// AsyncNotificationManager implementation.
+//
+// In-memory storage keeps a single config per task in the push-notification
+// registry, so the multi-config CRUD surface is expressed in those terms.
+#[async_trait]
+impl AsyncNotificationManager for InMemoryTaskStorage {
+    async fn set_config(
+        &self,
+        config: &TaskPushNotificationConfig,
+    ) -> Result<TaskPushNotificationConfig, A2AError> {
+        #[cfg(feature = "tracing")]
+        tracing::info!(
+            task_id = %config.task_id,
+            url = %config.url,
+            "🚀 Registering push notification config for task"
+        );
+
+        // Register with the push notification registry
+        self.push_notification_registry
+            .register(&config.task_id, config.clone())
+            .await?;
+
+        #[cfg(feature = "tracing")]
+        tracing::info!(
+            task_id = %config.task_id,
+            "✅ Push notification config registered successfully"
+        );
+
+        Ok(config.clone())
+    }
+
+    async fn get_config(
+        &self,
+        params: &crate::domain::GetTaskPushNotificationConfigParams,
+    ) -> Result<TaskPushNotificationConfig, A2AError> {
+        match self
+            .push_notification_registry
+            .get_config(&params.id)
+            .await?
+        {
+            Some(config) => Ok(config),
+            None => Err(A2AError::PushNotificationNotSupported),
+        }
+    }
+
+    async fn list_configs(
+        &self,
+        params: &crate::domain::ListTaskPushNotificationConfigsParams,
+    ) -> Result<Vec<TaskPushNotificationConfig>, A2AError> {
+        // In-memory storage supports one config per task; return it as a
+        // single-item vec (or empty if none registered).
+        match self
+            .push_notification_registry
+            .get_config(&params.id)
+            .await?
+        {
+            Some(config) => Ok(vec![config]),
+            None => Ok(vec![]),
+        }
+    }
+
+    async fn delete_config(
+        &self,
+        params: &crate::domain::DeleteTaskPushNotificationConfigParams,
+    ) -> Result<(), A2AError> {
+        // In-memory storage keeps a single config per task, so config_id is
+        // not used for lookup. Idempotent per the v1.0.0 spec.
+        self.push_notification_registry
+            .unregister(&params.id)
+            .await?;
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl AsyncRetention for InMemoryTaskStorage {
+    /// Sweep under one set of guards.
+    ///
+    /// Every map is locked for the whole sweep, in the order documented on
+    /// `conversations`. Phasing it — pick the ids, release, then delete — would
+    /// let a turn arrive on a context between the two and leave that context
+    /// with its tasks deleted and its conversation intact. A sweep runs once a
+    /// night against contexts nothing has touched for days, so holding the
+    /// store still for it costs nothing anyone will notice.
+    async fn sweep(&self, policy: &RetentionPolicy, now: DateTime<Utc>) -> Result<Swept, A2AError> {
+        let mut swept = Swept::default();
+
+        if let Some(cutoff) = policy.context_cutoff(now) {
+            let mut tasks = self.tasks.lock().await;
+            let mut versions = self.versions.lock().await;
+            let mut conversations = self.conversations.lock().await;
+            let mut digests = self.digests.lock().await;
+            let mut owners = self.context_owners.lock().await;
+            let mut state = self.context_state.lock().await;
+            let mut touched = self.context_touched.lock().await;
+
+            // A context is idle when its last write is older than the cutoff.
+            // One with no entry at all was never written and has nothing to
+            // sweep, so it is skipped rather than treated as infinitely old.
+            let idle: Vec<String> = touched
+                .iter()
+                .filter(|(_, at)| **at < cutoff)
+                .map(|(context_id, _)| context_id.clone())
+                .collect();
+
+            // Every task of every idle context, in one pass over `tasks` rather
+            // than one pass per context.
+            let mut by_context: HashMap<&str, Vec<&Task>> = HashMap::new();
+            for task in tasks.values() {
+                by_context
+                    .entry(task.context_id.as_str())
+                    .or_default()
+                    .push(task);
+            }
+
+            let mut sweepable = Vec::new();
+            for context_id in &idle {
+                let held = by_context.get(context_id.as_str());
+
+                // Leave a context alone while anything in it might still be
+                // running. `is_settled` counts `input-required` and
+                // `auth-required` as settled — those wait on a caller, and after
+                // the retention window the caller is not coming back — so this
+                // holds back exactly `submitted`, `working`, and a state this
+                // build cannot read.
+                let running = held
+                    .is_some_and(|tasks| tasks.iter().any(|task| !task.status.state.is_settled()));
+                if running {
+                    continue;
+                }
+
+                let doomed: Vec<String> = held
+                    .map(|tasks| tasks.iter().map(|task| task.id.clone()).collect())
+                    .unwrap_or_default();
+                sweepable.push((context_id.clone(), doomed));
+            }
+            // `by_context` borrows `tasks`, which the deletes below need mutably.
+            drop(by_context);
+
+            for (context_id, doomed) in sweepable {
+                for task_id in &doomed {
+                    tasks.remove(task_id);
+                    versions.remove(task_id);
+                    // The SQL sweep deletes `push_notification_configs` with the
+                    // task; this is the same delete. A webhook left registered
+                    // against a task that no longer exists is a URL the agent
+                    // would keep as long as the process lives. The registry has
+                    // a lock of its own and takes none of the store's, so
+                    // calling it under these guards cannot deadlock.
+                    self.push_notification_registry.unregister(task_id).await?;
+                }
+                swept.tasks += doomed.len() as u64;
+
+                swept.messages += conversations
+                    .remove(&context_id)
+                    .map_or(0, |log| log.len() as u64);
+                swept.digests += digests
+                    .remove(&context_id)
+                    .map_or(0, |appended| appended.len() as u64);
+                swept.state_keys += state
+                    .remove(&(StateScope::Context, context_id.clone()))
+                    .map_or(0, |bucket| bucket.len() as u64);
+                owners.remove(&context_id);
+                touched.remove(&context_id);
+                swept.contexts += 1;
+            }
+        }
+
+        if let Some(cutoff) = policy.user_state_cutoff(now) {
+            let mut state = self.context_state.lock().await;
+            let mut touched = self.principal_touched.lock().await;
+
+            let expired: Vec<String> = touched
+                .iter()
+                .filter(|(_, at)| **at < cutoff)
+                .map(|(principal, _)| principal.clone())
+                .collect();
+
+            for principal in expired {
+                swept.state_keys += state
+                    .remove(&(StateScope::User, principal.clone()))
+                    .map_or(0, |bucket| bucket.len() as u64);
+                touched.remove(&principal);
+            }
+        }
+
+        Ok(swept)
+    }
+}
+
+impl Clone for InMemoryTaskStorage {
+    fn clone(&self) -> Self {
+        Self {
+            tasks: self.tasks.clone(),
+            versions: self.versions.clone(),
+            conversations: self.conversations.clone(),
+            digests: self.digests.clone(),
+            context_owners: self.context_owners.clone(),
+            context_state: self.context_state.clone(),
+            context_touched: self.context_touched.clone(),
+            principal_touched: self.principal_touched.clone(),
+            read_refresh: self.read_refresh,
+            next_seq: self.next_seq.clone(),
+            push_notification_registry: self.push_notification_registry.clone(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::ContextId;
+
+    fn tid(s: &str) -> TaskId {
+        s.parse().unwrap()
+    }
+    fn cid(s: &str) -> ContextId {
+        s.parse().unwrap()
+    }
+
+    /// Ageing a bag needs a timestamp in the past, which no port lets a caller
+    /// write — so the half of `ReadRefresh` that says a read *saves* something
+    /// is asserted here, against `principal_touched` directly. The shared body
+    /// in `tests/context_state_test.rs` covers what a caller can reach.
+    async fn age_the_bag(store: &InMemoryTaskStorage, principal: &str, to: DateTime<Utc>) {
+        store
+            .principal_touched
+            .lock()
+            .await
+            .insert(principal.to_string(), to);
+    }
+
+    async fn bag_written_at(store: &InMemoryTaskStorage, principal: &str) -> DateTime<Utc> {
+        store.principal_touched.lock().await[principal]
+    }
+
+    #[tokio::test]
+    async fn a_read_refreshes_a_bag_that_is_old_enough() {
+        let day = std::time::Duration::from_secs(24 * 60 * 60);
+        let store = InMemoryTaskStorage::new().with_read_refresh(ReadRefresh::after(day));
+        let context = cid("ctx-refresh");
+
+        store
+            .remember(
+                &context,
+                Some("alice"),
+                &StateKey::scoped(StateScope::User, "name").unwrap(),
+                "Emil",
+            )
+            .await
+            .unwrap();
+
+        let long_ago = Utc::now() - chrono::TimeDelta::days(7);
+        age_the_bag(&store, "alice", long_ago).await;
+
+        store.load_state(&context, Some("alice")).await.unwrap();
+
+        assert!(
+            bag_written_at(&store, "alice").await > long_ago,
+            "a read of a week-old bag should have refreshed it"
+        );
+    }
+
+    /// The bound the design claims: however often it is read, a bag is written
+    /// at most once per window. A second read straight after the first finds it
+    /// fresh and leaves it alone.
+    #[tokio::test]
+    async fn a_second_read_inside_the_window_writes_nothing() {
+        let day = std::time::Duration::from_secs(24 * 60 * 60);
+        let store = InMemoryTaskStorage::new().with_read_refresh(ReadRefresh::after(day));
+        let context = cid("ctx-refresh-twice");
+
+        store
+            .remember(
+                &context,
+                Some("alice"),
+                &StateKey::scoped(StateScope::User, "name").unwrap(),
+                "Emil",
+            )
+            .await
+            .unwrap();
+        age_the_bag(&store, "alice", Utc::now() - chrono::TimeDelta::days(7)).await;
+
+        store.load_state(&context, Some("alice")).await.unwrap();
+        let after_first = bag_written_at(&store, "alice").await;
+        store.load_state(&context, Some("alice")).await.unwrap();
+
+        assert_eq!(
+            bag_written_at(&store, "alice").await,
+            after_first,
+            "the bag was already fresh, so the second read wrote nothing"
+        );
+    }
+
+    /// The default, from the inside: a week-old bag stays week-old however
+    /// often it is read.
+    #[tokio::test]
+    async fn without_a_refresh_a_read_writes_nothing() {
+        let store = InMemoryTaskStorage::new();
+        let context = cid("ctx-no-refresh");
+
+        store
+            .remember(
+                &context,
+                Some("alice"),
+                &StateKey::scoped(StateScope::User, "name").unwrap(),
+                "Emil",
+            )
+            .await
+            .unwrap();
+        let long_ago = Utc::now() - chrono::TimeDelta::days(7);
+        age_the_bag(&store, "alice", long_ago).await;
+
+        store.load_state(&context, Some("alice")).await.unwrap();
+
+        assert_eq!(bag_written_at(&store, "alice").await, long_ago);
+    }
+
+    /// A principal that never wrote a `user:` key has no bag, and a refresh
+    /// must not invent one — an entry here is a claim that a write happened.
+    #[tokio::test]
+    async fn a_refresh_does_not_invent_a_bag_that_was_never_written() {
+        let store = InMemoryTaskStorage::new()
+            .with_read_refresh(ReadRefresh::after(std::time::Duration::ZERO));
+
+        store
+            .load_state(&cid("ctx-empty"), Some("alice"))
+            .await
+            .unwrap();
+
+        assert!(store.principal_touched.lock().await.is_empty());
+    }
+
+    fn said(text: &str) -> Message {
+        use crate::domain::{Part, Role};
+        Message::builder()
+            .role(Role::User)
+            .parts(vec![Part::text(text.to_string())])
+            .message_id(uuid::Uuid::new_v4().to_string())
+            .build()
+    }
+
+    fn texts(conversation: &Conversation) -> Vec<String> {
+        use crate::domain::part;
+        conversation
+            .tail
+            .iter()
+            .flat_map(|entry| {
+                entry.message.parts.iter().filter_map(|p| match &p.content {
+                    Some(part::Content::Text(text)) => Some(text.clone()),
+                    _ => None,
+                })
+            })
+            .collect()
+    }
+
+    /// The conversation is the messages of every task in a context, in the order
+    /// they were recorded. Two tasks, because that is what a multi-turn
+    /// conversation actually looks like: one task per turn, sharing a context.
+    #[tokio::test]
+    async fn a_context_reads_back_as_one_ordered_conversation() {
+        let store = InMemoryTaskStorage::new();
+        store.create(&tid("t1"), &cid("c1")).await.unwrap();
+        store
+            .update_status(&tid("t1"), TaskState::Working, Some(said("what is it")))
+            .await
+            .unwrap();
+        store
+            .update_status(&tid("t1"), TaskState::Completed, Some(said("Oslo")))
+            .await
+            .unwrap();
+
+        store.create(&tid("t2"), &cid("c1")).await.unwrap();
+        store
+            .update_status(
+                &tid("t2"),
+                TaskState::Completed,
+                Some(said("and the population")),
+            )
+            .await
+            .unwrap();
+
+        let conversation = store.load(&cid("c1"), None, None).await.unwrap();
+        assert_eq!(
+            texts(&conversation),
+            vec!["what is it", "Oslo", "and the population"]
+        );
+    }
+
+    /// A status transition with no message has nothing to record. Storing a
+    /// placeholder would put an empty turn in the model's prompt.
+    #[tokio::test]
+    async fn a_transition_without_a_message_records_nothing() {
+        let store = InMemoryTaskStorage::new();
+        store.create(&tid("t1"), &cid("c1")).await.unwrap();
+        store
+            .update_status(&tid("t1"), TaskState::Working, None)
+            .await
+            .unwrap();
+
+        assert!(store.load(&cid("c1"), None, None).await.unwrap().is_empty());
+    }
+
+    /// Contexts do not leak into one another. This is the whole reason the log
+    /// is keyed by context rather than kept per handler.
+    #[tokio::test]
+    async fn conversations_are_separate_per_context() {
+        let store = InMemoryTaskStorage::new();
+        store.create(&tid("t1"), &cid("c1")).await.unwrap();
+        store.create(&tid("t2"), &cid("c2")).await.unwrap();
+        store
+            .update_status(&tid("t1"), TaskState::Completed, Some(said("in one")))
+            .await
+            .unwrap();
+        store
+            .update_status(&tid("t2"), TaskState::Completed, Some(said("in two")))
+            .await
+            .unwrap();
+
+        let one = store.load(&cid("c1"), None, None).await.unwrap();
+        assert_eq!(texts(&one), vec!["in one"]);
+    }
+
+    /// A digest hides everything at or below its watermark, and the tail picks
+    /// up after it. Loading the summarized part again would double the tokens
+    /// compaction was meant to save.
+    #[tokio::test]
+    async fn a_digest_replaces_the_messages_it_covers() {
+        let store = InMemoryTaskStorage::new();
+        store.create(&tid("t1"), &cid("c1")).await.unwrap();
+        for text in ["one", "two", "three"] {
+            store
+                .update_status(&tid("t1"), TaskState::Working, Some(said(text)))
+                .await
+                .unwrap();
+        }
+
+        let before = store.load(&cid("c1"), None, None).await.unwrap();
+        let watermark = before.tail[1].seq;
+        store
+            .compact(
+                &cid("c1"),
+                None,
+                Digest {
+                    covers_through: watermark,
+                    summary: "they said one and two".to_string(),
+                    replaced_messages: 2,
+                    model: "test".to_string(),
+                },
+            )
+            .await
+            .unwrap();
+
+        let after = store.load(&cid("c1"), None, None).await.unwrap();
+        assert_eq!(after.summary(), Some("they said one and two"));
+        assert_eq!(texts(&after), vec!["three"]);
+    }
+
+    /// Two turns of one conversation can compact at the same time. Both digests
+    /// land, and the one covering more wins — the reason digests append with a
+    /// watermark instead of updating in place.
+    #[tokio::test]
+    async fn concurrent_compaction_keeps_the_widest_digest() {
+        let store = InMemoryTaskStorage::new();
+        store.create(&tid("t1"), &cid("c1")).await.unwrap();
+        for text in ["one", "two", "three"] {
+            store
+                .update_status(&tid("t1"), TaskState::Working, Some(said(text)))
+                .await
+                .unwrap();
+        }
+        let loaded = store.load(&cid("c1"), None, None).await.unwrap();
+
+        // The wider digest is written first, so "newest row wins" would pick the
+        // narrow one and re-feed a message the summary already covers.
+        for (seq, summary) in [
+            (loaded.tail[2].seq, "covers all three"),
+            (loaded.tail[0].seq, "covers only the first"),
+        ] {
+            store
+                .compact(
+                    &cid("c1"),
+                    None,
+                    Digest {
+                        covers_through: seq,
+                        summary: summary.to_string(),
+                        replaced_messages: 1,
+                        model: "test".to_string(),
+                    },
+                )
+                .await
+                .unwrap();
+        }
+
+        let after = store.load(&cid("c1"), None, None).await.unwrap();
+        assert_eq!(after.summary(), Some("covers all three"));
+        assert!(after.tail.is_empty(), "{:?}", texts(&after));
+    }
+
+    /// Limiting keeps the newest. The older end is what a summary stands in for,
+    /// so truncating there would leave the model the least relevant half.
+    #[tokio::test]
+    async fn limiting_a_conversation_keeps_the_most_recent_messages() {
+        let store = InMemoryTaskStorage::new();
+        store.create(&tid("t1"), &cid("c1")).await.unwrap();
+        for text in ["one", "two", "three", "four"] {
+            store
+                .update_status(&tid("t1"), TaskState::Working, Some(said(text)))
+                .await
+                .unwrap();
+        }
+
+        let conversation = store.load(&cid("c1"), None, Some(2)).await.unwrap();
+        assert_eq!(texts(&conversation), vec!["three", "four"]);
+    }
+
+    /// Reading a conversation back turns `context_id` into a capability: whoever
+    /// holds one would otherwise read what was said in it.
+    #[tokio::test]
+    async fn a_context_belongs_to_whoever_started_it() {
+        let store = InMemoryTaskStorage::new();
+        store.create(&tid("t1"), &cid("c1")).await.unwrap();
+        store
+            .update_status(&tid("t1"), TaskState::Completed, Some(said("private")))
+            .await
+            .unwrap();
+
+        // First read claims it.
+        store.load(&cid("c1"), Some("alice"), None).await.unwrap();
+        assert_eq!(
+            texts(&store.load(&cid("c1"), Some("alice"), None).await.unwrap()),
+            vec!["private"]
+        );
+
+        let err = store
+            .load(&cid("c1"), Some("mallory"), None)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, A2AError::ContextAccessDenied { .. }),
+            "{err:?}"
+        );
+
+        // And compacting someone else's conversation is refused the same way.
+        let err = store
+            .compact(
+                &cid("c1"),
+                Some("mallory"),
+                Digest {
+                    covers_through: Seq::new(1),
+                    summary: "mine now".to_string(),
+                    replaced_messages: 1,
+                    model: "test".to_string(),
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(err, A2AError::ContextAccessDenied { .. }));
+    }
+
+    /// An agent running without an authenticator has no principal to claim with,
+    /// and its conversations stay readable. Refusing here would break every
+    /// unauthenticated deployment.
+    #[tokio::test]
+    async fn an_unowned_context_stays_open() {
+        let store = InMemoryTaskStorage::new();
+        store.create(&tid("t1"), &cid("c1")).await.unwrap();
+        store
+            .update_status(&tid("t1"), TaskState::Completed, Some(said("open")))
+            .await
+            .unwrap();
+
+        store.load(&cid("c1"), None, None).await.unwrap();
+        assert_eq!(
+            texts(&store.load(&cid("c1"), Some("anyone"), None).await.unwrap()),
+            vec!["open"]
+        );
+    }
+
+    #[tokio::test]
+    async fn an_unknown_context_is_empty_rather_than_an_error() {
+        let store = InMemoryTaskStorage::new();
+        assert!(
+            store
+                .load(&cid("never-seen"), None, None)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[tokio::test]
+    async fn versioning_tracks_and_guards_mutations() {
+        let store = InMemoryTaskStorage::new();
+        store.create(&tid("t1"), &cid("c1")).await.unwrap();
+        assert_eq!(store.version(&tid("t1")).await.unwrap(), 1);
+
+        // Unversioned mutations bump the version, keeping the two views in sync.
+        store
+            .update_status(&tid("t1"), TaskState::Working, None)
+            .await
+            .unwrap();
+        let snap = store.get_versioned(&tid("t1"), None).await.unwrap();
+        assert_eq!(snap.version, 2);
+
+        // Stale conditional update is rejected and leaves the task unchanged.
+        let err = store
+            .update_status_checked(&tid("t1"), 1, TaskState::Completed, None)
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            A2AError::VersionConflict {
+                expected: 1,
+                actual: 2,
+                ..
+            }
+        ));
+        assert_eq!(
+            store.get(&tid("t1"), None).await.unwrap().status.state,
+            TaskState::Working
+        );
+
+        // Current-version conditional update succeeds and bumps.
+        let ok = store
+            .update_status_checked(&tid("t1"), 2, TaskState::Completed, None)
+            .await
+            .unwrap();
+        assert_eq!(ok.version, 3);
+        assert_eq!(ok.task.status.state, TaskState::Completed);
+    }
+}

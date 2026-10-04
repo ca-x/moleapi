@@ -44,6 +44,29 @@ pub struct SessionSummary {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum EventMessage {
+    A2aReady {
+        dialect: String,
+        transport: String,
+    },
+    A2aResult {
+        request_id: String,
+        method: String,
+        result: serde_json::Value,
+    },
+    A2aStream {
+        request_id: String,
+        method: String,
+        result: serde_json::Value,
+    },
+    A2aError {
+        request_id: String,
+        method: String,
+        error: serde_json::Value,
+    },
+    A2aFinished {
+        request_id: String,
+        method: String,
+    },
     McpInitialized {
         info: serde_json::Value,
     },
@@ -182,6 +205,14 @@ pub struct EventBatch {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SendMessage {
+    A2aRequest {
+        request_id: String,
+        method: String,
+        params_source: String,
+    },
+    A2aStop {
+        request_id: String,
+    },
     McpRequest {
         request_id: String,
         method: String,

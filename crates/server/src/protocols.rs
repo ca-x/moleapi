@@ -76,8 +76,24 @@ pub async fn create(
     let environment = execution::environment(&w, c.environment_id.as_deref())?;
     let mut scopes =
         execution::variables(&s, &w, Some(collection), environment, &[], &[], &c.locals)?;
-    let (request, mut feedback, mut updates, mut request_updates) =
+    let (mut request, mut feedback, mut updates, mut request_updates) =
         execution::prepare_live(&s, &w, &c.request, collection, &mut scopes).await?;
+    if let Protocol::A2a { config } = &mut request.protocol
+        && let Some(spec_id) = &request.specification_id
+    {
+        let spec = w
+            .data
+            .specifications
+            .iter()
+            .find(|s| &s.id == spec_id)
+            .ok_or_else(ApiError::not_found)?;
+        if spec.kind != "a2a-agent-card" || spec.dialect != format!("a2a-{}", config.dialect) {
+            return Err(ApiError::bad(
+                "Select an Agent Card matching the A2A dialect",
+            ));
+        }
+        config.card_source = Some(spec.source.clone());
+    }
     if request.protocol.is_graphql() {
         if !moleapi_core::graphql_is_subscription(&request)
             .map_err(|e| ApiError::bad(e.to_string()))?
@@ -86,7 +102,8 @@ pub async fn create(
                 "GraphQL query/mutation requests use the execute API",
             ));
         }
-    } else if !request.protocol.is_mcp()
+    } else if !request.protocol.is_a2a()
+        && !request.protocol.is_mcp()
         && !request.protocol.is_mqtt()
         && !request.protocol.is_grpc()
         && (request.method != "GET" || request.body_kind != "none")
@@ -95,13 +112,16 @@ pub async fn create(
             "SSE and WebSocket connections require GET with body mode None",
         ));
     }
-    if request.protocol.is_mcp() != c.request.protocol.is_mcp()
+    if matches!((&request.protocol,&c.request.protocol),(Protocol::A2a{config},Protocol::A2a{config:original}) if config.dialect!=original.dialect || config.transport!=original.transport)
+        || request.protocol.is_a2a() != c.request.protocol.is_a2a()
+        || request.protocol.is_mcp() != c.request.protocol.is_mcp()
         || matches!((&request.protocol, &c.request.protocol), (Protocol::Mcp { config }, Protocol::Mcp { config: original }) if config.transport != original.transport)
         || request.protocol.is_mqtt() != c.request.protocol.is_mqtt()
         || request.protocol.is_socketio() != c.request.protocol.is_socketio()
         || request.protocol.is_graphql() != c.request.protocol.is_graphql()
         || request.protocol.is_grpc() != c.request.protocol.is_grpc()
-        || (!request.protocol.is_mcp()
+        || (!request.protocol.is_a2a()
+            && !request.protocol.is_mcp()
             && !request.protocol.is_mqtt()
             && !request.protocol.is_socketio()
             && !request.protocol.is_graphql()
@@ -248,6 +268,14 @@ pub async fn create(
             scopes.effective(),
             mask.clone(),
         )
+    {
+        let _ = s.protocol_sessions.remove(&owner.0, &summary.id).await;
+        return Err(error(e));
+    }
+    if request.protocol.is_a2a()
+        && let Err(e) = s
+            .protocol_sessions
+            .configure_a2a(&owner.0, &summary.id, scopes.effective())
     {
         let _ = s.protocol_sessions.remove(&owner.0, &summary.id).await;
         return Err(error(e));

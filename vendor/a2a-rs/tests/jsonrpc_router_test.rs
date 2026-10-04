@@ -1,0 +1,499 @@
+//! End-to-end tests for the JSON-RPC / REST **routers** (the surface the
+//! dispatch tests don't reach).
+//!
+//! [`jsonrpc_dispatch_test`] drives [`JsonRpcAdapter::handle_unary`] directly;
+//! this file stands up the real `axum` routers and drives them with
+//! `tower::ServiceExt::oneshot`, so it covers the parts that only exist at the
+//! router layer: REST path/query extraction, the canonical `/tasks/{id}:cancel`
+//! colon paths and their slash aliases, HTTP status mapping, and — most importantly — the two **SSE framings**
+//! (`jsonrpc_sse` wraps each event in a JSON-RPC envelope; `rest_sse` emits the
+//! bare ProtoJSON `StreamResponse`).
+
+#![cfg(feature = "jsonrpc-server")]
+
+mod common;
+
+use std::pin::Pin;
+use std::sync::Arc;
+use std::time::Duration;
+
+use async_trait::async_trait;
+use axum::body::{Body, to_bytes};
+use axum::http::{Request, StatusCode, header::CONTENT_TYPE};
+use common::TestBusinessHandler;
+use futures::{Stream, StreamExt, stream};
+use serde_json::{Value, json};
+use tower::ServiceExt;
+
+use a2a_rs::adapter::streaming::InMemoryStreamingHandler;
+use a2a_rs::adapter::{
+    InMemoryTaskStorage, JsonRpcAdapter, SimpleAgentInfo, jsonrpc_router, rest_router,
+};
+use a2a_rs::domain::{
+    A2AError, ContextId, TaskArtifactUpdateEvent, TaskId, TaskState, TaskStatusUpdateEvent,
+};
+use a2a_rs::port::streaming_handler::{SeqEvent, Subscriber};
+use a2a_rs::port::{AsyncStreamingHandler, AsyncTaskLifecycle};
+
+/// A streaming handler whose pull-streams are empty but valid.
+///
+/// `InMemoryTaskStorage` models streaming as subscriber push and returns
+/// `UnsupportedOperation` from `combined_update_stream`, so `TaskService`'s
+/// stream methods can't run against it. These tests only need the SSE *framing*
+/// to be exercised — the initial task snapshot is emitted by the adapter ahead
+/// of the (here empty) update stream — so a handler that returns an empty stream
+/// is enough to drive `open_stream` to success.
+#[derive(Clone)]
+struct EmptyStreamHandler;
+
+type StatusStream = Pin<Box<dyn Stream<Item = Result<TaskStatusUpdateEvent, A2AError>> + Send>>;
+type ArtifactStream = Pin<Box<dyn Stream<Item = Result<TaskArtifactUpdateEvent, A2AError>> + Send>>;
+type CombinedStream = Pin<Box<dyn Stream<Item = Result<SeqEvent, A2AError>> + Send>>;
+
+#[async_trait]
+impl AsyncStreamingHandler for EmptyStreamHandler {
+    async fn add_status_subscriber(
+        &self,
+        _task_id: &str,
+        _subscriber: Box<dyn Subscriber<TaskStatusUpdateEvent> + Send + Sync>,
+    ) -> Result<String, A2AError> {
+        Ok("status-sub".to_string())
+    }
+
+    async fn add_artifact_subscriber(
+        &self,
+        _task_id: &str,
+        _subscriber: Box<dyn Subscriber<TaskArtifactUpdateEvent> + Send + Sync>,
+    ) -> Result<String, A2AError> {
+        Ok("artifact-sub".to_string())
+    }
+
+    async fn remove_subscription(&self, _subscription_id: &str) -> Result<(), A2AError> {
+        Ok(())
+    }
+
+    async fn remove_task_subscribers(&self, _task_id: &str) -> Result<(), A2AError> {
+        Ok(())
+    }
+
+    async fn get_subscriber_count(&self, _task_id: &str) -> Result<usize, A2AError> {
+        Ok(0)
+    }
+
+    async fn broadcast_status_update(
+        &self,
+        _task_id: &str,
+        _update: TaskStatusUpdateEvent,
+    ) -> Result<(), A2AError> {
+        Ok(())
+    }
+
+    async fn broadcast_artifact_update(
+        &self,
+        _task_id: &str,
+        _update: TaskArtifactUpdateEvent,
+    ) -> Result<(), A2AError> {
+        Ok(())
+    }
+
+    async fn status_update_stream(&self, _task_id: &str) -> Result<StatusStream, A2AError> {
+        Ok(Box::pin(stream::empty::<
+            Result<TaskStatusUpdateEvent, A2AError>,
+        >()))
+    }
+
+    async fn artifact_update_stream(&self, _task_id: &str) -> Result<ArtifactStream, A2AError> {
+        Ok(Box::pin(stream::empty::<
+            Result<TaskArtifactUpdateEvent, A2AError>,
+        >()))
+    }
+
+    async fn combined_update_stream(
+        &self,
+        _task_id: &str,
+        _from_event_id: Option<u64>,
+    ) -> Result<CombinedStream, A2AError> {
+        Ok(Box::pin(stream::empty::<Result<SeqEvent, A2AError>>()))
+    }
+}
+
+/// An adapter wired with a working (empty) streaming backend.
+fn streaming_adapter() -> Arc<JsonRpcAdapter> {
+    let handler = TestBusinessHandler::with_storage(InMemoryTaskStorage::new());
+    let agent_info =
+        SimpleAgentInfo::new("router-test".to_string(), "http://localhost".to_string());
+    Arc::new(
+        JsonRpcAdapter::with_handler(handler, agent_info)
+            .with_streaming_handler(EmptyStreamHandler),
+    )
+}
+
+/// Build an adapter backed by a real in-memory streaming handler so the SSE
+/// methods emit the initial task snapshot.
+fn adapter() -> Arc<JsonRpcAdapter> {
+    adapter_with_handler().0
+}
+
+/// As [`adapter`], also handing back the handler — the seam a test needs to put
+/// a task into a state the routes cannot reach on their own.
+fn adapter_with_handler() -> (Arc<JsonRpcAdapter>, TestBusinessHandler) {
+    let handler = TestBusinessHandler::with_storage(InMemoryTaskStorage::new());
+    let agent_info =
+        SimpleAgentInfo::new("router-test".to_string(), "http://localhost".to_string());
+    let adapter = Arc::new(
+        JsonRpcAdapter::with_handler(handler.clone(), agent_info)
+            .with_streaming_handler(handler.clone()),
+    );
+    (adapter, handler)
+}
+
+fn send_message_body(task_id: &str) -> Value {
+    json!({
+        "message": {
+            "messageId": "m1",
+            "role": "ROLE_USER",
+            "parts": [{ "text": "hello" }],
+            "taskId": task_id,
+        }
+    })
+}
+
+/// As [`send_message_body`], with the task id omitted entirely — the shape a
+/// client sends when it wants the server to name the task.
+fn send_message_body_without_task_id() -> Value {
+    json!({
+        "message": {
+            "messageId": "m1",
+            "role": "ROLE_USER",
+            "parts": [{ "text": "hello" }],
+        }
+    })
+}
+
+fn post(uri: &str, body: &Value) -> Request<Body> {
+    Request::builder()
+        .method("POST")
+        .uri(uri)
+        .header(CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(body).unwrap()))
+        .unwrap()
+}
+
+fn get(uri: &str) -> Request<Body> {
+    Request::builder()
+        .method("GET")
+        .uri(uri)
+        .body(Body::empty())
+        .unwrap()
+}
+
+/// Drive a request through the REST router and return `(status, json_body)`.
+async fn rest_call(adapter: &Arc<JsonRpcAdapter>, req: Request<Body>) -> (StatusCode, Value) {
+    let resp = rest_router(adapter.clone()).oneshot(req).await.unwrap();
+    let status = resp.status();
+    let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    (status, value)
+}
+
+/// Drive a request through the JSON-RPC router and return `(status, json_body)`.
+async fn jsonrpc_call(adapter: &Arc<JsonRpcAdapter>, body: &Value) -> (StatusCode, Value) {
+    let resp = jsonrpc_router(adapter.clone())
+        .oneshot(post("/", body))
+        .await
+        .unwrap();
+    let status = resp.status();
+    let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    (status, value)
+}
+
+/// Read the first SSE event's `data:` payload as JSON, with a timeout so a
+/// keep-alive stream that never yields fails the test rather than hanging.
+async fn first_sse_event(resp: axum::response::Response) -> Value {
+    assert_eq!(
+        resp.status(),
+        StatusCode::OK,
+        "SSE endpoint should return 200"
+    );
+    let ct = resp
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    assert!(
+        ct.starts_with("text/event-stream"),
+        "expected SSE content-type, got {ct:?}"
+    );
+
+    let mut stream = resp.into_body().into_data_stream();
+    let mut buf = String::new();
+    let deadline = tokio::time::sleep(Duration::from_secs(3));
+    tokio::pin!(deadline);
+    loop {
+        tokio::select! {
+            _ = &mut deadline => panic!("timed out waiting for an SSE data line; buffered: {buf:?}"),
+            chunk = stream.next() => {
+                let chunk = chunk.expect("stream ended before a data line").expect("stream error");
+                buf.push_str(&String::from_utf8_lossy(&chunk));
+                if let Some(line) = buf.lines().find(|l| l.starts_with("data:")) {
+                    let payload = line.trim_start_matches("data:").trim();
+                    return serde_json::from_str(payload).expect("SSE data is not JSON");
+                }
+            }
+        }
+    }
+}
+
+// --- REST unary ------------------------------------------------------------
+
+#[tokio::test]
+async fn rest_send_then_get_round_trips() {
+    let a = adapter();
+
+    let (status, body) = rest_call(&a, post("/message:send", &send_message_body("t1"))).await;
+    assert_eq!(status, StatusCode::OK);
+    // SendMessageResponse field-presence union: `{ "task": { ... } }`.
+    assert_eq!(body["task"]["id"], "t1");
+
+    let (status, body) = rest_call(&a, get("/tasks/t1")).await;
+    assert_eq!(status, StatusCode::OK);
+    // GetTask returns a bare Task, not a union.
+    assert_eq!(body["id"], "t1");
+}
+
+#[tokio::test]
+async fn rest_cancel_slash_alias_works() {
+    // A task still in flight: the echo handler finishes what it is sent, and a
+    // completed task is correctly not cancelable — which would make this route
+    // test fail for a reason that has nothing to do with routing.
+    let (a, handler) = adapter_with_handler();
+    let id: TaskId = "t2".parse().unwrap();
+    handler
+        .create(&id, &"ctx".parse::<ContextId>().unwrap())
+        .await
+        .unwrap();
+    handler
+        .update_status(&id, TaskState::Working, None)
+        .await
+        .unwrap();
+
+    let (status, body) = rest_call(&a, post("/tasks/t2/cancel", &json!({}))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["id"], "t2");
+}
+
+/// The canonical spec path, which is the one the official client sends.
+///
+/// matchit cannot register `/tasks/{id}:cancel` — `{id}` already claims the
+/// whole segment — so the request lands on `/tasks/{id}` with the verb inside
+/// the captured id. Before that was split off, the route was `GET`-only and the
+/// official `a2acli` got a bare `405`.
+#[tokio::test]
+async fn rest_cancel_accepts_the_canonical_colon_path() {
+    let (a, handler) = adapter_with_handler();
+    let id: TaskId = "t9".parse().unwrap();
+    handler
+        .create(&id, &"ctx".parse::<ContextId>().unwrap())
+        .await
+        .unwrap();
+    handler
+        .update_status(&id, TaskState::Working, None)
+        .await
+        .unwrap();
+
+    let (status, body) = rest_call(&a, post("/tasks/t9:cancel", &json!({}))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["id"], "t9");
+}
+
+/// The same shape on the subscribe path, where the failure was quieter: `GET
+/// /tasks/{id}:subscribe` matched `/tasks/{id}` and answered with the *task* as
+/// JSON to a client that was waiting on an event stream.
+#[tokio::test]
+async fn rest_subscribe_accepts_the_canonical_colon_path() {
+    // A task still running: subscribing to a finished one is refused, which
+    // would fail this test for a reason that has nothing to do with routing.
+    let (a, handler) = adapter_with_handler();
+    let id: TaskId = "s9".parse().unwrap();
+    handler
+        .create(&id, &"ctx".parse::<ContextId>().unwrap())
+        .await
+        .unwrap();
+
+    let resp = rest_router(a.clone())
+        .oneshot(get("/tasks/s9:subscribe"))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        resp.headers()
+            .get(CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(|v| v.split(';').next().unwrap_or(v).trim().to_string()),
+        Some("text/event-stream".to_string()),
+        "the canonical subscribe path must open a stream, not return the task"
+    );
+}
+
+/// A task id that merely contains a colon is not a verb.
+#[tokio::test]
+async fn a_colon_in_a_task_id_is_not_a_verb() {
+    let a = adapter();
+    rest_call(&a, post("/message:send", &send_message_body("urn:uuid:7"))).await;
+
+    let (status, body) = rest_call(&a, get("/tasks/urn:uuid:7")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["id"], "urn:uuid:7");
+}
+
+#[tokio::test]
+async fn rest_get_missing_task_is_404() {
+    let a = adapter();
+    let (status, _body) = rest_call(&a, get("/tasks/nope")).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn rest_list_tasks_via_query() {
+    let a = adapter();
+    rest_call(&a, post("/message:send", &send_message_body("t3"))).await;
+
+    let (status, body) = rest_call(&a, get("/tasks?pageSize=10")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body["tasks"].is_array());
+}
+
+// --- JSON-RPC unary --------------------------------------------------------
+
+#[tokio::test]
+async fn jsonrpc_send_message_envelope() {
+    let a = adapter();
+    let body = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "SendMessage",
+        "params": send_message_body("j1"),
+    });
+    let (status, resp) = jsonrpc_call(&a, &body).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(resp["jsonrpc"], "2.0");
+    assert_eq!(resp["id"], 1);
+    assert!(resp.get("error").is_none(), "unexpected error: {resp:?}");
+    assert_eq!(resp["result"]["task"]["id"], "j1");
+}
+
+#[tokio::test]
+async fn jsonrpc_rejects_wrong_version() {
+    let a = adapter();
+    let body = json!({ "jsonrpc": "1.0", "id": 1, "method": "GetTask", "params": { "id": "x" } });
+    let (status, resp) = jsonrpc_call(&a, &body).await;
+    assert_eq!(status, StatusCode::OK); // JSON-RPC errors ride in the body, not the HTTP status
+    assert_eq!(resp["error"]["code"], -32600); // INVALID_REQUEST
+}
+
+// --- SSE framing (the part only the router exercises) ----------------------
+
+#[tokio::test]
+async fn jsonrpc_stream_frames_events_in_envelopes() {
+    let a = streaming_adapter();
+    let body = json!({
+        "jsonrpc": "2.0",
+        "id": 7,
+        "method": "SendStreamingMessage",
+        "params": send_message_body("s1"),
+    });
+    let resp = jsonrpc_router(a.clone())
+        .oneshot(post("/", &body))
+        .await
+        .unwrap();
+    let event = first_sse_event(resp).await;
+
+    // JSON-RPC SSE: each event is a full response envelope whose `result` is the
+    // tag-free `StreamResponse` union — here the initial task snapshot.
+    assert_eq!(event["jsonrpc"], "2.0");
+    assert_eq!(event["id"], 7);
+    assert_eq!(event["result"]["task"]["id"], "s1");
+}
+
+#[tokio::test]
+async fn rest_stream_frames_bare_protojson() {
+    let a = streaming_adapter();
+    let resp = rest_router(a.clone())
+        .oneshot(post("/message:stream", &send_message_body("s2")))
+        .await
+        .unwrap();
+    let event = first_sse_event(resp).await;
+
+    // REST SSE has no envelope: the event data IS the bare `StreamResponse`.
+    assert!(
+        event.get("jsonrpc").is_none(),
+        "REST SSE must not carry a JSON-RPC envelope"
+    );
+    assert_eq!(event["task"]["id"], "s2");
+}
+
+#[tokio::test]
+async fn stream_without_a_task_id_gets_a_server_assigned_one() {
+    // `message/stream` decodes through the same path as `message/send`, so the
+    // omitted-id rule has to hold on the streaming route too (issue #51).
+    let a = streaming_adapter();
+    let resp = rest_router(a.clone())
+        .oneshot(post(
+            "/message:stream",
+            &send_message_body_without_task_id(),
+        ))
+        .await
+        .unwrap();
+    let event = first_sse_event(resp).await;
+
+    let id = event["task"]["id"].as_str().expect("task id");
+    assert!(!id.is_empty(), "server must name the task");
+    assert!(
+        !event["task"]["contextId"].as_str().unwrap_or("").is_empty(),
+        "server must name the context: {event:?}",
+    );
+}
+
+/// A live streaming backend plus a handler that answers synchronously.
+///
+/// The task is `COMPLETED` before the stream is handed over, so no settling
+/// event can arrive on it — and `InMemoryStreamingHandler` hands back a
+/// broadcast receiver, which parks rather than ending. The SSE response
+/// therefore stayed open forever; the official `a2acli` hung on exactly this
+/// until its own timeout fired. Reading the body to completion is the
+/// assertion.
+#[tokio::test]
+async fn a_synchronously_answered_stream_ends() {
+    let handler = TestBusinessHandler::with_storage(InMemoryTaskStorage::new());
+    let agent_info =
+        SimpleAgentInfo::new("router-test".to_string(), "http://localhost".to_string());
+    let a = Arc::new(
+        JsonRpcAdapter::with_handler(handler, agent_info)
+            .with_streaming_handler(InMemoryStreamingHandler::new()),
+    );
+
+    // `a` is deliberately still held while the body is read. Dropping the
+    // adapter drops the streaming handler, which drops the broadcast sender,
+    // which ends the receiver — so a test that lets the router own the only
+    // reference passes whatever the stream logic does. A served agent outlives
+    // its responses, and that is the case that hung.
+    let resp = rest_router(a.clone())
+        .oneshot(post("/message:stream", &send_message_body("s11")))
+        .await
+        .unwrap();
+    let body = tokio::time::timeout(
+        Duration::from_secs(2),
+        to_bytes(resp.into_body(), 64 * 1024),
+    )
+    .await
+    .expect("the stream has to end on its own")
+    .expect("body");
+    drop(a);
+
+    let text = String::from_utf8_lossy(&body);
+    assert!(
+        text.contains("TASK_STATE_COMPLETED"),
+        "the task snapshot still has to be delivered: {text}"
+    );
+}

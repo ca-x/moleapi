@@ -1,3 +1,4 @@
+import type { A2aMessage, A2aCommand } from "../a2a/types";
 import type { McpMessage, McpCommand } from "../mcp/types";
 import type { MqttMessage, MqttSubscription } from "../mqtt/types";
 import type {
@@ -12,7 +13,7 @@ export interface ProtocolSession {
   id: string;
   workspace_id: string;
   request_id: string;
-  protocol: "sse" | "websocket" | "graphql" | "grpc" | "socketio" | "mqtt" | "mcp";
+  protocol: "sse" | "websocket" | "graphql" | "grpc" | "socketio" | "mqtt" | "mcp" | "a2a";
   client_half_closed?: boolean;
   url: string;
   state: SessionState;
@@ -27,6 +28,7 @@ export interface ProtocolSession {
   request_updates?: RequestUpdate[];
 }
 export type ProtocolMessage =
+  | A2aMessage
   | McpMessage
   | {
       kind: "mqtt_message";
@@ -106,6 +108,7 @@ export interface EventBatch {
   dropped_count: number;
 }
 export type SendMessage =
+  | A2aCommand
   | McpCommand
   | { kind: "mqtt_publish"; message: MqttMessage }
   | { kind: "mqtt_subscribe"; subscription: MqttSubscription }

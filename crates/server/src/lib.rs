@@ -1,3 +1,4 @@
+mod a2a;
 mod auth;
 mod entities;
 mod execution;
@@ -47,6 +48,7 @@ struct AppState {
     script_worker: PathBuf,
     protocol_sessions: Arc<moleapi_protocols::SessionManager>,
     protocol_admission: Arc<protocol_admission::AdmissionGates>,
+    a2a_sources: Arc<a2a::Sources>,
 }
 #[derive(Debug)]
 struct ApiError {
@@ -154,6 +156,7 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         script_worker,
         protocol_sessions: moleapi_protocols::SessionManager::new(),
         protocol_admission: Arc::new(protocol_admission::AdmissionGates::default()),
+        a2a_sources: Arc::new(a2a::Sources::default()),
     };
     let protected = Router::new()
         .route("/auth/logout", post(auth::logout))
@@ -179,6 +182,9 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         .route("/soap/import-url", post(soap::import_url))
         .route("/soap/schema", post(soap::schema))
         .route("/soap/template", post(soap::template))
+        .route("/a2a/cards/discover/cancel", post(a2a::cancel_discovery))
+        .route("/a2a/cards/import", post(a2a::import))
+        .route("/a2a/cards/discover", post(a2a::discover))
         .route("/graphql/introspect", post(graphql::introspect))
         .route("/graphql/schema", post(graphql::schema))
         .route("/grpc/schema", post(grpc::schema))

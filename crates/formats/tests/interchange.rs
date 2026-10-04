@@ -570,3 +570,63 @@ fn mcp_default_exports_do_not_leak_known_secrets_in_json_keys_or_scalars() {
     assert!(!safe.content.contains("31337"));
     assert!(safe.content.contains("public"));
 }
+
+#[test]
+fn a2a_native_sources_and_drafts_restore_and_default_export_screens_credentials() {
+    let mut source = workspace(import("postman", &postman().to_string()).unwrap().data);
+    let request = &mut source.data.collections[0].requests[0];
+    let card = r#"{ "name": "Fixture", "description": "retained", "version": "1", "protocolVersion": "0.3.0", "url": "https://example.test/a2a?api_key=card-secret", "capabilities": { "streaming": true }, "defaultInputModes": ["text/plain"], "defaultOutputModes": ["text/plain"], "skills": [], "token": "literal-card-secret", "extension": { "preserved": true } }"#;
+    request.protocol = serde_json::from_value(json!({"kind":"a2a","params_source":"{\"message\":{\"kind\":\"message\",\"messageId\":\"request\",\"role\":\"user\",\"parts\":[{\"kind\":\"text\",\"text\":\"keep\"}]},\"metadata\":{\"token\":\"params-secret\"}}","card_source":card,"interface_url":"https://example.test/a2a?api_key=interface-secret"})).unwrap();
+    let safe = export(&source, "moleapi", false).unwrap();
+    for value in [
+        "card-secret",
+        "literal-card-secret",
+        "params-secret",
+        "interface-secret",
+    ] {
+        assert!(!safe.content.contains(value), "{value}");
+    }
+    assert!(safe.content.contains("preserved"));
+    assert!(safe.content.contains("keep"));
+    let explicit = export(&source, "moleapi", true).unwrap();
+    let restored = import("moleapi", &explicit.content).unwrap();
+    assert_eq!(
+        restored.data.collections[0].requests[0].protocol,
+        source.data.collections[0].requests[0].protocol
+    );
+    for format in ["openapi", "postman"] {
+        assert!(
+            export(&source, format, true)
+                .err()
+                .expect("A2A must reject lossy formats")
+                .to_string()
+                .contains("MoleAPI")
+        );
+    }
+}
+
+#[test]
+fn a2a_canonical_card_source_default_export_excludes_copied_private_data() {
+    let mut source = workspace(import("postman", &postman().to_string()).unwrap().data);
+    source.data.collections[0].variables[0].value = "31337".into();
+    let card = r#"{ "name": "Fixture", "description": "safe", "version": "1", "protocolVersion": "0.3.0", "url": "https://example.test/a2a", "capabilities": {}, "defaultInputModes": ["text/plain"], "defaultOutputModes": ["text/plain"], "skills": [], "extension": { "31337": "private-key", "number": 31337, "copied": "31337", "keep": "public" } }"#;
+    source
+        .data
+        .specifications
+        .push(moleapi_core::Specification {
+            id: "card".into(),
+            name: "Agent".into(),
+            kind: "a2a-agent-card".into(),
+            dialect: "a2a-0.3".into(),
+            source: card.into(),
+        });
+    let safe = export(&source, "moleapi", false).unwrap();
+    assert!(!safe.content.contains("31337"));
+    assert!(safe.content.contains("public"));
+    let restored = import(
+        "moleapi",
+        &export(&source, "moleapi", true).unwrap().content,
+    )
+    .unwrap();
+    assert_eq!(restored.data.specifications.last().unwrap().source, card);
+}

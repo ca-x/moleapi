@@ -1,4 +1,5 @@
 //! Volatile owner-scoped protocol sessions. Event cursors order delivery independently of clocks.
+pub mod a2a;
 mod grpc;
 mod mcp;
 mod mqtt;
@@ -32,6 +33,7 @@ fn now() -> String {
     chrono::Utc::now().to_rfc3339()
 }
 pub(crate) enum Command {
+    A2a(SendMessage),
     Mcp(SendMessage),
     Mqtt(mqtt::MqttCommand),
     Socketio(socketio::SocketioCommand),
@@ -56,6 +58,7 @@ pub(crate) struct Session {
     receiver: Mutex<Option<mpsc::Receiver<Command>>>,
     mqtt: Mutex<mqtt::Control>,
     socketio: Mutex<socketio::Control>,
+    a2a_environment: Mutex<Option<moleapi_core::Environment>>,
     mcp_environment: Mutex<Option<moleapi_core::Environment>>,
     grpc_method: Mutex<Option<prost_reflect::MethodDescriptor>>,
     grpc_environment: Mutex<Option<moleapi_core::Environment>>,
@@ -64,6 +67,11 @@ pub(crate) struct Session {
 impl Session {
     pub(crate) fn event(&self, direction: &str, message: EventMessage) -> Result<()> {
         let payload_size = match &message {
+            EventMessage::A2aReady { .. }
+            | EventMessage::A2aResult { .. }
+            | EventMessage::A2aStream { .. }
+            | EventMessage::A2aError { .. }
+            | EventMessage::A2aFinished { .. } => serde_json::to_vec(&message)?.len(),
             EventMessage::McpInitialized { .. }
             | EventMessage::McpCapabilities { .. }
             | EventMessage::McpResult { .. }
@@ -134,7 +142,7 @@ impl Session {
             "Session event exceeds 1 MiB payload limit"
         );
         let mut r = self.record.lock().unwrap();
-        if r.summary.protocol == "mcp" && direction == "received" {
+        if matches!(r.summary.protocol.as_str(), "mcp" | "a2a") && direction == "received" {
             ensure!(
                 r.summary.event_count < 4096,
                 "MCP event budget exceeded (4096)"
@@ -312,7 +320,9 @@ impl SessionManager {
             workspace_id: workspace.into(),
             request_id: request.id.clone(),
             url: safe_url,
-            protocol: if request.protocol.is_mcp() {
+            protocol: if request.protocol.is_a2a() {
+                "a2a"
+            } else if request.protocol.is_mcp() {
                 "mcp"
             } else if request.protocol.is_mqtt() {
                 "mqtt"
@@ -358,6 +368,7 @@ impl SessionManager {
             receiver: Mutex::new(Some(rx)),
             mqtt: Mutex::new(mqtt::Control::default()),
             socketio: Mutex::new(socketio::Control::default()),
+            a2a_environment: Mutex::new(None),
             mcp_environment: Mutex::new(None),
             grpc_method: Mutex::new(None),
             grpc_environment: Mutex::new(None),
@@ -510,6 +521,16 @@ impl SessionManager {
         *s.grpc_mask.lock().unwrap() = Some(mask);
         Ok(())
     }
+    pub fn configure_a2a(
+        &self,
+        owner: &str,
+        id: &str,
+        environment: moleapi_core::Environment,
+    ) -> Result<()> {
+        let session = self.owned(owner, id)?;
+        *session.a2a_environment.lock().unwrap() = Some(environment);
+        Ok(())
+    }
     pub fn configure_mcp(
         &self,
         owner: &str,
@@ -564,6 +585,12 @@ impl SessionManager {
     }
     pub fn send(&self, owner: &str, id: &str, message: SendMessage) -> Result<()> {
         let s = self.owned(owner, id)?;
+        if matches!(
+            &message,
+            SendMessage::A2aRequest { .. } | SendMessage::A2aStop { .. }
+        ) {
+            return a2a::send(&s, message);
+        }
         if matches!(
             &message,
             SendMessage::McpRequest { .. }
@@ -655,7 +682,9 @@ impl SessionManager {
         }
         let ping = matches!(&message, SendMessage::Ping { .. });
         let (message, size) = match message {
-            SendMessage::McpRequest { .. }
+            SendMessage::A2aRequest { .. }
+            | SendMessage::A2aStop { .. }
+            | SendMessage::McpRequest { .. }
             | SendMessage::McpCallback { .. }
             | SendMessage::McpCancel { .. }
             | SendMessage::MqttPublish { .. }

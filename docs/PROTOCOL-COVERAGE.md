@@ -13,7 +13,7 @@
 | MQTT publish/subscribe/QoS/TLS | Postman，Apifox公开目录未定位 |实际3.1.1/5、QoS0/1/2、retain/Will/属性、订阅/重连、TCP/TLS/WS/WSS、保存消息与遥测已实现并复审；分发验证留到功能整合阶段 |现用 rumqttc0.25.1，最小连接地址/额度/PUBREC SDK补丁；真实Mosquitto测试 |
 | SOAP/XML/WSDL | 两者 |专用1.1/1.2客户端、WSDL1.1多文件导入/Service/Port/Operation/XML模板、实际HTTP调用/鉴权/脚本/XML/Fault已实现；真实Spyne服务验证，协议与XML私密值/工作量审查及回归验证通过；分发验证留到功能整合阶段 |现用wsdl0.1.3、roxmltree0.18、quick-xml0.38、xmltree0.11、xsd-parser1.5.2；运行时模型和XML写入均复用成熟库 |
 | MCP调试/客户端/服务端配置 | 两者 |真实Streamable HTTP/STDIO客户端、工具/资源/模板/提示词、通知/进度/取消、sampling/elicitation/roots手动回调、Host配置导入导出已实现并复审；OAuth、Apps、服务端发布与更高协议版本仍待共享模块补齐 |官方RustSDK rmcp3.5.0，严格复用其协议解析与状态机；有来源/许可记录的输入额度与进程清理补丁 |
-| A2A/Agent Card/任务与流 | Apifox，Postman专用A2A公开目录未定位 |待实现 | a2a-sdk0.7.0；必须检查其客户端/传输能力，a2a-protocol这一猜测名称返回404，不采用 |
+| A2A/Agent Card/任务与流 | Apifox，Postman专用A2A公开目录未定位 |0.3 JSONRPC及1.0 JSONRPC/HTTP+JSON真实客户端、原始Card导入/发现/显式端点选择、消息/任务/流/产物/继续任务/推送配置CRUD/取消已实现并复审；分发验证留到功能整合阶段 |a2a-client0.1/0.2实际注入客户端；a2a-types，a2a-rs0.10仅用于真实1.0 fixture；有许可和来源记录的输入预算/SDK语义补丁 |
 | TCP Socket/报文处理 | Apifox，Postman公开目录未定位 |待实现 | tokio、tokio-util0.7.19现成 codec、TLS库 |
 | Dubbo | Apifox，Postman公开目录未定位 |待实现 |Apache dubbo0.4.0；确认Triple与经典Dubbo/Hessian覆盖，hessian2仅是序列化库，不能据此宣称完整Dubbo客户端 |
 | Webhook监听/检查/重放 | 两者 |待实现专用入口 | Axum、现有HTTP客户端及成熟请求/解析库 |
@@ -32,3 +32,5 @@
 SOAP 当前边界：WSDL1.1，document/literal；RPC/encoded 与不能可靠生成模板的 XSD choice/derivation/attribute/wildcard 明确报错。允许原始 XML 编辑，但所选 binding、版本、Action 和操作 QName 仍检查。不会自动下载外部 import；需提供依赖文件。尚未实现 WSDL2、WS-Security、完整 XSD facet 校验或专用 XPath 提取。
 
 MCP 当前边界：已验证协商协议2025-11-25；不把SDK版本号当成支持所有后续协议版本。HTTP不自动跟随重定向；STDIO需要绝对可执行路径，独立服务端需管理员配置允许路径，原生客户端显式连接才启动。JSONHTTP/单帧/STDIO行1MiB、流/标准输出8MiB，会话命令512、回调数/事件数等有明确上限。手動sampling不调用LLM、roots不自动读取文件；外部资源URI/HTML/SVG不会自动执行或获取。
+
+A2A 当前边界：明确选择0.3或1.0，0.3仅JSONRPC，1.0支持JSONRPC与HTTP+JSON；未实现A2A gRPC绑定、OAuth交互调试或自动推送接收。仅显式操作注册推送，message配置中的隐式注册会被拒绝。任务取消是远端操作，本地Stop终止当前请求而不伪造任务取消。Card不自动选择地址、不下载file URI；原文保存与显式含私密值导出保留原始数据，默认导出屏蔽已知私密值。真实SDK测试9项、原文/私密值互换2项及浏览器实际调用/流/任务/本地Stop已验证。

@@ -13,6 +13,11 @@ import { messageContent } from "./events";
 import type { ProtocolEvent } from "./types";
 const eventLabel = (event: ProtocolEvent) => {
   switch (event.message.kind) {
+    case "a2a_ready": return "A2A 就绪";
+    case "a2a_result": return event.message.method + " 结果";
+    case "a2a_stream": return event.message.method + " 事件";
+    case "a2a_error": return event.message.method + " 错误";
+    case "a2a_finished": return event.message.method + " 完成";
     case "mcp_initialized": return "MCP 初始化";
     case "mcp_capabilities": return "MCP 能力列表";
     case "mcp_result": return event.message.method + " 结果";

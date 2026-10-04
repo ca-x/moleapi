@@ -1,0 +1,1162 @@
+//! Integration tests for SQLx storage implementation
+
+#[cfg(feature = "sqlx-storage")]
+mod sqlx_tests {
+    use a2a_rs::adapter::storage::{DatabaseConfig, SqlxStorageBuilder, SqlxTaskStorage};
+    use a2a_rs::domain::TaskState;
+    use a2a_rs::port::{
+        AsyncContextStateStore, AsyncConversationStore, AsyncNotificationManager,
+        AsyncStreamingHandler, AsyncTaskLifecycle, AsyncTaskQuery, AsyncTaskVersioning,
+    };
+    use a2a_rs::{A2AError, TaskPushNotificationConfig};
+    use std::sync::Arc;
+    use uuid::Uuid;
+
+    fn tid(s: &str) -> a2a_rs::domain::TaskId {
+        s.parse().unwrap()
+    }
+    fn cid(s: &str) -> a2a_rs::domain::ContextId {
+        s.parse().unwrap()
+    }
+
+    async fn create_test_storage() -> Result<SqlxTaskStorage, A2AError> {
+        // Use SQLite in-memory for tests
+        let config = DatabaseConfig::builder()
+            .url("sqlite::memory:".to_string())
+            .max_connections(1)
+            .build();
+
+        SqlxStorageBuilder::from_config(&config).connect().await
+    }
+
+    /// Everything the conversation tests need to say something.
+    fn said(text: &str) -> a2a_rs::domain::Message {
+        use a2a_rs::domain::{Message, Part, Role};
+        Message::builder()
+            .role(Role::User)
+            .parts(vec![Part::text(text.to_string())])
+            .message_id(Uuid::new_v4().to_string())
+            .build()
+    }
+
+    fn texts(conversation: &a2a_rs::domain::Conversation) -> Vec<String> {
+        use a2a_rs::domain::part;
+        conversation
+            .tail
+            .iter()
+            .flat_map(|entry| {
+                entry.message.parts.iter().filter_map(|p| match &p.content {
+                    Some(part::Content::Text(text)) => Some(text.clone()),
+                    _ => None,
+                })
+            })
+            .collect()
+    }
+
+    /// The messages of every task in a context, in the order they were written.
+    /// This is the read `mode = "context"` makes on every turn, and it goes
+    /// through the denormalized `task_history.context_id` added by migration 004
+    /// rather than joining `tasks`.
+    #[tokio::test]
+    async fn a_context_reads_back_as_one_ordered_conversation()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let storage = create_test_storage().await?;
+        storage.create(&tid("t1"), &cid("c1")).await?;
+        storage
+            .update_status(&tid("t1"), TaskState::Working, Some(said("what is it")))
+            .await?;
+        storage
+            .update_status(&tid("t1"), TaskState::Completed, Some(said("Oslo")))
+            .await?;
+
+        // A second task in the same context: one turn per task is the shape a
+        // real conversation has.
+        storage.create(&tid("t2"), &cid("c1")).await?;
+        storage
+            .update_status(
+                &tid("t2"),
+                TaskState::Completed,
+                Some(said("and the population")),
+            )
+            .await?;
+
+        let conversation = storage.load(&cid("c1"), None, None).await?;
+        assert_eq!(
+            texts(&conversation),
+            vec!["what is it", "Oslo", "and the population"]
+        );
+        Ok(())
+    }
+
+    /// Ordering is by the history table's autoincrement id, not its timestamp.
+    /// `datetime('now')` is second-resolution, so rows written inside one second
+    /// used to come back in an arbitrary order — invisible while history was
+    /// read for display, and wrong turns in a prompt once it is not.
+    #[tokio::test]
+    async fn messages_written_in_the_same_second_keep_their_order()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let storage = create_test_storage().await?;
+        storage.create(&tid("t1"), &cid("c1")).await?;
+        let written: Vec<String> = (0..20).map(|i| format!("message {i}")).collect();
+        for text in &written {
+            storage
+                .update_status(&tid("t1"), TaskState::Working, Some(said(text)))
+                .await?;
+        }
+
+        assert_eq!(texts(&storage.load(&cid("c1"), None, None).await?), written);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn conversations_do_not_leak_between_contexts() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let storage = create_test_storage().await?;
+        storage.create(&tid("t1"), &cid("c1")).await?;
+        storage.create(&tid("t2"), &cid("c2")).await?;
+        storage
+            .update_status(&tid("t1"), TaskState::Completed, Some(said("in one")))
+            .await?;
+        storage
+            .update_status(&tid("t2"), TaskState::Completed, Some(said("in two")))
+            .await?;
+
+        assert_eq!(
+            texts(&storage.load(&cid("c1"), None, None).await?),
+            vec!["in one"]
+        );
+        Ok(())
+    }
+
+    /// A digest hides everything at or below its watermark. Re-loading the
+    /// summarized part would double the tokens compaction exists to save.
+    #[tokio::test]
+    async fn a_digest_replaces_the_messages_it_covers() -> Result<(), Box<dyn std::error::Error>> {
+        use a2a_rs::domain::Digest;
+
+        let storage = create_test_storage().await?;
+        storage.create(&tid("t1"), &cid("c1")).await?;
+        for text in ["one", "two", "three"] {
+            storage
+                .update_status(&tid("t1"), TaskState::Working, Some(said(text)))
+                .await?;
+        }
+
+        let before = storage.load(&cid("c1"), None, None).await?;
+        storage
+            .compact(
+                &cid("c1"),
+                None,
+                Digest {
+                    covers_through: before.tail[1].seq,
+                    summary: "they said one and two".to_string(),
+                    replaced_messages: 2,
+                    model: "test".to_string(),
+                },
+            )
+            .await?;
+
+        let after = storage.load(&cid("c1"), None, None).await?;
+        assert_eq!(after.summary(), Some("they said one and two"));
+        assert_eq!(texts(&after), vec!["three"]);
+        Ok(())
+    }
+
+    /// Two turns of one conversation can compact at once. Both rows land, and
+    /// the digest covering more wins — which is why `load` picks by watermark
+    /// rather than by the newest row.
+    #[tokio::test]
+    async fn concurrent_compaction_keeps_the_widest_digest()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use a2a_rs::domain::Digest;
+
+        let storage = create_test_storage().await?;
+        storage.create(&tid("t1"), &cid("c1")).await?;
+        for text in ["one", "two", "three"] {
+            storage
+                .update_status(&tid("t1"), TaskState::Working, Some(said(text)))
+                .await?;
+        }
+        let loaded = storage.load(&cid("c1"), None, None).await?;
+
+        // Widest written first, so "newest row wins" would pick the narrow one
+        // and re-feed a message the summary already covers.
+        for (seq, summary) in [
+            (loaded.tail[2].seq, "covers all three"),
+            (loaded.tail[0].seq, "covers only the first"),
+        ] {
+            storage
+                .compact(
+                    &cid("c1"),
+                    None,
+                    Digest {
+                        covers_through: seq,
+                        summary: summary.to_string(),
+                        replaced_messages: 1,
+                        model: "test".to_string(),
+                    },
+                )
+                .await?;
+        }
+
+        let after = storage.load(&cid("c1"), None, None).await?;
+        assert_eq!(after.summary(), Some("covers all three"));
+        assert!(after.tail.is_empty(), "{:?}", texts(&after));
+        Ok(())
+    }
+
+    /// Limiting keeps the newest: the older end is what a summary stands in for.
+    #[tokio::test]
+    async fn limiting_a_conversation_keeps_the_most_recent_messages()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let storage = create_test_storage().await?;
+        storage.create(&tid("t1"), &cid("c1")).await?;
+        for text in ["one", "two", "three", "four"] {
+            storage
+                .update_status(&tid("t1"), TaskState::Working, Some(said(text)))
+                .await?;
+        }
+
+        assert_eq!(
+            texts(&storage.load(&cid("c1"), None, Some(2)).await?),
+            vec!["three", "four"]
+        );
+        Ok(())
+    }
+
+    /// Handing a conversation back makes `context_id` a capability: whoever
+    /// holds one would otherwise read what was said in it. The first read
+    /// claims the context; a different principal is refused.
+    #[tokio::test]
+    async fn a_context_belongs_to_whoever_started_it() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = create_test_storage().await?;
+        storage.create(&tid("t1"), &cid("c1")).await?;
+        storage
+            .update_status(&tid("t1"), TaskState::Completed, Some(said("private")))
+            .await?;
+
+        storage.load(&cid("c1"), Some("alice"), None).await?;
+        assert_eq!(
+            texts(&storage.load(&cid("c1"), Some("alice"), None).await?),
+            vec!["private"]
+        );
+
+        let err = storage
+            .load(&cid("c1"), Some("mallory"), None)
+            .await
+            .expect_err("another principal must be refused");
+        assert!(
+            matches!(err, A2AError::ContextAccessDenied { .. }),
+            "{err:?}"
+        );
+        Ok(())
+    }
+
+    /// Claiming a context reads before it writes, so several callers can all
+    /// find it unheld and all try to claim it. Exactly one may end up owning it
+    /// — the rest have to be refused rather than proceeding on an insert that
+    /// was ignored.
+    #[tokio::test]
+    async fn concurrent_first_readers_do_not_all_get_the_context()
+    -> Result<(), Box<dyn std::error::Error>> {
+        // A pool wider than one, so the claims actually overlap.
+        let config = DatabaseConfig::builder()
+            .url("sqlite::memory:".to_string())
+            .max_connections(8)
+            .build();
+        let storage = Arc::new(SqlxStorageBuilder::from_config(&config).connect().await?);
+        storage.create(&tid("t1"), &cid("c1")).await?;
+        storage
+            .update_status(&tid("t1"), TaskState::Completed, Some(said("private")))
+            .await?;
+
+        let mut claimants = tokio::task::JoinSet::new();
+        for n in 0..8 {
+            let storage = storage.clone();
+            claimants.spawn(async move {
+                storage
+                    .load(&cid("c1"), Some(&format!("principal-{n}")), None)
+                    .await
+            });
+        }
+
+        let mut allowed = 0;
+        while let Some(result) = claimants.join_next().await {
+            match result? {
+                Ok(_) => allowed += 1,
+                Err(A2AError::ContextAccessDenied { .. }) => {}
+                Err(e) => return Err(e.into()),
+            }
+        }
+        assert_eq!(allowed, 1, "one principal owns a context, not several");
+        Ok(())
+    }
+
+    /// An agent with no authenticator has no principal to claim with, and its
+    /// conversations stay readable. Refusing here would break every
+    /// unauthenticated deployment.
+    #[tokio::test]
+    async fn an_unowned_context_stays_open() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = create_test_storage().await?;
+        storage.create(&tid("t1"), &cid("c1")).await?;
+        storage
+            .update_status(&tid("t1"), TaskState::Completed, Some(said("open")))
+            .await?;
+
+        storage.load(&cid("c1"), None, None).await?;
+        assert_eq!(
+            texts(&storage.load(&cid("c1"), Some("anyone"), None).await?),
+            vec!["open"]
+        );
+        Ok(())
+    }
+
+    /// The first turn of a conversation asks for history that does not exist.
+    #[tokio::test]
+    async fn an_unknown_context_is_empty_rather_than_an_error()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let storage = create_test_storage().await?;
+        assert!(
+            storage
+                .load(&cid("never-seen"), None, None)
+                .await?
+                .is_empty()
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_task_lifecycle() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = create_test_storage().await?;
+        let task_id = Uuid::new_v4().to_string();
+        let context_id = "test-context";
+
+        // Test task creation
+        let task = storage.create(&tid(&task_id), &cid(context_id)).await?;
+        assert_eq!(task.id, task_id);
+        assert_eq!(task.context_id, context_id);
+        assert_eq!(task.status.state, TaskState::Submitted);
+
+        // Test task existence
+        assert!(storage.exists(&tid(&task_id)).await?);
+        assert!(!storage.exists(&tid("non-existent")).await?);
+
+        // Test status updates
+        let working_task = storage
+            .update_status(&tid(&task_id), TaskState::Working, None)
+            .await?;
+        assert_eq!(working_task.status.state, TaskState::Working);
+
+        let completed_task = storage
+            .update_status(&tid(&task_id), TaskState::Completed, None)
+            .await?;
+        assert_eq!(completed_task.status.state, TaskState::Completed);
+
+        // Test task retrieval with history
+        let retrieved_task = storage.get(&tid(&task_id), Some(10)).await?;
+        assert_eq!(retrieved_task.id, task_id);
+        assert_eq!(retrieved_task.status.state, TaskState::Completed);
+        // Should have history: Submitted -> Working -> Completed
+        // Note: We're not loading full history in the current implementation
+        // assert_eq!(retrieved_task.history.len(), 3);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_task_cancellation() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = create_test_storage().await?;
+        let task_id = Uuid::new_v4().to_string();
+
+        // Create and start working on task
+        storage.create(&tid(&task_id), &cid("test-context")).await?;
+        storage
+            .update_status(&tid(&task_id), TaskState::Working, None)
+            .await?;
+
+        // Cancel the working task
+        let canceled_task = storage.cancel(&tid(&task_id)).await?;
+        assert_eq!(canceled_task.status.state, TaskState::Canceled);
+
+        // Verify cancellation was successful
+        let task_with_history = storage.get(&tid(&task_id), None).await?;
+        assert_eq!(task_with_history.status.state, TaskState::Canceled);
+        // Note: We're not fully implementing history loading in this version
+        // In a full implementation, you'd verify the cancellation message was added
+
+        Ok(())
+    }
+
+    /// A queued task is the clearest case, and the one the storage used to
+    /// refuse: nothing has started, and a client that changed its mind has no
+    /// other way to stop it. Same rule as the in-memory adapter — the two
+    /// consult `TaskState::is_cancelable` rather than each carrying their own
+    /// copy of it.
+    #[tokio::test]
+    async fn a_submitted_task_can_be_canceled() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = create_test_storage().await?;
+        let task_id = Uuid::new_v4().to_string();
+        storage.create(&tid(&task_id), &cid("test-context")).await?;
+
+        let canceled = storage.cancel(&tid(&task_id)).await?;
+        assert_eq!(canceled.status.state, TaskState::Canceled);
+        assert_eq!(
+            storage.get(&tid(&task_id), None).await?.status.state,
+            TaskState::Canceled,
+            "the cancellation has to reach the database, not just the response"
+        );
+        Ok(())
+    }
+
+    /// The agent is waiting on the caller; cancelling is how the caller says
+    /// "never mind" instead of being obliged to answer.
+    #[tokio::test]
+    async fn an_interrupted_task_can_be_canceled() -> Result<(), Box<dyn std::error::Error>> {
+        for state in [TaskState::InputRequired, TaskState::AuthRequired] {
+            let storage = create_test_storage().await?;
+            let task_id = Uuid::new_v4().to_string();
+            storage.create(&tid(&task_id), &cid("test-context")).await?;
+            storage.update_status(&tid(&task_id), state, None).await?;
+
+            let canceled = storage.cancel(&tid(&task_id)).await?;
+            assert_eq!(
+                canceled.status.state,
+                TaskState::Canceled,
+                "cancelling from {state:?} should work"
+            );
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_cannot_cancel_completed_task() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = create_test_storage().await?;
+        let task_id = Uuid::new_v4().to_string();
+
+        // Create, work on, and complete task
+        storage.create(&tid(&task_id), &cid("test-context")).await?;
+        storage
+            .update_status(&tid(&task_id), TaskState::Working, None)
+            .await?;
+        storage
+            .update_status(&tid(&task_id), TaskState::Completed, None)
+            .await?;
+
+        // Try to cancel completed task - should fail
+        let result = storage.cancel(&tid(&task_id)).await;
+        assert!(result.is_err());
+
+        if let Err(A2AError::TaskNotCancelable(_)) = result {
+            // Expected error type
+        } else {
+            panic!("Expected TaskNotCancelable error, got: {:?}", result);
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_duplicate_task_creation() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = create_test_storage().await?;
+        let task_id = Uuid::new_v4().to_string();
+
+        // Create first task
+        storage.create(&tid(&task_id), &cid("test-context")).await?;
+
+        // Try to create duplicate - should fail
+        let result = storage.create(&tid(&task_id), &cid("test-context")).await;
+        assert!(result.is_err());
+
+        if let Err(A2AError::TaskNotFound(_)) = result {
+            // Expected error type (reused for "already exists")
+        } else {
+            panic!(
+                "Expected TaskNotFound error for duplicate, got: {:?}",
+                result
+            );
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_task_history_limit() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = create_test_storage().await?;
+        let task_id = Uuid::new_v4().to_string();
+
+        // Create task and make several status changes
+        storage.create(&tid(&task_id), &cid("test-context")).await?;
+        storage
+            .update_status(&tid(&task_id), TaskState::Working, None)
+            .await?;
+        storage
+            .update_status(&tid(&task_id), TaskState::InputRequired, None)
+            .await?;
+        storage
+            .update_status(&tid(&task_id), TaskState::Working, None)
+            .await?;
+        storage
+            .update_status(&tid(&task_id), TaskState::Completed, None)
+            .await?;
+
+        // Note: We're not fully implementing history loading in this version
+        // In a full implementation, you'd test history limits here
+        let _task_limited = storage.get(&tid(&task_id), Some(3)).await?;
+        let _task_full = storage.get(&tid(&task_id), None).await?;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_push_notifications() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = create_test_storage().await?;
+        let task_id = Uuid::new_v4().to_string();
+
+        // Create task first
+        storage.create(&tid(&task_id), &cid("test-context")).await?;
+
+        // Set push notification config
+        let config = TaskPushNotificationConfig {
+            tenant: String::new(),
+            task_id: task_id.clone(),
+            id: String::new(),
+            url: "https://example.com/webhook".to_string(),
+            token: String::new(),
+            authentication: None.into(),
+            ..Default::default()
+        };
+
+        let set_config = storage.set_config(&config).await?;
+        assert_eq!(set_config.task_id, task_id);
+        assert_eq!(set_config.url, "https://example.com/webhook");
+
+        // Get push notification config
+        let retrieved_config = storage
+            .get_config(&a2a_rs::domain::GetTaskPushNotificationConfigParams {
+                id: task_id.clone(),
+                push_notification_config_id: None,
+                metadata: None,
+            })
+            .await?;
+        assert_eq!(retrieved_config.task_id, task_id);
+        assert_eq!(retrieved_config.url, "https://example.com/webhook");
+
+        // Remove push notification config
+        storage
+            .delete_config(&a2a_rs::domain::DeleteTaskPushNotificationConfigParams {
+                id: task_id.clone(),
+                push_notification_config_id: String::new(),
+                metadata: None,
+            })
+            .await?;
+
+        // Verify it's removed
+        let result = storage
+            .get_config(&a2a_rs::domain::GetTaskPushNotificationConfigParams {
+                id: task_id.clone(),
+                push_notification_config_id: None,
+                metadata: None,
+            })
+            .await;
+        assert!(result.is_err());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_database_config() -> Result<(), Box<dyn std::error::Error>> {
+        // Test config validation
+        let valid_config = DatabaseConfig::builder()
+            .url("sqlite:test.db".to_string())
+            .max_connections(5)
+            .timeout_seconds(10)
+            .build();
+        assert!(valid_config.validate().is_ok());
+
+        // Test invalid config
+        let invalid_config = DatabaseConfig::builder().url("".to_string()).build();
+        assert!(invalid_config.validate().is_err());
+
+        // Test database type detection
+        use a2a_rs::adapter::storage::DatabaseType;
+        assert_eq!(valid_config.database_type(), Some(DatabaseType::Sqlite));
+
+        let postgres_config = DatabaseConfig::builder()
+            .url("postgres://localhost/test".to_string())
+            .build();
+        assert_eq!(
+            postgres_config.database_type(),
+            Some(DatabaseType::Postgres)
+        );
+
+        Ok(())
+    }
+
+    /// The pool is sized by what the caller asked for, not by sqlx's default.
+    #[tokio::test]
+    async fn pool_is_sized_by_the_builder() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = SqlxTaskStorage::builder("sqlite::memory:")
+            .max_connections(3)
+            .connect()
+            .await?;
+        assert_eq!(storage.max_connections(), 3);
+
+        // Unconfigured stays on sqlx's default, so `new` is sized as it was.
+        let default = SqlxTaskStorage::new("sqlite::memory:").await?;
+        assert_eq!(default.max_connections(), 10);
+
+        Ok(())
+    }
+
+    /// `DatabaseConfig::max_connections` reaches the pool.
+    #[tokio::test]
+    async fn pool_is_sized_by_the_database_config() -> Result<(), Box<dyn std::error::Error>> {
+        let config = DatabaseConfig::builder()
+            .url("sqlite::memory:".to_string())
+            .max_connections(7)
+            .build();
+
+        let storage = SqlxStorageBuilder::from_config(&config).connect().await?;
+        assert_eq!(storage.max_connections(), 7);
+
+        Ok(())
+    }
+
+    /// A pool that hands out no connections would fail every query, so it is
+    /// refused where it is written rather than at the first read.
+    #[tokio::test]
+    async fn a_pool_of_no_connections_is_refused() {
+        let Err(err) = SqlxTaskStorage::builder("sqlite::memory:")
+            .max_connections(0)
+            .connect()
+            .await
+        else {
+            panic!("a zero-connection pool must not open");
+        };
+
+        assert!(
+            err.to_string().contains("max_connections"),
+            "error should name the setting: {err}"
+        );
+    }
+
+    /// Additional migrations are executed, not collected and dropped.
+    #[tokio::test]
+    async fn additional_migrations_run() {
+        let Err(err) = SqlxTaskStorage::builder("sqlite::memory:")
+            .migrations(["THIS IS NOT SQL"])
+            .connect()
+            .await
+        else {
+            panic!("a broken migration must fail construction");
+        };
+
+        assert!(
+            err.to_string().contains("Additional migration 1"),
+            "error should name the migration: {err}"
+        );
+    }
+
+    /// Subscriber management is not a storage responsibility: it lives in
+    /// `InMemoryStreamingHandler`. This pins the registry semantics on that
+    /// adapter.
+    #[tokio::test]
+    async fn test_streaming_subscribers() -> Result<(), Box<dyn std::error::Error>> {
+        use a2a_rs::InMemoryStreamingHandler;
+
+        let streaming = InMemoryStreamingHandler::new();
+        let task_id = Uuid::new_v4().to_string();
+
+        // No subscribers registered for an unknown task.
+        let count = streaming.get_subscriber_count(&task_id).await?;
+        assert_eq!(count, 0);
+
+        // Removing subscribers for a task with none is a no-op.
+        streaming.remove_task_subscribers(&task_id).await?;
+
+        // Removal by subscription ID is unsupported by the in-memory handler.
+        let result = streaming.remove_subscription("fake-id").await;
+        assert!(matches!(result, Err(A2AError::UnsupportedOperation(_))));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_operations() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = Arc::new(create_test_storage().await?);
+        let mut handles = Vec::new();
+
+        // Create multiple tasks concurrently
+        for i in 0..10 {
+            let storage_clone = storage.clone();
+            let handle = tokio::spawn(async move {
+                let task_id = format!("concurrent-task-{}", i);
+                let task = storage_clone
+                    .create(&tid(&task_id), &cid("concurrent-context"))
+                    .await?;
+                storage_clone
+                    .update_status(&tid(&task_id), TaskState::Working, None)
+                    .await?;
+                storage_clone
+                    .update_status(&tid(&task_id), TaskState::Completed, None)
+                    .await?;
+                Ok::<_, A2AError>(task)
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all operations to complete
+        for handle in handles {
+            let result = handle.await??;
+            assert_eq!(result.status.state, TaskState::Submitted); // Initial state
+        }
+
+        // Verify all tasks exist
+        for i in 0..10 {
+            let task_id = format!("concurrent-task-{}", i);
+            assert!(storage.exists(&tid(&task_id)).await?);
+            let task = storage.get(&tid(&task_id), None).await?;
+            assert_eq!(task.status.state, TaskState::Completed);
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_database_migrations() -> Result<(), Box<dyn std::error::Error>> {
+        // Test that migrations run successfully on a fresh database
+        let config = DatabaseConfig::builder()
+            .url("sqlite::memory:".to_string())
+            .build();
+
+        // This should run migrations internally
+        let _storage = SqlxTaskStorage::new(&config.url).await?;
+
+        // Create another instance with the same URL - should not fail
+        let _storage2 = SqlxTaskStorage::new(&config.url).await?;
+
+        Ok(())
+    }
+
+    // ===== v1.0.0 Tests =====
+
+    #[tokio::test]
+    async fn test_list_tasks_v3_basic() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = create_test_storage().await?;
+
+        // Create some tasks
+        for i in 0..5 {
+            let task_id = format!("task-{}", i);
+            storage.create(&tid(&task_id), &cid("test-context")).await?;
+        }
+
+        // List all tasks
+        let params = a2a_rs::domain::ListTasksParams::default();
+        let result = storage.list(&params).await?;
+
+        assert_eq!(result.total_size, 5, "Should have 5 tasks");
+        assert_eq!(result.tasks.len(), 5, "Should return 5 tasks");
+        assert_eq!(result.page_size, 50, "Default page size should be 50");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_list_tasks_v3_filtering() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = create_test_storage().await?;
+
+        // Create tasks in different contexts and states
+        storage.create(&tid("task-a-1"), &cid("context-a")).await?;
+        storage.create(&tid("task-a-2"), &cid("context-a")).await?;
+        storage.create(&tid("task-b-1"), &cid("context-b")).await?;
+
+        storage
+            .update_status(&tid("task-a-1"), TaskState::Working, None)
+            .await?;
+        storage
+            .update_status(&tid("task-a-2"), TaskState::Completed, None)
+            .await?;
+
+        // Filter by context
+        let params = a2a_rs::domain::ListTasksParams {
+            context_id: Some("context-a".to_string()),
+            ..Default::default()
+        };
+        let result = storage.list(&params).await?;
+        assert_eq!(result.total_size, 2, "Should have 2 tasks in context-a");
+
+        // Filter by status
+        let params = a2a_rs::domain::ListTasksParams {
+            status: Some(TaskState::Working),
+            ..Default::default()
+        };
+        let result = storage.list(&params).await?;
+        assert_eq!(result.total_size, 1, "Should have 1 working task");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_list_tasks_v3_pagination() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = create_test_storage().await?;
+
+        // Create 10 tasks
+        for i in 0..10 {
+            storage
+                .create(&tid(&format!("task-{}", i)), &cid("test-context"))
+                .await?;
+        }
+
+        // Get first page
+        let params = a2a_rs::domain::ListTasksParams {
+            page_size: Some(3),
+            ..Default::default()
+        };
+        let page1 = storage.list(&params).await?;
+        assert_eq!(page1.tasks.len(), 3, "Should return 3 tasks");
+        assert!(
+            !page1.next_page_token.is_empty(),
+            "Should have next page token"
+        );
+
+        // Get second page
+        let params = a2a_rs::domain::ListTasksParams {
+            page_size: Some(3),
+            page_token: Some(page1.next_page_token.clone()),
+            ..Default::default()
+        };
+        let page2 = storage.list(&params).await?;
+        assert_eq!(page2.tasks.len(), 3, "Should return 3 tasks");
+
+        Ok(())
+    }
+
+    /// Migration 002 used to drop and recreate `push_notification_configs`, and
+    /// the base migrations re-run on every construction — so every restart threw
+    /// away the webhooks the agent had been told to call, silently. Reopening
+    /// the same file is that restart.
+    #[tokio::test]
+    async fn push_configs_survive_a_restart() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = tempfile::tempdir()?;
+        let url = format!("sqlite:{}?mode=rwc", dir.path().join("a2a.db").display());
+        let task_id = Uuid::new_v4().to_string();
+
+        let storage = SqlxTaskStorage::new(&url).await?;
+        storage
+            .create(&tid(&task_id), &cid("restart-context"))
+            .await?;
+        storage
+            .set_config(&TaskPushNotificationConfig {
+                task_id: task_id.clone(),
+                id: "kept".to_string(),
+                url: "https://example.com/kept".to_string(),
+                ..Default::default()
+            })
+            .await?;
+        drop(storage);
+
+        let restarted = SqlxTaskStorage::new(&url).await?;
+        let configs = restarted
+            .list_configs(&a2a_rs::domain::ListTaskPushNotificationConfigsParams {
+                id: task_id.clone(),
+                metadata: None,
+            })
+            .await?;
+
+        assert_eq!(configs.len(), 1, "the config must survive the restart");
+        assert_eq!(configs[0].url, "https://example.com/kept");
+        Ok(())
+    }
+
+    // --- the state bag -------------------------------------------------------
+
+    fn key(raw: &str) -> a2a_rs::domain::StateKey {
+        raw.parse().unwrap()
+    }
+
+    /// A bare key belongs to the conversation it was written in, and reads back
+    /// there and nowhere else.
+    #[tokio::test]
+    async fn a_context_scoped_value_stays_in_its_context() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let storage = create_test_storage().await?;
+
+        storage
+            .remember(&cid("c1"), None, &key("project"), "a2a-rs")
+            .await?;
+
+        let here = storage.load_state(&cid("c1"), None).await?;
+        assert_eq!(here.get(&key("project")), Some("a2a-rs"));
+        assert!(storage.load_state(&cid("c2"), None).await?.is_empty());
+        Ok(())
+    }
+
+    /// What `user:` is for: filed under the principal, so it reads back from a
+    /// conversation that has never seen it — and only for that principal.
+    #[tokio::test]
+    async fn a_user_scoped_value_follows_the_caller_across_contexts()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let storage = create_test_storage().await?;
+
+        storage
+            .remember(&cid("c1"), Some("alice"), &key("user:tone"), "brief")
+            .await?;
+
+        let elsewhere = storage.load_state(&cid("c2"), Some("alice")).await?;
+        assert_eq!(elsewhere.get(&key("user:tone")), Some("brief"));
+
+        let someone_else = storage.load_state(&cid("c3"), Some("bob")).await?;
+        assert!(someone_else.is_empty());
+        Ok(())
+    }
+
+    /// With no authenticator there is nothing to file it under, and filing it
+    /// against the context would promise a lifetime it does not have.
+    #[tokio::test]
+    async fn a_user_scoped_write_without_a_principal_is_refused()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let storage = create_test_storage().await?;
+
+        let refused = storage
+            .remember(&cid("c1"), None, &key("user:tone"), "brief")
+            .await;
+        assert!(matches!(refused, Err(A2AError::InvalidParams(_))));
+        assert!(storage.load_state(&cid("c1"), None).await?.is_empty());
+        Ok(())
+    }
+
+    /// Writing the same key again replaces it rather than accumulating rows —
+    /// the upsert is what the primary key is there for.
+    #[tokio::test]
+    async fn writing_a_key_twice_replaces_it() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = create_test_storage().await?;
+
+        storage
+            .remember(&cid("c1"), None, &key("project"), "old")
+            .await?;
+        storage
+            .remember(&cid("c1"), None, &key("project"), "new")
+            .await?;
+
+        let state = storage.load_state(&cid("c1"), None).await?;
+        assert_eq!(state.len(), 1);
+        assert_eq!(state.get(&key("project")), Some("new"));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn forgetting_reports_whether_the_key_held_anything()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let storage = create_test_storage().await?;
+
+        storage
+            .remember(&cid("c1"), None, &key("project"), "a2a-rs")
+            .await?;
+        assert!(storage.forget(&cid("c1"), None, &key("project")).await?);
+        assert!(!storage.forget(&cid("c1"), None, &key("project")).await?);
+        assert!(storage.load_state(&cid("c1"), None).await?.is_empty());
+        Ok(())
+    }
+
+    /// The state bag is behind the same ownership check as the transcript: a
+    /// context id that reads back what was remembered in it is a capability.
+    #[tokio::test]
+    async fn another_principal_cannot_read_or_write_a_claimed_context()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let storage = create_test_storage().await?;
+
+        storage
+            .remember(&cid("c1"), Some("alice"), &key("project"), "a2a-rs")
+            .await?;
+
+        assert!(matches!(
+            storage.load_state(&cid("c1"), Some("bob")).await,
+            Err(A2AError::ContextAccessDenied { .. })
+        ));
+        assert!(matches!(
+            storage
+                .remember(&cid("c1"), Some("bob"), &key("project"), "theirs")
+                .await,
+            Err(A2AError::ContextAccessDenied { .. })
+        ));
+        Ok(())
+    }
+
+    /// The reason the bag is in the database at all. The control plane restarts
+    /// agents on purpose, and a fact the model was asked to remember has to
+    /// still be there afterwards.
+    #[tokio::test]
+    async fn remembered_values_survive_a_restart() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = tempfile::tempdir()?;
+        let url = format!("sqlite:{}?mode=rwc", dir.path().join("a2a.db").display());
+
+        let storage = SqlxTaskStorage::new(&url).await?;
+        storage
+            .remember(&cid("c1"), Some("alice"), &key("project"), "a2a-rs")
+            .await?;
+        storage
+            .remember(&cid("c1"), Some("alice"), &key("user:tone"), "brief")
+            .await?;
+        drop(storage);
+
+        let restarted = SqlxTaskStorage::new(&url).await?;
+        let state = restarted.load_state(&cid("c1"), Some("alice")).await?;
+        assert_eq!(state.get(&key("project")), Some("a2a-rs"));
+        assert_eq!(state.get(&key("user:tone")), Some("brief"));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_push_notification_config_v3_crud() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = create_test_storage().await?;
+        let task_id = Uuid::new_v4().to_string();
+
+        // Create task first
+        storage.create(&tid(&task_id), &cid("test-context")).await?;
+
+        // Set push notification config
+        let config = TaskPushNotificationConfig {
+            tenant: String::new(),
+            task_id: task_id.clone(),
+            id: "config-1".to_string(),
+            url: "https://example.com/webhook".to_string(),
+            token: "test-token".to_string(),
+            authentication: None.into(),
+            ..Default::default()
+        };
+        storage.set_config(&config).await?;
+
+        // Get specific config
+        let get_params = a2a_rs::domain::GetTaskPushNotificationConfigParams {
+            id: task_id.clone(),
+            push_notification_config_id: Some("config-1".to_string()),
+            metadata: None,
+        };
+        let retrieved = storage.get_config(&get_params).await?;
+        assert_eq!(retrieved.url, "https://example.com/webhook");
+        assert_eq!(retrieved.token, "test-token");
+
+        // List configs
+        let list_params = a2a_rs::domain::ListTaskPushNotificationConfigsParams {
+            id: task_id.clone(),
+            metadata: None,
+        };
+        let configs = storage.list_configs(&list_params).await?;
+        assert_eq!(configs.len(), 1, "Should have 1 config");
+
+        // Delete config
+        let delete_params = a2a_rs::domain::DeleteTaskPushNotificationConfigParams {
+            id: task_id.clone(),
+            push_notification_config_id: "config-1".to_string(),
+            metadata: None,
+        };
+        storage.delete_config(&delete_params).await?;
+
+        // Verify deleted
+        let configs = storage.list_configs(&list_params).await?;
+        assert_eq!(configs.len(), 0, "Config should be deleted");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_push_notification_config_v3_multiple() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = create_test_storage().await?;
+        let task_id = Uuid::new_v4().to_string();
+
+        // Create task
+        storage.create(&tid(&task_id), &cid("test-context")).await?;
+
+        // Set multiple configs
+        let config1 = TaskPushNotificationConfig {
+            tenant: String::new(),
+            task_id: task_id.clone(),
+            id: "config-1".to_string(),
+            url: "https://example.com/webhook1".to_string(),
+            token: String::new(),
+            authentication: None.into(),
+            ..Default::default()
+        };
+        let config2 = TaskPushNotificationConfig {
+            tenant: String::new(),
+            task_id: task_id.clone(),
+            id: "config-2".to_string(),
+            url: "https://example.com/webhook2".to_string(),
+            token: "token-2".to_string(),
+            authentication: None.into(),
+            ..Default::default()
+        };
+
+        storage.set_config(&config1).await?;
+        storage.set_config(&config2).await?;
+
+        // List should return both
+        let list_params = a2a_rs::domain::ListTaskPushNotificationConfigsParams {
+            id: task_id.clone(),
+            metadata: None,
+        };
+        let configs = storage.list_configs(&list_params).await?;
+        assert_eq!(configs.len(), 2, "Should have 2 configs");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_optimistic_concurrency_versioning() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = create_test_storage().await?;
+        let task_id = Uuid::new_v4().to_string();
+
+        // A freshly created task starts at version 1.
+        storage.create(&tid(&task_id), &cid("ctx")).await?;
+        assert_eq!(storage.version(&tid(&task_id)).await?, 1);
+
+        // Every unversioned mutation bumps the version too.
+        storage
+            .update_status(&tid(&task_id), TaskState::Working, None)
+            .await?;
+        let snapshot = storage.get_versioned(&tid(&task_id), None).await?;
+        assert_eq!(snapshot.version, 2);
+        assert_eq!(snapshot.task.status.state, TaskState::Working);
+
+        // A conditional update with the stale version is rejected, untouched.
+        let stale = storage
+            .update_status_checked(&tid(&task_id), 1, TaskState::Completed, None)
+            .await;
+        match stale {
+            Err(A2AError::VersionConflict {
+                expected, actual, ..
+            }) => {
+                assert_eq!(expected, 1);
+                assert_eq!(actual, 2);
+            }
+            other => panic!("expected VersionConflict, got {other:?}"),
+        }
+        // State is unchanged after the rejected update.
+        assert_eq!(
+            storage.get(&tid(&task_id), None).await?.status.state,
+            TaskState::Working
+        );
+
+        // A conditional update with the current version succeeds and bumps.
+        let updated = storage
+            .update_status_checked(&tid(&task_id), 2, TaskState::Completed, None)
+            .await?;
+        assert_eq!(updated.version, 3);
+        assert_eq!(updated.task.status.state, TaskState::Completed);
+
+        // Versioning ops on a missing task report TaskNotFound.
+        assert!(matches!(
+            storage.version(&tid("ghost")).await,
+            Err(A2AError::TaskNotFound(_))
+        ));
+
+        Ok(())
+    }
+}
+
+#[cfg(not(feature = "sqlx-storage"))]
+#[tokio::test]
+async fn test_sqlx_not_available() {
+    // This test just verifies the feature flag works correctly
+    println!("SQLx storage tests skipped - feature not enabled");
+}

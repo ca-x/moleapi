@@ -59,8 +59,9 @@ export function useWorkbenchController() {
   );
   const graphqlRun = useRef<(() => void) | null>(null);
   const mcpRun = useRef<(() => void) | null>(null);
+  const a2aRun = useRef<(() => void) | null>(null);
   const sendRequest =
-    requests.request?.protocol?.kind === "mcp" ? () => mcpRun.current?.() : requests.request?.protocol?.kind === "graphql"
+    requests.request?.protocol?.kind === "a2a" ? () => a2aRun.current?.() : requests.request?.protocol?.kind === "mcp" ? () => mcpRun.current?.() : requests.request?.protocol?.kind === "graphql"
       ? () => graphqlRun.current?.()
       : requests.request?.protocol?.kind &&
           ["sse", "websocket", "grpc", "socketio", "mqtt", "mcp"].includes(
@@ -217,6 +218,7 @@ export function useWorkbenchController() {
     protocolSession,
     graphqlRun,
     mcpRun,
+    a2aRun,
     send: sendRequest,
     busy: requests.busy || protocolSession.busy,
     sending: requests.sending || protocolSession.busy,

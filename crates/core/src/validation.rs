@@ -3,6 +3,7 @@ use anyhow::{Context, Result, bail, ensure};
 use reqwest::header::{HeaderName, HeaderValue};
 use std::collections::HashSet;
 pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
+    crate::validate_a2a(r, templates)?;
     crate::validate_mcp(r, templates)?;
     validate_soap(r, templates)?;
     validate_graphql_draft(r, templates)?;
@@ -118,7 +119,8 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
         "Unsupported authentication kind"
     );
     ensure!(r.body.len() <= MAX_BODY, "Request body exceeds 5 MiB");
-    if !r.protocol.is_mqtt()
+    if !(templates && r.protocol.is_a2a() && r.url.is_empty())
+        && !r.protocol.is_mqtt()
         && !matches!(&r.protocol, Protocol::Mcp { config } if config.transport == "stdio" || templates && r.url.is_empty())
         && (!templates || !r.url.contains("{{"))
     {
@@ -209,6 +211,17 @@ pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
             "Specification IDs must be unique and nonempty"
         );
         ensure!(spec.source.len() <= MAX_BODY, "Specification exceeds 5 MiB");
+        if spec.kind == "a2a-agent-card" {
+            ensure!(
+                matches!(spec.dialect.as_str(), "a2a-0.3" | "a2a-1.0"),
+                "Unsupported Agent Card dialect"
+            );
+            ensure!(spec.source.len() <= 1024 * 1024, "Agent Card exceeds 1 MiB");
+            crate::validate_mcp_json(
+                &serde_json::from_str::<serde_json::Value>(&spec.source)
+                    .context("Invalid Agent Card JSON")?,
+            )?;
+        }
         if spec.kind == "wsdl" {
             soap_schema(spec)?;
         }

@@ -45,6 +45,27 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
             request.url = redact_url(&request.url);
             request.body = redact_embedded_json(&request.body);
             match &mut request.protocol {
+                moleapi_core::Protocol::A2a { config } => {
+                    request.url = privacy.screen_text(&request.url);
+                    for row in request.headers.iter_mut().chain(request.query.iter_mut()) {
+                        row.value = privacy.screen_text(&row.value);
+                        row.local_value = None;
+                    }
+                    config.params_source =
+                        privacy.screen_json(&redact_protocol_json_or(&config.params_source, "{}"));
+                    if let Some(url) = &mut config.interface_url {
+                        *url = privacy.screen_text(&redact_url(url));
+                    }
+                    if let Some(source) = &mut config.card_source {
+                        if let Ok(mut value) = serde_json::from_str::<Value>(source) {
+                            redact_value(&mut value);
+                            *source = privacy
+                                .screen_json(&serde_json::to_string(&value).unwrap_or_default());
+                        } else {
+                            source.clear();
+                        }
+                    }
+                }
                 moleapi_core::Protocol::Mcp { config } => {
                     request.url = privacy.screen_text(&request.url);
                     for row in request.headers.iter_mut().chain(request.query.iter_mut()) {
@@ -167,7 +188,11 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
             redact_value(&mut value);
             // Redaction changes text; preserve original text only for explicit include_secrets exports.
             if let Ok(text) = serde_json::to_string_pretty(&value) {
-                specification.source = text;
+                specification.source = if specification.kind == "a2a-agent-card" {
+                    privacy.screen_json(&text)
+                } else {
+                    text
+                };
             }
         } else {
             // An opaque source cannot be safely screened as structured content.

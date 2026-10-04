@@ -25,6 +25,8 @@ const GraphQLWorkbench = lazy(() => import("../graphql/GraphQLWorkbench"));
 const GrpcWorkbench = lazy(() => import("../grpc/GrpcWorkbench"));
 const SocketIoWorkbench = lazy(() => import("../socketio/SocketIoWorkbench"));
 const MqttWorkbench = lazy(() => import("../mqtt/MqttWorkbench"));
+const A2aWorkbench = lazy(() => import("../a2a/A2aWorkbench"));
+import { a2aConfig } from "../a2a/model";
 const McpWorkbench = lazy(() => import("../mcp/McpWorkbench"));
 import { mcpConfig } from "../mcp/model";
 const SoapWorkbench = lazy(() => import("../soap/SoapWorkbench"));
@@ -76,12 +78,13 @@ export default function RequestEditor({
   const mqtt = kind === "mqtt";
   const soap = kind === "soap";
   const mcp = kind === "mcp";
+  const a2a = kind === "a2a";
   const mcpStdio = request.protocol?.kind === "mcp" && request.protocol.transport === "stdio";
   const mqttWebSocket =
     mqtt && (/^wss?:/i.test(request.url) || request.url.includes("{{"));
   useEffect(() => {
     if (
-      (live || grpc || socketio || mqtt || mcp) &&
+      (live || grpc || socketio || mqtt || mcp || a2a) &&
       [
         "body",
         "assertions",
@@ -92,7 +95,7 @@ export default function RequestEditor({
       ].includes(tab)
     )
       setTab(mcpStdio ? "settings" : mqtt ? "auth" : grpc ? "headers" : "query");
-  }, [live, grpc, socketio, mqtt, mcp, mcpStdio, mqttWebSocket, tab]);
+  }, [live, grpc, socketio, mqtt, mcp, a2a, mcpStdio, mqttWebSocket, tab]);
   function changeProtocol(
     value:
       | "http"
@@ -103,7 +106,8 @@ export default function RequestEditor({
       | "socketio"
       | "mqtt"
       | "soap"
-      | "mcp",
+      | "mcp"
+      | "a2a",
   ) {
     let url = request.url;
     try {
@@ -124,7 +128,7 @@ export default function RequestEditor({
     }
     update({
       protocol:
-        value === "mcp" ? mcpConfig() : value === "soap"
+        value === "a2a" ? a2aConfig() : value === "mcp" ? mcpConfig() : value === "soap"
           ? {
               kind: "soap",
               version: "1.1",
@@ -190,7 +194,7 @@ export default function RequestEditor({
           <Text size="1" color="gray">
             {kind === "http"
               ? "HTTP 请求"
-              : mcp ? "MCP 客户端" : grpc
+              : a2a ? "A2A 客户端" : mcp ? "MCP 客户端" : grpc
                 ? "gRPC 请求"
                 : soap
                   ? "SOAP 请求"
@@ -248,9 +252,10 @@ export default function RequestEditor({
             { value: "mqtt", label: "MQTT" },
             { value: "soap", label: "SOAP" },
             { value: "mcp", label: "MCP" },
+            { value: "a2a", label: "A2A" },
           ]}
         />
-        {mcp ? <Badge className="protocol-handshake" color="gray">MCP</Badge> : mqtt ? (
+        {a2a ? <Badge className="protocol-handshake" color="gray">A2A</Badge> : mcp ? <Badge className="protocol-handshake" color="gray">MCP</Badge> : mqtt ? (
           <Badge className="protocol-handshake" color="gray">
             MQTT Broker
           </Badge>
@@ -291,7 +296,7 @@ export default function RequestEditor({
           }
         >
           <Send size={16} />
-          {mcp ? (protocolConnected ? "运行" : "加载能力") : grpc
+          {a2a ? (protocolConnected ? "运行" : "连接") : mcp ? (protocolConnected ? "运行" : "加载能力") : grpc
             ? "调用"
             : !(live || socketio || mqtt)
               ? "发送"
@@ -309,7 +314,7 @@ export default function RequestEditor({
         <Panel
           id="request-options-panel"
           defaultSize={
-            kind === "graphql" || grpc || socketio || mqtt || soap || mcp
+            kind === "graphql" || grpc || socketio || mqtt || soap || mcp || a2a
               ? "20%"
               : "35%"
           }
@@ -326,7 +331,7 @@ export default function RequestEditor({
                 .filter((item) =>
                   kind === "graphql" || soap
                     ? item.value !== "body"
-                    : grpc || mqtt || mcp
+                    : grpc || mqtt || mcp || a2a
                       ? ![
                           ...(mqtt && !mqttWebSocket ? ["headers"] : []),
                           ...(mcpStdio ? ["headers", "auth"] : []),
@@ -548,13 +553,13 @@ export default function RequestEditor({
         <Panel
           id="request-response-panel"
           defaultSize={
-            kind === "graphql" || grpc || socketio || mqtt || soap || mcp
+            kind === "graphql" || grpc || socketio || mqtt || soap || mcp || a2a
               ? "80%"
               : "65%"
           }
           minSize="40%"
         >
-          {mcp ? <Suspense fallback={<Text role="status">正在加载 MCP 客户端…</Text>}><McpWorkbench /></Suspense> : soap ? (
+          {a2a ? <Suspense fallback={<Text role="status">正在加载 A2A 客户端…</Text>}><A2aWorkbench /></Suspense> : mcp ? <Suspense fallback={<Text role="status">正在加载 MCP 客户端…</Text>}><McpWorkbench /></Suspense> : soap ? (
             <Suspense
               fallback={<Text role="status">正在加载 SOAP 客户端…</Text>}
             >
