@@ -1,3 +1,6 @@
 # Preserve upstream license/snapshot formatting and unified-diff context bytes.
 vendor/** -whitespace
 web/patches/*.patch -whitespace
+
+# This embedded, hashed upstream bundle must retain canonical bytes on Windows.
+vendor/snippet-engine/engine.js text eol=lf
