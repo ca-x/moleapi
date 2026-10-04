@@ -3,6 +3,7 @@ use anyhow::{Context, Result, bail, ensure};
 use reqwest::header::{HeaderName, HeaderValue};
 use std::collections::HashSet;
 pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
+    crate::validate_mcp(r, templates)?;
     validate_soap(r, templates)?;
     validate_graphql_draft(r, templates)?;
     validate_mqtt(r, templates)?;
@@ -117,7 +118,10 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
         "Unsupported authentication kind"
     );
     ensure!(r.body.len() <= MAX_BODY, "Request body exceeds 5 MiB");
-    if !r.protocol.is_mqtt() && (!templates || !r.url.contains("{{")) {
+    if !r.protocol.is_mqtt()
+        && !matches!(&r.protocol, Protocol::Mcp { config } if config.transport == "stdio" || templates && r.url.is_empty())
+        && (!templates || !r.url.contains("{{"))
+    {
         protocol_url(
             &r.url,
             r.protocol == Protocol::Websocket || r.protocol.is_socketio(),

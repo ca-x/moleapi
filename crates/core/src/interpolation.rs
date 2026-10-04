@@ -119,6 +119,10 @@ pub fn resolve_request(
             )?;
         }
     }
+    if request.protocol.is_mcp() {
+        value["protocol"]["arguments_source"] = "{}".into();
+        value["protocol"]["config_source"] = serde_json::Value::Null;
+    }
     let grpc = if let Protocol::Grpc { message_source, .. } = &request.protocol {
         let message: serde_json::Value =
             serde_json::from_str(message_source).context("Invalid gRPC JSON draft")?;
@@ -221,6 +225,12 @@ pub fn resolve_request(
         .into();
     }
     let mut resolved: RequestSpec = serde_json::from_value(value)?;
+    if let (Protocol::Mcp { config }, Protocol::Mcp { config: original }) =
+        (&mut resolved.protocol, &request.protocol)
+    {
+        config.arguments_source = original.arguments_source.clone();
+        config.config_source = original.config_source.clone();
+    }
     resolved.pre_request_script = request.pre_request_script.clone();
     resolved.post_response_script = request.post_response_script.clone();
     reconcile_graphql(&mut resolved)?;

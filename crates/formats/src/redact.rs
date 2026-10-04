@@ -2,7 +2,7 @@ use moleapi_core::Workspace;
 use serde_json::Value;
 
 pub(super) fn workspace(source: &Workspace) -> Workspace {
-    let xml_privacy = XmlPrivacy::new(source);
+    let privacy = ExportPrivacy::new(source);
     let mut result = source.clone();
     for environment in &mut result.data.environments {
         for variable in &mut environment.variables {
@@ -45,10 +45,39 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
             request.url = redact_url(&request.url);
             request.body = redact_embedded_json(&request.body);
             match &mut request.protocol {
+                moleapi_core::Protocol::Mcp { config } => {
+                    request.url = privacy.screen_text(&request.url);
+                    for row in request.headers.iter_mut().chain(request.query.iter_mut()) {
+                        row.value = privacy.screen_text(&row.value);
+                        row.local_value = None;
+                    }
+                    mcp_args(&mut config.args);
+                    for row in &mut config.env {
+                        if row.secret == Some(true) || sensitive(&row.key) {
+                            row.value.clear();
+                        }
+                        row.value = privacy.screen_text(&row.value);
+                        row.local_value = None;
+                    }
+                    config.command = privacy.screen_text(&config.command);
+                    config.uri = privacy.screen_text(&redact_url(&config.uri));
+                    config.arguments_source = privacy
+                        .screen_json(&redact_protocol_json_or(&config.arguments_source, "{}"));
+                    for arg in &mut config.args {
+                        *arg = privacy.screen_text(arg);
+                    }
+                    if let Some(source) = &mut config.config_source {
+                        *source = privacy.screen_json(&redact_protocol_json_or(source, "{}"));
+                        if let Ok(mut value) = serde_json::from_str::<Value>(source) {
+                            redact_mcp_args(&mut value);
+                            *source = serde_json::to_string_pretty(&value).unwrap_or_default();
+                        }
+                    }
+                }
                 moleapi_core::Protocol::Soap { .. } => {
-                    request.body = xml_privacy.screen(&request.body, false);
+                    request.body = privacy.screen_xml(&request.body, false);
                     for example in &mut request.examples {
-                        example.body = xml_privacy.screen(&example.body, false);
+                        example.body = privacy.screen_xml(&example.body, false);
                     }
                 }
                 moleapi_core::Protocol::Mqtt { config } => {
@@ -129,7 +158,7 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
                         *content = Value::String(
                             content
                                 .as_str()
-                                .map(|source| xml_privacy.screen(source, true))
+                                .map(|source| privacy.screen_xml(source, true))
                                 .unwrap_or_default(),
                         );
                     }
@@ -313,11 +342,11 @@ fn sensitive(key: &str) -> bool {
 }
 
 // XML entity spelling is arbitrary; screen decoded data before default exports.
-struct XmlPrivacy {
+struct ExportPrivacy {
     matcher: Option<aho_corasick::AhoCorasick>,
     withhold: bool,
 }
-impl XmlPrivacy {
+impl ExportPrivacy {
     fn new(workspace: &Workspace) -> Self {
         let mut secrets = std::collections::BTreeSet::new();
         let mut pairs = |rows: &[moleapi_core::Pair]| {
@@ -339,12 +368,36 @@ impl XmlPrivacy {
             for request in &collection.requests {
                 pairs(&request.headers);
                 pairs(&request.query);
+                if let moleapi_core::Protocol::Mcp { config } = &request.protocol {
+                    pairs(&config.env);
+                }
             }
         }
         for collection in &workspace.data.collections {
             for request in &collection.requests {
                 secrets.insert(request.auth.token.clone());
                 secrets.insert(request.auth.password.clone());
+                if let moleapi_core::Protocol::Mcp { config } = &request.protocol {
+                    if let Some(raw) = &config.config_source
+                        && let Ok(source) = serde_json::from_str::<Value>(raw)
+                    {
+                        // Host sources have no secret flags; imported env/header values
+                        // are private by default, including originals changed later.
+                        for field in ["env", "headers"] {
+                            if let Some(rows) = source.get(field).and_then(Value::as_object) {
+                                for value in rows.values().filter_map(Value::as_str) {
+                                    secrets.insert(value.into());
+                                }
+                            }
+                        }
+                        if let Some(values) = source.get("args")
+                            && let Ok(args) = serde_json::from_value::<Vec<String>>(values.clone())
+                        {
+                            collect_mcp_private_args(&args, &mut secrets);
+                        }
+                    }
+                    collect_mcp_private_args(&config.args, &mut secrets);
+                }
             }
         }
         secrets.remove("");
@@ -373,7 +426,56 @@ impl XmlPrivacy {
             },
         }
     }
-    fn screen(&self, source: &str, definitions: bool) -> String {
+    fn screen_text(&self, text: &str) -> String {
+        if self.withhold {
+            return String::new();
+        }
+        match &self.matcher {
+            Some(matcher) => {
+                let replacements = vec!["[REDACTED]"; matcher.patterns_len()];
+                matcher.replace_all(text, &replacements)
+            }
+            None => text.into(),
+        }
+    }
+    fn screen_json(&self, text: &str) -> String {
+        if self.withhold {
+            return "{}".into();
+        }
+        fn visit(value: &mut Value, privacy: &ExportPrivacy) {
+            match value {
+                Value::String(text) => *text = privacy.screen_text(text),
+                Value::Array(values) => {
+                    for value in values {
+                        visit(value, privacy);
+                    }
+                }
+                Value::Object(object) => {
+                    if let Some(matcher) = &privacy.matcher {
+                        object.retain(|key, _| !matcher.is_match(key));
+                    }
+                    for value in object.values_mut() {
+                        visit(value, privacy);
+                    }
+                }
+                Value::Number(_) | Value::Bool(_)
+                    if privacy
+                        .matcher
+                        .as_ref()
+                        .is_some_and(|matcher| matcher.is_match(&value.to_string())) =>
+                {
+                    *value = Value::Null;
+                }
+                _ => {}
+            }
+        }
+        let Ok(mut value) = serde_json::from_str::<Value>(text) else {
+            return "{}".into();
+        };
+        visit(&mut value, self);
+        serde_json::to_string_pretty(&value).unwrap_or_default()
+    }
+    fn screen_xml(&self, source: &str, definitions: bool) -> String {
         let safe = if definitions {
             moleapi_core::redact_soap_source_xml(source)
         } else {
@@ -397,5 +499,62 @@ impl XmlPrivacy {
             }
         }
         safe
+    }
+}
+
+fn mcp_args(args: &mut [String]) {
+    let mut hidden = false;
+    for arg in args {
+        if hidden {
+            arg.clear();
+            hidden = false;
+            continue;
+        }
+        if !arg.starts_with('-') {
+            continue;
+        }
+        if let Some((key, _)) = arg.split_once('=') {
+            if mcp_private_flag(key) {
+                *arg = format!("{key}=");
+            }
+        } else if mcp_private_flag(arg) {
+            hidden = true;
+        }
+    }
+}
+fn redact_mcp_args(value: &mut Value) {
+    if let Some(args) = value.get_mut("args") {
+        if let Ok(mut values) = serde_json::from_value::<Vec<String>>(args.clone()) {
+            mcp_args(&mut values);
+            *args = serde_json::to_value(values).unwrap_or(Value::Null);
+        } else {
+            *args = Value::Array(vec![]);
+        }
+    }
+}
+
+fn mcp_private_flag(flag: &str) -> bool {
+    let key = flag.trim_start_matches('-');
+    sensitive(key) || sensitive(&key.replace('-', "_"))
+}
+
+fn collect_mcp_private_args(args: &[String], secrets: &mut std::collections::BTreeSet<String>) {
+    let mut hidden = false;
+    for arg in args {
+        if hidden {
+            secrets.insert(arg.clone());
+            hidden = false;
+            continue;
+        }
+        if !arg.starts_with('-') {
+            continue;
+        }
+        if let Some((key, value)) = arg.split_once('=') {
+            if mcp_private_flag(key) {
+                secrets.insert(value.into());
+            }
+        } else if mcp_private_flag(arg) {
+            hidden = true;
+        }
     }
 }

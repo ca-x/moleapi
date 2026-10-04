@@ -1,5 +1,5 @@
 [workspace]
-exclude = ["vendor/graphql-ws-client", "vendor/cynic-introspection", "vendor/protox-parse", "vendor/rust_socketio", "vendor/rust_engineio", "vendor/rumqttc", "vendor/wsdl"]
+exclude = ["vendor/rmcp", "vendor/graphql-ws-client", "vendor/cynic-introspection", "vendor/protox-parse", "vendor/rust_socketio", "vendor/rust_engineio", "vendor/rumqttc", "vendor/wsdl"]
 members = ["crates/core", "crates/server", "crates/formats", "crates/script-runtime", "crates/protocols", "desktop"]
 default-members = ["crates/core", "crates/server", "crates/formats", "crates/script-runtime", "crates/protocols"]
 resolver = "3"
@@ -44,3 +44,5 @@ rust_engineio = { path = "vendor/rust_engineio" }
 rumqttc = { path = "vendor/rumqttc" }
 
 wsdl = { path = "vendor/wsdl" }
+
+rmcp = { path = "vendor/rmcp" }

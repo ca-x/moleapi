@@ -86,7 +86,8 @@ pub async fn create(
                 "GraphQL query/mutation requests use the execute API",
             ));
         }
-    } else if !request.protocol.is_mqtt()
+    } else if !request.protocol.is_mcp()
+        && !request.protocol.is_mqtt()
         && !request.protocol.is_grpc()
         && (request.method != "GET" || request.body_kind != "none")
     {
@@ -94,11 +95,14 @@ pub async fn create(
             "SSE and WebSocket connections require GET with body mode None",
         ));
     }
-    if request.protocol.is_mqtt() != c.request.protocol.is_mqtt()
+    if request.protocol.is_mcp() != c.request.protocol.is_mcp()
+        || matches!((&request.protocol, &c.request.protocol), (Protocol::Mcp { config }, Protocol::Mcp { config: original }) if config.transport != original.transport)
+        || request.protocol.is_mqtt() != c.request.protocol.is_mqtt()
         || request.protocol.is_socketio() != c.request.protocol.is_socketio()
         || request.protocol.is_graphql() != c.request.protocol.is_graphql()
         || request.protocol.is_grpc() != c.request.protocol.is_grpc()
-        || (!request.protocol.is_mqtt()
+        || (!request.protocol.is_mcp()
+            && !request.protocol.is_mqtt()
             && !request.protocol.is_socketio()
             && !request.protocol.is_graphql()
             && !request.protocol.is_grpc()
@@ -159,7 +163,27 @@ pub async fn create(
             request.protocol == Protocol::Websocket || request.protocol.is_socketio(),
         ),
     };
-    let mut resolved_url = if request.protocol.is_mqtt() {
+    if let Protocol::Mcp { config } = &request.protocol
+        && config.transport == "stdio"
+        && !s.local
+    {
+        let allowed = std::env::var_os("MOLEAPI_MCP_STDIO_ALLOWLIST")
+            .map(|value| std::env::split_paths(&value).collect::<Vec<_>>())
+            .unwrap_or_default();
+        if !allowed
+            .iter()
+            .any(|path| path == std::path::Path::new(&config.command))
+        {
+            return Err(ApiError::bad(
+                "MCP STDIO launch is disabled or executable is not administrator-allowed",
+            ));
+        }
+    }
+    let stdio =
+        matches!(&request.protocol, Protocol::Mcp { config } if config.transport == "stdio");
+    let mut resolved_url = if stdio {
+        moleapi_core::protocol_url("http://mcp.invalid/", false)
+    } else if request.protocol.is_mqtt() {
         moleapi_core::mqtt_url(target_url)
     } else {
         moleapi_core::protocol_url(target_url, ws_url)
@@ -186,10 +210,14 @@ pub async fn create(
             &owner.0,
             &c.workspace_id,
             &request,
-            mask(&moleapi_core::redact_url(
-                resolved_url.as_str(),
-                Some(&scopes.effective()),
-            )),
+            if stdio {
+                "MCP STDIO".into()
+            } else {
+                mask(&moleapi_core::redact_url(
+                    resolved_url.as_str(),
+                    Some(&scopes.effective()),
+                ))
+            },
             feedback,
         )
         .map_err(error)?;
@@ -223,6 +251,14 @@ pub async fn create(
     {
         let _ = s.protocol_sessions.remove(&owner.0, &summary.id).await;
         return Err(error(e));
+    }
+    if request.protocol.is_mcp()
+        && let Err(error) =
+            s.protocol_sessions
+                .configure_mcp(&owner.0, &summary.id, scopes.effective())
+    {
+        let _ = s.protocol_sessions.remove(&owner.0, &summary.id).await;
+        return Err(crate::protocols::error(error));
     }
     if let Some(method) = grpc_method {
         if let Err(e) = s.protocol_sessions.configure_grpc(

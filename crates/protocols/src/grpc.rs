@@ -319,7 +319,10 @@ pub(crate) async fn run(
                         tx.send(message).await.context("gRPC input stream closed")?;
                     }
                     Command::GrpcHalfClose => break,
-                    Command::Websocket(_) | Command::Mqtt(_) | Command::Socketio(_) => {
+                    Command::Mcp(_)
+                    | Command::Websocket(_)
+                    | Command::Mqtt(_)
+                    | Command::Socketio(_) => {
                         anyhow::bail!("Unexpected protocol command")
                     }
                 }

@@ -1,3 +1,4 @@
+import type { McpConfig } from "../features/mcp/types";
 import type { SoapConfig, SoapFault } from "../features/soap/types";
 import type { MqttConfig } from "../features/mqtt/types";
 export interface SocketIoConfig {
@@ -33,7 +34,8 @@ export type ProtocolConfig =
   | GrpcConfig
   | SocketIoConfig
   | MqttConfig
-  | SoapConfig;
+  | SoapConfig
+  | McpConfig;
 export interface Pair {
   id: string;
   key: string;

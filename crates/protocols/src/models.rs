@@ -44,6 +44,34 @@ pub struct SessionSummary {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum EventMessage {
+    McpInitialized {
+        info: serde_json::Value,
+    },
+    McpCapabilities {
+        tools: Vec<serde_json::Value>,
+        resources: Vec<serde_json::Value>,
+        resource_templates: Vec<serde_json::Value>,
+        prompts: Vec<serde_json::Value>,
+    },
+    McpResult {
+        request_id: String,
+        method: String,
+        result: serde_json::Value,
+    },
+    McpError {
+        request_id: String,
+        method: String,
+        error: serde_json::Value,
+    },
+    McpNotification {
+        method: String,
+        params: serde_json::Value,
+    },
+    McpCallback {
+        callback_id: String,
+        method: String,
+        params: serde_json::Value,
+    },
     MqttMessage {
         topic: String,
         payload_base64: String,
@@ -154,6 +182,26 @@ pub struct EventBatch {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SendMessage {
+    McpRequest {
+        request_id: String,
+        method: String,
+        #[serde(default)]
+        name: String,
+        #[serde(default)]
+        uri: String,
+        #[serde(default = "mcp_arguments")]
+        arguments_source: String,
+    },
+    McpCallback {
+        callback_id: String,
+        #[serde(default)]
+        result: Option<serde_json::Value>,
+        #[serde(default)]
+        error: Option<serde_json::Value>,
+    },
+    McpCancel {
+        request_id: String,
+    },
     MqttPublish {
         message: moleapi_core::MqttMessage,
     },
@@ -206,4 +254,8 @@ pub struct PreparedFeedback {
 
 fn ack_timeout() -> u64 {
     5000
+}
+
+fn mcp_arguments() -> String {
+    "{}".into()
 }

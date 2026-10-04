@@ -1,5 +1,6 @@
 //! Volatile owner-scoped protocol sessions. Event cursors order delivery independently of clocks.
 mod grpc;
+mod mcp;
 mod mqtt;
 pub use grpc::{ReflectionResult, ReflectionStatus, reflect};
 mod engine;
@@ -31,6 +32,7 @@ fn now() -> String {
     chrono::Utc::now().to_rfc3339()
 }
 pub(crate) enum Command {
+    Mcp(SendMessage),
     Mqtt(mqtt::MqttCommand),
     Socketio(socketio::SocketioCommand),
     Websocket(Message),
@@ -54,6 +56,7 @@ pub(crate) struct Session {
     receiver: Mutex<Option<mpsc::Receiver<Command>>>,
     mqtt: Mutex<mqtt::Control>,
     socketio: Mutex<socketio::Control>,
+    mcp_environment: Mutex<Option<moleapi_core::Environment>>,
     grpc_method: Mutex<Option<prost_reflect::MethodDescriptor>>,
     grpc_environment: Mutex<Option<moleapi_core::Environment>>,
     grpc_mask: Mutex<Option<PrivacyMask>>,
@@ -61,6 +64,12 @@ pub(crate) struct Session {
 impl Session {
     pub(crate) fn event(&self, direction: &str, message: EventMessage) -> Result<()> {
         let payload_size = match &message {
+            EventMessage::McpInitialized { .. }
+            | EventMessage::McpCapabilities { .. }
+            | EventMessage::McpResult { .. }
+            | EventMessage::McpError { .. }
+            | EventMessage::McpNotification { .. }
+            | EventMessage::McpCallback { .. } => serde_json::to_vec(&message)?.len(),
             EventMessage::MqttMessage { payload_base64, .. } => {
                 payload_base64.len() / 4 * 3
                     - payload_base64
@@ -125,6 +134,17 @@ impl Session {
             "Session event exceeds 1 MiB payload limit"
         );
         let mut r = self.record.lock().unwrap();
+        if r.summary.protocol == "mcp" && direction == "received" {
+            ensure!(
+                r.summary.event_count < 4096,
+                "MCP event budget exceeded (4096)"
+            );
+            r.summary.received_bytes += payload_size as u64;
+            ensure!(
+                r.summary.received_bytes <= MAX_INPUT as u64,
+                "MCP received event budget exceeded"
+            );
+        }
         r.summary.event_count += 1;
         let cursor = r.summary.event_count;
         r.summary.updated_at = now();
@@ -292,7 +312,9 @@ impl SessionManager {
             workspace_id: workspace.into(),
             request_id: request.id.clone(),
             url: safe_url,
-            protocol: if request.protocol.is_mqtt() {
+            protocol: if request.protocol.is_mcp() {
+                "mcp"
+            } else if request.protocol.is_mqtt() {
                 "mqtt"
             } else if request.protocol.is_grpc() {
                 "grpc"
@@ -336,6 +358,7 @@ impl SessionManager {
             receiver: Mutex::new(Some(rx)),
             mqtt: Mutex::new(mqtt::Control::default()),
             socketio: Mutex::new(socketio::Control::default()),
+            mcp_environment: Mutex::new(None),
             grpc_method: Mutex::new(None),
             grpc_environment: Mutex::new(None),
             grpc_mask: Mutex::new(None),
@@ -487,6 +510,20 @@ impl SessionManager {
         *s.grpc_mask.lock().unwrap() = Some(mask);
         Ok(())
     }
+    pub fn configure_mcp(
+        &self,
+        owner: &str,
+        id: &str,
+        environment: moleapi_core::Environment,
+    ) -> Result<()> {
+        let session = self.owned(owner, id)?;
+        ensure!(
+            session.record.lock().unwrap().summary.protocol == "mcp",
+            "Expected MCP session"
+        );
+        *session.mcp_environment.lock().unwrap() = Some(environment);
+        Ok(())
+    }
     pub fn start(
         &self,
         owner: &str,
@@ -527,6 +564,14 @@ impl SessionManager {
     }
     pub fn send(&self, owner: &str, id: &str, message: SendMessage) -> Result<()> {
         let s = self.owned(owner, id)?;
+        if matches!(
+            &message,
+            SendMessage::McpRequest { .. }
+                | SendMessage::McpCallback { .. }
+                | SendMessage::McpCancel { .. }
+        ) {
+            return mcp::send(&s, message);
+        }
         if matches!(
             message,
             SendMessage::MqttPublish { .. }
@@ -610,7 +655,10 @@ impl SessionManager {
         }
         let ping = matches!(&message, SendMessage::Ping { .. });
         let (message, size) = match message {
-            SendMessage::MqttPublish { .. }
+            SendMessage::McpRequest { .. }
+            | SendMessage::McpCallback { .. }
+            | SendMessage::McpCancel { .. }
+            | SendMessage::MqttPublish { .. }
             | SendMessage::MqttSubscribe { .. }
             | SendMessage::MqttUnsubscribe { .. }
             | SendMessage::MqttAbort

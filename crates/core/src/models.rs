@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Pair {
     pub id: String,
     pub key: String,
@@ -65,6 +65,10 @@ pub enum Protocol {
         #[serde(flatten)]
         config: Box<crate::MqttConfig>,
     },
+    Mcp {
+        #[serde(flatten)]
+        config: Box<crate::McpConfig>,
+    },
     Soap {
         #[serde(flatten)]
         config: Box<crate::SoapConfig>,
@@ -117,6 +121,9 @@ fn empty_object() -> serde_json::Value {
     serde_json::json!({})
 }
 impl Protocol {
+    pub fn is_mcp(&self) -> bool {
+        matches!(self, Self::Mcp { .. })
+    }
     pub fn is_soap(&self) -> bool {
         matches!(self, Self::Soap { .. })
     }

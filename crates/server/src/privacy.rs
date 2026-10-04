@@ -236,6 +236,13 @@ pub(crate) fn request_values(
             properties(&subscription.user_properties, &mut capture);
         }
     }
+    if let moleapi_core::Protocol::Mcp { config } = &request.protocol {
+        for pair in config.env.iter().filter(|pair| pair.enabled) {
+            if pair.secret == Some(true) || moleapi_core::sensitive_query_key(&pair.key) {
+                capture(&pair.value);
+            }
+        }
+    }
     capture(&request.auth.token);
     capture(&request.auth.password);
     if !request.auth.password.is_empty() {

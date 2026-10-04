@@ -481,3 +481,92 @@ fn soap_default_export_withholds_decoded_private_entities_in_plain_data_fields()
         assert_eq!(restored.data.collections[0].requests[0].body, body);
     }
 }
+
+#[test]
+fn mcp_native_and_host_sources_roundtrip_and_default_exports_screen_credentials() {
+    let mut source = workspace(import("postman", &postman().to_string()).unwrap().data);
+    let request = &mut source.data.collections[0].requests[0];
+    let raw = r#"{ "command": "/usr/bin/node", "args": ["server.js", "--password", "cli-secret", "--api-key=key-secret"], "env": { "TENANT": "private-env" }, "extra": { "duplicate": "cli-secret", "public": "keep" } }"#;
+    request.protocol = serde_json::from_value(json!({"kind":"mcp","transport":"stdio","command":"/usr/bin/node","args":["server.js","--password","cli-secret","--api-key=key-secret"],"env":[{"id":"env","key":"TENANT","value":"private-env","secret":true,"enabled":true}],"arguments_source":"{\"plain\":\"private-env\",\"password\":23,\"public\":\"keep\"}","config_source":raw})).unwrap();
+    let safe = export(&source, "moleapi", false).unwrap();
+    for secret in ["private-env", "cli-secret", "key-secret"] {
+        assert!(!safe.content.contains(secret), "{secret}");
+    }
+    assert!(safe.content.contains("server.js"));
+    assert!(safe.content.contains("keep"));
+    let restored = import("moleapi", &safe.content).unwrap();
+    assert!(matches!(
+        restored.data.collections[0].requests[0].protocol,
+        moleapi_core::Protocol::Mcp { .. }
+    ));
+    let explicit = export(&source, "moleapi", true).unwrap();
+    let restored = import("moleapi", &explicit.content).unwrap();
+    assert_eq!(
+        restored.data.collections[0].requests[0].protocol,
+        source.data.collections[0].requests[0].protocol
+    );
+    if let moleapi_core::Protocol::Mcp { config } =
+        &restored.data.collections[0].requests[0].protocol
+    {
+        assert_eq!(config.config_source.as_deref(), Some(raw));
+    }
+    for format in ["openapi", "postman"] {
+        assert!(
+            export(&source, format, true)
+                .err()
+                .expect("MCP must reject foreign export")
+                .to_string()
+                .contains("MoleAPI")
+        );
+    }
+}
+
+#[test]
+fn mcp_default_exports_screen_original_and_repeated_transport_credentials_after_edits() {
+    let mut source = workspace(import("postman", &postman().to_string()).unwrap().data);
+    let request = &mut source.data.collections[0].requests[0];
+    request.url = "https://example.test/known-bearer/private".into();
+    request.auth.token = "known-bearer".into();
+    request.headers.push(
+        serde_json::from_value(
+            json!({"id":"custom","key":"X-Other","value":"known-bearer","enabled":true}),
+        )
+        .unwrap(),
+    );
+    request.protocol = serde_json::from_value(json!({"kind":"mcp","command":"/usr/bin/node","transport":"stdio","env":[{"id":"env","key":"TENANT","value":"new-private","secret":true,"enabled":true},{"id":"copy","key":"OTHER","value":"known-bearer","enabled":true}],"args":["server.js","--password","new-cli-private"],"config_source":"{\"command\":\"/usr/bin/node\",\"env\":{\"TENANT\":\"old-private\"},\"headers\":{\"X-Custom\":\"old-header\"},\"args\":[\"--password\",\"old-cli-private\"],\"extra\":{\"env\":\"old-private\",\"header\":\"old-header\",\"arg\":\"old-cli-private\"}}"})).unwrap();
+    let safe = export(&source, "moleapi", false).unwrap();
+    for value in [
+        "known-bearer",
+        "new-private",
+        "old-private",
+        "old-header",
+        "old-cli-private",
+        "new-cli-private",
+    ] {
+        assert!(!safe.content.contains(value), "{value}");
+    }
+    let restored = import(
+        "moleapi",
+        &export(&source, "moleapi", true).unwrap().content,
+    )
+    .unwrap();
+    assert_eq!(
+        restored.data.collections[0].requests[0].protocol,
+        source.data.collections[0].requests[0].protocol
+    );
+    assert_eq!(
+        restored.data.collections[0].requests[0].url,
+        source.data.collections[0].requests[0].url
+    );
+}
+
+#[test]
+fn mcp_default_exports_do_not_leak_known_secrets_in_json_keys_or_scalars() {
+    let mut source = workspace(import("postman", &postman().to_string()).unwrap().data);
+    source.data.collections[0].variables[0].value = "31337".into();
+    let request = &mut source.data.collections[0].requests[0];
+    request.protocol = serde_json::from_value(json!({"kind":"mcp","arguments_source":"{\"31337\":\"public\",\"count\":31337,\"keep\":\"public\"}","config_source":"{\"url\":\"https://example.test/mcp\",\"extra\":{\"31337\":\"public\",\"count\":31337}}"})).unwrap();
+    let safe = export(&source, "moleapi", false).unwrap();
+    assert!(!safe.content.contains("31337"));
+    assert!(safe.content.contains("public"));
+}

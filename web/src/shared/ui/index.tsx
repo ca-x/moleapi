@@ -175,6 +175,7 @@ export function PairEditor({
   rows,
   onChange,
   secrets = false,
+  disabled = false,
   keyLabel = "名称",
   valueLabel = "值",
   readLocal,
@@ -183,6 +184,7 @@ export function PairEditor({
   rows: Pair[];
   onChange: (rows: Pair[]) => void;
   secrets?: boolean;
+  disabled?: boolean;
   keyLabel?: string;
   valueLabel?: string;
   readLocal?: (row: Pair) => string | undefined;
@@ -203,6 +205,7 @@ export function PairEditor({
       {rows.map((row) => (
         <div className="pair-row" key={row.id}>
           <Checkbox
+            disabled={disabled}
             checked={row.enabled}
             onCheckedChange={(value) =>
               patch(row.id, { enabled: value === true })
@@ -210,12 +213,14 @@ export function PairEditor({
             aria-label={`启用 ${row.key || keyLabel}`}
           />
           <TextField.Root
+            disabled={disabled}
             aria-label={keyLabel}
             placeholder={keyLabel}
             value={row.key}
             onChange={(event) => patch(row.id, { key: event.target.value })}
           />
           <TextField.Root
+            disabled={disabled}
             aria-label={valueLabel}
             placeholder={valueLabel}
             type={row.secret && !visible.has(row.id) ? "password" : "text"}
@@ -225,6 +230,7 @@ export function PairEditor({
             {(secrets || row.secret) && (
               <TextField.Slot side="right">
                 <IconButton
+                  disabled={disabled}
                   size="1"
                   variant="ghost"
                   color="gray"
@@ -250,6 +256,7 @@ export function PairEditor({
           </TextField.Root>
           {writeLocal && (
             <TextField.Root
+            disabled={disabled}
               className="local-value-cell"
               aria-label={`本地覆盖值 ${row.key || keyLabel}`}
               placeholder="跟随共享值"
@@ -263,7 +270,7 @@ export function PairEditor({
                   variant="ghost"
                   color="gray"
                   aria-label={`清除 ${row.key || keyLabel} 本地覆盖`}
-                  disabled={readLocal?.(row) === undefined}
+                  disabled={disabled || readLocal?.(row) === undefined}
                   onClick={() => writeLocal(row, undefined)}
                 >
                   <Link2 size={14} />
@@ -274,6 +281,7 @@ export function PairEditor({
           <Flex align="center" gap="2">
             {secrets && (
               <Checkbox
+            disabled={disabled}
                 checked={!!row.secret}
                 onCheckedChange={(value) =>
                   patch(row.id, { secret: value === true })
@@ -282,6 +290,7 @@ export function PairEditor({
               />
             )}
             <ToolButton
+              disabled={disabled}
               label="删除此行"
               onClick={() => onChange(rows.filter((x) => x.id !== row.id))}
             >
@@ -291,6 +300,7 @@ export function PairEditor({
         </div>
       ))}
       <Button
+        disabled={disabled}
         variant="ghost"
         size="2"
         onClick={() => onChange([...rows, pair()])}

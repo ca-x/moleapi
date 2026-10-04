@@ -13,6 +13,12 @@ import { messageContent } from "./events";
 import type { ProtocolEvent } from "./types";
 const eventLabel = (event: ProtocolEvent) => {
   switch (event.message.kind) {
+    case "mcp_initialized": return "MCP 初始化";
+    case "mcp_capabilities": return "MCP 能力列表";
+    case "mcp_result": return event.message.method + " 结果";
+    case "mcp_error": return event.message.method + " 错误";
+    case "mcp_notification": return event.message.method;
+    case "mcp_callback": return event.message.method + " 回调";
     case "mqtt_message":
       return event.message.topic;
     case "mqtt_status":
@@ -147,8 +153,7 @@ export default function SessionEventPane({
                 </Text>
               </Flex>
               {onReply &&
-                picked.message.kind === "socketio_event" &&
-                picked.message.ack_id &&
+                ((picked.message.kind === "socketio_event" && picked.message.ack_id) || picked.message.kind === "mcp_callback") &&
                 picked.direction === "incoming" && (
                   <Button
                     size="1"
@@ -156,7 +161,7 @@ export default function SessionEventPane({
                     disabled={canReply ? !canReply(picked) : false}
                     onClick={() => onReply(picked)}
                   >
-                    {canReply && !canReply(picked) ? "已回复 ACK" : "回复 ACK"}
+                    {picked.message.kind === "mcp_callback" ? (canReply && !canReply(picked) ? "回调已结束" : "回复回调") : (canReply && !canReply(picked) ? "已回复 ACK" : "回复 ACK")}
                   </Button>
                 )}
               <Editor

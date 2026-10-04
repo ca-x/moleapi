@@ -1174,3 +1174,27 @@ kbd {
 .soap-toolbar { padding:12px 20px; border-bottom:1px solid var(--gray-5); flex-shrink:0; }
 .soap-toolbar .rt-SelectTrigger { max-width:340px; }
 @media(max-width:700px){.soap-toolbar{padding:12px;}.soap-toolbar .rt-SelectTrigger{max-width:100%;}.soap-workbench > .grpc-tabs{min-height:360px;flex-shrink:0;}}
+
+.method-mcp { color:var(--cyan-12); }
+.mcp-workbench { height:100%; min-height:0; overflow:auto; display:flex; flex-direction:column; }
+.mcp-toolbar { padding:12px 20px; border-bottom:1px solid var(--gray-5); flex-shrink:0; }
+.mcp-stdio-settings { display:flex; flex-direction:column; gap:12px; margin-top:16px; max-height:300px; overflow:auto; }
+.mcp-arguments { display:flex; flex-direction:column; gap:8px; }
+.mcp-arguments .rt-TextFieldRoot { flex:1; }
+.mcp-tabs { display:flex; flex-direction:column; min-height:360px; flex:1; }
+.mcp-tabs > .rt-TabsContent[data-state="active"] { display:flex; flex-direction:column; gap:16px; padding:16px 20px; min-height:0; flex:1; overflow:auto; }
+.mcp-capability-grid { display:grid; grid-template-columns:240px minmax(0,1fr); gap:20px; min-height:0; flex:1; }
+.mcp-capabilities { display:flex; flex-direction:column; gap:12px; min-height:0; }
+.mcp-capability-list { overflow:auto; min-height:0; flex:1; }
+.mcp-capability-list button { display:flex; width:100%; flex-direction:column; gap:4px; text-align:left; padding:10px; border:0; border-radius:6px; background:transparent; color:var(--gray-12); cursor:pointer; }
+.mcp-capability-list button[aria-pressed="true"] { background:var(--cyan-3); }
+.mcp-capability-list small { color:var(--gray-11); overflow-wrap:anywhere; }
+.mcp-capability-list span { overflow-wrap:anywhere; }
+.mcp-request-editor, .mcp-result-content { display:flex; flex-direction:column; gap:12px; min-width:0; overflow-wrap:anywhere; }
+.mcp-image { max-width:100%; max-height:420px; object-fit:contain; align-self:start; }
+.mcp-result-content audio { max-width:100%; }
+@media (hover:hover) and (pointer:fine) { .mcp-capability-list button:hover { background:var(--gray-3); } }
+@media(max-width:700px) { .mcp-toolbar{padding:12px;}.mcp-tabs{flex-shrink:0;}.mcp-tabs > .rt-TabsContent[data-state="active"]{padding:12px;}.mcp-capability-grid{grid-template-columns:minmax(0,1fr);}.mcp-capability-list{max-height:200px;}.mcp-workbench .pairs{overflow:auto;} }
+
+.mcp-stdio-details { margin-top:12px; }
+.mcp-stdio-details summary { cursor:pointer; font-size:12px; color:var(--gray-11); overflow-wrap:anywhere; }

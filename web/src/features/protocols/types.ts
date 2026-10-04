@@ -1,3 +1,4 @@
+import type { McpMessage, McpCommand } from "../mcp/types";
 import type { MqttMessage, MqttSubscription } from "../mqtt/types";
 import type {
   Pair,
@@ -11,7 +12,7 @@ export interface ProtocolSession {
   id: string;
   workspace_id: string;
   request_id: string;
-  protocol: "sse" | "websocket" | "graphql" | "grpc" | "socketio" | "mqtt";
+  protocol: "sse" | "websocket" | "graphql" | "grpc" | "socketio" | "mqtt" | "mcp";
   client_half_closed?: boolean;
   url: string;
   state: SessionState;
@@ -26,6 +27,7 @@ export interface ProtocolSession {
   request_updates?: RequestUpdate[];
 }
 export type ProtocolMessage =
+  | McpMessage
   | {
       kind: "mqtt_message";
       topic: string;
@@ -104,6 +106,7 @@ export interface EventBatch {
   dropped_count: number;
 }
 export type SendMessage =
+  | McpCommand
   | { kind: "mqtt_publish"; message: MqttMessage }
   | { kind: "mqtt_subscribe"; subscription: MqttSubscription }
   | { kind: "mqtt_unsubscribe"; filter: string }

@@ -162,7 +162,7 @@ export function safeMessage(error: unknown): string {
 }
 
 export const requestLabel = (request: RequestSpec) =>
-  request.protocol?.kind === "soap"
+  request.protocol?.kind === "mcp" ? "MCP" : request.protocol?.kind === "soap"
     ? "SOAP"
     : request.protocol?.kind === "mqtt"
       ? "MQTT"

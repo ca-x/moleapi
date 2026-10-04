@@ -27,6 +27,13 @@ export function appendEvents(
 export function messageContent(event: ProtocolEvent): string {
   const message = event.message;
   switch (message.kind) {
+    case "mcp_initialized":
+    case "mcp_capabilities":
+    case "mcp_result":
+    case "mcp_error":
+    case "mcp_notification":
+    case "mcp_callback":
+      return JSON.stringify(message, null, 2);
     case "mqtt_message":
     case "mqtt_status":
       return JSON.stringify(message, null, 2);
