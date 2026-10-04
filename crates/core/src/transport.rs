@@ -29,12 +29,35 @@ pub async fn execute(
     }
     tokio::time::timeout(
         Duration::from_millis(r.timeout_ms),
-        execute_inner(&r, policy),
+        execute_inner(&r, policy, None),
     )
     .await
     .context("Request timed out")?
 }
-async fn execute_inner(r: &RequestSpec, policy: NetworkPolicy) -> Result<Response> {
+/// Checked HTTP transport for explicit byte replay; no scripts or source interpolation.
+pub async fn execute_bytes(
+    request: &RequestSpec,
+    body: Vec<u8>,
+    policy: NetworkPolicy,
+) -> Result<Response> {
+    ensure!(
+        request.protocol == Protocol::Http,
+        "Raw byte execution requires HTTP"
+    );
+    crate::validate_request(request, false)?;
+    ensure!(body.len() <= crate::MAX_BODY, "Raw HTTP body exceeds 5 MiB");
+    tokio::time::timeout(
+        Duration::from_millis(request.timeout_ms),
+        execute_inner(request, policy, Some(body)),
+    )
+    .await
+    .context("Request timed out")?
+}
+async fn execute_inner(
+    r: &RequestSpec,
+    policy: NetworkPolicy,
+    raw_body: Option<Vec<u8>>,
+) -> Result<Response> {
     let start = Instant::now();
     let mut url = valid_url(&r.url)?;
     {
@@ -45,11 +68,13 @@ async fn execute_inner(r: &RequestSpec, policy: NetworkPolicy) -> Result<Respons
     }
     let mut method = Method::from_bytes(r.method.as_bytes())?;
     let mut headers = request_headers(r)?;
-    let mut body = if r.body_kind == "none" {
-        None
-    } else {
-        Some(r.body.clone())
-    };
+    let mut body = raw_body.or_else(|| {
+        if r.body_kind == "none" {
+            None
+        } else {
+            Some(r.body.as_bytes().to_vec())
+        }
+    });
     if r.body_kind == "json" && !headers.contains_key("content-type") {
         headers.insert("content-type", HeaderValue::from_static("application/json"));
     }

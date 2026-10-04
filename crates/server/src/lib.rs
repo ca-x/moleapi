@@ -15,6 +15,7 @@ mod runner;
 mod soap;
 mod storage;
 mod sync;
+mod webhooks;
 mod workspaces;
 
 use axum::{
@@ -51,6 +52,7 @@ struct AppState {
     protocol_sessions: Arc<moleapi_protocols::SessionManager>,
     protocol_admission: Arc<protocol_admission::AdmissionGates>,
     a2a_sources: Arc<a2a::Sources>,
+    webhooks: Arc<webhooks::Hub>,
 }
 #[derive(Debug)]
 struct ApiError {
@@ -160,8 +162,33 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         protocol_sessions: moleapi_protocols::SessionManager::new(),
         protocol_admission: Arc::new(protocol_admission::AdmissionGates::default()),
         a2a_sources: Arc::new(a2a::Sources::default()),
+        webhooks: Arc::new(webhooks::Hub::default()),
     };
     let protected = Router::new()
+        .route(
+            "/workspaces/{id}/webhooks",
+            get(webhooks::list).post(webhooks::create),
+        )
+        .route(
+            "/webhooks/{id}",
+            get(webhooks::get)
+                .put(webhooks::update)
+                .delete(webhooks::delete),
+        )
+        .route(
+            "/webhooks/{id}/captures",
+            get(webhooks::captures).delete(webhooks::clear),
+        )
+        .route(
+            "/webhooks/{id}/captures/{capture_id}",
+            get(webhooks::capture_get),
+        )
+        .route("/webhooks/{id}/export", post(webhooks::export))
+        .route("/webhooks/{id}/replay", post(webhooks::replay))
+        .route("/webhooks/replay/cancel", post(webhooks::replay_cancel))
+        .route("/webhooks/listener", get(webhooks::listener_status))
+        .route("/webhooks/listener/start", post(webhooks::listener_start))
+        .route("/webhooks/listener/stop", post(webhooks::listener_stop))
         .route("/auth/logout", post(auth::logout))
         .route(
             "/workspaces",
@@ -233,7 +260,16 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         .route("/auth/login", post(auth::login))
         .fallback(|| async { ApiError::not_found() })
         .layer(middleware::from_fn(json_errors));
+    let receiver = Router::new()
+        .route("/hooks/{token}", axum::routing::any(webhooks::ingest))
+        .with_state(webhooks::ReceiverState {
+            db: state.db.clone(),
+            gates: state.webhooks.gates.clone(),
+            intake: state.webhooks.intake.clone(),
+            stop: tokio_util::sync::CancellationToken::new(),
+        });
     let router = Router::new()
+        .merge(receiver)
         .nest("/api", api)
         .layer(DefaultBodyLimit::max(25 * 1024 * 1024))
         .with_state(state);

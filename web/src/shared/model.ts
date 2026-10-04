@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import stableStringify from "fast-json-stable-stringify";
 import type { Pair, RequestSpec, WorkspaceData } from "./types";
 export const id = () => crypto.randomUUID();
@@ -8,7 +9,7 @@ export const pair = (key = "", value = "", secret = false): Pair => ({
   enabled: true,
   secret,
 });
-export function newRequest(name = "新建请求", url = ""): RequestSpec {
+export function newRequest(name = t("新建请求"), url = ""): RequestSpec {
   return {
     id: id(),
     name,
@@ -28,35 +29,35 @@ export function newRequest(name = "新建请求", url = ""): RequestSpec {
   };
 }
 export function initialData(): WorkspaceData {
-  const health = newRequest("发送 Echo 请求", "{{base_url}}/get");
+  const health = newRequest(t("发送 Echo 请求"), "{{base_url}}/get");
   health.description =
-    "使用 Apifox 的公开 Echo 服务查看请求内容，不需要鉴权。\n\n点击「发送」即可查看返回状态、耗时和 JSON 内容。";
+    t("使用 Apifox 的公开 Echo 服务查看请求内容，不需要鉴权。\n\n点击「发送」即可查看返回状态、耗时和 JSON 内容。");
   health.assertions = [
     {
       id: id(),
-      name: "HTTP 状态为 200",
+      name: t("HTTP 状态为 200"),
       kind: "status",
       target: "",
       expected: "200",
     },
   ];
-  const create = newRequest("发送 Echo POST 请求", "{{base_url}}/post");
+  const create = newRequest(t("发送 Echo POST 请求"), "{{base_url}}/post");
   create.method = "POST";
   create.body_kind = "json";
   create.body = '{\n  "name": "MoleAPI"\n}';
   create.description =
-    "向 Apifox 公开 Echo 服务发送 JSON，响应会返回你提交的请求内容。\n\n点击「请求体」修改 JSON，再点击「发送」查看结果。不需要鉴权。";
+    t("向 Apifox 公开 Echo 服务发送 JSON，响应会返回你提交的请求内容。\n\n点击「请求体」修改 JSON，再点击「发送」查看结果。不需要鉴权。");
   create.assertions = [
     {
       id: id(),
-      name: "HTTP 状态为 200",
+      name: t("HTTP 状态为 200"),
       kind: "status",
       target: "",
       expected: "200",
     },
     {
       id: id(),
-      name: "Echo 返回提交的名称",
+      name: t("Echo 返回提交的名称"),
       kind: "json",
       target: "/json/name",
       expected: '"MoleAPI"',
@@ -67,15 +68,15 @@ export function initialData(): WorkspaceData {
     collections: [
       {
         id: id(),
-        name: "快速开始",
-        description: "了解工作台的基本操作",
+        name: t("快速开始"),
+        description: t("了解工作台的基本操作"),
         requests: [health, create],
       },
     ],
     environments: [
       {
         id: "local",
-        name: "本地开发",
+        name: t("本地开发"),
         variables: [
           pair("base_url", nativeBase()),
           pair("api_token", "", true),

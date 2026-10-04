@@ -1,0 +1,466 @@
+diff --git a/node_modules/monaco-editor/esm/vs/base/browser/ui/toggle/toggle.js b/node_modules/monaco-editor/esm/vs/base/browser/ui/toggle/toggle.js
+index 9e38e8a..c8b1360 100644
+--- a/node_modules/monaco-editor/esm/vs/base/browser/ui/toggle/toggle.js
++++ b/node_modules/monaco-editor/esm/vs/base/browser/ui/toggle/toggle.js
+@@ -1,3 +1,4 @@
++import { localizeFixedLabel, onLanguageChange } from '../../../../nls.js';
+ /*---------------------------------------------------------------------------------------------
+  *  Copyright (c) Microsoft Corporation. All rights reserved.
+  *  Licensed under the MIT License. See License.txt in the project root for license information.
+@@ -42,6 +43,11 @@ export class Toggle extends Widget {
+         this.domNode.setAttribute('role', 'checkbox');
+         this.domNode.setAttribute('aria-checked', String(this._checked));
+         this.domNode.setAttribute('aria-label', this._opts.title);
++        this._register(onLanguageChange(() => {
++            const label = localizeFixedLabel(this._opts.title);
++            this.domNode.setAttribute('aria-label', label);
++            this._hover.update(label);
++        }));
+         this.applyStyles();
+         this.onclick(this.domNode, (ev) => {
+             if (this.enabled) {
+diff --git a/node_modules/monaco-editor/esm/vs/editor/browser/editorExtensions.js b/node_modules/monaco-editor/esm/vs/editor/browser/editorExtensions.js
+index b0495f1..fa846ee 100644
+--- a/node_modules/monaco-editor/esm/vs/editor/browser/editorExtensions.js
++++ b/node_modules/monaco-editor/esm/vs/editor/browser/editorExtensions.js
+@@ -212,7 +212,9 @@ export class EditorAction extends EditorCommand {
+     }
+     constructor(opts) {
+         super(EditorAction.convertOptions(opts));
+-        this.label = opts.label;
++        let label = opts.label;
++        Object.defineProperty(this, 'label', { configurable: true,
++            get: () => nls.localizeFixedLabel(label), set: value => { label = value; } });
+         this.alias = opts.alias;
+     }
+     runEditorCommand(accessor, editor, args) {
+diff --git a/node_modules/monaco-editor/esm/vs/editor/common/editorAction.js b/node_modules/monaco-editor/esm/vs/editor/common/editorAction.js
+index 1689c52..4857215 100644
+--- a/node_modules/monaco-editor/esm/vs/editor/common/editorAction.js
++++ b/node_modules/monaco-editor/esm/vs/editor/common/editorAction.js
+@@ -2,10 +2,11 @@
+  *  Copyright (c) Microsoft Corporation. All rights reserved.
+  *  Licensed under the MIT License. See License.txt in the project root for license information.
+  *--------------------------------------------------------------------------------------------*/
++import { localizeFixedLabel } from '../../nls.js';
+ export class InternalEditorAction {
+     constructor(id, label, alias, metadata, _precondition, _run, _contextKeyService) {
+         this.id = id;
+-        this.label = label;
++        Object.defineProperty(this, 'label', { configurable: true, get: () => localizeFixedLabel(label) });
+         this.alias = alias;
+         this.metadata = metadata;
+         this._precondition = _precondition;
+diff --git a/node_modules/monaco-editor/esm/vs/editor/common/standaloneStrings.js b/node_modules/monaco-editor/esm/vs/editor/common/standaloneStrings.js
+index 956142e..0008718 100644
+--- a/node_modules/monaco-editor/esm/vs/editor/common/standaloneStrings.js
++++ b/node_modules/monaco-editor/esm/vs/editor/common/standaloneStrings.js
+@@ -5,35 +5,35 @@
+ import * as nls from '../../nls.js';
+ export var InspectTokensNLS;
+ (function (InspectTokensNLS) {
+-    InspectTokensNLS.inspectTokensAction = nls.localize('inspectTokens', "Developer: Inspect Tokens");
++    Object.defineProperty(InspectTokensNLS, "inspectTokensAction", { get: () => nls.localize('inspectTokens', "Developer: Inspect Tokens") });
+ })(InspectTokensNLS || (InspectTokensNLS = {}));
+ export var GoToLineNLS;
+ (function (GoToLineNLS) {
+-    GoToLineNLS.gotoLineActionLabel = nls.localize('gotoLineActionLabel', "Go to Line/Column...");
++    Object.defineProperty(GoToLineNLS, "gotoLineActionLabel", { get: () => nls.localize('gotoLineActionLabel', "Go to Line/Column...") });
+ })(GoToLineNLS || (GoToLineNLS = {}));
+ export var QuickHelpNLS;
+ (function (QuickHelpNLS) {
+-    QuickHelpNLS.helpQuickAccessActionLabel = nls.localize('helpQuickAccess', "Show all Quick Access Providers");
++    Object.defineProperty(QuickHelpNLS, "helpQuickAccessActionLabel", { get: () => nls.localize('helpQuickAccess', "Show all Quick Access Providers") });
+ })(QuickHelpNLS || (QuickHelpNLS = {}));
+ export var QuickCommandNLS;
+ (function (QuickCommandNLS) {
+-    QuickCommandNLS.quickCommandActionLabel = nls.localize('quickCommandActionLabel', "Command Palette");
+-    QuickCommandNLS.quickCommandHelp = nls.localize('quickCommandActionHelp', "Show And Run Commands");
++    Object.defineProperty(QuickCommandNLS, "quickCommandActionLabel", { get: () => nls.localize('quickCommandActionLabel', "Command Palette") });
++    Object.defineProperty(QuickCommandNLS, "quickCommandHelp", { get: () => nls.localize('quickCommandActionHelp', "Show And Run Commands") });
+ })(QuickCommandNLS || (QuickCommandNLS = {}));
+ export var QuickOutlineNLS;
+ (function (QuickOutlineNLS) {
+-    QuickOutlineNLS.quickOutlineActionLabel = nls.localize('quickOutlineActionLabel', "Go to Symbol...");
+-    QuickOutlineNLS.quickOutlineByCategoryActionLabel = nls.localize('quickOutlineByCategoryActionLabel', "Go to Symbol by Category...");
++    Object.defineProperty(QuickOutlineNLS, "quickOutlineActionLabel", { get: () => nls.localize('quickOutlineActionLabel', "Go to Symbol...") });
++    Object.defineProperty(QuickOutlineNLS, "quickOutlineByCategoryActionLabel", { get: () => nls.localize('quickOutlineByCategoryActionLabel', "Go to Symbol by Category...") });
+ })(QuickOutlineNLS || (QuickOutlineNLS = {}));
+ export var StandaloneCodeEditorNLS;
+ (function (StandaloneCodeEditorNLS) {
+-    StandaloneCodeEditorNLS.editorViewAccessibleLabel = nls.localize('editorViewAccessibleLabel', "Editor content");
++    Object.defineProperty(StandaloneCodeEditorNLS, "editorViewAccessibleLabel", { get: () => nls.localize('editorViewAccessibleLabel', "Editor content") });
+ })(StandaloneCodeEditorNLS || (StandaloneCodeEditorNLS = {}));
+ export var ToggleHighContrastNLS;
+ (function (ToggleHighContrastNLS) {
+-    ToggleHighContrastNLS.toggleHighContrast = nls.localize('toggleHighContrast', "Toggle High Contrast Theme");
++    Object.defineProperty(ToggleHighContrastNLS, "toggleHighContrast", { get: () => nls.localize('toggleHighContrast', "Toggle High Contrast Theme") });
+ })(ToggleHighContrastNLS || (ToggleHighContrastNLS = {}));
+ export var StandaloneServicesNLS;
+ (function (StandaloneServicesNLS) {
+-    StandaloneServicesNLS.bulkEditServiceSummary = nls.localize('bulkEditServiceSummary', "Made {0} edits in {1} files");
++    Object.defineProperty(StandaloneServicesNLS, "bulkEditServiceSummary", { get: () => nls.localize('bulkEditServiceSummary', "Made {0} edits in {1} files") });
+ })(StandaloneServicesNLS || (StandaloneServicesNLS = {}));
+diff --git a/node_modules/monaco-editor/esm/vs/editor/contrib/find/browser/findWidget.js b/node_modules/monaco-editor/esm/vs/editor/contrib/find/browser/findWidget.js
+index 3db4195..c4dfdde 100644
+--- a/node_modules/monaco-editor/esm/vs/editor/contrib/find/browser/findWidget.js
++++ b/node_modules/monaco-editor/esm/vs/editor/contrib/find/browser/findWidget.js
+@@ -103,6 +103,7 @@ export class FindWidget extends Widget {
+         this._register(toDisposable(() => this._updateHistoryDelayer.cancel()));
+         this._register(this._state.onFindReplaceStateChange((e) => this._onStateChanged(e)));
+         this._buildDomNode();
++        this._register(nls.onLanguageChange(() => this._refreshLocalizedCopy()));
+         this._updateButtons();
+         this._tryUpdateWidgetWidth();
+         this._findInput.inputBox.layout();
+@@ -187,6 +188,14 @@ export class FindWidget extends Widget {
+             }, 0);
+         }));
+     }
++    _refreshLocalizedCopy() {
++        this._domNode.setAttribute('aria-label', nls.localizeFixedLabel(NLS_FIND_DIALOG_LABEL));
++        this._findInput.inputBox.setPlaceHolder(nls.localizeFixedLabel(NLS_FIND_INPUT_PLACEHOLDER));
++        this._findInput.inputBox.inputElement.setAttribute('aria-label', nls.localizeFixedLabel(NLS_FIND_INPUT_LABEL));
++        this._replaceInput.inputBox.setPlaceHolder(nls.localizeFixedLabel(NLS_REPLACE_INPUT_PLACEHOLDER));
++        this._replaceInput.inputBox.inputElement.setAttribute('aria-label', nls.localizeFixedLabel(NLS_REPLACE_INPUT_LABEL));
++        this._updateMatchesCount();
++    }
+     // ----- IOverlayWidget API
+     getId() {
+         return FindWidget.ID;
+@@ -297,7 +306,7 @@ export class FindWidget extends Widget {
+     _updateMatchesCount() {
+         this._matchesCount.style.minWidth = MAX_MATCHES_COUNT_WIDTH + 'px';
+         if (this._state.matchesCount >= MATCHES_LIMIT) {
+-            this._matchesCount.title = NLS_MATCHES_COUNT_LIMIT_TITLE;
++            this._matchesCount.title = nls.localizeFixedLabel(NLS_MATCHES_COUNT_LIMIT_TITLE);
+         }
+         else {
+             this._matchesCount.title = '';
+@@ -314,10 +323,10 @@ export class FindWidget extends Widget {
+             if (matchesPosition === '0') {
+                 matchesPosition = '?';
+             }
+-            label = strings.format(NLS_MATCHES_LOCATION, matchesPosition, matchesCount);
++            label = strings.format(nls.localizeFixedLabel(NLS_MATCHES_LOCATION), matchesPosition, matchesCount);
+         }
+         else {
+-            label = NLS_NO_RESULTS;
++            label = nls.localizeFixedLabel(NLS_NO_RESULTS);
+         }
+         this._matchesCount.appendChild(document.createTextNode(label));
+         alertFn(this._getAriaLabel(label, this._state.currentMatch, this._state.searchString));
+@@ -325,7 +334,7 @@ export class FindWidget extends Widget {
+     }
+     // ----- actions
+     _getAriaLabel(label, currentMatch, searchString) {
+-        if (label === NLS_NO_RESULTS) {
++        if (label === nls.localizeFixedLabel(NLS_NO_RESULTS)) {
+             return searchString === ''
+                 ? nls.localize('ariaSearchNoResultEmpty', "{0} found", label)
+                 : nls.localize('ariaSearchNoResult', "{0} found for '{1}'", label, searchString);
+@@ -743,8 +752,8 @@ export class FindWidget extends Widget {
+         // Find input
+         this._findInput = this._register(new ContextScopedFindInput(null, this._contextViewProvider, {
+             width: FIND_INPUT_AREA_WIDTH,
+-            label: NLS_FIND_INPUT_LABEL,
+-            placeholder: NLS_FIND_INPUT_PLACEHOLDER,
++            label: nls.localizeFixedLabel(NLS_FIND_INPUT_LABEL),
++            placeholder: nls.localizeFixedLabel(NLS_FIND_INPUT_PLACEHOLDER),
+             appendCaseSensitiveLabel: this._keybindingLabelFor(FIND_IDS.ToggleCaseSensitiveCommand),
+             appendWholeWordsLabel: this._keybindingLabelFor(FIND_IDS.ToggleWholeWordCommand),
+             appendRegexLabel: this._keybindingLabelFor(FIND_IDS.ToggleRegexCommand),
+@@ -817,7 +826,7 @@ export class FindWidget extends Widget {
+         const hoverDelegate = this._register(createInstantHoverDelegate());
+         // Previous button
+         this._prevBtn = this._register(new SimpleButton({
+-            label: NLS_PREVIOUS_MATCH_BTN_LABEL + this._keybindingLabelFor(FIND_IDS.PreviousMatchFindAction),
++            label: nls.localizeFixedLabel(NLS_PREVIOUS_MATCH_BTN_LABEL) + this._keybindingLabelFor(FIND_IDS.PreviousMatchFindAction),
+             icon: findPreviousMatchIcon,
+             hoverDelegate,
+             onTrigger: () => {
+@@ -826,7 +835,7 @@ export class FindWidget extends Widget {
+         }, this._hoverService));
+         // Next button
+         this._nextBtn = this._register(new SimpleButton({
+-            label: NLS_NEXT_MATCH_BTN_LABEL + this._keybindingLabelFor(FIND_IDS.NextMatchFindAction),
++            label: nls.localizeFixedLabel(NLS_NEXT_MATCH_BTN_LABEL) + this._keybindingLabelFor(FIND_IDS.NextMatchFindAction),
+             icon: findNextMatchIcon,
+             hoverDelegate,
+             onTrigger: () => {
+@@ -845,7 +854,7 @@ export class FindWidget extends Widget {
+         // Toggle selection button
+         this._toggleSelectionFind = this._register(new Toggle({
+             icon: findSelectionIcon,
+-            title: NLS_TOGGLE_SELECTION_FIND_TITLE + this._keybindingLabelFor(FIND_IDS.ToggleSearchScopeCommand),
++            title: nls.localizeFixedLabel(NLS_TOGGLE_SELECTION_FIND_TITLE) + this._keybindingLabelFor(FIND_IDS.ToggleSearchScopeCommand),
+             isChecked: false,
+             hoverDelegate: hoverDelegate,
+             inputActiveOptionBackground: asCssVariable(inputActiveOptionBackground),
+@@ -877,7 +886,7 @@ export class FindWidget extends Widget {
+         actionsContainer.appendChild(this._toggleSelectionFind.domNode);
+         // Close button
+         this._closeBtn = this._register(new SimpleButton({
+-            label: NLS_CLOSE_BTN_LABEL + this._keybindingLabelFor(FIND_IDS.CloseFindWidgetCommand),
++            label: nls.localizeFixedLabel(NLS_CLOSE_BTN_LABEL) + this._keybindingLabelFor(FIND_IDS.CloseFindWidgetCommand),
+             icon: widgetClose,
+             hoverDelegate,
+             onTrigger: () => {
+@@ -899,8 +908,8 @@ export class FindWidget extends Widget {
+         }, this._hoverService));
+         // Replace input
+         this._replaceInput = this._register(new ContextScopedReplaceInput(null, undefined, {
+-            label: NLS_REPLACE_INPUT_LABEL,
+-            placeholder: NLS_REPLACE_INPUT_PLACEHOLDER,
++            label: nls.localizeFixedLabel(NLS_REPLACE_INPUT_LABEL),
++            placeholder: nls.localizeFixedLabel(NLS_REPLACE_INPUT_PLACEHOLDER),
+             appendPreserveCaseLabel: this._keybindingLabelFor(FIND_IDS.TogglePreserveCaseCommand),
+             history: [],
+             flexibleHeight,
+@@ -946,7 +955,7 @@ export class FindWidget extends Widget {
+         const replaceHoverDelegate = this._register(createInstantHoverDelegate());
+         // Replace one button
+         this._replaceBtn = this._register(new SimpleButton({
+-            label: NLS_REPLACE_BTN_LABEL + this._keybindingLabelFor(FIND_IDS.ReplaceOneAction),
++            label: nls.localizeFixedLabel(NLS_REPLACE_BTN_LABEL) + this._keybindingLabelFor(FIND_IDS.ReplaceOneAction),
+             icon: findReplaceIcon,
+             hoverDelegate: replaceHoverDelegate,
+             onTrigger: () => {
+@@ -961,7 +970,7 @@ export class FindWidget extends Widget {
+         }, this._hoverService));
+         // Replace all button
+         this._replaceAllBtn = this._register(new SimpleButton({
+-            label: NLS_REPLACE_ALL_BTN_LABEL + this._keybindingLabelFor(FIND_IDS.ReplaceAllAction),
++            label: nls.localizeFixedLabel(NLS_REPLACE_ALL_BTN_LABEL) + this._keybindingLabelFor(FIND_IDS.ReplaceAllAction),
+             icon: findReplaceAllIcon,
+             hoverDelegate: replaceHoverDelegate,
+             onTrigger: () => {
+@@ -978,7 +987,7 @@ export class FindWidget extends Widget {
+         replaceActionsContainer.appendChild(this._replaceAllBtn.domNode);
+         // Toggle replace button
+         this._toggleReplaceBtn = this._register(new SimpleButton({
+-            label: NLS_TOGGLE_REPLACE_MODE_BTN_LABEL,
++            label: nls.localizeFixedLabel(NLS_TOGGLE_REPLACE_MODE_BTN_LABEL),
+             className: 'codicon toggle left',
+             onTrigger: () => {
+                 this._state.change({ isReplaceRevealed: !this._isReplaceVisible }, false);
+@@ -994,7 +1003,7 @@ export class FindWidget extends Widget {
+         this._domNode = document.createElement('div');
+         this._domNode.className = 'editor-widget find-widget';
+         this._domNode.setAttribute('aria-hidden', 'true');
+-        this._domNode.ariaLabel = NLS_FIND_DIALOG_LABEL;
++        this._domNode.ariaLabel = nls.localizeFixedLabel(NLS_FIND_DIALOG_LABEL);
+         this._domNode.role = 'dialog';
+         // We need to set this explicitly, otherwise on IE11, the width inheritence of flex doesn't work.
+         this._domNode.style.width = `${FIND_WIDGET_INITIAL_WIDTH}px`;
+@@ -1074,7 +1083,12 @@ export class SimpleButton extends Widget {
+         this._domNode.className = className;
+         this._domNode.setAttribute('role', 'button');
+         this._domNode.setAttribute('aria-label', this._opts.label);
+-        this._register(hoverService.setupManagedHover(opts.hoverDelegate ?? getDefaultHoverDelegate('element'), this._domNode, this._opts.label));
++        this._hover = this._register(hoverService.setupManagedHover(opts.hoverDelegate ?? getDefaultHoverDelegate('element'), this._domNode, this._opts.label));
++        this._register(nls.onLanguageChange(() => {
++            const label = nls.localizeFixedLabel(this._opts.label);
++            this._domNode.setAttribute('aria-label', label);
++            this._hover.update(label);
++        }));
+         this.onclick(this._domNode, (e) => {
+             this._opts.onTrigger();
+             e.preventDefault();
+diff --git a/node_modules/monaco-editor/esm/vs/editor/contrib/quickAccess/browser/commandsQuickAccess.js b/node_modules/monaco-editor/esm/vs/editor/contrib/quickAccess/browser/commandsQuickAccess.js
+index 354f649..8fc1ede 100644
+--- a/node_modules/monaco-editor/esm/vs/editor/contrib/quickAccess/browser/commandsQuickAccess.js
++++ b/node_modules/monaco-editor/esm/vs/editor/contrib/quickAccess/browser/commandsQuickAccess.js
+@@ -29,7 +29,7 @@ export class AbstractEditorCommandsQuickAccessProvider extends AbstractCommandsQ
+                 commandId: editorAction.id,
+                 commandAlias: editorAction.alias,
+                 commandDescription,
+-                label: stripIcons(editorAction.label) || editorAction.id,
++                get label() { return stripIcons(editorAction.label) || editorAction.id; },
+             });
+         }
+         return editorCommandPicks;
+diff --git a/node_modules/monaco-editor/esm/vs/nls.js b/node_modules/monaco-editor/esm/vs/nls.js
+index 608714f..6da7432 100644
+--- a/node_modules/monaco-editor/esm/vs/nls.js
++++ b/node_modules/monaco-editor/esm/vs/nls.js
+@@ -4,6 +4,59 @@
+  *--------------------------------------------------------------------------------------------*/
+ // eslint-disable-next-line local/code-import-patterns
+ import { getNLSLanguage, getNLSMessages } from './nls.messages.js';
++import { getI18n } from 'react-i18next';
++function translateMessage(message) {
++    const i18n = getI18n();
++    return i18n ? String(i18n.t(message, { ns: 'monaco', defaultValue: message, keySeparator: false, nsSeparator: false })) : message;
++}
++let previousBundle, labelEntries, originalLabels, templateLabels;
++function labelPattern(source) {
++    const indexes = [];
++    const fragments = source.split(/\{(\d+)\}/);
++    if (fragments.filter((_, i) => i % 2 === 0).join('').length < 4) return null;
++    const pattern = fragments.map((fragment, i) => {
++        if (i % 2) { indexes.push(Number(fragment)); return '(.+?)'; }
++        return fragment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
++    }).join('');
++    return { expression: new RegExp('^' + pattern + '$'), indexes };
++}
++// Called only for native command/menu metadata, never for document or response values.
++export function localizeFixedLabel(label) {
++    if (typeof label !== 'string') return label;
++    const i18n = getI18n();
++    const bundle = i18n?.getResourceBundle('zh-CN', 'monaco');
++    if (bundle !== previousBundle) {
++        previousBundle = bundle;
++        labelEntries = Object.entries(bundle || {}).map(([english, chinese]) => ({ english, chinese, ns: 'monaco', key: english }));
++        for (const [key, chinese] of Object.entries(i18n?.getResourceBundle('zh-CN', 'translation') || {})) {
++            if (key.startsWith('GraphiQL:')) labelEntries.push({ english: key.slice(9), chinese, ns: 'translation', key });
++        }
++        originalLabels = new Map();
++        templateLabels = [];
++        for (const entry of labelEntries) {
++            originalLabels.set(entry.english, entry);
++            if (!originalLabels.has(entry.chinese)) originalLabels.set(entry.chinese, entry);
++            if (/\{\d+\}/.test(entry.english)) {
++                const english = labelPattern(entry.english), chinese = labelPattern(entry.chinese);
++                if (english) templateLabels.push({ ...entry, ...english });
++                if (chinese) templateLabels.push({ ...entry, ...chinese });
++            }
++        }
++    }
++    const entry = originalLabels?.get(label);
++    const render = value => String(i18n?.t(value.key, { ns: value.ns, defaultValue: value.english, keySeparator: false, nsSeparator: false }) ?? value.english);
++    if (entry) return render(entry);
++    const suffix = /^(.*?)( \([^()]*\))$/.exec(label);
++    if (suffix && originalLabels?.has(suffix[1])) return render(originalLabels.get(suffix[1])) + suffix[2];
++    for (const candidate of templateLabels || []) {
++        const matched = candidate.expression.exec(label);
++        if (!matched) continue;
++        const args = [];
++        candidate.indexes.forEach((index, position) => { args[index] = matched[position + 1]; });
++        return _format(render(candidate), args);
++    }
++    return label;
++}
+ // eslint-disable-next-line local/code-import-patterns
+ export { getNLSLanguage, getNLSMessages } from './nls.messages.js';
+ const isPseudo = getNLSLanguage() === 'pseudo' || (typeof document !== 'undefined' && document.location && document.location.hash.indexOf('pseudo=true') >= 0);
+@@ -39,7 +92,7 @@ export function localize(data /* | number when built */, message /* | null when
+     if (typeof data === 'number') {
+         return _format(lookupMessage(data, message), args);
+     }
+-    return _format(message, args);
++    return _format(translateMessage(message), args);
+ }
+ /**
+  * Only used when built: Looks up the message in the global NLS table.
+@@ -67,9 +120,17 @@ export function localize2(data /* | number when built */, originalMessage, ...ar
+     else {
+         message = originalMessage;
+     }
+-    const value = _format(message, args);
+     return {
+-        value,
+-        original: originalMessage === message ? value : _format(originalMessage, args)
++        get value() { return _format(translateMessage(message), args); },
++        original: _format(originalMessage, args)
+     };
+ }
++
++// Native editor widgets subscribe directly and update their own label options.
++// This does not walk or rewrite rendered document/response DOM.
++export function onLanguageChange(callback) {
++    const i18n = getI18n();
++    i18n?.on('languageChanged', callback);
++    callback();
++    return { dispose() { i18n?.off('languageChanged', callback); } };
++}
+diff --git a/node_modules/monaco-editor/esm/vs/platform/actions/common/actions.js b/node_modules/monaco-editor/esm/vs/platform/actions/common/actions.js
+index cca8070..d8fc1b0 100644
+--- a/node_modules/monaco-editor/esm/vs/platform/actions/common/actions.js
++++ b/node_modules/monaco-editor/esm/vs/platform/actions/common/actions.js
+@@ -12,6 +12,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
+     return function (target, key) { decorator(target, key, paramIndex); }
+ };
+ var MenuItemAction_1;
++import { localizeFixedLabel } from '../../../nls.js';
+ import { SubmenuAction } from '../../../base/common/actions.js';
+ import { ThemeIcon } from '../../../base/common/themables.js';
+ import { MicrotaskEmitter } from '../../../base/common/event.js';
+@@ -334,7 +335,7 @@ export const MenuRegistry = new class {
+ };
+ export class SubmenuItemAction extends SubmenuAction {
+     constructor(item, hideActions, actions) {
+-        super(`submenuitem.${item.submenu.id}`, typeof item.title === 'string' ? item.title : item.title.value, actions, 'submenu');
++        super(`submenuitem.${item.submenu.id}`, localizeFixedLabel(typeof item.title === 'string' ? item.title : item.title.value), actions, 'submenu');
+         this.item = item;
+         this.hideActions = hideActions;
+     }
+@@ -343,9 +344,9 @@ export class SubmenuItemAction extends SubmenuAction {
+ // subscribes to events of Action or modified properties
+ let MenuItemAction = MenuItemAction_1 = class MenuItemAction {
+     static label(action, options) {
+-        return options?.renderShortTitle && action.shortTitle
++        return localizeFixedLabel(options?.renderShortTitle && action.shortTitle
+             ? (typeof action.shortTitle === 'string' ? action.shortTitle : action.shortTitle.value)
+-            : (typeof action.title === 'string' ? action.title : action.title.value);
++            : (typeof action.title === 'string' ? action.title : action.title.value));
+     }
+     constructor(item, alt, options, hideActions, menuKeybinding, contextKeyService, _commandService) {
+         this.hideActions = hideActions;
+diff --git a/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInput.js b/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInput.js
+index 4df569e..d7ed4f4 100644
+--- a/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInput.js
++++ b/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInput.js
+@@ -380,7 +380,7 @@ export class QuickPick extends QuickInput {
+         this.onDidTriggerItemButton = this.onDidTriggerItemButtonEmitter.event;
+         this.onDidTriggerSeparatorButton = this.onDidTriggerSeparatorButtonEmitter.event;
+     }
+-    static { this.DEFAULT_ARIA_LABEL = localize('quickInputBox.ariaLabel', "Type to narrow down results."); }
++    static { Object.defineProperty(this, "DEFAULT_ARIA_LABEL", { get: () => localize('quickInputBox.ariaLabel', "Type to narrow down results.") }); }
+     get quickNavigate() {
+         return this._quickNavigate;
+     }
+diff --git a/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputController.js b/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputController.js
+index 38b7fb7..88ba726 100644
+--- a/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputController.js
++++ b/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputController.js
+@@ -21,7 +21,7 @@ import { CancellationToken } from '../../../base/common/cancellation.js';
+ import { Emitter, Event } from '../../../base/common/event.js';
+ import { Disposable, dispose } from '../../../base/common/lifecycle.js';
+ import Severity from '../../../base/common/severity.js';
+-import { localize } from '../../../nls.js';
++import { localize, localizeFixedLabel, onLanguageChange } from '../../../nls.js';
+ import { QuickInputHideReason } from '../common/quickInput.js';
+ import { QuickInputBox } from './quickInputBox.js';
+ import { QuickPick, backButton, InputBox, InQuickInputContextKey, QuickInputTypeContextKey, EndOfQuickInputBoxContextKey } from './quickInput.js';
+@@ -40,6 +40,22 @@ let QuickInputController = class QuickInputController extends Disposable {
+     constructor(options, layoutService, instantiationService, contextKeyService) {
+         super();
+         this.options = options;
++        this._register(onLanguageChange(() => {
++            if (!this.controller || !this.ui) return;
++            this.ui.inputBox.setAttribute('aria-label', localize('quickInputBox.ariaLabel', "Type to narrow down results."));
++            if (this.controller.type === 'quickPick' && this.controller.items.some(item => typeof item.commandId === 'string')) {
++                const active = this.controller.activeItems;
++                const previous = this.controller.items;
++                const localized = previous.map(item => {
++                    if (typeof item.commandId !== 'string') return item;
++                    const label = localizeFixedLabel(item.commandAlias || item.label);
++                    const ariaLabel = item.keybinding ? localize('commandPickAriaLabelWithKeybinding', "{0}, {1}", label, item.keybinding.getAriaLabel()) : label;
++                    return { ...item, label, ariaLabel };
++                });
++                this.controller.items = localized;
++                this.controller.activeItems = active.map(item => localized[previous.indexOf(item)]).filter(Boolean);
++            }
++        }));
+         this.layoutService = layoutService;
+         this.instantiationService = instantiationService;
+         this.contextKeyService = contextKeyService;
+@@ -455,6 +471,7 @@ let QuickInputController = class QuickInputController extends Disposable {
+         ui.checkAll.checked = false;
+         // ui.inputBox.value = ''; Avoid triggering an event.
+         ui.inputBox.placeholder = '';
++        ui.inputBox.setAttribute('aria-label', localize('quickInputBox.ariaLabel', "Type to narrow down results."));
+         ui.inputBox.password = false;
+         ui.inputBox.showDecoration(Severity.Ignore);
+         ui.visibleCount.setCount(0);

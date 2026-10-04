@@ -1,3 +1,4 @@
+import { t, useLanguage, message } from "../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
 import { Badge, Button, Callout, Flex, Tabs, Text, TextField } from "@radix-ui/themes";
 import { FileCode, RefreshCw, Server } from "lucide-react";
@@ -9,6 +10,7 @@ import { useSoapSchema } from "./useSoapSchema";
 import type { SoapConfig } from "./types";
 import SoapSourceDialog from "./SoapSourceDialog";
 export default function SoapWorkbench() {
+  useLanguage();
   const state = useWorkbench();
   const latest = useRef(state);
   latest.current = state;
@@ -58,9 +60,9 @@ export default function SoapWorkbench() {
     };
     if (state.request?.body.trim() && state.request.body !== operation.template)
       state.setGuard({
-        title: "替换 SOAP Envelope",
+        title: message("替换 SOAP Envelope"),
         description:
-          "当前 XML 草稿会被所选操作的模板替换。保存的 WSDL/XSD 保持原样。",
+          message("当前 XML 草稿会被所选操作的模板替换。保存的 WSDL/XSD 保持原样。"),
         action: commit,
       });
     else commit();
@@ -68,12 +70,12 @@ export default function SoapWorkbench() {
   if (!config || !state.request) return null;
   const response = state.response;
   return (
-    <section className="soap-workbench" aria-label="SOAP 客户端">
+    <section className="soap-workbench" aria-label={t("SOAP 客户端")}>
       <div className="soap-toolbar">
         <Flex gap="3" align="center" wrap="wrap">
           <Choice
             value={state.request.specification_id || "none"}
-            label="WSDL 服务定义"
+            label={t("WSDL 服务定义")}
             onChange={(value) =>
               latest.current.updateRequest({
                 specification_id: value === "none" ? null : value,
@@ -81,7 +83,7 @@ export default function SoapWorkbench() {
               })
             }
             options={[
-              { value: "none", label: "手动 SOAP XML" },
+              { value: "none", label: t("手动 SOAP XML") },
               ...(state.draft?.data.specifications || [])
                 .filter((entry) => entry.kind === "wsdl")
                 .map((entry) => ({ value: entry.id, label: entry.name })),
@@ -93,12 +95,10 @@ export default function SoapWorkbench() {
             variant="soft"
             onClick={() => setSourceOpen(true)}
           >
-            <FileCode size={14} />
-            WSDL / XSD 来源
-          </Button>
+            <FileCode size={14} /> {t("WSDL / XSD 来源")} </Button>
           <Choice
             value={config.version}
-            label="SOAP 版本"
+            label={t("SOAP 版本")}
             onChange={(version) => update({ version })}
             options={[
               { value: "1.1", label: "SOAP 1.1" },
@@ -133,7 +133,7 @@ export default function SoapWorkbench() {
                 })
               }
               options={[
-                { value: "none", label: "选择 Service" },
+                { value: "none", label: t("选择 Service") },
                 ...source.schema.services.map((entry) => ({
                   value: entry.name,
                   label: entry.name,
@@ -155,7 +155,7 @@ export default function SoapWorkbench() {
                 });
               }}
               options={[
-                { value: "none", label: "选择 Port" },
+                { value: "none", label: t("选择 Port") },
                 ...(service?.ports || []).map((entry) => ({
                   value: entry.name,
                   label: entry.name + " · " + entry.version,
@@ -176,7 +176,7 @@ export default function SoapWorkbench() {
                 });
               }}
               options={[
-                { value: "none", label: "选择 Operation" },
+                { value: "none", label: t("选择 Operation") },
                 ...(port?.operations || []).map((entry) => ({
                   value: entry.name,
                   label: entry.name,
@@ -192,9 +192,7 @@ export default function SoapWorkbench() {
                 latest.current.updateRequest({ url: port!.address })
               }
             >
-              <Server size={14} />
-              使用 WSDL Endpoint
-            </Button>
+              <Server size={14} /> {t("使用 WSDL Endpoint")} </Button>
             <Button
               size="1"
               variant="soft"
@@ -202,9 +200,7 @@ export default function SoapWorkbench() {
               disabled={!operation?.template || !!operation.error}
               onClick={template}
             >
-              <RefreshCw size={14} />
-              生成 XML 模板
-            </Button>
+              <RefreshCw size={14} /> {t("生成 XML 模板")} </Button>
           </Flex>
         )}
       </div>
@@ -219,19 +215,17 @@ export default function SoapWorkbench() {
         </Callout.Root>
       )}
       {source.busy && (
-        <Text size="1" color="gray" role="status">
-          正在读取保存的 WSDL…
-        </Text>
+        <Text size="1" color="gray" role="status"> {t("正在读取保存的 WSDL…")} </Text>
       )}
       <Tabs.Root value={tab} onValueChange={setTab} className="grpc-tabs">
         <Tabs.List>
           <Tabs.Trigger value="xml">SOAP Envelope</Tabs.Trigger>
-          <Tabs.Trigger value="response">HTTP / XML 响应</Tabs.Trigger>
-          <Tabs.Trigger value="operation">操作定义</Tabs.Trigger>
+          <Tabs.Trigger value="response">{t("HTTP / XML 响应")}</Tabs.Trigger>
+          <Tabs.Trigger value="operation">{t("操作定义")}</Tabs.Trigger>
         </Tabs.List>
         <Tabs.Content value="xml">
           <Text size="1" color="gray">
-            Action：{config.action || "未设置"} · 当前版本 SOAP {config.version}
+            Action：{config.action || t("未设置")} {t("· 当前版本 SOAP")} {config.version}
           </Text>
           <Editor
             value={state.request.body}
@@ -239,7 +233,7 @@ export default function SoapWorkbench() {
             dark={state.dark}
             language="xml"
             height="100%"
-            label="SOAP XML 草稿"
+            label={t("SOAP XML 草稿")}
           />
         </Tabs.Content>
         <Tabs.Content value="response">
@@ -287,13 +281,10 @@ export default function SoapWorkbench() {
               jsonMode
               readOnly
               height="100%"
-              label="SOAP 操作定义"
+              label={t("SOAP 操作定义")}
             />
           ) : (
-            <Text color="gray">
-              导入 WSDL 后选择 Service、Port 与 Operation。也可直接编写 XML
-              调试已知 SOAP Endpoint。
-            </Text>
+            <Text color="gray"> {t("导入 WSDL 后选择 Service、Port 与 Operation。也可直接编写 XML 调试已知 SOAP Endpoint。")} </Text>
           )}
         </Tabs.Content>
       </Tabs.Root>

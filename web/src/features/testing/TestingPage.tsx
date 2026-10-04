@@ -1,9 +1,11 @@
+import { t, useLanguage } from "../../shared/i18n";
 import { Badge, Button, Card, Flex, Heading, Text } from "@radix-ui/themes";
 import { FlaskConical } from "lucide-react";
 import { Choice } from "../../shared/ui";
 import { useWorkbench } from "../workbench/context";
 
 export default function TestingPage() {
+  useLanguage();
   const state = useWorkbench();
   const { draft, runCollection, setRunCollection, runResult, runnerBusy, run } =
     state;
@@ -12,10 +14,8 @@ export default function TestingPage() {
     <div className="page-panel">
       <div className="page-heading">
         <div>
-          <Heading size="5">集合测试</Heading>
-          <Text size="2" color="gray">
-            按顺序运行集合内的请求，并检查断言。
-          </Text>
+          <Heading size="5">{t("集合测试")}</Heading>
+          <Text size="2" color="gray"> {t("按顺序运行集合内的请求，并检查断言。")} </Text>
         </div>
       </div>
       <Flex gap="3" align="center">
@@ -26,22 +26,20 @@ export default function TestingPage() {
             value: c.id,
             label: c.name,
           }))}
-          label="测试集合"
+          label={t("测试集合")}
         />
         <Button
           loading={runnerBusy}
           disabled={!draft.data.collections.length}
           onClick={() => void run()}
         >
-          <FlaskConical size={16} />
-          运行集合
-        </Button>
+          <FlaskConical size={16} /> {t("运行集合")} </Button>
       </Flex>
       {runResult && (
         <>
           <Flex gap="4" align="center">
-            <Badge color="green">通过 {runResult.passed}</Badge>
-            <Badge color="red">失败 {runResult.failed}</Badge>
+            <Badge color="green">{t("通过")} {runResult.passed}</Badge>
+            <Badge color="red">{t("失败")} {runResult.failed}</Badge>
             <Text size="2" color="gray">
               {runResult.elapsed_ms} ms
             </Text>
@@ -75,7 +73,7 @@ export default function TestingPage() {
                   key={test.id}
                   color={test.passed ? "green" : "red"}
                 >
-                  {test.passed ? "通过" : "失败"} · {test.name} · {test.actual}
+                  {test.passed ? t("通过") : t("失败")} · {test.name} · {test.actual}
                 </Text>
               ))}
             </Card>

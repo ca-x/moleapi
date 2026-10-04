@@ -1,3 +1,4 @@
+import { useLanguage } from "../../shared/i18n";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../shared/api";
@@ -8,6 +9,7 @@ export function useHistory(
   active: boolean,
   accountId = "local",
 ) {
+  useLanguage();
   const history = useQuery({
     queryKey: ["history", selectedId, accountId],
     queryFn: () => api<HistoryEntry[]>(`/api/workspaces/${selectedId}/history`),

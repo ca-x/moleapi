@@ -205,6 +205,7 @@ pub async fn logout(
             .await?;
     }
     *generation = next;
+    state.webhooks.cancel_scope(&owner.0, None, None);
     state.protocol_sessions.close_owner(&owner.0).await;
     Ok(Json(serde_json::json!({"ok":true})))
 }
@@ -261,6 +262,7 @@ mod tests {
             generation_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
             protocol_sessions: moleapi_protocols::SessionManager::new(),
             a2a_sources: std::sync::Arc::new(crate::a2a::Sources::default()),
+            webhooks: std::sync::Arc::new(crate::webhooks::Hub::default()),
             protocol_admission: std::sync::Arc::new(
                 crate::protocol_admission::AdmissionGates::default(),
             ),

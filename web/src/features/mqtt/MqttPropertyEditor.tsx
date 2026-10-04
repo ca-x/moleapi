@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../shared/i18n";
 import { Button, Checkbox, Flex, TextField } from "@radix-ui/themes";
 import { Plus, Trash2 } from "lucide-react";
 import { ToolButton } from "../../shared/ui";
@@ -13,6 +14,7 @@ export default function MqttPropertyEditor({
   disabled?: boolean;
   label?: string;
 }) {
+  useLanguage();
   function edit(index: number, patch: Partial<MqttProperty>) {
     onChange(
       value.map((item, key) => (key === index ? { ...item, ...patch } : item)),
@@ -23,28 +25,28 @@ export default function MqttPropertyEditor({
       {value.map((item, index) => (
         <Flex key={index} gap="2" align="center">
           <TextField.Root
-            aria-label={label + " 名称 " + (index + 1)}
+            aria-label={t("{{label}} 名称 {{number}}", { label, number: index + 1 })}
             value={item.key}
             disabled={disabled}
-            placeholder="名称"
+            placeholder={t("名称")}
             onChange={(event) => edit(index, { key: event.target.value })}
           />
           <TextField.Root
-            aria-label={label + " 值 " + (index + 1)}
+            aria-label={t("{{label}} 值 {{number}}", { label, number: index + 1 })}
             value={item.value}
             type={item.secret ? "password" : "text"}
             disabled={disabled}
-            placeholder="值"
+            placeholder={t("值")}
             onChange={(event) => edit(index, { value: event.target.value })}
           />
           <Checkbox
-            aria-label={label + " 密钥 " + (index + 1)}
+            aria-label={t("{{label}} 密钥 {{number}}", { label, number: index + 1 })}
             checked={item.secret}
             disabled={disabled}
             onCheckedChange={(value) => edit(index, { secret: value === true })}
           />
           <ToolButton
-            label={"移除 " + label + " " + (index + 1)}
+            label={t("移除 {{label}} {{number}}", { label, number: index + 1 })}
             disabled={disabled}
             onClick={() => onChange(value.filter((_, key) => key !== index))}
           >
@@ -61,9 +63,7 @@ export default function MqttPropertyEditor({
           onChange([...value, { key: "", value: "", secret: false }])
         }
       >
-        <Plus size={14} />
-        添加属性
-      </Button>
+        <Plus size={14} /> {t("添加属性")} </Button>
     </div>
   );
 }

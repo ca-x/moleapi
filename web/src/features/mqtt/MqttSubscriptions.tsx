@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
 import { Button, Checkbox, Flex, Text, TextField } from "@radix-ui/themes";
 import { Plus, Trash2 } from "lucide-react";
@@ -15,6 +16,7 @@ export default function MqttSubscriptions({
   update: (patch: Partial<MqttConfig>) => void;
   identity: string;
 }) {
+  useLanguage();
   const state = useWorkbench();
   const latest = useRef(state);
   latest.current = state;
@@ -93,7 +95,7 @@ export default function MqttSubscriptions({
         </Field>
         <Choice
           value={String(draft.qos)}
-          label="订阅 QoS"
+          label={t("订阅 QoS")}
           disabled={blocked}
           onChange={(value) => patch({ qos: Number(value) as 0 | 1 | 2 })}
           options={[
@@ -109,17 +111,13 @@ export default function MqttSubscriptions({
             onCheckedChange={(value) =>
               patch({ filter_secret: value === true })
             }
-          />
-          私密 Filter
-        </label>
+          /> {t("私密 Filter")} </label>
         <Button
           disabled={!draft.filter.trim() || blocked}
           loading={pending}
           onClick={() => void apply(draft, true)}
         >
-          <Plus size={14} />
-          添加订阅
-        </Button>
+          <Plus size={14} /> {t("添加订阅")} </Button>
       </Flex>
       <Flex gap="3" align="end" wrap="wrap">
         <label className="checkbox-label">
@@ -148,9 +146,9 @@ export default function MqttSubscriptions({
             patch({ retain_handling: Number(value) as 0 | 1 | 2 })
           }
           options={[
-            { value: "0", label: "发送保留消息" },
-            { value: "1", label: "仅新订阅发送" },
-            { value: "2", label: "不发送保留消息" },
+            { value: "0", label: t("发送保留消息") },
+            { value: "1", label: t("仅新订阅发送") },
+            { value: "2", label: t("不发送保留消息") },
           ]}
         />
         <Field label="Subscription Identifier">
@@ -172,12 +170,12 @@ export default function MqttSubscriptions({
         value={draft.user_properties}
         disabled={blocked || !v5}
         onChange={(user_properties) => patch({ user_properties })}
-        label="订阅属性"
+        label={t("订阅属性")}
       />
       <div
         className="socketio-listeners"
         role="list"
-        aria-label="MQTT 订阅列表"
+        aria-label={t("MQTT 订阅列表")}
       >
         {value.subscriptions.map((item) => (
           <div key={item.filter} role="listitem" className="socketio-listener">
@@ -190,7 +188,7 @@ export default function MqttSubscriptions({
                 }
               />
               <Text className="mono">
-                {item.filter_secret ? "[私密 Filter]" : item.filter}
+                {item.filter_secret ? t("[私密 Filter]") : item.filter}
               </Text>
             </label>
             <Flex gap="3" align="center">
@@ -199,8 +197,7 @@ export default function MqttSubscriptions({
               </Text>
               <ToolButton
                 label={
-                  "移除订阅 " +
-                  (item.filter_secret ? "私密 Filter" : item.filter)
+                  t("移除订阅 {{filter}}", { filter: item.filter_secret ? t("私密 Filter") : item.filter })
                 }
                 disabled={blocked}
                 onClick={() => void apply(item, false, true)}
@@ -211,9 +208,7 @@ export default function MqttSubscriptions({
           </div>
         ))}
         {!value.subscriptions.length && (
-          <Text color="gray">
-            支持精确 Topic 和 broker 允许的通配符过滤器。
-          </Text>
+          <Text color="gray"> {t("支持精确 Topic 和 broker 允许的通配符过滤器。")} </Text>
         )}
       </div>
     </div>

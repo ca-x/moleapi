@@ -1,3 +1,4 @@
+import { t, useLanguage, message } from "../../shared/i18n";
 import {
   Badge,
   Button,
@@ -13,6 +14,7 @@ import { ResponsePane } from "../requests/ResponsePane";
 import { useWorkbench } from "../workbench/context";
 
 export default function HistoryPage() {
+  useLanguage();
   const state = useWorkbench();
   const {
     dark,
@@ -27,18 +29,16 @@ export default function HistoryPage() {
     <div className="page-panel">
       <div className="page-heading">
         <div>
-          <Heading size="5">请求历史</Heading>
-          <Text size="2" color="gray">
-            最近的执行记录，包含真实状态、耗时与响应。历史会保存接口返回的响应内容，可能包含敏感信息，可随时清空。
-          </Text>
+          <Heading size="5">{t("请求历史")}</Heading>
+          <Text size="2" color="gray"> {t("最近的执行记录，包含真实状态、耗时与响应。历史会保存接口返回的响应内容，可能包含敏感信息，可随时清空。")} </Text>
         </div>
         <Button
           color="gray"
           variant="soft"
           onClick={() =>
             setGuard({
-              title: "清空历史",
-              description: "清空此工作区的请求历史，不影响已保存请求。",
+              title: message("清空历史"),
+              description: message("清空此工作区的请求历史，不影响已保存请求。"),
               action: async () => {
                 await api(`/api/workspaces/${draft.id}/history`, "DELETE");
                 setHistoryResponse(null);
@@ -46,9 +46,7 @@ export default function HistoryPage() {
               },
             })
           }
-        >
-          清空历史
-        </Button>
+        > {t("清空历史")} </Button>
       </div>
       {history.error && (
         <Callout.Root color="red">
@@ -58,10 +56,10 @@ export default function HistoryPage() {
       <Table.Root>
         <Table.Header>
           <Table.Row>
-            <Table.ColumnHeaderCell>请求</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>状态</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>耗时</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>时间</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>{t("请求")}</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>{t("状态")}</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>{t("耗时")}</Table.ColumnHeaderCell>
+            <Table.ColumnHeaderCell>{t("时间")}</Table.ColumnHeaderCell>
             <Table.ColumnHeaderCell />
           </Table.Row>
         </Table.Header>
@@ -95,16 +93,14 @@ export default function HistoryPage() {
                   color="gray"
                   variant="ghost"
                   onClick={() => setHistoryResponse(entry.response)}
-                >
-                  查看响应
-                </Button>
+                > {t("查看响应")} </Button>
               </Table.Cell>
             </Table.Row>
           ))}
         </Table.Body>
       </Table.Root>
       {history.data?.length === 0 && (
-        <Text color="gray">还没有请求记录。发送一个请求后即可查看。</Text>
+        <Text color="gray">{t("还没有请求记录。发送一个请求后即可查看。")}</Text>
       )}
       {historyResponse && (
         <ResponsePane

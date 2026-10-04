@@ -1,10 +1,13 @@
+import type { ErrorCopy } from "../../shared/i18n/errors";
+import { LocalizedError, errorCopy } from "../../shared/i18n/errors";
+import { useLanguage, translateCopy } from "../../shared/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../../shared/api";
-import { safeMessage } from "../../shared/model";
 import type { Specification } from "../../shared/types";
 import { useWorkbench } from "../workbench/context";
 import type { GrpcSchema, GrpcSchemaResult, ReflectionResult } from "./types";
 export function useGrpcSchema() {
+  useLanguage();
   const state = useWorkbench();
   const latest = useRef(state);
   latest.current = state;
@@ -34,7 +37,7 @@ export function useGrpcSchema() {
     specification: string;
     schema: GrpcSchema;
   } | null>(null);
-  const [error, setError] = useState<{ scope: string; message: string } | null>(
+  const [error, setError] = useState<{ scope: string; message: ErrorCopy } | null>(
     null,
   );
   const [pending, setPending] = useState<string | null>(null);
@@ -84,7 +87,7 @@ export function useGrpcSchema() {
     void (async () => {
       try {
         if (latest.current.dirty && !(await latest.current.save(true)))
-          throw new Error("请先解决工作区保存冲突");
+          throw new LocalizedError("请先解决工作区保存冲突");
         if (disposed || !current()) return;
         const loaded = await api<GrpcSchemaResult>("/api/grpc/schema", "POST", {
           workspace_id: latest.current.draft!.id,
@@ -100,7 +103,7 @@ export function useGrpcSchema() {
         }
       } catch (caught) {
         if (!disposed && current())
-          setError({ scope: origin, message: safeMessage(caught) });
+          setError({ scope: origin, message: errorCopy(caught) });
       }
     })();
     return () => {
@@ -137,7 +140,7 @@ export function useGrpcSchema() {
     const locals = origin.localVariables.values(draft, collection, environment);
     try {
       if (origin.dirty && !(await origin.save(true)))
-        throw new Error("请先解决工作区保存冲突");
+        throw new LocalizedError("请先解决工作区保存冲突");
       if (!current()) return;
       const reflected = await api<ReflectionResult>(
         "/api/grpc/reflect",
@@ -156,16 +159,15 @@ export function useGrpcSchema() {
         environment,
         reflected.variable_updates || [],
       );
-      if (reflected.error || !reflected.specification || !reflected.schema)
-        throw new Error(
-          reflected.error ||
-            (reflected.status
-              ? `${reflected.status.code} ${reflected.status.name}: ${reflected.status.message}`
-              : "服务未返回可用定义"),
-        );
+      if (reflected.error) throw new Error(reflected.error);
+      if (!reflected.specification || !reflected.schema) {
+        if (reflected.status)
+          throw new Error(`${reflected.status.code} ${reflected.status.name}: ${reflected.status.message}`);
+        throw new LocalizedError("服务未返回可用定义");
+      }
       attach(reflected.specification, reflected.schema);
     } catch (caught) {
-      if (current()) setError({ scope: ticket, message: safeMessage(caught) });
+      if (current()) setError({ scope: ticket, message: errorCopy(caught) });
     } finally {
       tickets.current.delete(ticket);
       if (mounted.current)
@@ -176,7 +178,7 @@ export function useGrpcSchema() {
     schema,
     specification,
     busy: pending === identity,
-    error: error?.scope === identity ? error.message : "",
+    error: error?.scope === identity ? translateCopy(error.message) : "",
     reflect,
     attach,
     guard,

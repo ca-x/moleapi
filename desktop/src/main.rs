@@ -57,6 +57,14 @@ async fn api(
     Ok(ApiReply { status, body })
 }
 
+#[tauri::command]
+fn set_language(app: tauri::AppHandle, language: String) -> Result<(), String> {
+    if !matches!(language.as_str(), "zh-CN" | "en") {
+        return Err("Unsupported application language".into());
+    }
+    tray::set_language(&app, &language).map_err(|_| "Could not update native menu language".into())
+}
+
 fn main() {
     match moleapi_server::dispatch_script_worker() {
         Ok(true) => return,
@@ -90,7 +98,7 @@ fn main() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![api])
+        .invoke_handler(tauri::generate_handler![api, set_language])
         .build(tauri::generate_context!())
         .expect("MoleAPI desktop runtime failed");
     application.run(|_app, _event| {

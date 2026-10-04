@@ -1,0 +1,426 @@
+diff --git a/node_modules/@graphiql/plugin-doc-explorer/dist/components/argument.js b/node_modules/@graphiql/plugin-doc-explorer/dist/components/argument.js
+index e266293..c302e19 100644
+--- a/node_modules/@graphiql/plugin-doc-explorer/dist/components/argument.js
++++ b/node_modules/@graphiql/plugin-doc-explorer/dist/components/argument.js
+@@ -1,10 +1,12 @@
++import { moleapiTranslate, useMoleapiLanguage, moleapiMemoCache as c } from "@graphiql/react";
+ import { jsx, jsxs } from "react/jsx-runtime";
+-import { c } from "react-compiler-runtime";
++
+ import { MarkdownContent } from "@graphiql/react";
+ import { DefaultValue } from "./default-value.js";
+ import { TypeLink } from "./type-link.js";
+ /* empty css             */
+ const Argument = (t0) => {
++  useMoleapiLanguage();
+   const $ = c(19);
+   const {
+     arg,
+@@ -66,7 +68,7 @@ const Argument = (t0) => {
+   let t6;
+   if ($[13] !== arg.deprecationReason) {
+     t6 = arg.deprecationReason ? /* @__PURE__ */ jsxs("div", { className: "graphiql-doc-explorer-argument-deprecation", children: [
+-      /* @__PURE__ */ jsx("div", { className: "graphiql-doc-explorer-argument-deprecation-label", children: "Deprecated" }),
++      /* @__PURE__ */ jsx("div", { className: "graphiql-doc-explorer-argument-deprecation-label", children: moleapiTranslate("Deprecated") }),
+       /* @__PURE__ */ jsx(MarkdownContent, { type: "deprecation", children: arg.deprecationReason })
+     ] }) : null;
+     $[13] = arg.deprecationReason;
+diff --git a/node_modules/@graphiql/plugin-doc-explorer/dist/components/deprecation-reason.js b/node_modules/@graphiql/plugin-doc-explorer/dist/components/deprecation-reason.js
+index 9c0b633..55f915c 100644
+--- a/node_modules/@graphiql/plugin-doc-explorer/dist/components/deprecation-reason.js
++++ b/node_modules/@graphiql/plugin-doc-explorer/dist/components/deprecation-reason.js
+@@ -1,13 +1,15 @@
++import { moleapiTranslate, useMoleapiLanguage, moleapiMemoCache as c } from "@graphiql/react";
+ import { jsxs, jsx } from "react/jsx-runtime";
+-import { c } from "react-compiler-runtime";
++
+ import { MarkdownContent } from "@graphiql/react";
+ /* empty css                       */
+ const DeprecationReason = (props) => {
++  useMoleapiLanguage();
+   const $ = c(3);
+   let t0;
+   if ($[0] !== props.children || $[1] !== props.preview) {
+     t0 = props.children ? /* @__PURE__ */ jsxs("div", { className: "graphiql-doc-explorer-deprecation", children: [
+-      /* @__PURE__ */ jsx("div", { className: "graphiql-doc-explorer-deprecation-label", children: "Deprecated" }),
++      /* @__PURE__ */ jsx("div", { className: "graphiql-doc-explorer-deprecation-label", children: moleapiTranslate("Deprecated") }),
+       /* @__PURE__ */ jsx(MarkdownContent, { type: "deprecation", onlyShowFirstChild: props.preview ?? true, children: props.children })
+     ] }) : null;
+     $[0] = props.children;
+diff --git a/node_modules/@graphiql/plugin-doc-explorer/dist/components/doc-explorer.js b/node_modules/@graphiql/plugin-doc-explorer/dist/components/doc-explorer.js
+index 9256309..7256fe8 100644
+--- a/node_modules/@graphiql/plugin-doc-explorer/dist/components/doc-explorer.js
++++ b/node_modules/@graphiql/plugin-doc-explorer/dist/components/doc-explorer.js
+@@ -1,5 +1,6 @@
++import { moleapiTranslate, useMoleapiLanguage, moleapiMemoCache as c } from "@graphiql/react";
+ import { jsxs, jsx } from "react/jsx-runtime";
+-import { c } from "react-compiler-runtime";
++
+ import { isType } from "graphql";
+ import { pick, useGraphiQL, Spinner, ChevronLeftIcon } from "@graphiql/react";
+ import { useDocExplorer, useDocExplorerActions } from "../context.js";
+@@ -9,6 +10,7 @@ import { Search } from "./search.js";
+ import { TypeDocumentation } from "./type-documentation.js";
+ /* empty css                 */
+ const DocExplorer = () => {
++  useMoleapiLanguage();
+   const $ = c(39);
+   let t0;
+   if ($[0] === Symbol.for("react.memo_cache_sentinel")) {
+@@ -35,7 +37,7 @@ const DocExplorer = () => {
+     if (fetchError) {
+       let t12;
+       if ($[8] === Symbol.for("react.memo_cache_sentinel")) {
+-        t12 = /* @__PURE__ */ jsx("div", { className: "graphiql-doc-explorer-error", children: "Error fetching schema" });
++        t12 = /* @__PURE__ */ jsx("div", { className: "graphiql-doc-explorer-error", children: moleapiTranslate("Error fetching schema") });
+         $[8] = t12;
+       } else {
+         t12 = $[8];
+@@ -46,7 +48,7 @@ const DocExplorer = () => {
+         let t12;
+         if ($[9] !== validationErrors[0].message) {
+           t12 = /* @__PURE__ */ jsxs("div", { className: "graphiql-doc-explorer-error", children: [
+-            "Schema is invalid: ",
++            moleapiTranslate("Schema is invalid: "),
+             validationErrors[0].message
+           ] });
+           $[9] = validationErrors[0].message;
+@@ -69,7 +71,7 @@ const DocExplorer = () => {
+           if (!schema) {
+             let t12;
+             if ($[12] === Symbol.for("react.memo_cache_sentinel")) {
+-              t12 = /* @__PURE__ */ jsx("div", { className: "graphiql-doc-explorer-error", children: "No GraphQL schema available" });
++              t12 = /* @__PURE__ */ jsx("div", { className: "graphiql-doc-explorer-error", children: moleapiTranslate("No GraphQL schema available") });
+               $[12] = t12;
+             } else {
+               t12 = $[12];
+@@ -143,7 +145,7 @@ const DocExplorer = () => {
+     t1 = prevName && /* @__PURE__ */ jsxs("a", { href: "#", className: "graphiql-doc-explorer-back", onClick: (event) => {
+       event.preventDefault();
+       pop();
+-    }, "aria-label": `Go back to ${prevName}`, children: [
++    }, "aria-label": moleapiTranslate("Go back to {{value0}}", { value0: prevName }), children: [
+       /* @__PURE__ */ jsx(ChevronLeftIcon, {}),
+       prevName
+     ] });
+@@ -203,7 +205,7 @@ const DocExplorer = () => {
+   }
+   let t7;
+   if ($[36] !== t5 || $[37] !== t6) {
+-    t7 = /* @__PURE__ */ jsxs("section", { className: "graphiql-doc-explorer", "aria-label": "Documentation Explorer", children: [
++    t7 = /* @__PURE__ */ jsxs("section", { className: "graphiql-doc-explorer", "aria-label": moleapiTranslate("Documentation Explorer"), children: [
+       t5,
+       t6
+     ] });
+diff --git a/node_modules/@graphiql/plugin-doc-explorer/dist/components/field-documentation.js b/node_modules/@graphiql/plugin-doc-explorer/dist/components/field-documentation.js
+index fe398de..3abc36f 100644
+--- a/node_modules/@graphiql/plugin-doc-explorer/dist/components/field-documentation.js
++++ b/node_modules/@graphiql/plugin-doc-explorer/dist/components/field-documentation.js
+@@ -1,5 +1,6 @@
++import { moleapiTranslate, useMoleapiLanguage, moleapiMemoCache as c } from "@graphiql/react";
+ import { jsx, jsxs, Fragment } from "react/jsx-runtime";
+-import { c } from "react-compiler-runtime";
++
+ import { useState } from "react";
+ import { MarkdownContent, Button } from "@graphiql/react";
+ import { Argument } from "./argument.js";
+@@ -8,6 +9,7 @@ import { Directive } from "./directive.js";
+ import { ExplorerSection } from "./section.js";
+ import { TypeLink } from "./type-link.js";
+ const FieldDocumentation = (t0) => {
++  useMoleapiLanguage();
+   const $ = c(15);
+   const {
+     field
+@@ -69,6 +71,7 @@ const FieldDocumentation = (t0) => {
+   return t6;
+ };
+ const Arguments = (t0) => {
++  useMoleapiLanguage();
+   const $ = c(12);
+   const {
+     field
+@@ -112,7 +115,7 @@ const Arguments = (t0) => {
+   }
+   let t3;
+   if ($[5] !== args.length || $[6] !== deprecatedArgs || $[7] !== showDeprecated) {
+-    t3 = deprecatedArgs.length > 0 ? showDeprecated || args.length === 0 ? /* @__PURE__ */ jsx(ExplorerSection, { title: "Deprecated Arguments", children: deprecatedArgs.map(_temp2) }) : /* @__PURE__ */ jsx(Button, { type: "button", onClick: handleShowDeprecated, children: "Show Deprecated Arguments" }) : null;
++    t3 = deprecatedArgs.length > 0 ? showDeprecated || args.length === 0 ? /* @__PURE__ */ jsx(ExplorerSection, { title: "Deprecated Arguments", children: deprecatedArgs.map(_temp2) }) : /* @__PURE__ */ jsx(Button, { type: "button", onClick: handleShowDeprecated, children: moleapiTranslate("Show Deprecated Arguments") }) : null;
+     $[5] = args.length;
+     $[6] = deprecatedArgs;
+     $[7] = showDeprecated;
+@@ -135,6 +138,7 @@ const Arguments = (t0) => {
+   return t4;
+ };
+ const Directives = (t0) => {
++  useMoleapiLanguage();
+   var _a;
+   const $ = c(4);
+   const {
+diff --git a/node_modules/@graphiql/plugin-doc-explorer/dist/components/schema-documentation.js b/node_modules/@graphiql/plugin-doc-explorer/dist/components/schema-documentation.js
+index 4553cdd..b54137e 100644
+--- a/node_modules/@graphiql/plugin-doc-explorer/dist/components/schema-documentation.js
++++ b/node_modules/@graphiql/plugin-doc-explorer/dist/components/schema-documentation.js
+@@ -1,10 +1,12 @@
++import { moleapiTranslate, useMoleapiLanguage, moleapiMemoCache as c } from "@graphiql/react";
+ import { jsx, jsxs, Fragment } from "react/jsx-runtime";
+-import { c } from "react-compiler-runtime";
++
+ import { MarkdownContent } from "@graphiql/react";
+ import { ExplorerSection } from "./section.js";
+ import { TypeLink } from "./type-link.js";
+ /* empty css                         */
+ const SchemaDocumentation = (t0) => {
++  useMoleapiLanguage();
+   const $ = c(35);
+   const {
+     schema
+@@ -44,7 +46,7 @@ const SchemaDocumentation = (t0) => {
+   if ($[6] !== mutationType || $[7] !== queryType || $[8] !== schema || $[9] !== subscriptionType) {
+     const typeMap = schema.getTypeMap();
+     const ignoreTypesInAllSchema = [queryType == null ? void 0 : queryType.name, mutationType == null ? void 0 : mutationType.name, subscriptionType == null ? void 0 : subscriptionType.name];
+-    const t82 = schema.description || "A GraphQL schema provides a root type for each kind of operation.";
++    const t82 = schema.description || moleapiTranslate("A GraphQL schema provides a root type for each kind of operation.");
+     if ($[15] !== t82) {
+       t5 = /* @__PURE__ */ jsx(MarkdownContent, { type: "description", children: t82 });
+       $[15] = t82;
+diff --git a/node_modules/@graphiql/plugin-doc-explorer/dist/components/search.js b/node_modules/@graphiql/plugin-doc-explorer/dist/components/search.js
+index 769d77b..7ce4c7a 100644
+--- a/node_modules/@graphiql/plugin-doc-explorer/dist/components/search.js
++++ b/node_modules/@graphiql/plugin-doc-explorer/dist/components/search.js
+@@ -1,5 +1,6 @@
++import { moleapiTranslate, useMoleapiLanguage, moleapiMemoCache as c } from "@graphiql/react";
+ import { jsxs, jsx, Fragment } from "react/jsx-runtime";
+-import { c } from "react-compiler-runtime";
++
+ import { isObjectType, isInterfaceType, isInputObjectType } from "graphql";
+ import { useRef, useState, useEffect } from "react";
+ import { ComboboxOptions, ComboboxOption, ComboboxInput, Combobox } from "@headlessui/react";
+@@ -8,6 +9,7 @@ import { useDocExplorer, useDocExplorerActions } from "../context.js";
+ import { renderType } from "./utils.js";
+ /* empty css           */
+ const Search = () => {
++  useMoleapiLanguage();
+   const $ = c(34);
+   const explorerNavStack = useDocExplorer();
+   const {
+@@ -95,7 +97,7 @@ const Search = () => {
+     return null;
+   }
+   const t5 = isFocused ? void 0 : "idle";
+-  const t6 = `Search ${navItem.name}...`;
++  const t6 = moleapiTranslate("Search {{value0}}...", { value0: navItem.name });
+   let t7;
+   let t8;
+   if ($[16] === Symbol.for("react.memo_cache_sentinel")) {
+@@ -143,8 +145,8 @@ const Search = () => {
+   let t14;
+   if ($[25] !== isFocused || $[26] !== results) {
+     t14 = isFocused && /* @__PURE__ */ jsxs(ComboboxOptions, { "data-cy": "doc-explorer-list", children: [
+-      results.within.length + results.types.length + results.fields.length === 0 ? /* @__PURE__ */ jsx("div", { className: "graphiql-doc-explorer-search-empty", children: "No results found" }) : results.within.map(_temp),
+-      results.within.length > 0 && results.types.length + results.fields.length > 0 ? /* @__PURE__ */ jsx("div", { className: "graphiql-doc-explorer-search-divider", children: "Other results" }) : null,
++      results.within.length + results.types.length + results.fields.length === 0 ? /* @__PURE__ */ jsx("div", { className: "graphiql-doc-explorer-search-empty", children: moleapiTranslate("No results found") }) : results.within.map(_temp),
++      results.within.length > 0 && results.types.length + results.fields.length > 0 ? /* @__PURE__ */ jsx("div", { className: "graphiql-doc-explorer-search-divider", children: moleapiTranslate("Other results") }) : null,
+       results.types.map(_temp2),
+       results.fields.map(_temp3)
+     ] });
+@@ -261,6 +263,7 @@ function isMatch(sourceText, searchValue) {
+   }
+ }
+ const Type = (t0) => {
++  useMoleapiLanguage();
+   const $ = c(2);
+   const {
+     type
+@@ -276,6 +279,7 @@ const Type = (t0) => {
+   return t1;
+ };
+ const Field = (t0) => {
++  useMoleapiLanguage();
+   const $ = c(7);
+   const {
+     field,
+diff --git a/node_modules/@graphiql/plugin-doc-explorer/dist/components/section.js b/node_modules/@graphiql/plugin-doc-explorer/dist/components/section.js
+index b6879f0..69d5263 100644
+--- a/node_modules/@graphiql/plugin-doc-explorer/dist/components/section.js
++++ b/node_modules/@graphiql/plugin-doc-explorer/dist/components/section.js
+@@ -1,8 +1,9 @@
+ import { jsx, jsxs } from "react/jsx-runtime";
+-import { c } from "react-compiler-runtime";
++import { moleapiTranslate, useMoleapiLanguage, moleapiMemoCache as c } from "@graphiql/react";
+ import { TypeIcon, RootTypeIcon, ImplementsIcon, FieldIcon, EnumValueIcon, DirectiveIcon, DeprecatedFieldIcon, DeprecatedEnumValueIcon, DeprecatedArgumentIcon, ArgumentIcon } from "@graphiql/react";
+ /* empty css            */
+ const ExplorerSection = (t0) => {
++  useMoleapiLanguage();
+   const $ = c(10);
+   const {
+     title,
+@@ -21,7 +22,7 @@ const ExplorerSection = (t0) => {
+   if ($[2] !== t1 || $[3] !== title) {
+     t2 = /* @__PURE__ */ jsxs("div", { className: "graphiql-doc-explorer-section-title", children: [
+       t1,
+-      title
++      moleapiTranslate(title)
+     ] });
+     $[2] = t1;
+     $[3] = title;
+diff --git a/node_modules/@graphiql/plugin-doc-explorer/dist/components/type-documentation.js b/node_modules/@graphiql/plugin-doc-explorer/dist/components/type-documentation.js
+index 5c40e81..1fd7427 100644
+--- a/node_modules/@graphiql/plugin-doc-explorer/dist/components/type-documentation.js
++++ b/node_modules/@graphiql/plugin-doc-explorer/dist/components/type-documentation.js
+@@ -1,5 +1,6 @@
++import { moleapiTranslate, useMoleapiLanguage, moleapiMemoCache as c } from "@graphiql/react";
+ import { jsxs, Fragment, jsx } from "react/jsx-runtime";
+-import { c } from "react-compiler-runtime";
++
+ import { useState } from "react";
+ import { isNamedType, isObjectType, isInterfaceType, isInputObjectType, isEnumType, isAbstractType } from "graphql";
+ import { MarkdownContent, Button, useGraphiQL } from "@graphiql/react";
+@@ -11,6 +12,7 @@ import { ExplorerSection } from "./section.js";
+ import { TypeLink } from "./type-link.js";
+ /* empty css                       */
+ const TypeDocumentation = (t0) => {
++  useMoleapiLanguage();
+   const $ = c(2);
+   const {
+     type
+@@ -32,6 +34,7 @@ const TypeDocumentation = (t0) => {
+   return t1;
+ };
+ const ImplementsInterfaces = (t0) => {
++  useMoleapiLanguage();
+   const $ = c(5);
+   const {
+     type
+@@ -60,6 +63,7 @@ const ImplementsInterfaces = (t0) => {
+   return t2;
+ };
+ const Fields = (t0) => {
++  useMoleapiLanguage();
+   const $ = c(12);
+   const {
+     type
+@@ -104,7 +108,7 @@ const Fields = (t0) => {
+   }
+   let t3;
+   if ($[5] !== deprecatedFields || $[6] !== fields.length || $[7] !== showDeprecated) {
+-    t3 = deprecatedFields.length > 0 ? showDeprecated || fields.length === 0 ? /* @__PURE__ */ jsx(ExplorerSection, { title: "Deprecated Fields", children: deprecatedFields.map(_temp3) }) : /* @__PURE__ */ jsx(Button, { type: "button", onClick: handleShowDeprecated, children: "Show Deprecated Fields" }) : null;
++    t3 = deprecatedFields.length > 0 ? showDeprecated || fields.length === 0 ? /* @__PURE__ */ jsx(ExplorerSection, { title: "Deprecated Fields", children: deprecatedFields.map(_temp3) }) : /* @__PURE__ */ jsx(Button, { type: "button", onClick: handleShowDeprecated, children: moleapiTranslate("Show Deprecated Fields") }) : null;
+     $[5] = deprecatedFields;
+     $[6] = fields.length;
+     $[7] = showDeprecated;
+@@ -127,6 +131,7 @@ const Fields = (t0) => {
+   return t4;
+ };
+ const Field = (t0) => {
++  useMoleapiLanguage();
+   const $ = c(22);
+   const {
+     field
+@@ -219,6 +224,7 @@ const Field = (t0) => {
+   return t9;
+ };
+ const EnumValues = (t0) => {
++  useMoleapiLanguage();
+   const $ = c(12);
+   const {
+     type
+@@ -262,7 +268,7 @@ const EnumValues = (t0) => {
+   }
+   let t3;
+   if ($[5] !== deprecatedValues || $[6] !== showDeprecated || $[7] !== values.length) {
+-    t3 = deprecatedValues.length > 0 && (showDeprecated || !values.length ? /* @__PURE__ */ jsx(ExplorerSection, { title: "Deprecated Enum Values", children: deprecatedValues.map(_temp6) }) : /* @__PURE__ */ jsx(Button, { type: "button", onClick: handleShowDeprecated, children: "Show Deprecated Values" }));
++    t3 = deprecatedValues.length > 0 && (showDeprecated || !values.length ? /* @__PURE__ */ jsx(ExplorerSection, { title: "Deprecated Enum Values", children: deprecatedValues.map(_temp6) }) : /* @__PURE__ */ jsx(Button, { type: "button", onClick: handleShowDeprecated, children: moleapiTranslate("Show Deprecated Values") }));
+     $[5] = deprecatedValues;
+     $[6] = showDeprecated;
+     $[7] = values.length;
+@@ -285,6 +291,7 @@ const EnumValues = (t0) => {
+   return t4;
+ };
+ const EnumValue = (t0) => {
++  useMoleapiLanguage();
+   const $ = c(10);
+   const {
+     value
+@@ -330,6 +337,7 @@ const EnumValue = (t0) => {
+   return t4;
+ };
+ const PossibleTypes = (t0) => {
++  useMoleapiLanguage();
+   const $ = c(6);
+   const {
+     type
+diff --git a/node_modules/@graphiql/plugin-doc-explorer/dist/context.js b/node_modules/@graphiql/plugin-doc-explorer/dist/context.js
+index a267bc5..fbae892 100644
+--- a/node_modules/@graphiql/plugin-doc-explorer/dist/context.js
++++ b/node_modules/@graphiql/plugin-doc-explorer/dist/context.js
+@@ -1,5 +1,6 @@
++import { moleapiTranslate, useMoleapiLanguage, moleapiMemoCache as c } from "@graphiql/react";
+ import { jsx } from "react/jsx-runtime";
+-import { c } from "react-compiler-runtime";
++
+ import { isNamedType, isObjectType, isInputObjectType, isScalarType, isEnumType, isInterfaceType, isUnionType } from "graphql";
+ import { useEffect } from "react";
+ import { pick, useGraphiQL, createBoundedUseStore, DocsFilledIcon, DocsIcon, isMacOs } from "@graphiql/react";
+@@ -7,7 +8,7 @@ import { createStore } from "zustand";
+ import { getSchemaReference } from "./schema-reference.js";
+ import { DocExplorer } from "./components/doc-explorer.js";
+ const DOC_EXPLORER_PLUGIN = {
+-  title: "Documentation Explorer",
++  get title() { return moleapiTranslate("Documentation Explorer"); },
+   icon: function Icon() {
+     const visiblePlugin = useGraphiQL((state) => state.visiblePlugin);
+     return visiblePlugin === DOC_EXPLORER_PLUGIN ? /* @__PURE__ */ jsx(DocsFilledIcon, {}) : /* @__PURE__ */ jsx(DocsIcon, {});
+@@ -15,7 +16,7 @@ const DOC_EXPLORER_PLUGIN = {
+   content: DocExplorer
+ };
+ const INITIAL_NAV_STACK = [{
+-  name: "Docs"
++  get name() { return moleapiTranslate("Docs"); }
+ }];
+ const docExplorerStore = createStore((set, get) => ({
+   explorerNavStack: INITIAL_NAV_STACK,
+@@ -67,7 +68,7 @@ const docExplorerStore = createStore((set, get) => ({
+         push
+       } = get().actions;
+       switch (ref.kind) {
+-        case "Type": {
++        case moleapiTranslate("Type"): {
+           push({
+             name: ref.type.name,
+             def: ref.type
+@@ -169,6 +170,7 @@ const docExplorerStore = createStore((set, get) => ({
+   }
+ }));
+ const DocExplorerStore = (t0) => {
++  useMoleapiLanguage();
+   const $ = c(9);
+   const {
+     children
+@@ -254,7 +256,7 @@ function _temp2() {
+     if (!shouldFocusInput) {
+       return;
+     }
+-    const button = document.querySelector('.graphiql-sidebar button[aria-label="Show Documentation Explorer"]');
++    const button = document.querySelector('.graphiql-sidebar button[data-moleapi-docs="true"]');
+     button == null ? void 0 : button.click();
+     requestAnimationFrame(_temp);
+   };
+diff --git a/node_modules/@graphiql/plugin-doc-explorer/dist/schema-reference.js b/node_modules/@graphiql/plugin-doc-explorer/dist/schema-reference.js
+index bf11e64..f824a61 100644
+--- a/node_modules/@graphiql/plugin-doc-explorer/dist/schema-reference.js
++++ b/node_modules/@graphiql/plugin-doc-explorer/dist/schema-reference.js
+@@ -1,3 +1,4 @@
++import { moleapiTranslate } from "@graphiql/react";
+ import { getNamedType } from "graphql";
+ function getSchemaReference(kind, typeInfo) {
+   if (kind === "Field" && typeInfo.fieldDef || kind === "AliasedField" && typeInfo.fieldDef || kind === "ObjectField" && typeInfo.fieldDef) {
+@@ -48,7 +49,7 @@ function getFieldReference(typeInfo, isObjectField = false) {
+ }
+ function getTypeReference(typeInfo, type) {
+   return {
+-    kind: "Type",
++    kind: moleapiTranslate("Type"),
+     schema: typeInfo.schema,
+     type: type || typeInfo.type
+   };

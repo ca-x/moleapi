@@ -1,7 +1,10 @@
+import { errorCopy } from "../../shared/i18n/errors";
+import type { ErrorCopy } from "../../shared/i18n/errors";
+import { useLanguage, translateCopy } from "../../shared/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../../shared/api";
-import { newRequest, safeMessage } from "../../shared/model";
+import { newRequest } from "../../shared/model";
 import type { ApiResponse, RequestSpec } from "../../shared/types";
 import type { useWorkspace } from "../workspaces/useWorkspace";
 import type { useLocalVariables } from "../variables/useLocalVariables";
@@ -12,7 +15,7 @@ type Execution = {
   workspaceId: string;
   requestId: string;
   response: ApiResponse | null;
-  error: string;
+  error: ErrorCopy;
 };
 export function useRequests(
   workspace: ReturnType<typeof useWorkspace>,
@@ -20,6 +23,7 @@ export function useRequests(
   setSidebar: (open: boolean) => void,
   localVariables?: ReturnType<typeof useLocalVariables>,
 ) {
+  useLanguage();
   const client = useQueryClient();
   const { draft, dirty, save, updateData, stateRef, accountId, accountRef } =
     workspace;
@@ -109,7 +113,7 @@ export function useRequests(
         workspaceId,
         requestId,
         response: null,
-        error: safeMessage(error),
+        error: errorCopy(error),
       });
     } finally {
       running.current = false;
@@ -142,7 +146,7 @@ export function useRequests(
     busy: busy && !!current,
     sending: busy,
     response: current?.response || null,
-    requestError: current?.error || "",
+    requestError: translateCopy(current?.error || ""),
     setResponse: () => setExecution(null),
     setRequestError: () => setExecution(null),
   };

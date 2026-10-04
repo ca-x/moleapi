@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n";
 import type { Pair, Specification, VariableUpdate } from "../../shared/types";
 export interface ProtoFile {
   path: string;
@@ -53,8 +54,8 @@ export interface ReflectionResult {
 export const methodMode = (method: GrpcMethod) =>
   method.client_streaming
     ? method.server_streaming
-      ? "双向流"
-      : "客户端流"
+      ? t("双向流")
+      : t("客户端流")
     : method.server_streaming
-      ? "服务端流"
+      ? t("服务端流")
       : "Unary";

@@ -1,9 +1,11 @@
+import { useLanguage } from "../../shared/i18n";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, native, token } from "../../shared/api";
 import type { AuthStatus } from "../../shared/types";
 
 export function useAuth() {
+  useLanguage();
   const client = useQueryClient();
   const [authenticated, setAuthenticated] = useState(!!token() || native);
   const [accountId, setAccountId] = useState(() =>

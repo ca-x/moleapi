@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../shared/i18n";
 import { Checkbox, Flex, Text, TextField } from "@radix-ui/themes";
 import { Choice, Editor, Field } from "../../shared/ui";
 import MqttPropertyEditor from "./MqttPropertyEditor";
@@ -8,7 +9,7 @@ export default function MqttMessageEditor({
   dark,
   disabled = false,
   v5 = true,
-  label = "MQTT 消息",
+  label = t("MQTT 消息"),
   showProperties = false,
 }: {
   value: MqttMessage;
@@ -19,6 +20,7 @@ export default function MqttMessageEditor({
   label?: string;
   showProperties?: boolean;
 }) {
+  useLanguage();
   const update = (patch: Partial<MqttMessage>) =>
     onChange({ ...value, ...patch });
   const properties = value.properties;
@@ -46,7 +48,7 @@ export default function MqttMessageEditor({
         />
         <Choice
           value={value.encoding}
-          label={label + " 编码"}
+          label={t("{{label}} 编码", { label })}
           disabled={disabled}
           onChange={(encoding) => update({ encoding })}
           options={[
@@ -72,9 +74,7 @@ export default function MqttMessageEditor({
             onCheckedChange={(value) =>
               update({ topic_secret: value === true })
             }
-          />
-          私密 Topic
-        </label>
+          /> {t("私密 Topic")} </label>
         <label className="checkbox-label">
           <Checkbox
             checked={value.payload_secret}
@@ -82,9 +82,7 @@ export default function MqttMessageEditor({
             onCheckedChange={(value) =>
               update({ payload_secret: value === true })
             }
-          />
-          私密 Payload
-        </label>
+          /> {t("私密 Payload")} </label>
       </Flex>
       <Editor
         value={value.payload_source}
@@ -96,16 +94,11 @@ export default function MqttMessageEditor({
         label={label + " Payload"}
       />
       {value.encoding === "base64" && (
-        <Text size="1" color="gray">
-          填写 Base64；空字符串表示零字节消息，可配合 Retain 清除 broker
-          保留值。
-        </Text>
+        <Text size="1" color="gray"> {t("填写 Base64；空字符串表示零字节消息，可配合 Retain 清除 broker 保留值。")} </Text>
       )}
       {showProperties && (
         <div className="mqtt-message-properties">
-          <Text as="p" size="2" weight="medium">
-            MQTT 5 消息属性
-          </Text>
+          <Text as="p" size="2" weight="medium"> {t("MQTT 5 消息属性")} </Text>
           <Flex gap="3" wrap="wrap">
             <Field label="Content Type">
               <TextField.Root
@@ -149,7 +142,7 @@ export default function MqttMessageEditor({
                 }
               />
             </Field>
-            <Field label="Message Expiry（秒）">
+            <Field label={t("Message Expiry（秒）")}>
               <TextField.Root
                 type="number"
                 value={properties.message_expiry_interval ?? ""}
@@ -186,7 +179,7 @@ export default function MqttMessageEditor({
                 })
               }
               options={[
-                { value: "none", label: "未设置" },
+                { value: "none", label: t("未设置") },
                 { value: "0", label: "Binary" },
                 { value: "1", label: "UTF-8" },
               ]}

@@ -1,9 +1,11 @@
+import { t, useLanguage, liveTranslation } from "../../shared/i18n";
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { native } from "../../shared/api";
 
 /** Protect drafts when closing either the browser tab or a native window. */
 export function useCloseGuard(hasChanges: () => boolean) {
+  useLanguage();
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
       if (hasChanges()) {
@@ -31,12 +33,12 @@ export function useCloseGuard(hasChanges: () => boolean) {
               asking = true;
               try {
                 const discard = await ask(
-                  "工作区有未保存的修改。关闭窗口将丢弃这些修改。",
+                  t("工作区有未保存的修改。关闭窗口将丢弃这些修改。"),
                   {
-                    title: "关闭 MoleAPI",
+                    title: t("关闭 MoleAPI"),
                     kind: "warning",
-                    okLabel: "丢弃并关闭",
-                    cancelLabel: "继续编辑",
+                    okLabel: t("丢弃并关闭"),
+                    cancelLabel: t("继续编辑"),
                   },
                 );
                 if (discard && !disposed) await currentWindow.destroy();
@@ -50,7 +52,7 @@ export function useCloseGuard(hasChanges: () => boolean) {
         })
         .catch(() => {
           if (!disposed)
-            toast.error("无法启用窗口关闭确认，请先保存工作区再关闭窗口。");
+            toast.error(liveTranslation("无法启用窗口关闭确认，请先保存工作区再关闭窗口。"));
         });
     }
     return () => {

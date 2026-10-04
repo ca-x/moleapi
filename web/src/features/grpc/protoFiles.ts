@@ -1,3 +1,4 @@
+import { LocalizedError } from "../../shared/i18n/errors";
 import { readBoundedTextFiles } from "../../shared/readBoundedTextFiles";
 import { native } from "../../shared/api";
 import type { ProtoFile } from "./types";
@@ -5,7 +6,7 @@ export const MAX_PROTO_BYTES = 2 * 1024 * 1024;
 export const MAX_PROTO_FILE_BYTES = 256 * 1024;
 export function checkedProtoFiles(files: ProtoFile[]): ProtoFile[] {
   if (!files.length || files.length > 32)
-    throw new Error("选择 1–32 个 proto 文件。");
+    throw new LocalizedError("选择 1–32 个 proto 文件。");
   const encoder = new TextEncoder();
   if (
     files.reduce(
@@ -13,13 +14,13 @@ export function checkedProtoFiles(files: ProtoFile[]): ProtoFile[] {
       0,
     ) > MAX_PROTO_BYTES
   )
-    throw new Error("Proto 文件内容合计不能超过 2 MiB。");
+    throw new LocalizedError("Proto 文件内容合计不能超过 2 MiB。");
   if (
     files.some(
       (file) => encoder.encode(file.content).byteLength > MAX_PROTO_FILE_BYTES,
     )
   )
-    throw new Error("每个 Proto 文件不能超过 256 KiB。");
+    throw new LocalizedError("每个 Proto 文件不能超过 256 KiB。");
   const seen = new Set<string>();
   for (const file of files) {
     const parts = file.path.split("/");
@@ -29,8 +30,8 @@ export function checkedProtoFiles(files: ProtoFile[]): ProtoFile[] {
       file.path.includes(":") ||
       parts.some((part) => !part || part === "." || part === "..")
     )
-      throw new Error("使用相对虚拟路径，例如 api/common.proto。");
-    if (seen.has(file.path)) throw new Error(`重复路径：${file.path}`);
+      throw new LocalizedError("使用相对虚拟路径，例如 api/common.proto。");
+    if (seen.has(file.path)) throw new LocalizedError("重复路径：{{value0}}", { value0: file.path });
     seen.add(file.path);
   }
   return files;
@@ -46,7 +47,7 @@ export async function pickProtoFiles(): Promise<ProtoFile[] | null> {
     });
     if (!selected) return null;
     const paths = typeof selected === "string" ? [selected] : selected;
-    if (paths.length > 32) throw new Error("一次最多导入 32 个 proto 文件。");
+    if (paths.length > 32) throw new LocalizedError("一次最多导入 32 个 proto 文件。");
     const names = relativeFilePaths(paths);
     const contents = await readBoundedTextFiles(paths, MAX_PROTO_BYTES, MAX_PROTO_FILE_BYTES);
     return checkedProtoFiles(paths.map((_, index) => ({
@@ -67,7 +68,7 @@ export async function pickProtoFiles(): Promise<ProtoFile[] | null> {
         files.some((file) => file.size > MAX_PROTO_FILE_BYTES) ||
         files.reduce((sum, file) => sum + file.size, 0) > MAX_PROTO_BYTES
       )
-        return reject(new Error("最多 32 个文件，每个 256 KiB，合计 2 MiB。"));
+        return reject(new LocalizedError("最多 32 个文件，每个 256 KiB，合计 2 MiB。"));
       Promise.all(
         files.map(async (file) => ({
           path: file.webkitRelativePath || file.name,

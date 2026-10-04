@@ -1,3 +1,4 @@
+import { t, useLanguage, message } from "../../shared/i18n";
 import { Button, Card, Flex, Heading, Text, TextField } from "@radix-ui/themes";
 import { Plus, Save, Trash2 } from "lucide-react";
 import ProjectVariables from "../variables/ProjectVariables";
@@ -7,6 +8,7 @@ import { id } from "../../shared/model";
 import { useWorkbench } from "../workbench/context";
 
 export default function EnvironmentsPage() {
+  useLanguage();
   const state = useWorkbench();
   const { draft, saving, setGuard, dirty, updateData, save, environment } =
     state;
@@ -15,14 +17,12 @@ export default function EnvironmentsPage() {
     <div className="page-panel">
       <div className="page-heading">
         <div>
-          <Heading size="5">环境变量</Heading>
-          <Text size="2" color="gray">
-            切换开发、测试与生产环境，使用 {"{{变量名}}"} 引用值。
-          </Text>
+          <Heading size="5">{t("环境变量")}</Heading>
+          <Text size="2" color="gray"> {t("切换开发、测试与生产环境，使用 {{variable}} 引用值。", { variable: "{{variable}}" })} </Text>
         </div>
         <Button
           onClick={() => {
-            const next = { id: id(), name: "新建环境", variables: [] };
+            const next = { id: id(), name: t("新建环境"), variables: [] };
             updateData((data) => ({
               ...data,
               environments: [...data.environments, next],
@@ -30,9 +30,7 @@ export default function EnvironmentsPage() {
             }));
           }}
         >
-          <Plus size={16} />
-          新建环境
-        </Button>
+          <Plus size={16} /> {t("新建环境")} </Button>
       </div>
       <Flex gap="3" wrap="wrap">
         {draft.data.environments.map((e) => (
@@ -55,7 +53,7 @@ export default function EnvironmentsPage() {
       {environment ? (
         <Card className="environment-card">
           <Flex justify="between" align="center" gap="4">
-            <Field label="环境名称">
+            <Field label={t("环境名称")}>
               <TextField.Root
                 value={environment.name}
                 onChange={(e) =>
@@ -71,11 +69,11 @@ export default function EnvironmentsPage() {
               />
             </Field>
             <ToolButton
-              label="删除当前环境"
+              label={t("删除当前环境")}
               onClick={() =>
                 setGuard({
-                  title: "删除环境",
-                  description: `删除「${environment.name}」，保存后生效。`,
+                  title: message("删除环境"),
+                  description: message("删除「{{value0}}」，保存后生效。", { value0: environment.name }),
                   action: () =>
                     updateData((data) => ({
                       ...data,
@@ -103,18 +101,14 @@ export default function EnvironmentsPage() {
               }))
             }
           />
-          <Text size="1" color="gray">
-            勾选密钥后会隐藏值，导出默认排除密钥。工作区内的值会保存在当前数据库。
-          </Text>
+          <Text size="1" color="gray"> {t("勾选密钥后会隐藏值，导出默认排除密钥。工作区内的值会保存在当前数据库。")} </Text>
         </Card>
       ) : (
-        <Text color="gray">选择或新建一个环境。</Text>
+        <Text color="gray">{t("选择或新建一个环境。")}</Text>
       )}
       <ProjectVariables />
       <Button loading={saving} disabled={!dirty} onClick={() => void save()}>
-        <Save size={16} />
-        保存工作区
-      </Button>
+        <Save size={16} /> {t("保存工作区")} </Button>
     </div>
   );
 }

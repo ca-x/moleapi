@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../shared/i18n";
 import { Button, Card, Flex, TextField } from "@radix-ui/themes";
 import { Plus, Trash2 } from "lucide-react";
 import { Choice, ToolButton } from "../../shared/ui";
@@ -10,13 +11,14 @@ export default function AssertionsEditor({
   request: RequestSpec;
   update: (patch: Partial<RequestSpec>) => void;
 }) {
+  useLanguage();
   return (
     <div className="assertion-list">
       {request.assertions.map((check) => (
         <Card key={check.id}>
           <Flex align="center" gap="3" wrap="wrap">
             <TextField.Root
-              aria-label="断言名称"
+              aria-label={t("断言名称")}
               value={check.name}
               onChange={(e) =>
                 update({
@@ -36,12 +38,12 @@ export default function AssertionsEditor({
                 })
               }
               options={[
-                { value: "status", label: "状态码等于" },
-                { value: "duration", label: "耗时不超过 (ms)" },
-                { value: "contains", label: "响应包含" },
-                { value: "json", label: "JSON 值等于" },
+                { value: "status", label: t("状态码等于") },
+                { value: "duration", label: t("耗时不超过 (ms)") },
+                { value: "contains", label: t("响应包含") },
+                { value: "json", label: t("JSON 值等于") },
               ]}
-              label="断言类型"
+              label={t("断言类型")}
             />
             {check.kind === "json" && (
               <TextField.Root
@@ -58,9 +60,9 @@ export default function AssertionsEditor({
               />
             )}
             <TextField.Root
-              aria-label="期望值"
+              aria-label={t("期望值")}
               placeholder={
-                check.kind === "json" ? 'JSON，例如 "ok" 或 123' : "期望值"
+                check.kind === "json" ? t("JSON，例如 \"ok\" 或 123") : t("期望值")
               }
               value={check.expected}
               onChange={(e) =>
@@ -72,7 +74,7 @@ export default function AssertionsEditor({
               }
             />
             <ToolButton
-              label="删除断言"
+              label={t("删除断言")}
               onClick={() =>
                 update({
                   assertions: request.assertions.filter(
@@ -94,7 +96,7 @@ export default function AssertionsEditor({
               ...request.assertions,
               {
                 id: id(),
-                name: "HTTP 状态为 200",
+                name: t("HTTP 状态为 200"),
                 kind: "status",
                 target: "",
                 expected: "200",
@@ -103,9 +105,7 @@ export default function AssertionsEditor({
           })
         }
       >
-        <Plus size={15} />
-        添加断言
-      </Button>
+        <Plus size={15} /> {t("添加断言")} </Button>
     </div>
   );
 }

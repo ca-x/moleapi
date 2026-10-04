@@ -1,3 +1,4 @@
+import { t, useLanguage, message } from "../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
 import {
   Badge,
@@ -26,6 +27,7 @@ import MqttMessageEditor from "./MqttMessageEditor";
 import MqttSubscriptions from "./MqttSubscriptions";
 import MqttTelemetry from "./MqttTelemetry";
 export default function MqttWorkbench() {
+  useLanguage();
   const state = useWorkbench();
   const latest = useRef(state);
   latest.current = state;
@@ -96,7 +98,7 @@ export default function MqttWorkbench() {
   );
   const lastStatus = statuses.at(-1)?.message;
   return (
-    <section className="mqtt-workbench" aria-label="MQTT 客户端">
+    <section className="mqtt-workbench" aria-label={t("MQTT 客户端")}>
       <div className="mqtt-toolbar">
         <Flex gap="3" align="center" wrap="wrap">
           <Text size="2" weight="medium">
@@ -129,7 +131,7 @@ export default function MqttWorkbench() {
               onClick={() => void close()}
             >
               <Square size={14} />
-              {busy ? "取消连接" : "正常断开"}
+              {busy ? t("取消连接") : t("正常断开")}
             </Button>
           )}
           {active && (
@@ -140,18 +142,16 @@ export default function MqttWorkbench() {
               disabled={sending}
               onClick={() =>
                 state.setGuard({
-                  title: "中止 MQTT 连接",
+                  title: message("中止 MQTT 连接"),
                   description:
-                    "不发送 DISCONNECT。Broker 可能根据 Last Will 和延迟设置发布遗嘱消息。",
+                    message("不发送 DISCONNECT。Broker 可能根据 Last Will 和延迟设置发布遗嘱消息。"),
                   action: () => {
                     void send({ kind: "mqtt_abort" });
                   },
                 })
               }
             >
-              <Zap size={14} />
-              中止连接
-            </Button>
+              <Zap size={14} /> {t("中止连接")} </Button>
           )}
         </Flex>
       </div>
@@ -167,37 +167,31 @@ export default function MqttWorkbench() {
       )}
       {incompatible && (
         <Callout.Root color="amber">
-          <Callout.Text>
-            当前保存了 MQTT 5 专有属性。切回 MQTT 5 使用，或清除后再连接 MQTT
-            3.1.1。
-          </Callout.Text>
+          <Callout.Text> {t("当前保存了 MQTT 5 专有属性。切回 MQTT 5 使用，或清除后再连接 MQTT 3.1.1。")} </Callout.Text>
           <Button
             size="1"
             variant="soft"
             color="gray"
             disabled={active}
             onClick={() => update(clearV5Settings(config))}
-          >
-            清除 MQTT 5 专有设置
-          </Button>
+          > {t("清除 MQTT 5 专有设置")} </Button>
         </Callout.Root>
       )}
       <Tabs.Root value={tab} onValueChange={setTab} className="grpc-tabs">
         <Tabs.List>
-          <Tabs.Trigger value="publish">发布消息</Tabs.Trigger>
-          <Tabs.Trigger value="messages">
-            消息与状态 <span className="count">{events.length}</span>
+          <Tabs.Trigger value="publish">{t("发布消息")}</Tabs.Trigger>
+          <Tabs.Trigger value="messages"> {t("消息与状态")} <span className="count">{events.length}</span>
           </Tabs.Trigger>
           <Tabs.Trigger value="topics">Topics</Tabs.Trigger>
-          <Tabs.Trigger value="settings">连接设置</Tabs.Trigger>
+          <Tabs.Trigger value="settings">{t("连接设置")}</Tabs.Trigger>
           <Tabs.Trigger value="will">Last Will</Tabs.Trigger>
-          <Tabs.Trigger value="telemetry">遥测图表</Tabs.Trigger>
+          <Tabs.Trigger value="telemetry">{t("遥测图表")}</Tabs.Trigger>
         </Tabs.List>
         <Tabs.Content value="publish">
           <Flex gap="3" align="end" wrap="wrap">
             <Choice
               value={saved?.id || "none"}
-              label="保存的 MQTT 消息"
+              label={t("保存的 MQTT 消息")}
               onChange={(value) => {
                 setSavedId(value);
                 const entry = config.saved_messages.find(
@@ -209,18 +203,18 @@ export default function MqttWorkbench() {
                 }
               }}
               options={[
-                { value: "none", label: "当前编辑消息" },
+                { value: "none", label: t("当前编辑消息") },
                 ...config.saved_messages.map((item) => ({
                   value: item.id,
                   label: item.name,
                 })),
               ]}
             />
-            <Field label="消息名称">
+            <Field label={t("消息名称")}>
               <TextField.Root
                 value={messageName}
                 onChange={(event) => setMessageName(event.target.value)}
-                placeholder="保存以便复用"
+                placeholder={t("保存以便复用")}
               />
             </Field>
             <Button
@@ -229,9 +223,7 @@ export default function MqttWorkbench() {
               variant="soft"
               onClick={() => saveMessage()}
             >
-              <Save size={14} />
-              保存新消息
-            </Button>
+              <Save size={14} /> {t("保存新消息")} </Button>
             {saved && (
               <>
                 <Button
@@ -239,9 +231,7 @@ export default function MqttWorkbench() {
                   color="gray"
                   variant="outline"
                   onClick={() => saveMessage(true)}
-                >
-                  更新已选消息
-                </Button>
+                > {t("更新已选消息")} </Button>
                 <Button
                   size="1"
                   color="gray"
@@ -255,9 +245,7 @@ export default function MqttWorkbench() {
                     setSavedId("none");
                   }}
                 >
-                  <Trash2 size={14} />
-                  移除
-                </Button>
+                  <Trash2 size={14} /> {t("移除")} </Button>
               </>
             )}
             <Button
@@ -270,9 +258,7 @@ export default function MqttWorkbench() {
                 })
               }
             >
-              <Send size={15} />
-              发布
-            </Button>
+              <Send size={15} /> {t("发布")} </Button>
           </Flex>
           <MqttMessageEditor
             value={config.message}
@@ -281,10 +267,7 @@ export default function MqttWorkbench() {
             v5={v5}
             showProperties
           />
-          <Text size="1" color="gray">
-            已入队、已发送、QoS 确认由 SDK 事件显示；broker
-            确认不代表业务处理完成。
-          </Text>
+          <Text size="1" color="gray"> {t("已入队、已发送、QoS 确认由 SDK 事件显示；broker 确认不代表业务处理完成。")} </Text>
         </Tabs.Content>
         <Tabs.Content value="messages">
           <SessionEventPane
@@ -322,12 +305,10 @@ export default function MqttWorkbench() {
                       : null,
                 })
               }
-            />
-            启用 Last Will
-          </label>
+            /> {t("启用 Last Will")} </label>
           {config.will && (
             <>
-              <Field label="Will Delay（秒）">
+              <Field label={t("Will Delay（秒）")}>
                 <TextField.Root
                   type="number"
                   min="0"
@@ -356,10 +337,7 @@ export default function MqttWorkbench() {
               />
             </>
           )}
-          <Text size="2" color="gray">
-            正常断开会发送 DISCONNECT；中止或异常断开时，broker
-            决定是否及何时发布遗嘱。
-          </Text>
+          <Text size="2" color="gray"> {t("正常断开会发送 DISCONNECT；中止或异常断开时，broker 决定是否及何时发布遗嘱。")} </Text>
         </Tabs.Content>
         <Tabs.Content value="telemetry">
           <MqttTelemetry events={events} sessionId={session?.id} />

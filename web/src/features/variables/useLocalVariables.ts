@@ -1,3 +1,4 @@
+import { useLanguage, liveTranslation } from "../../shared/i18n";
 import { toast } from "sonner";
 import { useState } from "react";
 import { native } from "../../shared/api";
@@ -19,6 +20,7 @@ function load(key: string) {
   }
 }
 export function useLocalVariables(workspace: ReturnType<typeof useWorkspace>) {
+  useLanguage();
   const key = `moleapi:local-values:${encodeURIComponent(workspace.accountId)}:${encodeURIComponent(workspace.draft?.id || "")}`;
   const [stored, setStored] = useState(() => ({ key, buckets: load(key) }));
   const buckets = stored.key === key ? stored.buckets : load(key);
@@ -118,7 +120,7 @@ export function useLocalVariables(workspace: ReturnType<typeof useWorkspace>) {
       setStored({ key, buckets: next });
       return true;
     } catch {
-      toast.error("无法保存本地变量，请检查浏览器存储权限或剩余空间。");
+      toast.error(liveTranslation("无法保存本地变量，请检查浏览器存储权限或剩余空间。"));
       return false;
     }
   }

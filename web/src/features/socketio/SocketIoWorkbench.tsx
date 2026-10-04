@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
 import {
   Badge,
@@ -24,6 +25,7 @@ import {
   formatAttachmentLines,
 } from "./messages";
 export default function SocketIoWorkbench() {
+  useLanguage();
   const state = useWorkbench();
   const latest = useRef(state);
   latest.current = state;
@@ -129,7 +131,7 @@ export default function SocketIoWorkbench() {
   }
   if (!config) return null;
   return (
-    <section className="socketio-workbench" aria-label="Socket.IO 客户端">
+    <section className="socketio-workbench" aria-label={t("Socket.IO 客户端")}>
       <div className="socketio-toolbar">
         <Flex gap="3" align="end" wrap="wrap">
           <Field label="Namespace">
@@ -140,7 +142,7 @@ export default function SocketIoWorkbench() {
               onChange={(event) => update({ namespace: event.target.value })}
             />
           </Field>
-          <Field label="Engine.IO 路径">
+          <Field label={t("Engine.IO 路径")}>
             <TextField.Root
               value={config.path}
               disabled={active}
@@ -162,7 +164,7 @@ export default function SocketIoWorkbench() {
               onClick={() => void close()}
             >
               <Square size={14} />
-              {busy ? "取消连接" : "断开"}
+              {busy ? t("取消连接") : t("断开")}
             </Button>
           )}
         </Flex>
@@ -179,16 +181,15 @@ export default function SocketIoWorkbench() {
       )}
       <Tabs.Root value={tab} onValueChange={setTab} className="grpc-tabs">
         <Tabs.List>
-          <Tabs.Trigger value="send">发送事件</Tabs.Trigger>
-          <Tabs.Trigger value="events">
-            事件与 ACK <span className="count">{events.length}</span>
+          <Tabs.Trigger value="send">{t("发送事件")}</Tabs.Trigger>
+          <Tabs.Trigger value="events"> {t("事件与 ACK")} <span className="count">{events.length}</span>
           </Tabs.Trigger>
-          <Tabs.Trigger value="listeners">监听事件</Tabs.Trigger>
-          <Tabs.Trigger value="auth">连接 Auth</Tabs.Trigger>
+          <Tabs.Trigger value="listeners">{t("监听事件")}</Tabs.Trigger>
+          <Tabs.Trigger value="auth">{t("连接 Auth")}</Tabs.Trigger>
         </Tabs.List>
         <Tabs.Content value="send">
           <Flex gap="3" align="end" wrap="wrap">
-            <Field label="发送事件名称">
+            <Field label={t("发送事件名称")}>
               <TextField.Root
                 value={config.event}
                 onChange={(event) => update({ event: event.target.value })}
@@ -200,11 +201,9 @@ export default function SocketIoWorkbench() {
                 onCheckedChange={(value) =>
                   update({ request_ack: value === true })
                 }
-              />
-              请求 ACK
-            </label>
+              /> {t("请求 ACK")} </label>
             {config.request_ack && (
-              <Field label="ACK 超时（ms）">
+              <Field label={t("ACK 超时（ms）")}>
                 <TextField.Root
                   type="number"
                   min="1"
@@ -222,9 +221,7 @@ export default function SocketIoWorkbench() {
               loading={sending}
               onClick={() => void send(emitCommand(config))}
             >
-              <Send size={14} />
-              发送事件
-            </Button>
+              <Send size={14} /> {t("发送事件")} </Button>
           </Flex>
           <Editor
             value={config.arguments_source}
@@ -232,9 +229,9 @@ export default function SocketIoWorkbench() {
             dark={state.dark}
             jsonMode
             height="100%"
-            label="Socket.IO 事件参数"
+            label={t("Socket.IO 事件参数")}
           />
-          <Field label="二进制附件（每行一个 Base64）">
+          <Field label={t("二进制附件（每行一个 Base64）")}>
             <TextArea
               value={formatAttachmentLines(config.attachments_base64)}
               onChange={(event) =>
@@ -245,10 +242,7 @@ export default function SocketIoWorkbench() {
               rows={2}
             />
           </Field>
-          <Text size="1" color="gray">
-            参数是 JSON 数组。使用 {`{"_placeholder":true,"num":0}`}{" "}
-            在任意位置引用第一个附件，后续附件依次编号。
-          </Text>
+          <Text size="1" color="gray"> {t("参数是 JSON 数组。使用")} {`{"_placeholder":true,"num":0}`}{" "} {t("在任意位置引用第一个附件，后续附件依次编号。")} </Text>
         </Tabs.Content>
         <Tabs.Content value="events">
           <SessionEventPane
@@ -267,7 +261,7 @@ export default function SocketIoWorkbench() {
         </Tabs.Content>
         <Tabs.Content value="listeners">
           <Flex gap="3" align="end">
-            <Field label="监听事件名称">
+            <Field label={t("监听事件名称")}>
               <TextField.Root
                 value={listener}
                 onChange={(event) => setListener(event.target.value)}
@@ -284,14 +278,12 @@ export default function SocketIoWorkbench() {
               disabled={!listener.trim() || sending || (active && !open)}
               onClick={() => void changeListener(listener, true)}
             >
-              <Plus size={15} />
-              添加监听
-            </Button>
+              <Plus size={15} /> {t("添加监听")} </Button>
           </Flex>
           <div
             className="socketio-listeners"
             role="list"
-            aria-label="监听的 Socket.IO 事件"
+            aria-label={t("监听的 Socket.IO 事件")}
           >
             {config.listeners.map((event) => (
               <div key={event} role="listitem" className="socketio-listener">
@@ -299,7 +291,7 @@ export default function SocketIoWorkbench() {
                   {event}
                 </Text>
                 <ToolButton
-                  label={`移除监听 ${event}`}
+                  label={t("移除监听 {{value0}}", { value0: event })}
                   disabled={changingListener || sending || (active && !open)}
                   onClick={() => void changeListener(event, false)}
                 >
@@ -308,15 +300,12 @@ export default function SocketIoWorkbench() {
               </div>
             ))}
             {!config.listeners.length && (
-              <Text color="gray">添加要接收的事件名称。</Text>
+              <Text color="gray">{t("添加要接收的事件名称。")}</Text>
             )}
           </div>
         </Tabs.Content>
         <Tabs.Content value="auth">
-          <Text size="2" color="gray">
-            Namespace 连接时发送的 Auth
-            JSON，支持所选环境变量。请求头与查询参数在上方配置。
-          </Text>
+          <Text size="2" color="gray"> {t("Namespace 连接时发送的 Auth JSON，支持所选环境变量。请求头与查询参数在上方配置。")} </Text>
           <Editor
             value={config.auth_source}
             onChange={(auth_source) => update({ auth_source })}
@@ -335,10 +324,8 @@ export default function SocketIoWorkbench() {
         }}
       >
         <Dialog.Content maxWidth="700px">
-          <Dialog.Title>回复服务端 ACK</Dialog.Title>
-          <Dialog.Description size="2">
-            只回复当前会话中服务端请求的确认；令牌过期或已回复时，服务端会拒绝重复回复。
-          </Dialog.Description>
+          <Dialog.Title>{t("回复服务端 ACK")}</Dialog.Title>
+          <Dialog.Description size="2"> {t("只回复当前会话中服务端请求的确认；令牌过期或已回复时，服务端会拒绝重复回复。")} </Dialog.Description>
           <Editor
             value={replySource}
             onChange={setReplySource}
@@ -346,9 +333,9 @@ export default function SocketIoWorkbench() {
             jsonMode
             height="240px"
             readOnly={sending}
-            label="ACK 回复参数"
+            label={t("ACK 回复参数")}
           />
-          <Field label="ACK 二进制附件（每行一个 Base64）">
+          <Field label={t("ACK 二进制附件（每行一个 Base64）")}>
             <TextArea
               value={replyAttachments}
               disabled={sending}
@@ -357,17 +344,13 @@ export default function SocketIoWorkbench() {
           </Field>
           <Flex gap="3" justify="end" mt="4">
             <Dialog.Close>
-              <Button variant="soft" color="gray">
-                取消
-              </Button>
+              <Button variant="soft" color="gray"> {t("取消")} </Button>
             </Dialog.Close>
             <Button
               loading={sending}
               disabled={!open}
               onClick={() => void sendReply()}
-            >
-              回复 ACK
-            </Button>
+            > {t("回复 ACK")} </Button>
           </Flex>
         </Dialog.Content>
       </Dialog.Root>

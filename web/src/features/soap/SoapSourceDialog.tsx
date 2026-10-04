@@ -1,3 +1,6 @@
+import type { ErrorCopy } from "../../shared/i18n/errors";
+import { LocalizedError, errorCopy } from "../../shared/i18n/errors";
+import { t, useLanguage, translateCopy } from "../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
 import {
   Button,
@@ -10,7 +13,7 @@ import {
 } from "@radix-ui/themes";
 import { Plus, Trash2, Download, Upload } from "lucide-react";
 import { api } from "../../shared/api";
-import { id, safeMessage } from "../../shared/model";
+import { id } from "../../shared/model";
 import { Choice, Editor, Field, ToolButton } from "../../shared/ui";
 import { checkSoapFiles, pickSoapFiles } from "./files";
 import { useWorkbench } from "../workbench/context";
@@ -25,8 +28,9 @@ export default function SoapSourceDialog({
   onOpenChange: (open: boolean) => void;
   source: ReturnType<typeof useSoapSchema>;
 }) {
+  useLanguage();
   const state = useWorkbench();
-  const [name, setName] = useState("SOAP 服务定义");
+  const [name, setName] = useState(t("SOAP 服务定义"));
   const [files, setFiles] = useState<
     { id: string; path: string; content: string }[]
   >([]);
@@ -34,7 +38,7 @@ export default function SoapSourceDialog({
   const [entry, setEntry] = useState("");
   const [url, setUrl] = useState("");
   const [verify, setVerify] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<ErrorCopy>("");
   const [pending, setPending] = useState<number | null>(null);
   const opened = useRef(open);
   const epoch = useRef(0);
@@ -70,7 +74,7 @@ export default function SoapSourceDialog({
     setFiles(rows);
     setSelected(rows[0]?.id || "");
     setEntry(initial?.entry_file || "");
-    setName(source.specification?.name || "SOAP 服务定义");
+    setName(source.specification?.name || t("SOAP 服务定义"));
     setError("");
     setUrl("");
   }, [open]);
@@ -107,7 +111,7 @@ export default function SoapSourceDialog({
             next[0].path,
         );
     } catch (caught) {
-      if (current()) setError(safeMessage(caught));
+      if (current()) setError(errorCopy(caught));
     } finally {
       if (mounted.current)
         setPending((value) => (value === generation ? null : value));
@@ -129,7 +133,7 @@ export default function SoapSourceDialog({
         !fromUrl &&
         (!files.length || !files.some((file) => file.path === entry))
       )
-        throw new Error(
+        throw new LocalizedError(
           "选择一个 WSDL 入口文件，并提供所引用的 XSD/WSDL 依赖。",
         );
       if (!fromUrl) checkSoapFiles(files);
@@ -153,7 +157,7 @@ export default function SoapSourceDialog({
           ? {
               workspace_id: state.draft.id,
               ...contextFields,
-              name: name.trim() || "SOAP 服务定义",
+              name: name.trim() || t("SOAP 服务定义"),
               url,
               verify_tls: verify,
               timeout_ms: 30000,
@@ -161,7 +165,7 @@ export default function SoapSourceDialog({
           : {
               workspace_id: state.draft.id,
               ...contextFields,
-              name: name.trim() || "SOAP 服务定义",
+              name: name.trim() || t("SOAP 服务定义"),
               source: JSON.stringify({
                 entry_file: entry,
                 files: files.map(({ path, content }) => ({ path, content })),
@@ -172,7 +176,7 @@ export default function SoapSourceDialog({
       source.attach(candidate.specification, candidate.schema);
       onOpenChange(false);
     } catch (caught) {
-      if (current()) setError(safeMessage(caught));
+      if (current()) setError(errorCopy(caught));
     } finally {
       if (mounted.current)
         setPending((value) => (value === generation ? null : value));
@@ -181,13 +185,10 @@ export default function SoapSourceDialog({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Content maxWidth="980px" className="grpc-source-dialog">
-        <Dialog.Title>WSDL / XSD 来源</Dialog.Title>
-        <Dialog.Description size="2">
-          原始定义保留在工作区。相对路径与 import
-          一致；引用的依赖文件需一并提供。
-        </Dialog.Description>
+        <Dialog.Title>{t("WSDL / XSD 来源")}</Dialog.Title>
+        <Dialog.Description size="2"> {t("原始定义保留在工作区。相对路径与 import 一致；引用的依赖文件需一并提供。")} </Dialog.Description>
         <Flex gap="3" mt="4" align="end" wrap="wrap">
-          <Field label="WSDL 名称">
+          <Field label={t("WSDL 名称")}>
             <TextField.Root
               value={name}
               disabled={busy}
@@ -200,9 +201,7 @@ export default function SoapSourceDialog({
             disabled={busy}
             onClick={() => void pick()}
           >
-            <Upload size={14} />
-            导入文件
-          </Button>
+            <Upload size={14} /> {t("导入文件")} </Button>
           <Button
             variant="outline"
             color="gray"
@@ -218,9 +217,7 @@ export default function SoapSourceDialog({
               if (!entry) setEntry(row.path);
             }}
           >
-            <Plus size={14} />
-            添加文件
-          </Button>
+            <Plus size={14} /> {t("添加文件")} </Button>
         </Flex>
         <Flex gap="3" mt="3" align="end" wrap="wrap">
           <Field label="WSDL URL">
@@ -236,25 +233,21 @@ export default function SoapSourceDialog({
               checked={verify}
               disabled={busy}
               onCheckedChange={(value) => setVerify(value === true)}
-            />
-            验证 TLS
-          </label>
+            /> {t("验证 TLS")} </label>
           <Button
             variant="soft"
             disabled={busy || !url}
             onClick={() => void validate(true)}
           >
-            <Download size={14} />
-            读取 URL 定义
-          </Button>
+            <Download size={14} /> {t("读取 URL 定义")} </Button>
         </Flex>
         {error && (
           <Callout.Root color="red" role="alert" mt="3">
-            <Callout.Text>{error}</Callout.Text>
+            <Callout.Text>{translateCopy(error)}</Callout.Text>
           </Callout.Root>
         )}
         <div className="grpc-source-grid">
-          <div className="grpc-source-files" aria-label="WSDL / XSD 文件">
+          <div className="grpc-source-files" aria-label={t("WSDL / XSD 文件")}>
             {files.map((item) => (
               <button
                 className={
@@ -272,7 +265,7 @@ export default function SoapSourceDialog({
           {file && (
             <div className="grpc-source-editor">
               <Flex gap="3" align="end" mb="3">
-                <Field label="WSDL / XSD 相对路径">
+                <Field label={t("WSDL / XSD 相对路径")}>
                   <TextField.Root
                     value={file.path}
                     disabled={busy}
@@ -283,7 +276,7 @@ export default function SoapSourceDialog({
                   />
                 </Field>
                 <ToolButton
-                  label="移除定义文件"
+                  label={t("移除定义文件")}
                   disabled={busy}
                   onClick={() => {
                     setFiles((rows) =>
@@ -305,7 +298,7 @@ export default function SoapSourceDialog({
                 language="xml"
                 readOnly={busy}
                 height="360px"
-                label="WSDL / XSD 文件内容"
+                label={t("WSDL / XSD 文件内容")}
               />
             </div>
           )}
@@ -313,33 +306,27 @@ export default function SoapSourceDialog({
         <Flex gap="3" align="center" mt="3">
           <Choice
             value={files.some((file) => file.path === entry) ? entry : "none"}
-            label="入口 WSDL"
+            label={t("入口 WSDL")}
             disabled={busy}
             onChange={(value) => setEntry(value === "none" ? "" : value)}
             options={[
-              { value: "none", label: "选择入口 WSDL" },
+              { value: "none", label: t("选择入口 WSDL") },
               ...files
                 .filter((item) => item.path.endsWith(".wsdl") && item.path)
                 .map((item) => ({ value: item.path, label: item.path })),
             ]}
           />
-          <Text size="1" color="gray">
-            读取 URL 时不会自动下载外部 import；缺少依赖时请在文件列表中补齐。
-          </Text>
+          <Text size="1" color="gray"> {t("读取 URL 时不会自动下载外部 import；缺少依赖时请在文件列表中补齐。")} </Text>
         </Flex>
         <Flex gap="3" justify="end" mt="4">
           <Dialog.Close>
-            <Button variant="soft" color="gray">
-              取消
-            </Button>
+            <Button variant="soft" color="gray"> {t("取消")} </Button>
           </Dialog.Close>
           <Button
             loading={busy}
             disabled={!files.length}
             onClick={() => void validate()}
-          >
-            验证并使用定义
-          </Button>
+          > {t("验证并使用定义")} </Button>
         </Flex>
       </Dialog.Content>
     </Dialog.Root>

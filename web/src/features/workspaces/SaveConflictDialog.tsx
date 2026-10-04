@@ -1,9 +1,11 @@
+import { liveError } from "./../../shared/i18n/errors";
+import { t, useLanguage } from "../../shared/i18n";
 import { Button, Dialog, Flex, Text } from "@radix-ui/themes";
 import { saveFile } from "../../shared/api";
-import { safeMessage } from "../../shared/model";
 import { toast } from "sonner";
 import { useWorkbench } from "../workbench/context";
 export default function SaveConflictDialog() {
+  useLanguage();
   const {
     saveConflict,
     setSaveConflict,
@@ -19,14 +21,9 @@ export default function SaveConflictDialog() {
       }}
     >
       <Dialog.Content maxWidth="560px">
-        <Dialog.Title>工作区已被更新</Dialog.Title>
-        <Dialog.Description>
-          服务器版本已改变。当前未保存修改完整保留，请选择如何继续。
-        </Dialog.Description>
-        <Text as="p" size="2" my="4">
-          服务器修订 {saveConflict?.revision}
-          。保留修改后，再次点击保存将使用此修订提交你的完整工作区。
-        </Text>
+        <Dialog.Title>{t("工作区已被更新")}</Dialog.Title>
+        <Dialog.Description> {t("服务器版本已改变。当前未保存修改完整保留，请选择如何继续。")} </Dialog.Description>
+        <Text as="p" size="2" my="4"> {t("服务器修订")} {saveConflict?.revision} {t("。保留修改后，再次点击保存将使用此修订提交你的完整工作区。")} </Text>
         <Flex gap="3" wrap="wrap">
           <Button
             variant="soft"
@@ -44,16 +41,12 @@ export default function SaveConflictDialog() {
                   mime: "application/json",
                 });
               } catch (error) {
-                toast.error(safeMessage(error));
+                toast.error(liveError(error));
               }
             }}
-          >
-            备份当前修改（包含密钥）
-          </Button>
-          <Button variant="outline" onClick={useConflictRemote}>
-            放弃修改，使用服务器版本
-          </Button>
-          <Button onClick={keepConflictEdits}>保留修改，准备重试</Button>
+          > {t("备份当前修改（包含密钥）")} </Button>
+          <Button variant="outline" onClick={useConflictRemote}> {t("放弃修改，使用服务器版本")} </Button>
+          <Button onClick={keepConflictEdits}>{t("保留修改，准备重试")}</Button>
         </Flex>
       </Dialog.Content>
     </Dialog.Root>

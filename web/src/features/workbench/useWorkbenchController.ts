@@ -1,7 +1,12 @@
+import { liveError } from "./../../shared/i18n/errors";
+import { errorCopy } from "../../shared/i18n/errors";
+import type { ErrorCopy } from "../../shared/i18n/errors";
+import type { LocalizedCopy } from "../../shared/i18n";
+import { t, useLanguage, message, liveTranslation, translateCopy } from "../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "../../shared/api";
-import { id, initialData, safeMessage } from "../../shared/model";
+import { id, initialData } from "../../shared/model";
 import type { Workspace } from "../../shared/types";
 import { hasChanges } from "../workspaces/draft";
 import { useAuth } from "../auth/useAuth";
@@ -26,12 +31,13 @@ export type Modal =
   | "settings"
   | null;
 export type Guard = {
-  title: string;
-  description: string;
+  title: string | LocalizedCopy;
+  description: string | LocalizedCopy;
   action: () => void | Promise<void>;
   saveFirst?: boolean;
 };
 export function useWorkbenchController() {
+  useLanguage();
   useInputModality();
   const auth = useAuth();
   const appearance = useAppearance();
@@ -42,7 +48,7 @@ export function useWorkbenchController() {
   const [guard, setGuard] = useState<Guard | null>(null);
   const [modal, setModal] = useState<Modal>(null);
   const [name, setName] = useState("");
-  const [modalError, setModalError] = useState("");
+  const [modalError, setModalError] = useState<ErrorCopy>("");
   const [modalBusy, setModalBusy] = useState(false);
   useEffect(() => {
     setModal(null);
@@ -84,7 +90,7 @@ export function useWorkbenchController() {
     const action = () => {
       setModal(value);
       setModalError("");
-      setName(value === "new-workspace" ? "我的工作区" : "");
+      setName(value === "new-workspace" ? t("我的工作区") : "");
       interchange.setContent("");
       interchange.setIncludeSecrets(false);
       if (value === "export") interchange.setFormat("moleapi");
@@ -92,9 +98,9 @@ export function useWorkbenchController() {
     };
     if (workspace.dirty && (value === "new-workspace" || value === "import"))
       setGuard({
-        title: "保留当前工作区修改",
+        title: message("保留当前工作区修改"),
         description:
-          "新建或导入会打开另一个工作区。请保存当前修改，或放弃修改后继续。",
+          message("新建或导入会打开另一个工作区。请保存当前修改，或放弃修改后继续。"),
         action,
         saveFirst: true,
       });
@@ -110,8 +116,8 @@ export function useWorkbenchController() {
     };
     if (workspace.dirty)
       setGuard({
-        title: "切换工作区",
-        description: "当前工作区有未保存修改。可以保存后切换，或放弃修改。",
+        title: message("切换工作区"),
+        description: message("当前工作区有未保存修改。可以保存后切换，或放弃修改。"),
         action,
         saveFirst: true,
       });
@@ -144,7 +150,7 @@ export function useWorkbenchController() {
       else if (modal === "connect") await sync.connectServer();
       setModal(null);
     } catch (error) {
-      setModalError(safeMessage(error));
+      setModalError(errorCopy(error));
     } finally {
       setModalBusy(false);
     }
@@ -159,8 +165,8 @@ export function useWorkbenchController() {
     };
     if (workspace.dirty)
       setGuard({
-        title: "退出账户",
-        description: "工作区有未保存的修改。",
+        title: message("退出账户"),
+        description: message("工作区有未保存的修改。"),
         action,
         saveFirst: true,
       });
@@ -173,14 +179,14 @@ export function useWorkbenchController() {
       if (saveFirst) {
         if (!(await workspace.save(true))) return;
         if (hasChanges(workspace.stateRef.current)) {
-          toast.message("保存期间有新修改，请再次保存后继续。");
+          toast.message(liveTranslation("保存期间有新修改，请再次保存后继续。"));
           return;
         }
       }
       await current.action();
       setGuard(null);
     } catch (error) {
-      toast.error(safeMessage(error));
+      toast.error(liveError(error));
     }
   }
   useEffect(() => {
@@ -238,7 +244,7 @@ export function useWorkbenchController() {
     setModal,
     name,
     setName,
-    modalError,
+    modalError: translateCopy(modalError),
     setModalError,
     modalBusy,
     openModal,

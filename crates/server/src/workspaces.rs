@@ -151,7 +151,9 @@ pub async fn delete(
         return Err(ApiError::bad("Invalid expected revision"));
     }
     owned(&s, &owner.0, &id).await?;
+    let _webhook_gate = s.webhooks.gates.lock(&owner.0, &id).await;
     let tx = s.db.begin().await?;
+    crate::webhooks::cascade(&tx, &owner.0, &id).await?;
     let result = document::Entity::update_many()
         .col_expr(document::Column::Kind, Expr::value("tombstone"))
         .col_expr(document::Column::Payload, Expr::value("{}"))
@@ -176,6 +178,7 @@ pub async fn delete(
         .exec(&tx)
         .await?;
     tx.commit().await?;
+    s.webhooks.cancel_scope(&owner.0, Some(&id), None);
     s.protocol_sessions.close_workspace(&owner.0, &id).await;
     Ok(Json(serde_json::json!({"ok":true})))
 }

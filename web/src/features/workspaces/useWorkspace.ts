@@ -1,14 +1,16 @@
+import { liveError } from "./../../shared/i18n/errors";
+import { useLanguage, liveTranslation } from "../../shared/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api, ApiError } from "../../shared/api";
-import { safeMessage } from "../../shared/model";
 import type { Workspace, WorkspaceData } from "../../shared/types";
 import { useCloseGuard } from "./useCloseGuard";
 import { acknowledgeSave, hasChanges, retainLocal } from "./draft";
 import type { DraftState } from "./draft";
 
 export function useWorkspace(authenticated: boolean, accountId = "local") {
+  useLanguage();
   const client = useQueryClient();
   const workspaces = useQuery({
     queryKey: ["workspaces", accountId],
@@ -118,7 +120,7 @@ export function useWorkspace(authenticated: boolean, accountId = "local") {
             change((latest) => acknowledgeSave(latest, next));
             setSaveConflict(null);
           }
-          if (!silent) toast.success("已保存");
+          if (!silent) toast.success(liveTranslation("已保存"));
           return next;
         } catch (error) {
           if (
@@ -136,10 +138,10 @@ export function useWorkspace(authenticated: boolean, accountId = "local") {
               )
                 setSaveConflict(remote);
             } catch (fetchError) {
-              toast.error(safeMessage(fetchError));
+              toast.error(liveError(fetchError));
             }
           }
-          toast.error(safeMessage(error));
+          toast.error(liveError(error));
           return null;
         } finally {
           setSaving(false);
@@ -156,6 +158,7 @@ export function useWorkspace(authenticated: boolean, accountId = "local") {
     setSaveConflict(null);
   };
   const useConflictRemote = () => {
+  useLanguage();
     if (saveConflict) installWorkspace(saveConflict);
     setSaveConflict(null);
   };

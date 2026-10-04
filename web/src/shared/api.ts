@@ -1,9 +1,12 @@
+import { t, message, translateCopy } from "./i18n";
+import type { LocalizedCopy } from "./i18n";
+import { AppError, LocalizedError } from "./i18n/errors";
 import type { ExportResult } from "./types";
 export const native =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-export class ApiError extends Error {
+export class ApiError extends AppError {
   status: number;
-  constructor(message: string, status: number) {
+  constructor(message: string | LocalizedCopy, status: number) {
     super(message);
     this.name = "ApiError";
     this.status = status;
@@ -18,6 +21,7 @@ export async function api<T>(
   body?: unknown,
 ): Promise<T> {
   let status: number, data: unknown;
+  let parseFailure: LocalizedCopy | undefined;
   const requestToken = native ? null : token();
   if (native) {
     const { invoke } = await import("@tauri-apps/api/core");
@@ -41,7 +45,10 @@ export async function api<T>(
     status = response.status;
     data = await response
       .json()
-      .catch(() => ({ error: `服务返回了无法解析的数据 (${status})` }));
+      .catch(() => {
+        parseFailure = message("服务返回了无法解析的数据 ({{value0}})", { value0: status });
+        return { error: translateCopy(parseFailure) };
+      });
   }
   if (status < 200 || status >= 300) {
     if (
@@ -51,8 +58,9 @@ export async function api<T>(
       !path.startsWith("/api/auth/")
     )
       window.dispatchEvent(new Event("moleapi:unauthorized"));
+    const serverError = (data as { error?: string })?.error;
     throw new ApiError(
-      (data as { error?: string })?.error || `请求失败 (${status})`,
+      parseFailure || (serverError ? String(serverError) : message("请求失败 ({{value0}})", { value0: status })),
       status,
     );
   }
@@ -66,7 +74,7 @@ export async function saveFile(file: ExportResult): Promise<void> {
     ]);
     const path = await save({
       defaultPath: file.filename,
-      filters: [{ name: "API 文件", extensions: ["json", "yaml", "txt"] }],
+      filters: [{ name: t("API 文件"), extensions: ["json", "yaml", "txt"] }],
     });
     if (path) await writeTextFile(path, file.content);
     return;
@@ -89,7 +97,7 @@ export async function pickFile(): Promise<string | null> {
     const path = await open({
       multiple: false,
       filters: [
-        { name: "API 定义", extensions: ["json", "yaml", "yml", "txt"] },
+        { name: t("API 定义"), extensions: ["json", "yaml", "yml", "txt"] },
       ],
     });
     return typeof path === "string" ? readTextFile(path) : null;
@@ -102,7 +110,7 @@ export async function pickFile(): Promise<string | null> {
       const file = input.files?.[0];
       if (!file) return resolve(null);
       if (file.size > 5 * 1024 * 1024) {
-        reject(new Error("文件超过 5 MiB 导入限制。"));
+        reject(new LocalizedError("文件超过 5 MiB 导入限制。"));
         return;
       }
       file.text().then(resolve, reject);

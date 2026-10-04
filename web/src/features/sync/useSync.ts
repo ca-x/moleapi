@@ -1,8 +1,10 @@
+import { liveError } from "./../../shared/i18n/errors";
+import { useLanguage, liveTranslation } from "../../shared/i18n";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api, native } from "../../shared/api";
-import { fingerprint, safeMessage } from "../../shared/model";
+import { fingerprint } from "../../shared/model";
 import type { SyncResult, SyncStatus } from "../../shared/types";
 import { hasChanges } from "../workspaces/draft";
 import type { useWorkspace } from "../workspaces/useWorkspace";
@@ -11,6 +13,7 @@ export function useSync(
   workspace: ReturnType<typeof useWorkspace>,
   connect: () => void,
 ) {
+  useLanguage();
   const sync = useQuery({
     queryKey: ["sync-status"],
     queryFn: () => api<SyncStatus>("/api/sync/status"),
@@ -29,15 +32,15 @@ export function useSync(
     });
     setServerPassword("");
     await sync.refetch();
-    toast.success("已连接自托管服务");
+    toast.success(liveTranslation("已连接自托管服务"));
   }
   async function disconnectServer() {
     try {
       await api("/api/sync/connect", "DELETE");
       await sync.refetch();
-      toast.success("已断开同步，本地数据保留");
+      toast.success(liveTranslation("已断开同步，本地数据保留"));
     } catch (error) {
-      toast.error(safeMessage(error));
+      toast.error(liveError(error));
     }
   }
   async function synchronize(resolution?: "push" | "pull") {
@@ -51,7 +54,7 @@ export function useSync(
     try {
       if (dirty && !(await save(true))) return;
       if (hasChanges(stateRef.current)) {
-        toast.message("保存期间有新修改，请保存后再次同步。");
+        toast.message(liveTranslation("保存期间有新修改，请保存后再次同步。"));
         return;
       }
       const snapshot = stateRef.current.draft;
@@ -68,17 +71,17 @@ export function useSync(
       ) {
         if (latest?.id === snapshot.id)
           workspace.setSaveConflict(result.workspace);
-        toast.message("同步期间有新修改，当前修改已保留。请确认版本后继续。");
+        toast.message(liveTranslation("同步期间有新修改，当前修改已保留。请确认版本后继续。"));
         return;
       }
       if (result.status === "conflict") setSyncConflict(result);
       else {
         installWorkspace(result.workspace);
         setSyncConflict(null);
-        toast.success(result.message || "同步完成");
+        toast.success(result.message || liveTranslation("同步完成"));
       }
     } catch (error) {
-      toast.error(safeMessage(error));
+      toast.error(liveError(error));
     } finally {
       setSyncBusy(false);
     }

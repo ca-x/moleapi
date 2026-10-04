@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n";
 import type {
   MqttConfig,
   MqttMessage,
@@ -114,8 +115,8 @@ export function mqttSavedLabel(
     name.trim() ||
     previous ||
     (!message.topic_secret ? message.topic : "") ||
-    "MQTT 消息";
+    t("MQTT 消息");
   return message.topic_secret && message.topic && label.includes(message.topic)
-    ? label.replaceAll(message.topic, "[私密 Topic]")
+    ? label.replaceAll(message.topic, t("[私密 Topic]"))
     : label;
 }

@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../shared/i18n";
 import { Badge, Button, Flex, Text, Heading } from "@radix-ui/themes";
 import {
   Cloud,
@@ -14,6 +15,7 @@ import { native } from "../../shared/api";
 import { useWorkbench } from "../workbench/context";
 
 export default function WorkbenchHeader() {
+  useLanguage();
   const state = useWorkbench();
   const {
     dark,
@@ -32,7 +34,7 @@ export default function WorkbenchHeader() {
     <header className="app-header">
       <Flex align="center" gap="3">
         <ToolButton
-          label={sidebar ? "收起目录" : "展开目录"}
+          label={sidebar ? t("收起目录") : t("展开目录")}
           className="sidebar-toggle"
           expanded={sidebar}
           controls="collection-sidebar"
@@ -53,15 +55,13 @@ export default function WorkbenchHeader() {
               value: w.id,
               label: w.name,
             }))}
-            label="工作区"
+            label={t("工作区")}
           />
         ) : (
-          <Text size="2" color="gray">
-            API 工作台
-          </Text>
+          <Text size="2" color="gray"> {t("API 工作台")} </Text>
         )}
         <ToolButton
-          label="新建工作区"
+          label={t("新建工作区")}
           onClick={() => openModal("new-workspace")}
         >
           <Plus size={16} />
@@ -75,7 +75,7 @@ export default function WorkbenchHeader() {
           onClick={() => openModal("search")}
         >
           <Search size={16} />
-          <span>搜索请求</span>
+          <span>{t("搜索请求")}</span>
           <kbd>⌘ K</kbd>
         </Button>
         {native ? (
@@ -90,20 +90,18 @@ export default function WorkbenchHeader() {
             ) : (
               <CloudOff size={16} />
             )}
-            <span>{sync.data?.connected ? "同步" : "连接服务器"}</span>
+            <span>{sync.data?.connected ? t("同步") : t("连接服务器")}</span>
           </Button>
         ) : (
-          <Badge color="gray" variant="soft">
-            自托管
-          </Badge>
+          <Badge color="gray" variant="soft"> {t("自托管")} </Badge>
         )}
         <ToolButton
-          label={dark ? "切换为浅色" : "切换为深色"}
+          label={dark ? t("切换为浅色") : t("切换为深色")}
           onClick={() => setDark(!dark)}
         >
           {dark ? <Sun size={17} /> : <Moon size={17} />}
         </ToolButton>
-        <ToolButton label="工作台设置" onClick={() => openModal("settings")}>
+        <ToolButton label={t("工作台设置")} onClick={() => openModal("settings")}>
           <Settings size={17} />
         </ToolButton>
       </Flex>

@@ -61,3 +61,26 @@ it("a save that reorders equivalent request keys does not discard generation",as
   expect(api).toHaveBeenCalledWith("/api/generation/snippets","POST",expect.objectContaining({request_id:"r"}));
   expect(screen.getByRole("textbox",{name:"生成的请求代码"})).toHaveProperty("value","safe-code");
 });
+it("switches an existing catalog-load failure without refetching or changing the request", async () => {
+  const { setLanguage } = await import("../../shared/i18n");
+  vi.mocked(api).mockRejectedValue(new Error("upstream unreachable"));
+  const original = JSON.stringify(state.request);
+  render(<GenerationDialog open onOpenChange={vi.fn()} />);
+  await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("无法读取生成器列表，请关闭后重试。"));
+  await act(async () => { await setLanguage("en"); });
+  expect(screen.getByRole("alert").textContent).toBe("Unable to load generators. Close this dialog and try again.");
+  expect(api).toHaveBeenCalledTimes(1);
+  expect(JSON.stringify(state.request)).toBe(original);
+});
+it("preserves an exact upstream generation error when language changes", async () => {
+  const { setLanguage } = await import("../../shared/i18n");
+  const upstream = "请求失败 (503) · upstream 原文";
+  vi.mocked(api).mockImplementation(path => path.endsWith("catalog") ? Promise.resolve(catalog) : Promise.reject(new Error(upstream)));
+  render(<GenerationDialog open onOpenChange={vi.fn()} />);
+  await waitFor(() => expect((screen.getByRole("button", { name: "生成" }) as HTMLButtonElement).disabled).toBe(false));
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "生成" })); });
+  expect(screen.getByRole("alert").textContent).toBe(upstream);
+  await act(async () => { await setLanguage("en"); });
+  expect(screen.getByRole("alert").textContent).toBe(upstream);
+  expect(api).toHaveBeenCalledTimes(2);
+});

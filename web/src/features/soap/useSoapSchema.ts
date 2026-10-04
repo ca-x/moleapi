@@ -1,10 +1,13 @@
+import type { ErrorCopy } from "../../shared/i18n/errors";
+import { LocalizedError, errorCopy } from "../../shared/i18n/errors";
+import { useLanguage, translateCopy } from "../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../shared/api";
-import { safeMessage } from "../../shared/model";
 import type { Specification } from "../../shared/types";
 import { useWorkbench } from "../workbench/context";
 import type { SoapSchema, SoapSchemaResult } from "./types";
 export function useSoapSchema() {
+  useLanguage();
   const state = useWorkbench();
   const latest = useRef(state);
   latest.current = state;
@@ -35,7 +38,7 @@ export function useSoapSchema() {
     source: string;
     schema: SoapSchema;
   } | null>(null);
-  const [error, setError] = useState<{ scope: string; message: string } | null>(
+  const [error, setError] = useState<{ scope: string; message: ErrorCopy } | null>(
     null,
   );
   const [pending, setPending] = useState<string | null>(null);
@@ -93,7 +96,7 @@ export function useSoapSchema() {
     void (async () => {
       try {
         if (latest.current.dirty && !(await latest.current.save(true)))
-          throw new Error("请先解决工作区保存冲突");
+          throw new LocalizedError("请先解决工作区保存冲突");
         if (disposed || !current()) return;
         const loaded = await api<SoapSchemaResult>("/api/soap/schema", "POST", {
           workspace_id: latest.current.draft!.id,
@@ -110,7 +113,7 @@ export function useSoapSchema() {
         }
       } catch (caught) {
         if (!disposed && current())
-          setError({ scope: origin, message: safeMessage(caught) });
+          setError({ scope: origin, message: errorCopy(caught) });
       } finally {
         if (mounted.current)
           setPending((value) => (value === origin ? null : value));
@@ -130,7 +133,7 @@ export function useSoapSchema() {
     schema,
     specification,
     busy: pending === identity,
-    error: error?.scope === identity ? error.message : "",
+    error: error?.scope === identity ? translateCopy(error.message) : "",
     attach,
     guard,
   };

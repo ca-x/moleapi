@@ -1,10 +1,12 @@
+import { errorCopy } from "../../shared/i18n/errors";
+import { t, useLanguage } from "../../shared/i18n";
 import { Button, TextArea, Text } from "@radix-ui/themes";
 import { Upload } from "lucide-react";
 import { Choice, Field } from "../../shared/ui";
 import { pickFile } from "../../shared/api";
-import { safeMessage } from "../../shared/model";
 import { useWorkbench } from "../workbench/context";
 export default function InterchangeFields() {
+  useLanguage();
   const {
     modal,
     format,
@@ -17,14 +19,14 @@ export default function InterchangeFields() {
   } = useWorkbench();
   return (
     <>
-      <Field label="数据格式">
+      <Field label={t("数据格式")}>
         <Choice
           value={format}
           onChange={setFormat}
           options={
             modal === "import"
               ? [
-                  { value: "openapi", label: "OpenAPI / Swagger JSON 或 YAML" },
+                  { value: "openapi", label: t("OpenAPI / Swagger JSON 或 YAML") },
                   { value: "postman", label: "Postman Collection JSON" },
                   { value: "moleapi", label: "MoleAPI JSON" },
                   { value: "curl", label: "cURL" },
@@ -35,7 +37,7 @@ export default function InterchangeFields() {
                   { value: "openapi", label: "OpenAPI JSON" },
                 ]
           }
-          label="导入导出格式"
+          label={t("导入导出格式")}
         />
       </Field>
       {modal === "import" && (
@@ -49,40 +51,36 @@ export default function InterchangeFields() {
                 const text = await pickFile();
                 if (text !== null) setContent(text);
               } catch (error) {
-                setModalError(safeMessage(error));
+                setModalError(errorCopy(error));
               }
             }}
           >
-            <Upload size={15} />
-            选择文件
-          </Button>
-          <Field label="文件内容或 cURL">
+            <Upload size={15} /> {t("选择文件")} </Button>
+          <Field label={t("文件内容或 cURL")}>
             <TextArea
               required
               rows={10}
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder="粘贴 JSON、YAML 或 cURL 命令…"
+              placeholder={t("粘贴 JSON、YAML 或 cURL 命令…")}
             />
           </Field>
         </>
       )}
       {modal === "export" && (
         <>
-        <Field label="密钥处理">
+        <Field label={t("密钥处理")}>
           <Choice
             value={includeSecrets ? "include" : "exclude"}
             onChange={(value) => setIncludeSecrets(value === "include")}
             options={[
-              { value: "exclude", label: "默认排除密钥" },
-              { value: "include", label: "包含密钥值" },
+              { value: "exclude", label: t("默认排除密钥") },
+              { value: "include", label: t("包含密钥值") },
             ]}
-            label="导出密钥"
+            label={t("导出密钥")}
           />
         </Field>
-        {!includeSecrets && <Text size="1" color="gray">
-          含私密值或无法安全处理的 XML 会留空。需要完整备份时请选择包含密钥值，并妥善保管文件。
-        </Text>}
+        {!includeSecrets && <Text size="1" color="gray"> {t("含私密值或无法安全处理的 XML 会留空。需要完整备份时请选择包含密钥值，并妥善保管文件。")} </Text>}
         </>
       )}
     </>

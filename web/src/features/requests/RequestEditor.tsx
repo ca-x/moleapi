@@ -1,3 +1,5 @@
+import { liveError } from "./../../shared/i18n/errors";
+import { t, useLanguage, liveTranslation } from "../../shared/i18n";
 import ProtocolPane from "../protocols/ProtocolPane";
 import RequestScripts from "../scripts/RequestScripts";
 import ExamplesEditor from "./ExamplesEditor";
@@ -18,7 +20,7 @@ import {
 import { Braces, Copy, FileText, Save, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Choice, Editor, Field, PairEditor, ToolButton } from "../../shared/ui";
-import { curlTemplate, id, safeMessage } from "../../shared/model";
+import { curlTemplate, id } from "../../shared/model";
 import type { ApiResponse, RequestSpec } from "../../shared/types";
 
 const GraphQLWorkbench = lazy(() => import("../graphql/GraphQLWorkbench"));
@@ -36,15 +38,15 @@ const SoapWorkbench = lazy(() => import("../soap/SoapWorkbench"));
 import { mqttConfig } from "../mqtt/model";
 const methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
 const requestTabs = [
-  { value: "query", label: "参数" },
-  { value: "headers", label: "请求头" },
-  { value: "body", label: "请求体" },
-  { value: "auth", label: "鉴权" },
-  { value: "assertions", label: "断言" },
-  { value: "scripts", label: "脚本" },
-  { value: "docs", label: "文档" },
-  { value: "examples", label: "示例" },
-  { value: "settings", label: "设置" },
+  { value: "query", get label() { return t("参数"); } },
+  { value: "headers", get label() { return t("请求头"); } },
+  { value: "body", get label() { return t("请求体"); } },
+  { value: "auth", get label() { return t("鉴权"); } },
+  { value: "assertions", get label() { return t("断言"); } },
+  { value: "scripts", get label() { return t("脚本"); } },
+  { value: "docs", get label() { return t("文档"); } },
+  { value: "examples", get label() { return t("示例"); } },
+  { value: "settings", get label() { return t("设置"); } },
 ];
 export default function RequestEditor({
   request,
@@ -73,6 +75,7 @@ export default function RequestEditor({
   response: ApiResponse | null;
   error: string;
 }) {
+  useLanguage();
   const [tab, setTab] = useState("query");
   const [generationOpen, setGenerationOpen] = useState(false);
   const kind = request.protocol?.kind || "http";
@@ -183,16 +186,16 @@ export default function RequestEditor({
   const copyCurl = async () => {
     try {
       await navigator.clipboard.writeText(curlTemplate(request));
-      toast.success("已复制 cURL 模板，鉴权值以占位符表示");
+      toast.success(liveTranslation("已复制 cURL 模板，鉴权值以占位符表示"));
     } catch {
-      toast.error("剪贴板不可用");
+      toast.error(liveTranslation("剪贴板不可用"));
     }
   };
   const formatBody = () => {
     try {
       update({ body: JSON.stringify(JSON.parse(request.body), null, 2) });
     } catch (error) {
-      toast.error(safeMessage(error));
+      toast.error(liveError(error));
     }
   };
   return (
@@ -202,43 +205,39 @@ export default function RequestEditor({
         <Flex direction="column" gap="1">
           <Text size="1" color="gray">
             {kind === "http"
-              ? "HTTP 请求"
-              : tcp ? "TCP 客户端" : a2a ? "A2A 客户端" : mcp ? "MCP 客户端" : grpc
-                ? "gRPC 请求"
+              ? t("HTTP 请求")
+              : tcp ? t("TCP 客户端") : a2a ? t("A2A 客户端") : mcp ? t("MCP 客户端") : grpc
+                ? t("gRPC 请求")
                 : soap
-                  ? "SOAP 请求"
+                  ? t("SOAP 请求")
                   : mqtt
-                    ? "MQTT 会话"
+                    ? t("MQTT 会话")
                     : socketio
-                      ? "Socket.IO 会话"
+                      ? t("Socket.IO 会话")
                       : kind === "graphql"
-                        ? "GraphQL 请求"
+                        ? t("GraphQL 请求")
                         : kind === "sse"
-                          ? "SSE 事件流"
-                          : "WebSocket 会话"}
+                          ? t("SSE 事件流")
+                          : t("WebSocket 会话")}
           </Text>
           <TextField.Root
             className="request-title-input"
             variant="surface"
-            aria-label="请求名称"
+            aria-label={t("请求名称")}
             value={request.name}
             onChange={(e) => update({ name: e.target.value })}
           />
         </Flex>
         <Flex gap="3" align="center">
           {dirty && (
-            <Text size="1" color="gray">
-              未保存
-            </Text>
+            <Text size="1" color="gray"> {t("未保存")} </Text>
           )}
           <Button color="gray" variant="soft" loading={saving} onClick={save}>
-            <Save size={15} />
-            保存
-          </Button>
-          <Button variant="soft" color="gray" disabled={kind !== "http"} onClick={() => setGenerationOpen(true)}>生成代码</Button>
+            <Save size={15} /> {t("保存")} </Button>
+          <Button variant="soft" color="gray" disabled={kind !== "http"} onClick={() => setGenerationOpen(true)}>{t("生成代码")}</Button>
           <ToolButton
             label={
-              kind === "http" ? "复制 cURL 模板" : "此类型暂不提供 cURL 模板"
+              kind === "http" ? t("复制 cURL 模板") : t("此类型暂不提供 cURL 模板")
             }
             onClick={copyCurl}
             disabled={kind !== "http"}
@@ -251,7 +250,7 @@ export default function RequestEditor({
         <Choice
           value={kind}
           onChange={changeProtocol}
-          label="请求协议"
+          label={t("请求协议")}
           options={[
             { value: "http", label: "HTTP" },
             { value: "sse", label: "SSE" },
@@ -275,21 +274,19 @@ export default function RequestEditor({
             HTTP/2 · gRPC
           </Badge>
         ) : live || socketio ? (
-          <Badge className="protocol-handshake" color="gray">
-            GET 握手
-          </Badge>
+          <Badge className="protocol-handshake" color="gray"> {t("GET 握手")} </Badge>
         ) : (
           <Choice
             value={request.method}
             onChange={(method) => update({ method })}
             options={methods.map((value) => ({ value, label: value }))}
-            label="HTTP 方法"
+            label={t("HTTP 方法")}
           />
         )}
         <TextField.Root
           className="url-input mono"
           size="3"
-          aria-label="请求 URL"
+          aria-label={t("请求 URL")}
           disabled={mcpStdio}
           value={mcpStdio ? "STDIO" : request.url}
           placeholder="https://api.example.com/v1/users"
@@ -307,13 +304,13 @@ export default function RequestEditor({
           }
         >
           <Send size={16} />
-          {a2a ? (protocolConnected ? "运行" : "连接") : mcp ? (protocolConnected ? "运行" : "加载能力") : grpc
-            ? "调用"
+          {a2a ? (protocolConnected ? t("运行") : t("连接")) : mcp ? (protocolConnected ? t("运行") : t("加载能力")) : grpc
+            ? t("调用")
             : !(tcp || live || socketio || mqtt)
-              ? "发送"
+              ? t("发送")
               : protocolConnected
-                ? "已连接"
-                : "连接"}
+                ? t("已连接")
+                : t("连接")}
         </Button>
       </div>
       <Group
@@ -359,7 +356,7 @@ export default function RequestEditor({
                         ),
                 )
                 .map((item) => (
-                  <Tabs.Trigger key={item.value} value={item.value}>
+                  <Tabs.Trigger key={item.value} value={item.value} aria-label={grpc && item.value === "headers" ? "Metadata" : item.label}>
                     {grpc && item.value === "headers" ? "Metadata" : item.label}
                     {(item.value === "query"
                       ? request.query.length
@@ -380,15 +377,15 @@ export default function RequestEditor({
                 ))}
             </Tabs.List>
             <Tabs.Content value="scripts">
-              {tcp&&<Text size="1" color="gray">TCP 支持连接前脚本；响应／事件脚本尚不执行，请清空响应脚本后连接。</Text>}
+              {tcp&&<Text size="1" color="gray">{t("TCP 支持连接前脚本；响应／事件脚本尚不执行，请清空响应脚本后连接。")}</Text>}
               <RequestScripts request={request} update={update} dark={dark} />
             </Tabs.Content>
             <Tabs.Content value="query">
               <PairEditor
                 rows={request.query}
                 onChange={(query) => update({ query })}
-                keyLabel="参数名"
-                valueLabel="参数值"
+                keyLabel={t("参数名")}
+                valueLabel={t("参数值")}
               />
             </Tabs.Content>
             <Tabs.Content value="headers">
@@ -396,7 +393,7 @@ export default function RequestEditor({
                 rows={request.headers}
                 onChange={(headers) => update({ headers })}
                 keyLabel="Header"
-                valueLabel="值"
+                valueLabel={t("值")}
               />
             </Tabs.Content>
             <Tabs.Content value="body">
@@ -405,12 +402,12 @@ export default function RequestEditor({
                   value={request.body_kind}
                   onChange={(body_kind) => update({ body_kind })}
                   options={[
-                    { value: "none", label: "无请求体" },
+                    { value: "none", label: t("无请求体") },
                     { value: "json", label: "JSON" },
                     { value: "text", label: "Raw Text" },
                     { value: "form", label: "x-www-form-urlencoded" },
                   ]}
-                  label="请求体格式"
+                  label={t("请求体格式")}
                 />
                 {request.body_kind === "json" && (
                   <Button
@@ -419,9 +416,7 @@ export default function RequestEditor({
                     color="gray"
                     onClick={formatBody}
                   >
-                    <Braces size={14} />
-                    格式化
-                  </Button>
+                    <Braces size={14} /> {t("格式化")} </Button>
                 )}
               </div>
               {request.body_kind !== "none" ? (
@@ -433,14 +428,12 @@ export default function RequestEditor({
                   height="210px"
                 />
               ) : (
-                <Text size="2" color="gray">
-                  此请求不发送 Body。
-                </Text>
+                <Text size="2" color="gray"> {t("此请求不发送 Body。")} </Text>
               )}
             </Tabs.Content>
             <Tabs.Content value="auth">
               <div className="form-panel">
-                <Field label="鉴权类型">
+                <Field label={t("鉴权类型")}>
                   <Choice
                     value={request.auth.kind}
                     onChange={(kind) =>
@@ -451,13 +444,13 @@ export default function RequestEditor({
                       { value: "bearer", label: "Bearer Token" },
                       { value: "basic", label: "Basic Auth" },
                     ]}
-                    label="鉴权类型"
+                    label={t("鉴权类型")}
                   />
                 </Field>
                 {request.auth.kind === "bearer" && (
                   <Field
                     label="Token"
-                    hint="可使用 {{api_token}} 引用环境变量。"
+                    hint={t("可使用 {{api_token}} 引用环境变量。")}
                   >
                     <TextField.Root
                       type="password"
@@ -473,7 +466,7 @@ export default function RequestEditor({
                 )}
                 {request.auth.kind === "basic" && (
                   <>
-                    <Field label="用户名">
+                    <Field label={t("用户名")}>
                       <TextField.Root
                         value={request.auth.username}
                         onChange={(e) =>
@@ -483,7 +476,7 @@ export default function RequestEditor({
                         }
                       />
                     </Field>
-                    <Field label="密码">
+                    <Field label={t("密码")}>
                       <TextField.Root
                         type="password"
                         autoComplete="off"
@@ -504,19 +497,17 @@ export default function RequestEditor({
             </Tabs.Content>
             <Tabs.Content value="docs">
               <div className="documentation-editor">
-                <Field label="接口说明">
+                <Field label={t("接口说明")}>
                   <TextArea
                     rows={6}
                     value={request.description}
                     onChange={(e) => update({ description: e.target.value })}
-                    placeholder="接口用途、参数约束与调用注意事项…"
+                    placeholder={t("接口用途、参数约束与调用注意事项…")}
                   />
                 </Field>
                 <Flex align="center" gap="2">
                   <FileText size={16} />
-                  <Text size="2" color="gray">
-                    说明随请求一起保存和导出。
-                  </Text>
+                  <Text size="2" color="gray"> {t("说明随请求一起保存和导出。")} </Text>
                 </Flex>
               </div>
             </Tabs.Content>
@@ -525,7 +516,7 @@ export default function RequestEditor({
             </Tabs.Content>
             <Tabs.Content value="settings">
               <div className="form-panel">
-                <Field label="请求超时 (ms)" hint="最大 120000ms。">
+                <Field label={t("请求超时 (ms)")} hint={t("最大 120000ms。")}>
                   <TextField.Root
                     type="number"
                     min="100"
@@ -542,23 +533,19 @@ export default function RequestEditor({
                     onCheckedChange={(v) =>
                       update({ follow_redirects: v === true })
                     }
-                  />
-                  自动跟随重定向
-                </label>
+                  /> {t("自动跟随重定向")} </label>
                 <label className="checkbox-label">
                   <Checkbox
                     checked={request.verify_tls}
                     onCheckedChange={(v) => update({ verify_tls: v === true })}
-                  />
-                  验证 TLS 证书
-                </label>
+                  /> {t("验证 TLS 证书")} </label>
               </div>
             </Tabs.Content>
           </Tabs.Root>
         </Panel>
         <Separator
           className="request-response-separator"
-          aria-label="调整请求与响应面板高度"
+          aria-label={t("调整请求与响应面板高度")}
         >
           <span aria-hidden="true" />
         </Separator>
@@ -571,33 +558,33 @@ export default function RequestEditor({
           }
           minSize="40%"
         >
-          {tcp ? <Suspense fallback={<Text role="status">正在加载 TCP 客户端…</Text>}><TcpWorkbench /></Suspense> : a2a ? <Suspense fallback={<Text role="status">正在加载 A2A 客户端…</Text>}><A2aWorkbench /></Suspense> : mcp ? <Suspense fallback={<Text role="status">正在加载 MCP 客户端…</Text>}><McpWorkbench /></Suspense> : soap ? (
+          {tcp ? <Suspense fallback={<Text role="status">{t("正在加载 TCP 客户端…")}</Text>}><TcpWorkbench /></Suspense> : a2a ? <Suspense fallback={<Text role="status">{t("正在加载 A2A 客户端…")}</Text>}><A2aWorkbench /></Suspense> : mcp ? <Suspense fallback={<Text role="status">{t("正在加载 MCP 客户端…")}</Text>}><McpWorkbench /></Suspense> : soap ? (
             <Suspense
-              fallback={<Text role="status">正在加载 SOAP 客户端…</Text>}
+              fallback={<Text role="status">{t("正在加载 SOAP 客户端…")}</Text>}
             >
               <SoapWorkbench />
             </Suspense>
           ) : mqtt ? (
             <Suspense
-              fallback={<Text role="status">正在加载 MQTT 客户端…</Text>}
+              fallback={<Text role="status">{t("正在加载 MQTT 客户端…")}</Text>}
             >
               <MqttWorkbench />
             </Suspense>
           ) : socketio ? (
             <Suspense
-              fallback={<Text role="status">正在加载 Socket.IO 客户端…</Text>}
+              fallback={<Text role="status">{t("正在加载 Socket.IO 客户端…")}</Text>}
             >
               <SocketIoWorkbench />
             </Suspense>
           ) : grpc ? (
             <Suspense
-              fallback={<Text role="status">正在加载 gRPC 客户端…</Text>}
+              fallback={<Text role="status">{t("正在加载 gRPC 客户端…")}</Text>}
             >
               <GrpcWorkbench />
             </Suspense>
           ) : kind === "graphql" ? (
             <Suspense
-              fallback={<Text role="status">正在加载 GraphQL 编辑器…</Text>}
+              fallback={<Text role="status">{t("正在加载 GraphQL 编辑器…")}</Text>}
             >
               <GraphQLWorkbench />
             </Suspense>
@@ -617,14 +604,14 @@ export default function RequestEditor({
                       ...request.examples,
                       {
                         id: id(),
-                        name: `${response.status} 示例`,
+                        name: t("{{value0}} 示例", { value0: response.status }),
                         status: response.status,
                         headers: response.headers,
                         body: response.body,
                       },
                     ],
                   });
-                  toast.success("示例已添加，保存后保留");
+                  toast.success(liveTranslation("示例已添加，保存后保留"));
                 }
               }}
             />

@@ -132,3 +132,16 @@ it("appends a new source without deleting definitions used by other requests", a
     specification_id: "schema",
   });
 });
+it("switches a caught local save failure without repeating reflection or rewriting the request", async () => {
+  const { setLanguage } = await import("../../shared/i18n");
+  const state = setup(); state.dirty = true; state.save.mockResolvedValue(false);
+  const original = JSON.stringify(state.request);
+  const { result } = renderHook(useGrpcSchema);
+  await act(async () => { await result.current.reflect(); });
+  expect(result.current.error).toBe("请先解决工作区保存冲突");
+  await act(async () => { await setLanguage("en"); });
+  expect(result.current.error).toBe("Resolve the workspace save conflict first");
+  expect(state.save).toHaveBeenCalledTimes(1);
+  expect(api).not.toHaveBeenCalled();
+  expect(JSON.stringify(state.request)).toBe(original);
+});

@@ -1,3 +1,4 @@
+import { t } from "../../shared/i18n";
 import type { ProtocolEvent } from "../protocols/types";
 export interface TelemetrySample {
   cursor: number;
@@ -54,5 +55,5 @@ export function telemetrySamples(events: ProtocolEvent[]): TelemetrySample[] {
 }
 export function telemetryFieldLabel(field: string): string {
   const path = JSON.parse(field) as string[];
-  return path.length ? path.join(" › ") : "数值";
+  return path.length ? path.join(" › ") : t("数值");
 }

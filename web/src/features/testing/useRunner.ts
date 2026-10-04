@@ -1,8 +1,9 @@
+import { liveError } from "./../../shared/i18n/errors";
+import { useLanguage } from "../../shared/i18n";
 import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "../../shared/api";
-import { safeMessage } from "../../shared/model";
 import type { RunResult } from "../../shared/types";
 import type { useLocalVariables } from "../variables/useLocalVariables";
 import type { useWorkspace } from "../workspaces/useWorkspace";
@@ -11,6 +12,7 @@ export function useRunner(
   workspace: ReturnType<typeof useWorkspace>,
   localVariables?: ReturnType<typeof useLocalVariables>,
 ) {
+  useLanguage();
   const { draft, dirty, save, stateRef, accountId, accountRef } = workspace;
   const client = useQueryClient();
   const [selected, setRunCollection] = useState("");
@@ -66,7 +68,7 @@ export function useRunner(
       setResult({ accountId, workspaceId, collectionId, value });
       void client.invalidateQueries({ queryKey: ["history", workspaceId] });
     } catch (error) {
-      toast.error(safeMessage(error));
+      toast.error(liveError(error));
     } finally {
       running.current = false;
       setRunnerBusy(false);

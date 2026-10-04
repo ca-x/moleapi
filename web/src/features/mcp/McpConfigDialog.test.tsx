@@ -40,3 +40,18 @@ it("default host export uses centralized redaction and discards a late owner's r
   await act(async()=>{resolve({content:"{}"});});
   expect(saveFile).not.toHaveBeenCalled();
 });
+it("switches retained local JSON validation copy while keeping the invalid configuration draft", async () => {
+  const { setLanguage } = await import("../../shared/i18n");
+  setup();
+  const draft = '{"mcpServers":{"我的服务":{"args":"invalid"}}}';
+  render(<McpConfigDialog open onOpenChange={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText("MCP Host JSON"), { target: { value: draft } });
+  fireEvent.click(screen.getByRole("button", { name: "验证配置" }));
+  const original = screen.getByRole("alert").textContent;
+  expect(original).toContain("我的服务");
+  await act(async () => { await setLanguage("en"); });
+  expect(screen.getByRole("alert").textContent).toContain("我的服务");
+  expect(screen.getByRole("alert").textContent).not.toBe(original);
+  expect((screen.getByLabelText("MCP Host JSON") as HTMLTextAreaElement).value).toBe(draft);
+  expect(api).not.toHaveBeenCalled();
+});

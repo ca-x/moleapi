@@ -1,3 +1,5 @@
+import { LocalizedError } from "../../shared/i18n/errors";
+import { t } from "../../shared/i18n";
 import { getOperationAST, parse } from "graphql";
 import type { Fetcher, FetcherParams } from "@graphiql/toolkit";
 import { api } from "../../shared/api";
@@ -19,10 +21,10 @@ export interface GraphQLContext {
 }
 function executionInput(context: GraphQLContext, parameters: FetcherParams) {
   if (context.request.protocol?.kind !== "graphql")
-    throw new Error("当前请求不是 GraphQL");
+    throw new LocalizedError("当前请求不是 GraphQL");
   const variables = parameters.variables ?? {};
   if (typeof variables !== "object" || Array.isArray(variables))
-    throw new Error("GraphQL 变量必须为 JSON 对象");
+    throw new LocalizedError("GraphQL 变量必须为 JSON 对象");
   const request = {
     ...structuredClone(context.request),
     protocol: {
@@ -45,13 +47,13 @@ function payload(response: ApiResponse) {
   try {
     result = JSON.parse(response.body);
   } catch {
-    throw new Error(`GraphQL 服务返回非 JSON 内容（HTTP ${response.status}）`);
+    throw new LocalizedError("GraphQL 服务返回非 JSON 内容（HTTP {{value0}}）", { value0: response.status });
   }
   if (!result || typeof result !== "object" || Array.isArray(result))
-    throw new Error("GraphQL 服务响应必须为 JSON 对象");
+    throw new LocalizedError("GraphQL 服务响应必须为 JSON 对象");
   if (!Object.hasOwn(result, "data") && !Object.hasOwn(result, "errors"))
-    throw new Error(
-      `服务未返回 GraphQL data/errors（HTTP ${response.status}）`,
+    throw new LocalizedError(
+      "服务未返回 GraphQL data/errors（HTTP {{value0}}）", { value0: response.status },
     );
   return result as { data?: unknown; errors?: unknown[] };
 }
@@ -60,18 +62,18 @@ export function createRustGraphQLFetcher(
 ): Fetcher {
   return async (parameters) => {
     const context = await getContext();
-    if (!context.current()) throw new Error("GraphQL 请求已取消");
+    if (!context.current()) throw new LocalizedError("GraphQL 请求已取消");
     // GraphiQL refreshes operation facts after a debounce; execution must use
     // the actual editor text, including Send immediately after an edit.
     const document = parse(parameters.query);
     const operation = getOperationAST(document, parameters.operationName)
       ?? getOperationAST(document);
 
-    if (!operation) throw new Error("请选择要执行的 GraphQL operation");
+    if (!operation) throw new LocalizedError("请选择要执行的 GraphQL operation");
     const input = executionInput(context, { ...parameters, operationName: operation.name?.value });
     if (operation.operation !== "subscription") {
       const response = await api<ApiResponse>("/api/execute", "POST", input);
-      if (!context.current()) throw new Error("GraphQL 请求已取消");
+      if (!context.current()) throw new LocalizedError("GraphQL 请求已取消");
       context.apply(response.variable_updates || []);
       context.response(response);
       return payload(response);
@@ -136,15 +138,15 @@ async function* subscribe(
       );
       if (!context.current()) return;
       if (batch.dropped_count)
-        throw new Error(
-          `GraphQL 订阅已丢失 ${batch.dropped_count} 条事件，请重新订阅`,
+        throw new LocalizedError(
+          "GraphQL 订阅已丢失 {{value0}} 条事件，请重新订阅", { value0: batch.dropped_count },
         );
       cursor = batch.next_cursor;
       for (const event of batch.events) {
         if (event.message.kind === "graphql_next") {
           const value = event.message.payload;
           if (!value || typeof value !== "object" || Array.isArray(value))
-            throw new Error("GraphQL 订阅返回无效 payload");
+            throw new LocalizedError("GraphQL 订阅返回无效 payload");
           yield value;
         } else if (event.message.kind === "graphql_error") {
           yield {
@@ -152,7 +154,7 @@ async function* subscribe(
               ? event.message.payload
               : [
                   {
-                    message: "GraphQL 订阅失败",
+                    message: t("GraphQL 订阅失败"),
                     extensions: { detail: event.message.payload },
                   },
                 ],
@@ -161,7 +163,7 @@ async function* subscribe(
         } else if (event.message.kind === "graphql_complete") return;
       }
       if (state.state === "error")
-        throw new Error(state.reason || "GraphQL 订阅连接失败");
+        throw state.reason ? new Error(state.reason) : new LocalizedError("GraphQL 订阅连接失败");
       if (state.state === "closed") return;
       await new Promise((resolve) => setTimeout(resolve, 500));
     }

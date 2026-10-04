@@ -1,6 +1,8 @@
+import { useLanguage } from "../../shared/i18n";
 import { useEffect } from "react";
 /** Keyboard navigation is immediate; occasional pointer dialogs may use subtle motion. */
 export function useInputModality() {
+  useLanguage();
   useEffect(() => {
     const markKeyboard = () => {
       document.documentElement.dataset.inputModality = "keyboard";

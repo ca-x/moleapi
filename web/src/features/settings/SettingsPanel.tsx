@@ -1,8 +1,11 @@
+import LanguageSelector from "../../shared/i18n/LanguageSelector";
+import { t, useLanguage, message } from "../../shared/i18n";
 import { Button, Card, Flex, Text, TextField } from "@radix-ui/themes";
 import { Field } from "../../shared/ui";
 import { api, native } from "../../shared/api";
 import { useWorkbench } from "../workbench/context";
 export default function SettingsPanel() {
+  useLanguage();
   const {
     draft,
     setDraft,
@@ -19,11 +22,12 @@ export default function SettingsPanel() {
   } = useWorkbench();
   return (
     <Flex direction="column" gap="4">
+      <LanguageSelector />
       <Text size="2">
-        {native ? "桌面端将数据存储在本机 SQLite。" : "当前连接自托管服务端。"}
+        {native ? t("桌面端将数据存储在本机 SQLite。") : t("当前连接自托管服务端。")}
       </Text>
       {draft && (
-        <Field label="工作区名称">
+        <Field label={t("工作区名称")}>
           <TextField.Root
             value={draft.name}
             onChange={(e) =>
@@ -46,9 +50,7 @@ export default function SettingsPanel() {
             color="gray"
             variant="soft"
             onClick={() => void disconnectServer()}
-          >
-            断开同步
-          </Button>
+          > {t("断开同步")} </Button>
         </Card>
       )}
       {draft && (
@@ -58,8 +60,8 @@ export default function SettingsPanel() {
           onClick={() => {
             setModal(null);
             setGuard({
-              title: "删除工作区",
-              description: "删除此工作区及其资源与执行记录。",
+              title: message("删除工作区"),
+              description: message("删除此工作区及其资源与执行记录。"),
               action: async () => {
                 await api(`/api/workspaces/${draft.id}`, "DELETE", {
                   expected_revision: draft.revision,
@@ -71,23 +73,17 @@ export default function SettingsPanel() {
               },
             });
           }}
-        >
-          删除当前工作区
-        </Button>
+        > {t("删除当前工作区")} </Button>
       )}
       {!native && (
-        <Button color="gray" variant="soft" onClick={logout}>
-          退出登录
-        </Button>
+        <Button color="gray" variant="soft" onClick={logout}> {t("退出登录")} </Button>
       )}
       <Button
         onClick={async () => {
           if (dirty && !(await save())) return;
           setModal(null);
         }}
-      >
-        完成
-      </Button>
+      > {t("完成")} </Button>
     </Flex>
   );
 }

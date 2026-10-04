@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../shared/i18n";
 import { Tabs, Text } from "@radix-ui/themes";
 import { Editor } from "../../shared/ui";
 import type { RequestSpec } from "../../shared/types";
@@ -11,24 +12,20 @@ export default function RequestScripts({
   update: (patch: Partial<RequestSpec>) => void;
   dark: boolean;
 }) {
+  useLanguage();
   return (
     <div className="request-scripts">
-      <Text as="p" size="2" color="gray">
-        脚本在隔离的 JavaScript 运行时执行，可使用 pm
-        读取变量、修改请求和添加测试。
-      </Text>
+      <Text as="p" size="2" color="gray"> {t("脚本在隔离的 JavaScript 运行时执行，可使用 pm 读取变量、修改请求和添加测试。")} </Text>
       {request.protocol?.kind &&
         ["sse", "websocket", "grpc", "socketio", "mqtt"].includes(
           request.protocol.kind,
         ) && (
-          <Text as="p" size="1" color="gray">
-            实时协议执行请求前脚本，暂不执行响应后或逐条事件脚本。已有响应后脚本需清空后才能连接。
-          </Text>
+          <Text as="p" size="1" color="gray"> {t("实时协议执行请求前脚本，暂不执行响应后或逐条事件脚本。已有响应后脚本需清空后才能连接。")} </Text>
         )}
       <Tabs.Root defaultValue="pre">
         <Tabs.List>
-          <Tabs.Trigger value="pre">请求前</Tabs.Trigger>
-          <Tabs.Trigger value="post">响应后</Tabs.Trigger>
+          <Tabs.Trigger value="pre">{t("请求前")}</Tabs.Trigger>
+          <Tabs.Trigger value="post">{t("响应后")}</Tabs.Trigger>
         </Tabs.List>
         <Tabs.Content value="pre">
           <Editor
@@ -37,7 +34,7 @@ export default function RequestScripts({
             dark={dark}
             language="javascript"
             height="220px"
-            label="请求前 JavaScript 脚本"
+            label={t("请求前 JavaScript 脚本")}
           />
         </Tabs.Content>
         <Tabs.Content value="post">
@@ -49,14 +46,14 @@ export default function RequestScripts({
             dark={dark}
             language="javascript"
             height="220px"
-            label="响应后 JavaScript 脚本"
+            label={t("响应后 JavaScript 脚本")}
           />
         </Tabs.Content>
       </Tabs.Root>
       <Text size="1" color="gray">
         {["grpc", "socketio", "mqtt"].includes(request.protocol?.kind || "")
-          ? "请求前示例：pm.environment.set('token', '本地值');"
-          : "示例：pm.test('状态为200', () => pm.response.to.have.status(200));"}
+          ? t("请求前示例：pm.environment.set('token', '本地值');")
+          : t("示例：pm.test('状态为200', () => pm.response.to.have.status(200));")}
       </Text>
     </div>
   );

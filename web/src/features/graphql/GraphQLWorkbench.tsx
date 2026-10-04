@@ -1,3 +1,6 @@
+import type { ErrorCopy } from "../../shared/i18n/errors";
+import { LocalizedError, errorCopy } from "../../shared/i18n/errors";
+import { t, useLanguage, translateCopy } from "../../shared/i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Button, Callout, Flex, Text, Dialog } from "@radix-ui/themes";
 import { RefreshCw, FileText } from "lucide-react";
@@ -8,7 +11,6 @@ import "graphiql/setup-workers/vite";
 import { buildSchema } from "graphql";
 import type { Storage } from "@graphiql/toolkit";
 import { api } from "../../shared/api";
-import { safeMessage } from "../../shared/model";
 import type {
   ApiResponse,
   GraphQLConfig,
@@ -31,8 +33,15 @@ function EditorBridge({ onQuery, onVariables, initialOperation }: {
   onVariables: (value: string) => void;
   initialOperation?: string | null;
 }) {
+  const { language } = useLanguage();
   const queryEditor = useGraphiQL((store) => store.queryEditor);
+  const responseEditor = useGraphiQL((store) => store.responseEditor);
   const variableEditor = useGraphiQL((store) => store.variableEditor);
+  useEffect(() => {
+    queryEditor?.updateOptions({ ariaLabel: t("GraphiQL:Operation Editor") });
+    variableEditor?.updateOptions({ ariaLabel: t("GraphiQL:Variables") });
+    responseEditor?.updateOptions({ ariaLabel: t("GraphiQL:Result Window") });
+  }, [language, queryEditor, variableEditor, responseEditor]);
   const { run, setOperationName } = useGraphiQLActions();
   const savedOperation = useRef(initialOperation);
   const seededOperation = useRef(false);
@@ -61,6 +70,7 @@ function EditorBridge({ onQuery, onVariables, initialOperation }: {
   return null;
 }
 export default function GraphQLWorkbench() {
+  useLanguage();
   const state = useWorkbench();
   const latest = useRef(state);
   latest.current = state;
@@ -102,7 +112,7 @@ export default function GraphQLWorkbench() {
   );
   const [schemaError, setSchemaError] = useState<{
     scope: string;
-    message: string;
+    message: ErrorCopy;
   } | null>(null);
   const [loadingScope, setLoadingScope] = useState<string | null>(null);
   const loading = loadingScope === scope;
@@ -115,7 +125,7 @@ export default function GraphQLWorkbench() {
       !draft ||
       request?.protocol?.kind !== "graphql"
     )
-      throw new Error("没有可执行的 GraphQL 请求");
+      throw new LocalizedError("没有可执行的 GraphQL 请求");
     const identity = scopeRef.current;
     const epoch = generation.current;
     const current = () =>
@@ -130,8 +140,8 @@ export default function GraphQLWorkbench() {
     const environment = draft.data.active_environment_id;
     const locals = origin.localVariables.values(draft, collection, environment);
     if (origin.dirty && !(await origin.save(true)))
-      throw new Error("请先解决工作区保存冲突");
-    if (!current()) throw new Error("GraphQL 请求已取消");
+      throw new LocalizedError("请先解决工作区保存冲突");
+    if (!current()) throw new LocalizedError("GraphQL 请求已取消");
     return {
       workspace_id: draft.id,
       request: snapshot,
@@ -183,7 +193,7 @@ export default function GraphQLWorkbench() {
         // Newly imported sources must be saved before the Rust schema endpoint
         // can read them, including in the independent offline desktop client.
         if (latest.current.dirty && !(await latest.current.save(true)))
-          throw new Error("请先解决工作区保存冲突");
+          throw new LocalizedError("请先解决工作区保存冲突");
         if (cancelled || scopeRef.current !== origin || generation.current !== epoch) return;
         const result = await api<{sdl: string}>("/api/graphql/schema", "POST", {
           workspace_id: latest.current.draft!.id,
@@ -193,7 +203,7 @@ export default function GraphQLWorkbench() {
           setSchema({ scope: origin, sdl: result.sdl });
       } catch (error) {
         if (!cancelled && scopeRef.current === origin && generation.current === epoch)
-          setSchemaError({ scope: origin, message: safeMessage(error) });
+          setSchemaError({ scope: origin, message: errorCopy(error) });
       }
     })();
     return () => { cancelled = true; };
@@ -224,8 +234,9 @@ export default function GraphQLWorkbench() {
       if (!context.current()) return;
       context.apply(result.response.variable_updates || []);
       context.response(result.response);
-      if (result.error || !result.sdl || !result.specification)
-        throw new Error(result.error || "服务未返回可用 schema");
+      if (result.error) throw new Error(result.error);
+      if (!result.sdl || !result.specification)
+        throw new LocalizedError("服务未返回可用 schema");
       const candidate = result.specification;
       const existing = latest.current.draft?.data.specifications?.find(
         (item) =>
@@ -243,7 +254,7 @@ export default function GraphQLWorkbench() {
       if (current())
         setSchemaError({
           scope: origin,
-          message: safeMessage(error),
+          message: errorCopy(error),
         });
     } finally {
       if (mounted.current)
@@ -253,7 +264,7 @@ export default function GraphQLWorkbench() {
   if (!gql) return null;
   const response = last?.scope === scope ? last.response : null;
   return (
-    <section className="graphql-workbench" aria-label="GraphQL 客户端">
+    <section className="graphql-workbench" aria-label={t("GraphQL 客户端")}>
       <Flex
         className="graphql-toolbar"
         align="center"
@@ -282,30 +293,26 @@ export default function GraphQLWorkbench() {
           loading={loading}
           onClick={() => void introspect()}
         >
-          <RefreshCw size={14} />
-          读取并保存 Schema
-        </Button>
+          <RefreshCw size={14} /> {t("读取并保存 Schema")} </Button>
       </Flex>
       {schemaError?.scope === scope && (
         <Callout.Root color="red" role="alert">
-          <Callout.Text>{schemaError.message}</Callout.Text>
+          <Callout.Text>{translateCopy(schemaError.message)}</Callout.Text>
         </Callout.Root>
       )}
       {activeSchema && builtSchema === null && (
         <Callout.Root color="red">
-          <Callout.Text>Schema 无法加载，请检查规范或重新内省。</Callout.Text>
+          <Callout.Text>{t("Schema 无法加载，请检查规范或重新内省。")}</Callout.Text>
         </Callout.Root>
       )}
       {response && (
         <Dialog.Root>
           <Dialog.Trigger>
             <Button size="1" variant="ghost" color="gray">
-              <FileText size={14} />
-              查看 HTTP / 脚本结果
-            </Button>
+              <FileText size={14} /> {t("查看 HTTP / 脚本结果")} </Button>
           </Dialog.Trigger>
           <Dialog.Content maxWidth="850px">
-            <Dialog.Title>本次 GraphQL 请求的 HTTP / 脚本结果</Dialog.Title>
+            <Dialog.Title>{t("本次 GraphQL 请求的 HTTP / 脚本结果")}</Dialog.Title>
             <ResponsePane
               response={response}
               error=""
@@ -314,9 +321,7 @@ export default function GraphQLWorkbench() {
             />
             <Flex justify="end" mt="3">
               <Dialog.Close>
-                <Button variant="soft" color="gray">
-                  关闭
-                </Button>
+                <Button variant="soft" color="gray"> {t("关闭")} </Button>
               </Dialog.Close>
             </Flex>
           </Dialog.Content>

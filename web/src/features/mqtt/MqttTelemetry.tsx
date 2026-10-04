@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../shared/i18n";
 import { useEffect, useMemo, useState } from "react";
 import { Checkbox, Flex, Text } from "@radix-ui/themes";
 import {
@@ -27,6 +28,7 @@ export default function MqttTelemetry({
   events: ProtocolEvent[];
   sessionId?: string;
 }) {
+  useLanguage();
   const samples = useMemo(() => telemetrySamples(events), [events]);
   const topics = [...new Set(samples.map((sample) => sample.topic))];
   const [topic, setTopic] = useState("");
@@ -56,16 +58,14 @@ export default function MqttTelemetry({
   const formatTime = (value: number) => new Date(value).toLocaleTimeString();
   if (!samples.length)
     return (
-      <Text color="gray">
-        收到 JSON 数字字段后显示遥测图表。私密、二进制及非 JSON 消息不进入图表。
-      </Text>
+      <Text color="gray"> {t("收到 JSON 数字字段后显示遥测图表。私密、二进制及非 JSON 消息不进入图表。")} </Text>
     );
   return (
     <div className="mqtt-telemetry">
       <Flex gap="3" wrap="wrap">
         <Choice
           value={actualTopic}
-          label="遥测 Topic"
+          label={t("遥测 Topic")}
           onChange={(value) => {
             setTopic(value);
             setFields(null);
@@ -74,7 +74,7 @@ export default function MqttTelemetry({
         />
         <Choice
           value={style}
-          label="图表类型"
+          label={t("图表类型")}
           onChange={setStyle}
           options={[
             { value: "line", label: "Line" },
@@ -82,7 +82,7 @@ export default function MqttTelemetry({
           ]}
         />
       </Flex>
-      <Flex gap="4" wrap="wrap" aria-label="遥测字段">
+      <Flex gap="4" wrap="wrap" aria-label={t("遥测字段")}>
         {available.map((field) => (
           <label className="checkbox-label" key={field}>
             <Checkbox
@@ -105,7 +105,7 @@ export default function MqttTelemetry({
       <div
         className="mqtt-chart"
         role="img"
-        aria-label={"MQTT Topic " + actualTopic + " 数字字段的时间序列"}
+        aria-label={t("MQTT Topic {{topic}} 数字字段的时间序列", { topic: actualTopic })}
       >
         <ResponsiveContainer width="100%" height={300}>
           {style === "bar" ? (
@@ -153,10 +153,7 @@ export default function MqttTelemetry({
           )}
         </ResponsiveContainer>
       </div>
-      <Text size="1" color="gray">
-        最近 {series.length}{" "}
-        条接收消息；时间为本地接收时间，缺失字段保留为空值。
-      </Text>
+      <Text size="1" color="gray"> {t("最近 {{count}} 条接收消息；时间为本地接收时间，缺失字段保留为空值。", { count: series.length })} </Text>
     </div>
   );
 }

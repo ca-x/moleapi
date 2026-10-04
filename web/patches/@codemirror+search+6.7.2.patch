@@ -1,0 +1,67 @@
+diff --git a/node_modules/@codemirror/search/dist/index.js b/node_modules/@codemirror/search/dist/index.js
+index aa16328..65fa669 100644
+--- a/node_modules/@codemirror/search/dist/index.js
++++ b/node_modules/@codemirror/search/dist/index.js
+@@ -1071,6 +1071,7 @@ class SearchPanel {
+             form: "",
+             "main-field": "true",
+             onchange: this.commit,
++            oninput: this.commit,
+             onkeyup: this.commit
+         });
+         this.replaceField = elt("input", {
+@@ -1081,6 +1082,7 @@ class SearchPanel {
+             name: "replace",
+             form: "",
+             onchange: this.commit,
++            oninput: this.commit,
+             onkeyup: this.commit
+         });
+         this.caseField = elt("input", {
+@@ -1109,19 +1111,19 @@ class SearchPanel {
+         }
+         this.dom = elt("div", { onkeydown: (e) => this.keydown(e), class: "cm-search" }, [
+             this.searchField,
+-            button("next", () => findNext(view), [phrase(view, "next")]),
+-            button("prev", () => findPrevious(view), [phrase(view, "previous")]),
+-            button("select", () => selectMatches(view), [phrase(view, "all")]),
+-            elt("label", null, [this.caseField, phrase(view, "match case")]),
+-            elt("label", null, [this.reField, phrase(view, "regexp")]),
+-            elt("label", null, [this.wordField, phrase(view, "by word")]),
++            this.nextButton = button("next", () => findNext(view), [phrase(view, "next")]),
++            this.prevButton = button("prev", () => findPrevious(view), [phrase(view, "previous")]),
++            this.selectButton = button("select", () => selectMatches(view), [phrase(view, "all")]),
++            elt("label", null, [this.caseField, this.caseCaption = elt("span", null, [phrase(view, "match case")])]),
++            elt("label", null, [this.reField, this.reCaption = elt("span", null, [phrase(view, "regexp")])]),
++            elt("label", null, [this.wordField, this.wordCaption = elt("span", null, [phrase(view, "by word")])]),
+             ...view.state.readOnly ? [] : [
+                 elt("br"),
+                 this.replaceField,
+-                button("replace", () => replaceNext(view), [phrase(view, "replace")]),
+-                button("replaceAll", () => replaceAll(view), [phrase(view, "replace all")])
++                this.replaceButton = button("replace", () => replaceNext(view), [phrase(view, "replace")]),
++                this.replaceAllButton = button("replaceAll", () => replaceAll(view), [phrase(view, "replace all")])
+             ],
+-            elt("button", {
++            this.closeButton = elt("button", {
+                 name: "close",
+                 onclick: () => closeSearchPanel(view),
+                 "aria-label": phrase(view, "close"),
+@@ -1156,6 +1158,17 @@ class SearchPanel {
+         }
+     }
+     update(update) {
++        // The phrases facet can change without replacing the panel or its draft.
++        if (update.startState.phrase("Find") !== update.state.phrase("Find")) {
++            for (const [field, key] of [[this.searchField, "Find"], [this.replaceField, "Replace"]]) {
++                field.placeholder = phrase(this.view, key);
++                field.setAttribute("aria-label", phrase(this.view, key));
++            }
++            for (const [field, key] of [[this.nextButton, "next"], [this.prevButton, "previous"], [this.selectButton, "all"], [this.replaceButton, "replace"], [this.replaceAllButton, "replace all"], [this.caseCaption, "match case"], [this.reCaption, "regexp"], [this.wordCaption, "by word"]]) {
++                if (field) field.textContent = phrase(this.view, key);
++            }
++            this.closeButton.setAttribute("aria-label", phrase(this.view, "close"));
++        }
+         for (let tr of update.transactions)
+             for (let effect of tr.effects) {
+                 if (effect.is(setSearchQuery) && !effect.value.eq(this.query))

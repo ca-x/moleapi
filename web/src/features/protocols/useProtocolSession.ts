@@ -1,3 +1,7 @@
+import { liveError } from "./../../shared/i18n/errors";
+import { errorCopy } from "../../shared/i18n/errors";
+import type { ErrorCopy } from "../../shared/i18n/errors";
+import { useLanguage, translateCopy } from "../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
 import { useQuery, CancelledError } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -27,6 +31,7 @@ export function useProtocolSession(
   locals: ReturnType<typeof useLocalVariables>,
   authenticated: boolean,
 ) {
+  useLanguage();
   const kind = request?.protocol?.kind || "http";
   const identity = JSON.stringify([
     authenticated,
@@ -63,7 +68,7 @@ export function useProtocolSession(
   }>({ events: [], dropped: 0 });
   const [error, setError] = useState<{
     identity: string;
-    message: string;
+    message: ErrorCopy;
   } | null>(null);
   const [connecting, setConnecting] = useState<string[]>([]);
   const [sendingFor, setSendingFor] = useState<string[]>([]);
@@ -199,7 +204,7 @@ export function useProtocolSession(
       });
     } catch (caught) {
       if (current(origin, epoch))
-        setError({ identity: origin, message: safeMessage(caught) });
+        setError({ identity: origin, message: errorCopy(caught) });
     } finally {
       operations.current.delete(ticket);
       if (mounted.current) setConnecting([...operations.current]);
@@ -234,7 +239,7 @@ export function useProtocolSession(
         void poll.refetch();
     } catch (caught) {
       if (current(origin, epoch) && sessionRef.current === sessionId)
-        setError({ identity: origin, message: safeMessage(caught) });
+        setError({ identity: origin, message: errorCopy(caught) });
     }
   }
   async function send(message: SendMessage) {
@@ -262,7 +267,7 @@ export function useProtocolSession(
       return false;
     } catch (caught) {
       if (current(origin, epoch) && sessionRef.current === sessionId)
-        toast.error(safeMessage(caught));
+        toast.error(liveError(caught));
       return false;
     } finally {
       sends.current.delete(ticket);
@@ -275,7 +280,7 @@ export function useProtocolSession(
     dropped: live ? retained.dropped : 0,
     error:
       error?.identity === identity
-        ? error.message
+        ? translateCopy(error.message)
         : sessionId && poll.error
           ? safeMessage(poll.error)
           : "",

@@ -1,12 +1,12 @@
+import { t, useLanguage } from "../../shared/i18n";
 import { Badge, Flex, Text } from "@radix-ui/themes";
 import type { ScriptLog } from "../../shared/types";
 export default function ScriptConsole({ logs }: { logs: ScriptLog[] }) {
+  useLanguage();
   return (
-    <div className="script-console" role="log" aria-label="脚本控制台">
+    <div className="script-console" role="log" aria-label={t("脚本控制台")}>
       {logs.length === 0 ? (
-        <Text color="gray" size="2">
-          当前请求没有脚本输出。
-        </Text>
+        <Text color="gray" size="2"> {t("当前请求没有脚本输出。")} </Text>
       ) : (
         logs.map((log, index) => (
           <Flex key={index} gap="3" align="start">

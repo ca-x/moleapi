@@ -1,7 +1,92 @@
 diff --git a/node_modules/graphiql/dist/GraphiQL.js b/node_modules/graphiql/dist/GraphiQL.js
+index df8c017..ef0f6d3 100644
 --- a/node_modules/graphiql/dist/GraphiQL.js
 +++ b/node_modules/graphiql/dist/GraphiQL.js
-@@ -683,7 +683,7 @@
+@@ -1,5 +1,7 @@
++import { c as stableCompilerCache } from "react-compiler-runtime";
++import { moleapiTranslate, useMoleapiLanguage, moleapiMemoCache as c } from "@graphiql/react";
+ import { jsx, jsxs } from "react/jsx-runtime";
+-import { c } from "react-compiler-runtime";
++
+ import { useState, Children, useRef, Fragment } from "react";
+ import { useGraphiQLActions, pick, useGraphiQL, useMonaco, useDragResize, cn, UnStyledButton, ChevronUpIcon, ChevronDownIcon, Tab, Tooltip, GraphiQLProvider, QueryEditor, Spinner, ExecuteButton, VariableEditor, HeaderEditor, Tabs, PlusIcon, ResponseEditor } from "@graphiql/react";
+ import { HISTORY_PLUGIN, HistoryStore } from "@graphiql/plugin-history";
+@@ -10,7 +12,7 @@ import { GraphiQLLogo } from "./ui/logo.js";
+ import { Sidebar } from "./ui/sidebar.js";
+ const GraphiQL_ = (t0) => {
+   var _a, _b;
+-  const $ = c(54);
++  const $ = stableCompilerCache(54);
+   let children;
+   let className;
+   let confirmCloseTab;
+@@ -211,9 +213,10 @@ const GraphiQL_ = (t0) => {
+ };
+ const TAB_CLASS_PREFIX = "graphiql-session-tab-";
+ const LABEL = {
+-  newTab: "New tab"
++  get newTab() { return moleapiTranslate("New tab"); }
+ };
+ function GraphiQLInterface(t0) {
++  useMoleapiLanguage();
+   const $ = c(150);
+   const {
+     forcedTheme,
+@@ -461,7 +464,7 @@ function GraphiQLInterface(t0) {
+     t15 = $[35];
+   }
+   const handleTabClick = t15;
+-  const editorToolsText = `${editorToolsHiddenElement === "second" ? "Show" : "Hide"} editor tools`;
++  const editorToolsText = moleapiTranslate(editorToolsHiddenElement === "second" ? "Show editor tools" : "Hide editor tools");
+   const EditorToolsIcon = editorToolsHiddenElement === "second" ? ChevronUpIcon : ChevronDownIcon;
+   let t16;
+   if ($[36] !== hasMonaco || $[37] !== onClickReference || $[38] !== onEditQuery) {
+@@ -482,7 +485,7 @@ function GraphiQLInterface(t0) {
+   }
+   let t18;
+   if ($[41] !== toolbar) {
+-    t18 = /* @__PURE__ */ jsxs("div", { className: "graphiql-toolbar", role: "toolbar", "aria-label": "Editor Commands", children: [
++    t18 = /* @__PURE__ */ jsxs("div", { className: "graphiql-toolbar", role: "toolbar", "aria-label": moleapiTranslate("Editor Commands"), children: [
+       t17,
+       toolbar
+     ] });
+@@ -493,7 +496,7 @@ function GraphiQLInterface(t0) {
+   }
+   let t19;
+   if ($[43] !== editorToolsFirstRef || $[44] !== t16 || $[45] !== t18) {
+-    t19 = /* @__PURE__ */ jsxs("section", { className: "graphiql-query-editor", "aria-label": "Operation Editor", ref: editorToolsFirstRef, children: [
++    t19 = /* @__PURE__ */ jsxs("section", { className: "graphiql-query-editor", "aria-label": moleapiTranslate("Operation Editor"), ref: editorToolsFirstRef, children: [
+       t16,
+       t18
+     ] });
+@@ -515,7 +518,7 @@ function GraphiQLInterface(t0) {
+   }
+   let t22;
+   if ($[49] !== handleToolsTabClick || $[50] !== t21) {
+-    t22 = /* @__PURE__ */ jsx(UnStyledButton, { type: "button", className: t21, onClick: handleToolsTabClick, "data-name": "variables", children: "Variables" });
++    t22 = /* @__PURE__ */ jsx(UnStyledButton, { type: "button", className: t21, onClick: handleToolsTabClick, "data-name": "variables", children: moleapiTranslate("Variables") });
+     $[49] = handleToolsTabClick;
+     $[50] = t21;
+     $[51] = t22;
+@@ -524,7 +527,7 @@ function GraphiQLInterface(t0) {
+   }
+   let t23;
+   if ($[52] !== activeSecondaryEditor || $[53] !== editorToolsHiddenElement || $[54] !== handleToolsTabClick || $[55] !== isHeadersEditorEnabled) {
+-    t23 = isHeadersEditorEnabled && /* @__PURE__ */ jsx(UnStyledButton, { type: "button", className: cn(activeSecondaryEditor === "headers" && editorToolsHiddenElement !== "second" && "active"), onClick: handleToolsTabClick, "data-name": "headers", children: "Headers" });
++    t23 = isHeadersEditorEnabled && /* @__PURE__ */ jsx(UnStyledButton, { type: "button", className: cn(activeSecondaryEditor === "headers" && editorToolsHiddenElement !== "second" && "active"), onClick: handleToolsTabClick, "data-name": "headers", children: moleapiTranslate("Headers") });
+     $[52] = activeSecondaryEditor;
+     $[53] = editorToolsHiddenElement;
+     $[54] = handleToolsTabClick;
+@@ -575,7 +578,7 @@ function GraphiQLInterface(t0) {
+   } else {
+     t27 = $[70];
+   }
+-  const t28 = activeSecondaryEditor === "variables" ? "Variables" : "Headers";
++  const t28 = activeSecondaryEditor === "variables" ? moleapiTranslate("Variables") : moleapiTranslate("Headers");
+   const t29 = activeSecondaryEditor === "variables" ? "" : "hidden";
+   let t30;
+   if ($[71] !== onEditVariables || $[72] !== t29) {
+@@ -683,7 +686,7 @@ function GraphiQLInterface(t0) {
    let t40;
    if ($[103] !== activeTabIndex || $[104] !== handleTabClick || $[105] !== handleTabClose || $[106] !== tabs) {
      t40 = tabs.map((tab, index_1, arr) => /* @__PURE__ */ jsxs(Tab, { dragConstraints: tabContainerRef, value: tab, isActive: index_1 === activeTabIndex, children: [
@@ -10,3 +95,265 @@ diff --git a/node_modules/graphiql/dist/GraphiQL.js b/node_modules/graphiql/dist
        arr.length > 1 && /* @__PURE__ */ jsx(Tab.Close, { onClick: handleTabClose })
      ] }, tab.id));
      $[103] = activeTabIndex;
+@@ -696,7 +699,7 @@ function GraphiQLInterface(t0) {
+   }
+   let t41;
+   if ($[108] !== moveTab || $[109] !== t40 || $[110] !== tabs) {
+-    t41 = /* @__PURE__ */ jsx(Tabs, { ref: tabContainerRef, values: tabs, onReorder: moveTab, "aria-label": "Select active operation", className: "no-scrollbar", children: t40 });
++    t41 = /* @__PURE__ */ jsx(Tabs, { ref: tabContainerRef, values: tabs, onReorder: moveTab, "aria-label": moleapiTranslate("Select active operation"), className: "no-scrollbar", children: t40 });
+     $[108] = moveTab;
+     $[109] = t40;
+     $[110] = tabs;
+diff --git a/node_modules/graphiql/dist/ui/short-keys.js b/node_modules/graphiql/dist/ui/short-keys.js
+index 61f89e3..d2f8a37 100644
+--- a/node_modules/graphiql/dist/ui/short-keys.js
++++ b/node_modules/graphiql/dist/ui/short-keys.js
+@@ -1,5 +1,6 @@
++import { moleapiTranslate, useMoleapiLanguage, moleapiMemoCache as c } from "@graphiql/react";
+ import { jsxs, jsx } from "react/jsx-runtime";
+-import { c } from "react-compiler-runtime";
++
+ import { Fragment } from "react";
+ import { KEY_MAP, formatShortcutForOS } from "@graphiql/react";
+ const SHORT_KEYS = Object.entries({
+@@ -13,13 +14,14 @@ const SHORT_KEYS = Object.entries({
+   "Merge fragments definitions into operation definition": KEY_MAP.mergeFragments.key
+ });
+ const ShortKeys = () => {
++  useMoleapiLanguage();
+   const $ = c(5);
+   let t0;
+   if ($[0] === Symbol.for("react.memo_cache_sentinel")) {
+     t0 = /* @__PURE__ */ jsxs("table", { className: "graphiql-table", children: [
+       /* @__PURE__ */ jsx("thead", { children: /* @__PURE__ */ jsxs("tr", { children: [
+-        /* @__PURE__ */ jsx("th", { children: "Short Key" }),
+-        /* @__PURE__ */ jsx("th", { children: "Function" })
++        /* @__PURE__ */ jsx("th", { children: moleapiTranslate("Short Key") }),
++        /* @__PURE__ */ jsx("th", { children: moleapiTranslate("Function") })
+       ] }) }),
+       /* @__PURE__ */ jsx("tbody", { children: SHORT_KEYS.map(_temp2) })
+     ] });
+@@ -36,7 +38,7 @@ const ShortKeys = () => {
+   }
+   let t2;
+   if ($[2] === Symbol.for("react.memo_cache_sentinel")) {
+-    t2 = /* @__PURE__ */ jsx("a", { href: "https://code.visualstudio.com/docs/reference/default-keybindings", target: "_blank", rel: "noreferrer", children: "Monaco editor shortcuts" });
++    t2 = /* @__PURE__ */ jsx("a", { href: "https://code.visualstudio.com/docs/reference/default-keybindings", target: "_blank", rel: "noreferrer", children: moleapiTranslate("Monaco editor shortcuts") });
+     $[2] = t2;
+   } else {
+     t2 = $[2];
+@@ -53,16 +55,16 @@ const ShortKeys = () => {
+     t4 = /* @__PURE__ */ jsxs("div", { children: [
+       t0,
+       /* @__PURE__ */ jsxs("p", { children: [
+-        "This Graph",
++        moleapiTranslate("This Graph"),
+         t1,
+-        "QL editor uses",
++        moleapiTranslate("QL editor uses"),
+         " ",
+         t2,
+-        ", with keybindings similar to VS Code. See the full list of shortcuts for",
++        moleapiTranslate(", with keybindings similar to VS Code. See the full list of shortcuts for"),
+         " ",
+         t3,
+         " ",
+-        "or",
++        moleapiTranslate("or"),
+         " ",
+         /* @__PURE__ */ jsx("a", { href: "https://code.visualstudio.com/shortcuts/keyboard-shortcuts-windows.pdf", target: "_blank", rel: "noreferrer", children: "Windows" }),
+         "."
+@@ -84,7 +86,7 @@ function _temp2(t0) {
+   const [title, keys] = t0;
+   return /* @__PURE__ */ jsxs("tr", { children: [
+     /* @__PURE__ */ jsx("td", { children: keys.split("-").map(_temp) }),
+-    /* @__PURE__ */ jsx("td", { children: title })
++    /* @__PURE__ */ jsx("td", { children: moleapiTranslate(title) })
+   ] }, title);
+ }
+ export {
+diff --git a/node_modules/graphiql/dist/ui/sidebar.js b/node_modules/graphiql/dist/ui/sidebar.js
+index 47275a7..e422ff1 100644
+--- a/node_modules/graphiql/dist/ui/sidebar.js
++++ b/node_modules/graphiql/dist/ui/sidebar.js
+@@ -1,15 +1,17 @@
++import { moleapiTranslate, useMoleapiLanguage, moleapiMemoCache as c } from "@graphiql/react";
+ import { jsx, jsxs } from "react/jsx-runtime";
+-import { c } from "react-compiler-runtime";
++
+ import { useEffect, useState } from "react";
+ import { KEY_MAP, useGraphiQLActions, pick, useGraphiQL, cn, Dialog, VisuallyHidden, ButtonGroup, Button, Tooltip, UnStyledButton, ReloadIcon, KeyboardShortcutIcon, SettingsIcon, isMacOs } from "@graphiql/react";
+ import { ShortKeys } from "./short-keys.js";
+ const LABEL = {
+-  refetchSchema: `Re-fetch GraphQL schema (${KEY_MAP.refetchSchema.key})`,
+-  shortCutDialog: "Open short keys dialog",
+-  settingsDialogs: "Open settings dialog"
++  get refetchSchema() { return moleapiTranslate("Re-fetch GraphQL schema ({{value0}})", { value0: KEY_MAP.refetchSchema.key }); },
++  get shortCutDialog() { return moleapiTranslate("Open short keys dialog"); },
++  get settingsDialogs() { return moleapiTranslate("Open settings dialog"); }
+ };
+ const THEMES = ["light", "dark", "system"];
+ const Sidebar = (t0) => {
++  useMoleapiLanguage();
+   const $ = c(72);
+   const {
+     forcedTheme: $forcedTheme,
+@@ -188,8 +190,8 @@ const Sidebar = (t0) => {
+     if ($[25] !== handlePluginClick || $[26] !== visiblePlugin) {
+       t142 = (plugin_0, index_0) => {
+         const isVisible_0 = plugin_0 === visiblePlugin;
+-        const label = `${isVisible_0 ? "Hide" : "Show"} ${plugin_0.title}`;
+-        return /* @__PURE__ */ jsx(Tooltip, { label, children: /* @__PURE__ */ jsx(UnStyledButton, { type: "button", className: cn(isVisible_0 && "active"), onClick: handlePluginClick, "data-index": index_0, "aria-label": label, children: /* @__PURE__ */ jsx(plugin_0.icon, { "aria-hidden": "true" }) }) }, plugin_0.title);
++        const label = moleapiTranslate(isVisible_0 ? "Hide {{title}}" : "Show {{title}}", { title: plugin_0.title });
++        return /* @__PURE__ */ jsx(Tooltip, { label, children: /* @__PURE__ */ jsx(UnStyledButton, { type: "button", className: cn(isVisible_0 && "active"), onClick: handlePluginClick, "data-index": index_0, "data-moleapi-docs": plugin_0.title === moleapiTranslate("Documentation Explorer") ? "true" : undefined, "aria-label": label, children: /* @__PURE__ */ jsx(plugin_0.icon, { "aria-hidden": "true" }) }) }, plugin_0.title);
+       };
+       $[25] = handlePluginClick;
+       $[26] = visiblePlugin;
+@@ -258,7 +260,7 @@ const Sidebar = (t0) => {
+   const t21 = showDialog === "short-keys";
+   let t22;
+   if ($[39] === Symbol.for("react.memo_cache_sentinel")) {
+-    t22 = /* @__PURE__ */ jsx(Dialog.Title, { className: "graphiql-dialog-title", children: "Short Keys" });
++    t22 = /* @__PURE__ */ jsx(Dialog.Title, { className: "graphiql-dialog-title", children: moleapiTranslate("Short Keys") });
+     $[39] = t22;
+   } else {
+     t22 = $[39];
+@@ -267,7 +269,7 @@ const Sidebar = (t0) => {
+   if ($[40] === Symbol.for("react.memo_cache_sentinel")) {
+     t23 = /* @__PURE__ */ jsxs("div", { className: "graphiql-dialog-header", children: [
+       t22,
+-      /* @__PURE__ */ jsx(VisuallyHidden, { children: /* @__PURE__ */ jsx(Dialog.Description, { children: "This modal provides a list of available keyboard shortcuts and their functions." }) }),
++      /* @__PURE__ */ jsx(VisuallyHidden, { children: /* @__PURE__ */ jsx(Dialog.Description, { children: moleapiTranslate("This modal provides a list of available keyboard shortcuts and their functions.") }) }),
+       /* @__PURE__ */ jsx(Dialog.Close, {})
+     ] });
+     $[40] = t23;
+@@ -295,7 +297,7 @@ const Sidebar = (t0) => {
+   const t26 = showDialog === "settings";
+   let t27;
+   if ($[44] === Symbol.for("react.memo_cache_sentinel")) {
+-    t27 = /* @__PURE__ */ jsx(Dialog.Title, { className: "graphiql-dialog-title", children: "Settings" });
++    t27 = /* @__PURE__ */ jsx(Dialog.Title, { className: "graphiql-dialog-title", children: moleapiTranslate("Settings") });
+     $[44] = t27;
+   } else {
+     t27 = $[44];
+@@ -304,7 +306,7 @@ const Sidebar = (t0) => {
+   if ($[45] === Symbol.for("react.memo_cache_sentinel")) {
+     t28 = /* @__PURE__ */ jsxs("div", { className: "graphiql-dialog-header", children: [
+       t27,
+-      /* @__PURE__ */ jsx(VisuallyHidden, { children: /* @__PURE__ */ jsx(Dialog.Description, { children: "This modal lets you adjust header persistence, interface theme, and clear local storage." }) }),
++      /* @__PURE__ */ jsx(VisuallyHidden, { children: /* @__PURE__ */ jsx(Dialog.Description, { children: moleapiTranslate("This modal lets you adjust header persistence, interface theme, and clear local storage.") }) }),
+       /* @__PURE__ */ jsx(Dialog.Close, {})
+     ] });
+     $[45] = t28;
+@@ -315,16 +317,16 @@ const Sidebar = (t0) => {
+   if ($[46] !== handlePersistHeaders || $[47] !== shouldPersistHeaders || $[48] !== showPersistHeadersSettings) {
+     t29 = showPersistHeadersSettings ? /* @__PURE__ */ jsxs("div", { className: "graphiql-dialog-section", children: [
+       /* @__PURE__ */ jsxs("div", { children: [
+-        /* @__PURE__ */ jsx("div", { className: "graphiql-dialog-section-title", children: "Persist headers" }),
++        /* @__PURE__ */ jsx("div", { className: "graphiql-dialog-section-title", children: moleapiTranslate("Persist headers") }),
+         /* @__PURE__ */ jsxs("div", { className: "graphiql-dialog-section-caption", children: [
+-          "Save headers upon reloading.",
++          moleapiTranslate("Save headers upon reloading."),
+           " ",
+-          /* @__PURE__ */ jsx("span", { className: "graphiql-warning-text", children: "Only enable if you trust this device." })
++          /* @__PURE__ */ jsx("span", { className: "graphiql-warning-text", children: moleapiTranslate("Only enable if you trust this device.") })
+         ] })
+       ] }),
+       /* @__PURE__ */ jsxs(ButtonGroup, { children: [
+-        /* @__PURE__ */ jsx(Button, { type: "button", id: "enable-persist-headers", className: cn(shouldPersistHeaders && "active"), "data-value": "true", onClick: handlePersistHeaders, children: "On" }),
+-        /* @__PURE__ */ jsx(Button, { type: "button", id: "disable-persist-headers", className: cn(!shouldPersistHeaders && "active"), onClick: handlePersistHeaders, children: "Off" })
++        /* @__PURE__ */ jsx(Button, { type: "button", id: "enable-persist-headers", className: cn(shouldPersistHeaders && "active"), "data-value": "true", onClick: handlePersistHeaders, children: moleapiTranslate("On") }),
++        /* @__PURE__ */ jsx(Button, { type: "button", id: "disable-persist-headers", className: cn(!shouldPersistHeaders && "active"), onClick: handlePersistHeaders, children: moleapiTranslate("Off") })
+       ] })
+     ] }) : null;
+     $[46] = handlePersistHeaders;
+@@ -338,13 +340,13 @@ const Sidebar = (t0) => {
+   if ($[50] !== forcedTheme || $[51] !== handleChangeTheme || $[52] !== theme) {
+     t30 = !forcedTheme && /* @__PURE__ */ jsxs("div", { className: "graphiql-dialog-section", children: [
+       /* @__PURE__ */ jsxs("div", { children: [
+-        /* @__PURE__ */ jsx("div", { className: "graphiql-dialog-section-title", children: "Theme" }),
+-        /* @__PURE__ */ jsx("div", { className: "graphiql-dialog-section-caption", children: "Adjust how the interface appears." })
++        /* @__PURE__ */ jsx("div", { className: "graphiql-dialog-section-title", children: moleapiTranslate("Theme") }),
++        /* @__PURE__ */ jsx("div", { className: "graphiql-dialog-section-caption", children: moleapiTranslate("Adjust how the interface appears.") })
+       ] }),
+       /* @__PURE__ */ jsxs(ButtonGroup, { children: [
+-        /* @__PURE__ */ jsx(Button, { type: "button", className: cn(theme === null && "active"), onClick: handleChangeTheme, children: "System" }),
+-        /* @__PURE__ */ jsx(Button, { type: "button", className: cn(theme === "light" && "active"), "data-theme": "light", onClick: handleChangeTheme, children: "Light" }),
+-        /* @__PURE__ */ jsx(Button, { type: "button", className: cn(theme === "dark" && "active"), "data-theme": "dark", onClick: handleChangeTheme, children: "Dark" })
++        /* @__PURE__ */ jsx(Button, { type: "button", className: cn(theme === null && "active"), onClick: handleChangeTheme, children: moleapiTranslate("System") }),
++        /* @__PURE__ */ jsx(Button, { type: "button", className: cn(theme === "light" && "active"), "data-theme": "light", onClick: handleChangeTheme, children: moleapiTranslate("Light") }),
++        /* @__PURE__ */ jsx(Button, { type: "button", className: cn(theme === "dark" && "active"), "data-theme": "dark", onClick: handleChangeTheme, children: moleapiTranslate("Dark") })
+       ] })
+     ] });
+     $[50] = forcedTheme;
+@@ -357,8 +359,8 @@ const Sidebar = (t0) => {
+   let t31;
+   if ($[54] === Symbol.for("react.memo_cache_sentinel")) {
+     t31 = /* @__PURE__ */ jsxs("div", { children: [
+-      /* @__PURE__ */ jsx("div", { className: "graphiql-dialog-section-title", children: "Clear storage" }),
+-      /* @__PURE__ */ jsx("div", { className: "graphiql-dialog-section-caption", children: "Remove all locally stored data and start fresh." })
++      /* @__PURE__ */ jsx("div", { className: "graphiql-dialog-section-title", children: moleapiTranslate("Clear storage") }),
++      /* @__PURE__ */ jsx("div", { className: "graphiql-dialog-section-caption", children: moleapiTranslate("Remove all locally stored data and start fresh.") })
+     ] });
+     $[54] = t31;
+   } else {
+@@ -368,9 +370,9 @@ const Sidebar = (t0) => {
+   let t33;
+   if ($[55] !== clearStorageStatus) {
+     t33 = {
+-      success: "Cleared data",
+-      error: "Failed"
+-    }[clearStorageStatus] || "Clear data";
++      success: moleapiTranslate("Cleared data"),
++      error: moleapiTranslate("Failed")
++    }[clearStorageStatus] || moleapiTranslate("Clear data");
+     $[55] = clearStorageStatus;
+     $[56] = t33;
+   } else {
+diff --git a/node_modules/graphiql/dist/ui/toolbar.js b/node_modules/graphiql/dist/ui/toolbar.js
+index 98fabb5..ba05567 100644
+--- a/node_modules/graphiql/dist/ui/toolbar.js
++++ b/node_modules/graphiql/dist/ui/toolbar.js
+@@ -1,5 +1,6 @@
++import { moleapiTranslate, useMoleapiLanguage, moleapiMemoCache as c } from "@graphiql/react";
+ import { jsx, jsxs, Fragment } from "react/jsx-runtime";
+-import { c } from "react-compiler-runtime";
++
+ import { useGraphiQLActions, ToolbarButton, KEY_MAP, PrettifyIcon, MergeIcon, CopyIcon } from "@graphiql/react";
+ const DefaultToolbarRenderProps = (t0) => {
+   const $ = c(4);
+@@ -25,6 +26,7 @@ const DefaultToolbarRenderProps = (t0) => {
+   return t1;
+ };
+ const GraphiQLToolbar = (t0) => {
++  useMoleapiLanguage();
+   const $ = c(14);
+   const {
+     children: t1
+@@ -48,7 +50,7 @@ const GraphiQLToolbar = (t0) => {
+   }
+   let t3;
+   if ($[1] !== prettifyEditors) {
+-    t3 = /* @__PURE__ */ jsx(ToolbarButton, { onClick: prettifyEditors, label: `Prettify query (${KEY_MAP.prettify.key})`, children: t2 });
++    t3 = /* @__PURE__ */ jsx(ToolbarButton, { onClick: prettifyEditors, label: moleapiTranslate("Prettify query ({{value0}})", { value0: KEY_MAP.prettify.key }), children: t2 });
+     $[1] = prettifyEditors;
+     $[2] = t3;
+   } else {
+@@ -64,7 +66,7 @@ const GraphiQLToolbar = (t0) => {
+   }
+   let t5;
+   if ($[4] !== mergeQuery) {
+-    t5 = /* @__PURE__ */ jsx(ToolbarButton, { onClick: mergeQuery, label: `Merge fragments into query (${KEY_MAP.mergeFragments.key})`, children: t4 });
++    t5 = /* @__PURE__ */ jsx(ToolbarButton, { onClick: mergeQuery, label: moleapiTranslate("Merge fragments into query ({{value0}})", { value0: KEY_MAP.mergeFragments.key }), children: t4 });
+     $[4] = mergeQuery;
+     $[5] = t5;
+   } else {
+@@ -80,7 +82,7 @@ const GraphiQLToolbar = (t0) => {
+   }
+   let t7;
+   if ($[7] !== copyQuery) {
+-    t7 = /* @__PURE__ */ jsx(ToolbarButton, { onClick: copyQuery, label: `Copy query (${KEY_MAP.copyQuery.key})`, children: t6 });
++    t7 = /* @__PURE__ */ jsx(ToolbarButton, { onClick: copyQuery, label: moleapiTranslate("Copy query ({{value0}})", { value0: KEY_MAP.copyQuery.key }), children: t6 });
+     $[7] = copyQuery;
+     $[8] = t7;
+   } else {

@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../shared/i18n";
 import { useEffect, useState } from "react";
 import { Badge, Button, Callout, Flex, Tabs, Text } from "@radix-ui/themes";
 import {
@@ -17,6 +18,7 @@ import { methodMode } from "./types";
 import ProtoSourceDialog from "./ProtoSourceDialog";
 import GrpcEvents from "./GrpcEvents";
 export default function GrpcWorkbench() {
+  useLanguage();
   const state = useWorkbench();
   const source = useGrpcSchema();
   const { session, events, dropped, error, busy, sending, send, close } =
@@ -59,7 +61,7 @@ export default function GrpcWorkbench() {
   }
   if (!grpc) return null;
   return (
-    <section className="grpc-workbench" aria-label="gRPC 客户端">
+    <section className="grpc-workbench" aria-label={t("gRPC 客户端")}>
       <div className="grpc-definition-toolbar">
         <Flex gap="3" align="center" wrap="wrap">
           <Choice
@@ -70,10 +72,10 @@ export default function GrpcWorkbench() {
                 protocol: { ...grpc, service: "", method: "" },
               })
             }
-            label="gRPC 服务定义"
+            label={t("gRPC 服务定义")}
             disabled={active}
             options={[
-              { value: "none", label: "选择服务定义" },
+              { value: "none", label: t("选择服务定义") },
               ...(state.draft?.data.specifications || [])
                 .filter((item) => item.kind === "protobuf")
                 .map((item) => ({ value: item.id, label: item.name })),
@@ -87,7 +89,7 @@ export default function GrpcWorkbench() {
             onClick={() => setSourceOpen(true)}
           >
             <FileCode size={14} />
-            {source.specification ? "Proto 文件" : "导入 Proto"}
+            {source.specification ? t("Proto 文件") : t("导入 Proto")}
           </Button>
           <Button
             size="1"
@@ -104,10 +106,10 @@ export default function GrpcWorkbench() {
         <Flex gap="3" align="center" wrap="wrap" mt="3">
           <Choice
             value={grpc.service || "none"}
-            label="gRPC 服务"
+            label={t("gRPC 服务")}
             disabled={active || !source.schema}
             options={[
-              { value: "none", label: "选择服务" },
+              { value: "none", label: t("选择服务") },
               ...(source.schema?.services || []).map((item) => ({
                 value: item.name,
                 label: item.name,
@@ -119,10 +121,10 @@ export default function GrpcWorkbench() {
           />
           <Choice
             value={grpc.method || "none"}
-            label="gRPC 方法"
+            label={t("gRPC 方法")}
             disabled={active || !service}
             options={[
-              { value: "none", label: "选择方法" },
+              { value: "none", label: t("选择方法") },
               ...(service?.methods || []).map((item) => ({
                 value: item.name,
                 label: item.name,
@@ -151,7 +153,7 @@ export default function GrpcWorkbench() {
               onClick={() => void close()}
             >
               <Square size={14} />
-              {busy ? "取消调用" : "停止"}
+              {busy ? t("取消调用") : t("停止")}
             </Button>
           )}
         </Flex>
@@ -168,17 +170,16 @@ export default function GrpcWorkbench() {
       )}
       <Tabs.Root value={tab} onValueChange={setTab} className="grpc-tabs">
         <Tabs.List>
-          <Tabs.Trigger value="message">请求消息</Tabs.Trigger>
-          <Tabs.Trigger value="events">
-            消息与状态 <span className="count">{events.length}</span>
+          <Tabs.Trigger value="message">{t("请求消息")}</Tabs.Trigger>
+          <Tabs.Trigger value="events"> {t("消息与状态")} <span className="count">{events.length}</span>
           </Tabs.Trigger>
-          <Tabs.Trigger value="definition">方法定义</Tabs.Trigger>
+          <Tabs.Trigger value="definition">{t("方法定义")}</Tabs.Trigger>
         </Tabs.List>
         <Tabs.Content value="message">
           <div className="grpc-input-toolbar">
             <Text size="1" color="gray" className="mono">
               {method?.input_type ||
-                "选择定义、服务和方法后，输入 Protobuf JSON 请求。"}
+                t("选择定义、服务和方法后，输入 Protobuf JSON 请求。")}
             </Text>
             <Flex gap="2" wrap="wrap">
               <Button
@@ -196,9 +197,7 @@ export default function GrpcWorkbench() {
                   })
                 }
               >
-                <Braces size={14} />
-                插入模板
-              </Button>
+                <Braces size={14} /> {t("插入模板")} </Button>
               {method?.client_streaming && (
                 <>
                   <Button
@@ -212,9 +211,7 @@ export default function GrpcWorkbench() {
                       })
                     }
                   >
-                    <Send size={14} />
-                    发送消息
-                  </Button>
+                    <Send size={14} /> {t("发送消息")} </Button>
                   <Button
                     size="1"
                     color="gray"
@@ -225,7 +222,7 @@ export default function GrpcWorkbench() {
                     onClick={() => void halfClose()}
                   >
                     <StepForward size={14} />
-                    {halfClosed ? "发送已结束" : "结束发送"}
+                    {halfClosed ? t("发送已结束") : t("结束发送")}
                   </Button>
                 </>
               )}
@@ -237,11 +234,9 @@ export default function GrpcWorkbench() {
             dark={state.dark}
             jsonMode
             height="100%"
-            label="gRPC 请求消息"
+            label={t("gRPC 请求消息")}
           />
-          <Text size="1" color="gray" className="grpc-input-help">
-            首次调用发送当前消息；客户端流和双向流可继续发送，结束发送后仍可接收响应。
-          </Text>
+          <Text size="1" color="gray" className="grpc-input-help"> {t("首次调用发送当前消息；客户端流和双向流可继续发送，结束发送后仍可接收响应。")} </Text>
         </Tabs.Content>
         <Tabs.Content value="events">
           <GrpcEvents
@@ -272,12 +267,10 @@ export default function GrpcWorkbench() {
               jsonMode
               readOnly
               height="100%"
-              label="gRPC 方法定义"
+              label={t("gRPC 方法定义")}
             />
           ) : (
-            <Text color="gray">
-              导入 Proto 或读取 Server Reflection，然后选择服务与方法。
-            </Text>
+            <Text color="gray"> {t("导入 Proto 或读取 Server Reflection，然后选择服务与方法。")} </Text>
           )}
         </Tabs.Content>
       </Tabs.Root>

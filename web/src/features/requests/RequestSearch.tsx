@@ -1,8 +1,10 @@
+import { t, useLanguage } from "../../shared/i18n";
 import { requestLabel } from "../../shared/model";
 import { Button, Text, TextField } from "@radix-ui/themes";
 import { Search } from "lucide-react";
 import { useWorkbench } from "../workbench/context";
 export default function RequestSearch() {
+  useLanguage();
   const {
     draft,
     content,
@@ -16,8 +18,8 @@ export default function RequestSearch() {
     <>
       <TextField.Root
         autoFocus
-        aria-label="搜索请求"
-        placeholder="名称、方法或 URL…"
+        aria-label={t("搜索请求")}
+        placeholder={t("名称、方法或 URL…")}
         value={content}
         onChange={(e) => setContent(e.target.value)}
       >

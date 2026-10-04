@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../shared/i18n";
 import { useEffect, useState } from "react";
 import {
   Badge,
@@ -13,17 +14,17 @@ import { messageContent } from "./events";
 import type { ProtocolEvent } from "./types";
 const eventLabel = (event: ProtocolEvent) => {
   switch (event.message.kind) {
-    case "a2a_ready": return "A2A 就绪";
-    case "a2a_result": return event.message.method + " 结果";
-    case "a2a_stream": return event.message.method + " 事件";
-    case "a2a_error": return event.message.method + " 错误";
-    case "a2a_finished": return event.message.method + " 完成";
-    case "mcp_initialized": return "MCP 初始化";
-    case "mcp_capabilities": return "MCP 能力列表";
-    case "mcp_result": return event.message.method + " 结果";
-    case "mcp_error": return event.message.method + " 错误";
+    case "a2a_ready": return t("A2A 就绪");
+    case "a2a_result": return t("{{method}} 结果", { method: event.message.method });
+    case "a2a_stream": return t("{{method}} 事件", { method: event.message.method });
+    case "a2a_error": return t("{{method}} 错误", { method: event.message.method });
+    case "a2a_finished": return t("{{method}} 完成", { method: event.message.method });
+    case "mcp_initialized": return t("MCP 初始化");
+    case "mcp_capabilities": return t("MCP 能力列表");
+    case "mcp_result": return t("{{method}} 结果", { method: event.message.method });
+    case "mcp_error": return t("{{method}} 错误", { method: event.message.method });
     case "mcp_notification": return event.message.method;
-    case "mcp_callback": return event.message.method + " 回调";
+    case "mcp_callback": return t("{{method}} 回调", { method: event.message.method });
     case "mqtt_message":
       return event.message.topic;
     case "mqtt_status":
@@ -33,17 +34,17 @@ const eventLabel = (event: ProtocolEvent) => {
     case "socketio_ack":
       return `ACK ${event.message.status}`;
     case "grpc_message":
-      return event.direction === "incoming" ? "响应消息" : "请求消息";
+      return event.direction === "incoming" ? t("响应消息") : t("请求消息");
     case "grpc_metadata":
       return event.message.phase === "headers" ? "Headers" : "Trailers";
     case "grpc_status":
       return `${event.message.code} ${event.message.name}`;
     case "state":
-      return "调用状态";
+      return t("调用状态");
     case "script_log":
-      return "脚本日志";
+      return t("脚本日志");
     case "script_test":
-      return "脚本断言";
+      return t("脚本断言");
     default:
       return event.message.kind;
   }
@@ -65,6 +66,7 @@ export default function SessionEventPane({
   onReply?: (event: ProtocolEvent) => void;
   canReply?: (event: ProtocolEvent) => boolean;
 }) {
+  useLanguage();
   const [selected, setSelected] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [direction, setDirection] = useState("all");
@@ -86,8 +88,8 @@ export default function SessionEventPane({
     <div className="grpc-event-pane">
       <Flex gap="3" className="grpc-event-controls">
         <TextField.Root
-          aria-label={`搜索 ${protocolLabel} 消息`}
-          placeholder="搜索消息…"
+          aria-label={t("搜索 {{value0}} 消息", { value0: protocolLabel })}
+          placeholder={t("搜索消息…")}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         >
@@ -98,28 +100,26 @@ export default function SessionEventPane({
         <Choice
           value={direction}
           onChange={setDirection}
-          label="消息方向"
+          label={t("消息方向")}
           options={[
-            { value: "all", label: "全部" },
-            { value: "incoming", label: "接收" },
-            { value: "outgoing", label: "发送" },
-            { value: "system", label: "系统" },
+            { value: "all", label: t("全部") },
+            { value: "incoming", label: t("接收") },
+            { value: "outgoing", label: t("发送") },
+            { value: "system", label: t("系统") },
           ]}
         />
       </Flex>
       {dropped > 0 && (
-        <Text size="1" color="gray">
-          已错过或淘汰 {dropped} 条事件，当前保留最近 256 条 / 8 MiB。
-        </Text>
+        <Text size="1" color="gray"> {t("已错过或淘汰 {{count}} 条事件，当前保留最近 256 条 / 8 MiB。", { count: dropped })} </Text>
       )}
       <div className="protocol-events grpc-events">
         <ScrollArea className="protocol-event-list" type="auto">
-          <div role="list" aria-label={`${protocolLabel} 调用事件`}>
+          <div role="list" aria-label={t("{{value0}} 调用事件", { value0: protocolLabel })}>
             {!filtered.length && (
               <Text size="2" color="gray">
                 {events.length
-                  ? "没有匹配的事件。"
-                  : "调用后查看消息、Metadata 和状态。"}
+                  ? t("没有匹配的事件。")
+                  : t("调用后查看消息、Metadata 和状态。")}
               </Text>
             )}
             {filtered.map((event) => (
@@ -131,11 +131,11 @@ export default function SessionEventPane({
                 >
                   <span className="mono">{event.cursor}</span>
                   {event.direction === "incoming" ? (
-                    <ArrowDownLeft size={14} aria-label="接收" />
+                    <ArrowDownLeft size={14} aria-label={t("接收")} />
                   ) : event.direction === "outgoing" ? (
-                    <ArrowUpRight size={14} aria-label="发送" />
+                    <ArrowUpRight size={14} aria-label={t("发送")} />
                   ) : (
-                    <span aria-label="系统">·</span>
+                    <span aria-label={t("系统")}>·</span>
                   )}
                   <span className="protocol-event-preview">
                     <span>{eventLabel(event)}</span>
@@ -166,7 +166,7 @@ export default function SessionEventPane({
                     disabled={canReply ? !canReply(picked) : false}
                     onClick={() => onReply(picked)}
                   >
-                    {picked.message.kind === "mcp_callback" ? (canReply && !canReply(picked) ? "回调已结束" : "回复回调") : (canReply && !canReply(picked) ? "已回复 ACK" : "回复 ACK")}
+                    {picked.message.kind === "mcp_callback" ? (canReply && !canReply(picked) ? t("回调已结束") : t("回复回调")) : (canReply && !canReply(picked) ? t("已回复 ACK") : t("回复 ACK"))}
                   </Button>
                 )}
               <Editor
@@ -175,7 +175,7 @@ export default function SessionEventPane({
                 dark={dark}
                 readOnly
                 height="100%"
-                label={`${protocolLabel} 事件内容`}
+                label={t("{{value0}} 事件内容", { value0: protocolLabel })}
               />
             </>
           )}

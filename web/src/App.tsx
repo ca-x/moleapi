@@ -1,3 +1,4 @@
+import { t, useLanguage } from "./shared/i18n";
 import { Button, Callout, Heading, Text, Theme } from "@radix-ui/themes";
 import { Toaster } from "sonner";
 import AuthScreen from "./features/auth/AuthScreen";
@@ -14,6 +15,7 @@ import { WorkbenchContext } from "./features/workbench/context";
 import { useWorkbenchController } from "./features/workbench/useWorkbenchController";
 import { safeMessage } from "./shared/model";
 export default function App() {
+  useLanguage();
   const state = useWorkbenchController();
   const { dark, status, authenticated, login } = state;
   return (
@@ -32,15 +34,15 @@ export default function App() {
       {status.isPending ? (
         <main className="boot-screen" role="status">
           <img src="/logo.png" alt="MoleAPI" width="64" height="64" />
-          <Text>正在打开工作台…</Text>
+          <Text>{t("正在打开工作台…")}</Text>
         </main>
       ) : status.error ? (
         <main className="boot-screen">
-          <Heading size="5">无法连接工作台</Heading>
+          <Heading size="5">{t("无法连接工作台")}</Heading>
           <Callout.Root color="red">
             <Callout.Text>{safeMessage(status.error)}</Callout.Text>
           </Callout.Root>
-          <Button onClick={() => status.refetch()}>重试</Button>
+          <Button onClick={() => status.refetch()}>{t("重试")}</Button>
         </main>
       ) : !authenticated && status.data ? (
         <AuthScreen status={status.data} onLogin={login} />

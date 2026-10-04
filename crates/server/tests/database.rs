@@ -84,6 +84,45 @@ async fn identical_storage_auth_cas_tests_on_every_configured_database() {
         let (status, w) = call(&router, "POST", "/api/workspaces", Some(&a), Some(body)).await;
         assert_eq!(status, StatusCode::OK, "{w}");
         assert_eq!(w["revision"], 1);
+        // Run real callback persistence/privacy/CAS/cascade on every configured engine.
+        let (status, receiver) = call(&router, "POST", "/api/workspaces/shared-id/webhooks", Some(&a),
+            Some(json!({"name":"Database receiver","response":{"status":201,"body":"{\"received\":true}","headers":[]}}))).await;
+        assert_eq!(status, StatusCode::OK, "{receiver}");
+        let receiver_id = receiver["id"].as_str().unwrap();
+        let receiver_path = receiver["receiver_path"].as_str().unwrap();
+        assert_eq!(
+            call(
+                &router_again,
+                "POST",
+                receiver_path,
+                None,
+                Some(json!({"password":"database-private","copied":"database-private"}))
+            )
+            .await
+            .0,
+            StatusCode::CREATED
+        );
+        let capture_path = format!("/api/webhooks/{receiver_id}/captures");
+        let (status, captures) = call(&router, "GET", &capture_path, Some(&a), None).await;
+        assert_eq!(status, StatusCode::OK, "{captures}");
+        assert_eq!(captures["captures"].as_array().unwrap().len(), 1);
+        assert!(!captures.to_string().contains("database-private"));
+        assert_eq!(
+            call(&router, "GET", &capture_path, Some(&b), None).await.0,
+            StatusCode::NOT_FOUND
+        );
+        let (status, stale) = call(
+            &router,
+            "PUT",
+            &format!("/api/webhooks/{receiver_id}"),
+            Some(&a),
+            Some(
+                json!({"name":"Stale receiver","active":false,"response":{},"expected_revision":1}),
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT, "{stale}");
+
         assert_eq!(
             call(
                 &router_again,
@@ -207,6 +246,16 @@ async fn identical_storage_auth_cas_tests_on_every_configured_database() {
             .await
             .0,
             StatusCode::OK
+        );
+        assert_eq!(
+            call(&router, "GET", &capture_path, Some(&a), None).await.0,
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            call(&router, "POST", receiver_path, None, Some(json!({})))
+                .await
+                .0,
+            StatusCode::NOT_FOUND
         );
         let (recreated_status, recreated) = call(
             &router,

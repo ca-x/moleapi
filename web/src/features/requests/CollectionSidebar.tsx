@@ -1,3 +1,4 @@
+import { t, useLanguage, message } from "../../shared/i18n";
 import { requestLabel } from "../../shared/model";
 import {
   Button,
@@ -20,6 +21,7 @@ import { id } from "../../shared/model";
 import { useWorkbench } from "../workbench/context";
 
 export default function CollectionSidebar() {
+  useLanguage();
   const state = useWorkbench();
   const {
     draft,
@@ -42,15 +44,13 @@ export default function CollectionSidebar() {
   return (
     <aside
       className={`collection-sidebar ${sidebar ? "open" : ""}`}
-      aria-label="集合目录"
+      aria-label={t("集合目录")}
       id="collection-sidebar"
     >
       <div className="sidebar-heading">
-        <Text weight="medium" size="2">
-          集合
-        </Text>
+        <Text weight="medium" size="2"> {t("集合")} </Text>
         <ToolButton
-          label="新建集合"
+          label={t("新建集合")}
           disabled={!draft}
           onClick={() => openModal("new-collection")}
         >
@@ -59,8 +59,8 @@ export default function CollectionSidebar() {
       </div>
       <TextField.Root
         className="collection-search"
-        placeholder="筛选请求…"
-        aria-label="筛选请求"
+        placeholder={t("筛选请求…")}
+        aria-label={t("筛选请求")}
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
       >
@@ -80,7 +80,7 @@ export default function CollectionSidebar() {
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger>
                   <Button
-                    aria-label={`${collection.name} 操作`}
+                    aria-label={t("{{value0}} 操作", { value0: collection.name })}
                     variant="ghost"
                     color="gray"
                     size="1"
@@ -89,24 +89,20 @@ export default function CollectionSidebar() {
                   </Button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content>
-                  <DropdownMenu.Item onSelect={() => addRequest(collection.id)}>
-                    新建请求
-                  </DropdownMenu.Item>
+                  <DropdownMenu.Item onSelect={() => addRequest(collection.id)}> {t("新建请求")} </DropdownMenu.Item>
                   <DropdownMenu.Item
                     onSelect={() => {
                       setView("runner");
                       setRunCollection(collection.id);
                     }}
-                  >
-                    运行集合
-                  </DropdownMenu.Item>
+                  > {t("运行集合")} </DropdownMenu.Item>
                   <DropdownMenu.Separator />
                   <DropdownMenu.Item
                     color="red"
                     onSelect={() =>
                       setGuard({
-                        title: "删除集合",
-                        description: `删除「${collection.name}」及其请求。保存后生效。`,
+                        title: message("删除集合"),
+                        description: message("删除「{{value0}}」及其请求。保存后生效。", { value0: collection.name }),
                         action: () =>
                           updateData((data) => ({
                             ...data,
@@ -116,9 +112,7 @@ export default function CollectionSidebar() {
                           })),
                       })
                     }
-                  >
-                    删除集合
-                  </DropdownMenu.Item>
+                  > {t("删除集合")} </DropdownMenu.Item>
                 </DropdownMenu.Content>
               </DropdownMenu.Root>
             </Flex>
@@ -147,7 +141,7 @@ export default function CollectionSidebar() {
                     >
                       {requestLabel(r)}
                     </span>
-                    <span className="truncate">{r.name || "未命名请求"}</span>
+                    <span className="truncate">{r.name || t("未命名请求")}</span>
                   </button>
                   <DropdownMenu.Root>
                     <DropdownMenu.Trigger>
@@ -155,7 +149,7 @@ export default function CollectionSidebar() {
                         size="1"
                         variant="ghost"
                         color="gray"
-                        aria-label={`${r.name} 请求操作`}
+                        aria-label={t("{{value0}} 请求操作", { value0: r.name })}
                       >
                         <MoreHorizontal size={13} />
                       </Button>
@@ -166,7 +160,7 @@ export default function CollectionSidebar() {
                           const copy = {
                             ...structuredClone(r),
                             id: id(),
-                            name: `${r.name} 副本`,
+                            name: t("{{value0}} 副本", { value0: r.name }),
                           };
                           updateData((data) => ({
                             ...data,
@@ -178,15 +172,13 @@ export default function CollectionSidebar() {
                           }));
                           setRequestId(copy.id);
                         }}
-                      >
-                        复制请求
-                      </DropdownMenu.Item>
+                      > {t("复制请求")} </DropdownMenu.Item>
                       <DropdownMenu.Item
                         color="red"
                         onSelect={() =>
                           setGuard({
-                            title: "删除请求",
-                            description: `删除「${r.name}」，保存后生效。`,
+                            title: message("删除请求"),
+                            description: message("删除「{{value0}}」，保存后生效。", { value0: r.name }),
                             action: () => {
                               updateData((data) => ({
                                 ...data,
@@ -201,9 +193,7 @@ export default function CollectionSidebar() {
                             },
                           })
                         }
-                      >
-                        删除请求
-                      </DropdownMenu.Item>
+                      > {t("删除请求")} </DropdownMenu.Item>
                     </DropdownMenu.Content>
                   </DropdownMenu.Root>
                 </div>
@@ -215,27 +205,20 @@ export default function CollectionSidebar() {
               className="add-request"
               onClick={() => addRequest(collection.id)}
             >
-              <Plus size={13} />
-              新建请求
-            </Button>
+              <Plus size={13} /> {t("新建请求")} </Button>
           </div>
         ))}
       </ScrollArea>
       <div className="sidebar-bottom">
         <Text size="1" color="gray">
-          {draft?.data.collections.reduce((n, c) => n + c.requests.length, 0) ||
-            0}{" "}
-          个请求
-        </Text>
+          {t("{{count}} 个请求", { count: draft?.data.collections.reduce((n, c) => n + c.requests.length, 0) || 0 })} </Text>
         <Button
           size="1"
           color="gray"
           variant="ghost"
           onClick={() => openModal("import")}
         >
-          <Upload size={13} />
-          导入
-        </Button>
+          <Upload size={13} /> {t("导入")} </Button>
       </div>
     </aside>
   );

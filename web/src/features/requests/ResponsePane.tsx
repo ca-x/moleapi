@@ -1,3 +1,4 @@
+import { t, useLanguage, liveTranslation } from "../../shared/i18n";
 import ScriptConsole from "../scripts/ScriptConsole";
 import { useState } from "react";
 import {
@@ -30,6 +31,7 @@ export function ResponsePane({
   onExample?: () => void;
   fill?: boolean;
 }) {
+  useLanguage();
   const [pretty, setPretty] = useState(true);
   let content = response?.body || "";
   let isJson = false;
@@ -50,21 +52,19 @@ export function ResponsePane({
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(response?.body || "");
-      toast.success("已复制响应");
+      toast.success(liveTranslation("已复制响应"));
     } catch {
-      toast.error("无法访问剪贴板，请在编辑器中选择文本复制。");
+      toast.error(liveTranslation("无法访问剪贴板，请在编辑器中选择文本复制。"));
     }
   };
   return (
     <section
       className={`response-pane ${fill ? "response-pane-fill" : ""}`}
-      aria-label="响应面板"
+      aria-label={t("响应面板")}
     >
       <div className="response-toolbar">
         <Flex gap="3" align="center">
-          <Text weight="medium" size="2">
-            响应
-          </Text>
+          <Text weight="medium" size="2"> {t("响应")} </Text>
           {response && (
             <>
               <Badge color={response.status < 400 ? "green" : "red"}>
@@ -81,14 +81,12 @@ export function ResponsePane({
         </Flex>
         {response && (
           <Flex gap="3">
-            <ToolButton label="复制响应" onClick={copy}>
+            <ToolButton label={t("复制响应")} onClick={copy}>
               <Copy size={15} />
             </ToolButton>
             {onExample && (
               <Button variant="ghost" size="1" color="gray" onClick={onExample}>
-                <Save size={14} />
-                保存示例
-              </Button>
+                <Save size={14} /> {t("保存示例")} </Button>
             )}
           </Flex>
         )}
@@ -99,17 +97,13 @@ export function ResponsePane({
         </Callout.Root>
       )}
       {busy && (
-        <div className="response-loading" role="status">
-          正在等待响应…
-        </div>
+        <div className="response-loading" role="status"> {t("正在等待响应…")} </div>
       )}
       {!response && !error && !busy && (
         <div className="response-empty">
           <Send size={30} strokeWidth={1.3} />
-          <Heading size="3">发送请求，查看响应</Heading>
-          <Text size="2" color="gray">
-            状态、耗时、响应内容和测试结果会显示在这里。
-          </Text>
+          <Heading size="3">{t("发送请求，查看响应")}</Heading>
+          <Text size="2" color="gray"> {t("状态、耗时、响应内容和测试结果会显示在这里。")} </Text>
           <Text size="1" color="gray">
             Ctrl / ⌘ + Enter
           </Text>
@@ -118,32 +112,25 @@ export function ResponsePane({
       {response && (
         <Tabs.Root defaultValue="body">
           <Tabs.List>
-            <Tabs.Trigger value="body">响应体</Tabs.Trigger>
-            <Tabs.Trigger value="headers">
-              响应头 <span className="count">{response.headers.length}</span>
+            <Tabs.Trigger value="body">{t("响应体")}</Tabs.Trigger>
+            <Tabs.Trigger value="headers"> {t("响应头")} <span className="count">{response.headers.length}</span>
             </Tabs.Trigger>
-            <Tabs.Trigger value="tests">
-              测试 <span className="count">{response.tests.length}</span>
+            <Tabs.Trigger value="tests"> {t("测试")} <span className="count">{response.tests.length}</span>
             </Tabs.Trigger>
-            <Tabs.Trigger value="logs">
-              控制台 <span className="count">{response.logs?.length || 0}</span>
+            <Tabs.Trigger value="logs"> {t("控制台")} <span className="count">{response.logs?.length || 0}</span>
             </Tabs.Trigger>
           </Tabs.List>
           <Tabs.Content value="logs">
             <ScriptConsole logs={response.logs || []} />
             {!!response.request_updates?.length && (
               <>
-                <Text as="p" size="2" weight="medium" mt="4">
-                  脚本修改的本次请求
-                </Text>
-                <Text as="p" size="1" color="gray">
-                  以下修改仅用于本次执行。
-                </Text>
+                <Text as="p" size="2" weight="medium" mt="4"> {t("脚本修改的本次请求")} </Text>
+                <Text as="p" size="1" color="gray"> {t("以下修改仅用于本次执行。")} </Text>
                 <Table.Root>
                   <Table.Header>
                     <Table.Row>
-                      <Table.ColumnHeaderCell>字段</Table.ColumnHeaderCell>
-                      <Table.ColumnHeaderCell>执行值</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>{t("字段")}</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>{t("执行值")}</Table.ColumnHeaderCell>
                     </Table.Row>
                   </Table.Header>
                   <Table.Body>
@@ -166,7 +153,7 @@ export function ResponsePane({
                 {isJson
                   ? "JSON"
                   : response.body_base64
-                    ? "二进制 / Base64"
+                    ? t("二进制 / Base64")
                     : "Text"}
               </Text>
               <Button
@@ -175,12 +162,12 @@ export function ResponsePane({
                 color="gray"
                 onClick={() => setPretty(!pretty)}
               >
-                {pretty ? "查看原文" : "格式化"}
+                {pretty ? t("查看原文") : t("格式化")}
               </Button>
             </div>
             {response.truncated && (
               <Callout.Root color="amber">
-                <Callout.Text>响应超过预览限制，当前内容已截断。</Callout.Text>
+                <Callout.Text>{t("响应超过预览限制，当前内容已截断。")}</Callout.Text>
               </Callout.Root>
             )}
             <Editor
@@ -196,8 +183,8 @@ export function ResponsePane({
             <Table.Root>
               <Table.Header>
                 <Table.Row>
-                  <Table.ColumnHeaderCell>名称</Table.ColumnHeaderCell>
-                  <Table.ColumnHeaderCell>值</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell>{t("名称")}</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell>{t("值")}</Table.ColumnHeaderCell>
                 </Table.Row>
               </Table.Header>
               <Table.Body>
@@ -215,9 +202,7 @@ export function ResponsePane({
           <Tabs.Content value="tests">
             <div className="tests-list">
               {response.tests.length === 0 ? (
-                <Text color="gray" size="2">
-                  在「断言」中添加测试后重新发送请求。
-                </Text>
+                <Text color="gray" size="2"> {t("在「断言」中添加测试后重新发送请求。")} </Text>
               ) : (
                 response.tests.map((test) => (
                   <div className="test-result" key={test.id}>
@@ -230,12 +215,11 @@ export function ResponsePane({
                       <Text weight="medium" size="2">
                         {test.name}
                       </Text>
-                      <Text as="p" size="1" color="gray">
-                        期望 {test.expected} · 实际 {test.actual}
+                      <Text as="p" size="1" color="gray"> {t("期望")} {test.expected} {t("· 实际")} {test.actual}
                       </Text>
                     </div>
                     <Badge color={test.passed ? "green" : "red"}>
-                      {test.passed ? "通过" : "失败"}
+                      {test.passed ? t("通过") : t("失败")}
                     </Badge>
                   </div>
                 ))

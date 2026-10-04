@@ -1,0 +1,3 @@
+The embedded `monaco-zh-CN.json` message catalog is extracted from Monaco Editor 0.52.2's official Chinese NLS resources, copyright Microsoft Corporation, under the MIT license. The original license is preserved in `web/public/licenses/monaco-editor.txt` and shipped with the embedded frontend at `/licenses/monaco-editor.txt`. `tools/localization/monaco-catalog.cjs` reproduces the extraction with Babel from the pinned package.
+
+Application translations and the GraphiQL/CodeMirror adapters are maintained in this repository. Original upstream copyright/license notices remain in the dependency packages and patch contexts.

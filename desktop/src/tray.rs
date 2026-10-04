@@ -5,6 +5,27 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 
+struct TrayMenuItems<R: Runtime> {
+    show: MenuItem<R>,
+    hide: MenuItem<R>,
+    quit: MenuItem<R>,
+}
+
+pub fn set_language<R: Runtime>(app: &AppHandle<R>, language: &str) -> tauri::Result<()> {
+    let Some(menu) = app.try_state::<TrayMenuItems<R>>() else {
+        return Ok(());
+    };
+    let (show, hide, quit) = if language == "en" {
+        ("Show main window", "Hide main window", "Quit MoleAPI")
+    } else {
+        ("显示主窗口", "隐藏主窗口", "退出 MoleAPI")
+    };
+    menu.show.set_text(show)?;
+    menu.hide.set_text(hide)?;
+    menu.quit.set_text(quit)?;
+    Ok(())
+}
+
 pub fn show_main<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window("main") {
         // Each step is independent: a platform's unminimize failure must not
@@ -71,6 +92,7 @@ pub fn install<R: Runtime>(app: &App<R>) -> anyhow::Result<()> {
         .build(app)?;
     // Tauri retains a resource-table reference; managed state explicitly ties
     // our own handle to application lifetime as well.
+    app.manage(TrayMenuItems { show, hide, quit });
     app.manage(tray);
     Ok(())
 }

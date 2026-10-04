@@ -1,0 +1,11 @@
+# Application and documentation localization
+
+User2026-10-04 requires screenshots in README, multilingual README and application. Full parent feature goal remains active.
+
+Deliver complete Simplified Chinese and English UI, persistent selectable language, bilingual discoverable README and actual runtime screenshots. Use mature i18next/react-i18next, embedded catalogs, no runtime CDN/translation service, DOM mutation or handwritten source parsers. Immediate language switching covers labels/a11y/navigation/dialogs/toasts/validation/explanations. User-owned request names/descriptions/specifications/scripts/URLs/variables/responses/generated code are never translated or rewritten. Newly created sample display names may reflect selected language; stored data remains intact.
+
+Preference stored locally with denied-storage fallback; saved supported choice wins, then Chinese browser locale chooses zh-CN, otherwise en. Set document language/title. Desktop shares UI; native tray/menu language follows trusted explicit preference IPC/update, not frontend-only coverage. Exact third-party protocol errors remain original; local app-owned errors may translate. i18next interpolation/plurals for dynamic copy; stable source/semantic keys with deliberate separator settings. All English entries are genuine translations. AST migration may use mature Babel/TypeScript tools, but never replace user payload/script/source because it contains Chinese. Preserve drafts/focus/auth state when switching.
+
+Files: web/src/shared/i18n runtime/catalogs/tests, UI/settings/auth/main imports, web manifests and migration tooling. Root owns README variants/images and later agreed native tray IPC. Worker does not edit Rust or README.
+
+Acceptance: initialization/storage fallback and live-switch/a11y/no-data-mutation tests; complete catalogs, meaningful English screens, dynamic values; full frontend/typecheck/build, actual both-language browser workbench/protocol/environment/settings/auth and narrow light/dark checks. Native propagation source/build evidence scoped honestly. Real synthetic-data screenshots of compiled embedded hosted UI, equivalent Chinese/English install/database/client/Actions/status documentation. No local Docker or fabricated native screenshots.

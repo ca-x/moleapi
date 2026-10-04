@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../shared/i18n";
 import { Checkbox, Flex, Text, TextField } from "@radix-ui/themes";
 import { Choice, Field } from "../../shared/ui";
 import MqttPropertyEditor from "./MqttPropertyEditor";
@@ -11,6 +12,7 @@ export default function MqttConnection({
   onChange: (value: MqttConfig) => void;
   disabled: boolean;
 }) {
+  useLanguage();
   const change = (patch: Partial<MqttConfig>) =>
     onChange({ ...value, ...patch });
   const v5 = value.version === "5";
@@ -19,7 +21,7 @@ export default function MqttConnection({
       <Flex gap="3" wrap="wrap" align="end">
         <Choice
           value={value.version}
-          label="MQTT 版本"
+          label={t("MQTT 版本")}
           disabled={disabled}
           onChange={(version) => change({ version })}
           options={[
@@ -31,11 +33,11 @@ export default function MqttConnection({
           <TextField.Root
             value={value.client_id}
             disabled={disabled}
-            placeholder="留空为本次连接生成 ID"
+            placeholder={t("留空为本次连接生成 ID")}
             onChange={(event) => change({ client_id: event.target.value })}
           />
         </Field>
-        <Field label="Keep Alive（秒）">
+        <Field label={t("Keep Alive（秒）")}>
           <TextField.Root
             type="number"
             min="5"
@@ -55,7 +57,7 @@ export default function MqttConnection({
           />
           Clean Start / Session
         </label>
-        <Field label="Session Expiry（秒）">
+        <Field label={t("Session Expiry（秒）")}>
           <TextField.Root
             type="number"
             min="0"
@@ -67,9 +69,7 @@ export default function MqttConnection({
           />
         </Field>
       </Flex>
-      <Text size="1" color="gray">
-        持久会话使用固定 Client ID；留空生成的 ID 不会写入共享请求。
-      </Text>
+      <Text size="1" color="gray"> {t("持久会话使用固定 Client ID；留空生成的 ID 不会写入共享请求。")} </Text>
       <Flex gap="3" align="end" wrap="wrap">
         <label className="checkbox-label">
           <Checkbox
@@ -80,10 +80,8 @@ export default function MqttConnection({
                 reconnect: { ...value.reconnect, enabled: enabled === true },
               })
             }
-          />
-          自动重连
-        </label>
-        <Field label="最大重连次数">
+          /> {t("自动重连")} </label>
+        <Field label={t("最大重连次数")}>
           <TextField.Root
             type="number"
             min="1"
@@ -100,7 +98,7 @@ export default function MqttConnection({
             }
           />
         </Field>
-        <Field label="重连间隔（ms）">
+        <Field label={t("重连间隔（ms）")}>
           <TextField.Root
             type="number"
             min="100"
@@ -118,18 +116,14 @@ export default function MqttConnection({
           />
         </Field>
       </Flex>
-      <Text as="p" size="2" weight="medium">
-        连接 User Properties
-      </Text>
+      <Text as="p" size="2" weight="medium"> {t("连接 User Properties")} </Text>
       <MqttPropertyEditor
         value={value.user_properties}
         disabled={disabled || !v5}
         onChange={(user_properties) => change({ user_properties })}
-        label="连接属性"
+        label={t("连接属性")}
       />
-      <Text size="2" color="gray">
-        匿名连接使用 None；用户名／密码在上方鉴权中选择 Basic。
-      </Text>
+      <Text size="2" color="gray"> {t("匿名连接使用 None；用户名／密码在上方鉴权中选择 Basic。")} </Text>
     </div>
   );
 }

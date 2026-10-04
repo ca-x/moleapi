@@ -1,0 +1,88 @@
+diff --git a/node_modules/@graphiql/plugin-history/dist/components.js b/node_modules/@graphiql/plugin-history/dist/components.js
+index 43ec80d..44bd918 100644
+--- a/node_modules/@graphiql/plugin-history/dist/components.js
++++ b/node_modules/@graphiql/plugin-history/dist/components.js
+@@ -1,5 +1,6 @@
++import { moleapiTranslate, useMoleapiLanguage, moleapiMemoCache as c } from "@graphiql/react";
+ import { jsx, jsxs, Fragment } from "react/jsx-runtime";
+-import { c } from "react-compiler-runtime";
++
+ import { useState, useEffect, useRef } from "react";
+ import { Button, pick, useGraphiQL, cn, UnStyledButton, CloseIcon, Tooltip, PenIcon, StarFilledIcon, StarIcon, TrashIcon } from "@graphiql/react";
+ import { useHistory, useHistoryActions } from "./context.js";
+@@ -9,6 +10,7 @@ function handleDelete(items, deleteFromHistory) {
+   }
+ }
+ const History = () => {
++  useMoleapiLanguage();
+   const $ = c(16);
+   const all = useHistory();
+   const {
+@@ -49,16 +51,16 @@ const History = () => {
+   };
+   const hasFavorites = Boolean(favorites.length);
+   const hasItems = Boolean(items.length);
+-  const t2 = "History";
++  const t2 = moleapiTranslate("History");
+   const t3 = "graphiql-history";
+   const t4 = (clearStatus || hasItems) && /* @__PURE__ */ jsx(Button, { type: "button", state: clearStatus || void 0, disabled: !items.length, onClick: handleClearStatus, children: {
+-    success: "Cleared",
+-    error: "Failed to Clear"
+-  }[clearStatus] || "Clear" });
++    success: moleapiTranslate("Cleared"),
++    error: moleapiTranslate("Failed to Clear")
++  }[clearStatus] || moleapiTranslate("Clear") });
+   let t5;
+   if ($[3] !== t4) {
+     t5 = /* @__PURE__ */ jsxs("div", { className: "graphiql-history-header", children: [
+-      "History",
++      moleapiTranslate("History"),
+       t4
+     ] });
+     $[3] = t4;
+@@ -104,6 +106,7 @@ const History = () => {
+   return t9;
+ };
+ const HistoryItem = (props) => {
++  useMoleapiLanguage();
+   const $ = c(39);
+   const {
+     editLabel,
+@@ -270,14 +273,14 @@ const HistoryItem = (props) => {
+             });
+           }
+         }
+-      }, placeholder: "Type a label" }),
+-      /* @__PURE__ */ jsx(UnStyledButton, { type: "button", ref: buttonRef, onClick: handleSave, children: "Save" }),
++      }, placeholder: moleapiTranslate("Type a label") }),
++      /* @__PURE__ */ jsx(UnStyledButton, { type: "button", ref: buttonRef, onClick: handleSave, children: moleapiTranslate("Save") }),
+       /* @__PURE__ */ jsx(UnStyledButton, { type: "button", ref: buttonRef, onClick: handleClose, children: /* @__PURE__ */ jsx(CloseIcon, {}) })
+     ] }) : /* @__PURE__ */ jsxs(Fragment, { children: [
+-      /* @__PURE__ */ jsx(Tooltip, { label: "Set active", children: /* @__PURE__ */ jsx(UnStyledButton, { type: "button", className: "graphiql-history-item-label", onClick: handleHistoryItemClick, "aria-label": "Set active", children: displayName }) }),
+-      /* @__PURE__ */ jsx(Tooltip, { label: "Edit label", children: /* @__PURE__ */ jsx(UnStyledButton, { type: "button", className: "graphiql-history-item-action", onClick: handleEditLabel, "aria-label": "Edit label", children: /* @__PURE__ */ jsx(PenIcon, { "aria-hidden": "true" }) }) }),
+-      /* @__PURE__ */ jsx(Tooltip, { label: props.item.favorite ? "Remove favorite" : "Add favorite", children: /* @__PURE__ */ jsx(UnStyledButton, { type: "button", className: "graphiql-history-item-action", onClick: handleToggleFavorite, "aria-label": props.item.favorite ? "Remove favorite" : "Add favorite", children: props.item.favorite ? /* @__PURE__ */ jsx(StarFilledIcon, { "aria-hidden": "true" }) : /* @__PURE__ */ jsx(StarIcon, { "aria-hidden": "true" }) }) }),
+-      /* @__PURE__ */ jsx(Tooltip, { label: "Delete from history", children: /* @__PURE__ */ jsx(UnStyledButton, { type: "button", className: "graphiql-history-item-action", onClick: handleDeleteItemFromHistory, "aria-label": "Delete from history", children: /* @__PURE__ */ jsx(TrashIcon, { "aria-hidden": "true" }) }) })
++      /* @__PURE__ */ jsx(Tooltip, { label: moleapiTranslate("Set active"), children: /* @__PURE__ */ jsx(UnStyledButton, { type: "button", className: "graphiql-history-item-label", onClick: handleHistoryItemClick, "aria-label": moleapiTranslate("Set active"), children: displayName }) }),
++      /* @__PURE__ */ jsx(Tooltip, { label: moleapiTranslate("Edit label"), children: /* @__PURE__ */ jsx(UnStyledButton, { type: "button", className: "graphiql-history-item-action", onClick: handleEditLabel, "aria-label": moleapiTranslate("Edit label"), children: /* @__PURE__ */ jsx(PenIcon, { "aria-hidden": "true" }) }) }),
++      /* @__PURE__ */ jsx(Tooltip, { label: props.item.favorite ? moleapiTranslate("Remove favorite") : moleapiTranslate("Add favorite"), children: /* @__PURE__ */ jsx(UnStyledButton, { type: "button", className: "graphiql-history-item-action", onClick: handleToggleFavorite, "aria-label": props.item.favorite ? moleapiTranslate("Remove favorite") : moleapiTranslate("Add favorite"), children: props.item.favorite ? /* @__PURE__ */ jsx(StarFilledIcon, { "aria-hidden": "true" }) : /* @__PURE__ */ jsx(StarIcon, { "aria-hidden": "true" }) }) }),
++      /* @__PURE__ */ jsx(Tooltip, { label: moleapiTranslate("Delete from history"), children: /* @__PURE__ */ jsx(UnStyledButton, { type: "button", className: "graphiql-history-item-action", onClick: handleDeleteItemFromHistory, "aria-label": moleapiTranslate("Delete from history"), children: /* @__PURE__ */ jsx(TrashIcon, { "aria-hidden": "true" }) }) })
+     ] });
+     $[27] = displayName;
+     $[28] = editLabel;
+diff --git a/node_modules/@graphiql/plugin-history/dist/index.js b/node_modules/@graphiql/plugin-history/dist/index.js
+index 2437487..ced5ef4 100644
+--- a/node_modules/@graphiql/plugin-history/dist/index.js
++++ b/node_modules/@graphiql/plugin-history/dist/index.js
+@@ -1,10 +1,11 @@
++import { moleapiTranslate } from "@graphiql/react";
+ import { HistoryIcon } from "@graphiql/react";
+ /* empty css          */
+ import { History } from "./components.js";
+ import { HistoryStore, useHistory, useHistoryActions } from "./context.js";
+ import { useHistoryContext } from "./deprecated.js";
+ const HISTORY_PLUGIN = {
+-  title: "History",
++  get title() { return moleapiTranslate("History"); },
+   icon: HistoryIcon,
+   content: History
+ };

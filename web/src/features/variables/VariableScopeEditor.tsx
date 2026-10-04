@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../shared/i18n";
 import { Card, Flex, Text, TextField } from "@radix-ui/themes";
 import { Link2 } from "lucide-react";
 import type { Pair } from "../../shared/types";
@@ -14,6 +15,7 @@ export default function VariableScopeEditor({
   rows: Pair[];
   onChange: (rows: Pair[]) => void;
 }) {
+  useLanguage();
   const { localVariables } = useWorkbench();
   const entries = localVariables.entries(scope, target);
   const extra = Object.entries(entries).filter(
@@ -28,28 +30,24 @@ export default function VariableScopeEditor({
           if (localVariables.reconcile(scope, target, rows, next))
             onChange(next);
         }}
-        keyLabel="变量名"
-        valueLabel="共享值"
+        keyLabel={t("变量名")}
+        valueLabel={t("共享值")}
         readLocal={(row) => localVariables.read(scope, target, row.key, row.id)}
         writeLocal={(row, value) =>
           localVariables.write(scope, target, row.key, value, row.id)
         }
       />
-      <Text size="1" color="gray">
-        共享值保存到工作区；本地覆盖值只保存在当前浏览器或本机数据库。空字符串也可作为覆盖值，点击链接按钮恢复共享值。
-      </Text>
+      <Text size="1" color="gray"> {t("共享值保存到工作区；本地覆盖值只保存在当前浏览器或本机数据库。空字符串也可作为覆盖值，点击链接按钮恢复共享值。")} </Text>
       {extra.length > 0 && (
         <Card>
-          <Text as="p" size="2" weight="medium">
-            脚本提取的本地变量
-          </Text>
+          <Text as="p" size="2" weight="medium"> {t("脚本提取的本地变量")} </Text>
           {extra.map(([key, value]) => (
             <Flex key={key} align="center" gap="3" mt="3">
               <Text className="mono" size="2">
                 {key}
               </Text>
               <TextField.Root
-                aria-label={`${key} 本地值`}
+                aria-label={t("{{value0}} 本地值", { value0: key })}
                 type="password"
                 value={value}
                 onChange={(e) =>
@@ -57,7 +55,7 @@ export default function VariableScopeEditor({
                 }
               />
               <ToolButton
-                label={`清除本地变量 ${key}`}
+                label={t("清除本地变量 {{value0}}", { value0: key })}
                 onClick={() =>
                   localVariables.write(scope, target, key, undefined)
                 }

@@ -1,3 +1,4 @@
+import { useLanguage, liveTranslation } from "../../shared/i18n";
 import { useState } from "react";
 import { toast } from "sonner";
 import { api, saveFile } from "../../shared/api";
@@ -5,6 +6,7 @@ import type { ExportResult, ImportResult, Workspace } from "../../shared/types";
 import { hasChanges } from "../workspaces/draft";
 import type { useWorkspace } from "../workspaces/useWorkspace";
 export function useInterchange(workspace: ReturnType<typeof useWorkspace>) {
+  useLanguage();
   const [format, setFormat] = useState("openapi");
   const [content, setContent] = useState("");
   const [includeSecrets, setIncludeSecrets] = useState(false);
@@ -20,7 +22,7 @@ export function useInterchange(workspace: ReturnType<typeof useWorkspace>) {
       }),
     );
     if (imported.warnings.length)
-      toast.message("导入说明", {
+      toast.message(liveTranslation("导入说明"), {
         description: imported.warnings.join("；"),
         duration: 10000,
       });
@@ -30,7 +32,7 @@ export function useInterchange(workspace: ReturnType<typeof useWorkspace>) {
     if (!current) return false;
     if (workspace.dirty && !(await workspace.save(true))) return false;
     if (hasChanges(workspace.stateRef.current)) {
-      toast.message("保存期间有新修改，请保存后再次导出。");
+      toast.message(liveTranslation("保存期间有新修改，请保存后再次导出。"));
       return false;
     }
     const result = await api<ExportResult>(
