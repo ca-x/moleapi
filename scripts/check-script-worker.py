@@ -77,6 +77,22 @@ except subprocess.TimeoutExpired:
                     print(sample.read_text(errors="replace")[:32768], flush=True)
     process.kill()
     process.communicate(timeout=3)
+    if (args.diagnostics or os.environ.get("GITHUB_ACTIONS") == "true") and sys.platform == "darwin" and not args.container:
+        # A/B/A distinguishes an empty-environment bootstrap issue from a warmed cache.
+        for name, isolated in [("fixed-marker", {"MOLEAPI_WORKER_ISOLATED": "1"}), ("empty-again", {})]:
+            probe_started = time.monotonic()
+            try:
+                probe = subprocess.run(command, input=json.dumps(payload).encode(),
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=isolated, timeout=10, check=False)
+                try:
+                    probe_status = json.loads(probe.stdout).get("status", "missing")
+                except (ValueError, AttributeError):
+                    probe_status = "invalid-json"
+                print(f"Worker environment probe: case={name} exit={probe.returncode} "
+                    f"status={probe_status} elapsed={time.monotonic()-probe_started:.3f}s "
+                    f"stdout_bytes={len(probe.stdout)} stderr_bytes={len(probe.stderr)}", flush=True)
+            except subprocess.TimeoutExpired:
+                print(f"Worker environment probe: case={name} timeout=10s", flush=True)
     raise
 if process.returncode:
     raise subprocess.CalledProcessError(process.returncode, command, stdout, stderr)
