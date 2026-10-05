@@ -989,5 +989,22 @@
   "导出 CSV": "Export CSV",
   "导出全部已返回行。JSON 保留类型；CSV 空单元格表示 NULL，公式会转义。": "Exports all returned rows. JSON preserves types; CSV uses empty cells for NULL and escapes formulas.",
   "SQL 编辑器滚动区域": "SQL editor scroll region",
-  "连接在查询完成前关闭，请重新连接。": "The connection closed before the query finished. Reconnect to continue."
+  "连接在查询完成前关闭，请重新连接。": "The connection closed before the query finished. Reconnect to continue.",
+  "上传文件超过 5 MiB。": "Upload exceeds 5 MiB.",
+  "请求体源数据有误，请修正 JSON 配置。": "Invalid body source. Correct the JSON configuration.",
+  "选择上传文件": "Choose upload file",
+  "尚未选择文件": "No file selected",
+  "需要重新选择文件": "Reselect the original file",
+  "文件 MIME 类型": "File MIME type",
+  "文件总量最多 5 MiB。默认导出不包含文件字节；上传响应仅保留在实时视图。": "Files/text total at most 5 MiB. Default exports omit file bytes; upload responses remain live-only.",
+  "multipart 边界由工具生成，手动 Content-Type 需禁用。支持同名字段。": "The multipart boundary is generated. Disable manual Content-Type headers. Repeated names are supported.",
+  "启用上传字段": "Enable upload field",
+  "字段名": "Field name",
+  "字段类型": "Field type",
+  "删除字段": "Remove field",
+  "字段值": "Field value",
+  "添加上传字段": "Add upload field",
+  "请求体源数据": "Body source",
+  "二进制文件": "Binary file",
+  "切换文件模式时，已有 Content-Type 会被禁用，原值保留在请求头中。": "Switching to a file mode disables existing Content-Type headers. Their values stay in the header list."
 }

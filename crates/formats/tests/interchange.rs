@@ -769,3 +769,92 @@ fn data_request_exports_screen_credentials_copied_sql_and_keep_explicit_original
         w.data.collections[0].requests[0].protocol
     );
 }
+
+#[test]
+fn structured_file_bodies_private_roundtrip_default_withholding_and_dynamic_modes() {
+    let original=import("postman",r#"{"info":{"name":"files","schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},"item":[{"name":"file","request":{"method":"POST","url":"https://example.com","header":[],"body":{"mode":"formdata","formdata":[{"key":"upload","type":"file","src":[]},{"key":"same","type":"text","value":"first"},{"key":"same","type":"text","value":"second"}]}}}]}"#).unwrap();
+    let mut w = workspace(original.data);
+    assert!(!original.warnings.is_empty());
+    let r = &mut w.data.collections[0].requests[0];
+    let body: moleapi_core::MultipartBody = serde_json::from_str(&r.body).unwrap();
+    assert_eq!(body.parts.len(), 3);
+    assert!(moleapi_core::validate_request(r, false).is_err());
+    r.body_kind = "binary".into();
+    r.body = json!({"file_name":"a.bin","mime":"image/png","base64":"AP9B"}).to_string();
+    let full = export(&w, "moleapi", true).unwrap();
+    assert_eq!(import("moleapi", &full.content).unwrap().data, w.data);
+    let default = export(&w, "moleapi", false).unwrap();
+    let parsed = import("moleapi", &default.content).unwrap();
+    let file: moleapi_core::BinaryBody =
+        serde_json::from_str(&parsed.data.collections[0].requests[0].body).unwrap();
+    assert!(file.base64.is_none());
+    let pm = export(&w, "postman", false).unwrap();
+    let imported = import("postman", &pm.content).unwrap();
+    let r = &imported.data.collections[0].requests[0];
+    let file: moleapi_core::BinaryBody = serde_json::from_str(&r.body).unwrap();
+    assert_eq!(file.mime, "image/png");
+    assert!(file.base64.is_none());
+    assert!(export(&w, "postman", true).is_err());
+    assert!(export(&w, "openapi", false).is_err());
+    w.data.collections[0].requests[0].body_kind = "{{mode}}".into();
+    w.data.global_variables.push(moleapi_core::Pair {
+        id: "mode".into(),
+        key: "mode".into(),
+        value: "binary".into(),
+        enabled: true,
+        secret: None,
+        local_value: None,
+    });
+    let default = export(&w, "moleapi", false).unwrap();
+    assert!(!default.content.contains("AP9B"));
+    assert!(export(&w, "postman", false).is_err());
+    assert!(
+        export(&w, "moleapi", true)
+            .unwrap()
+            .content
+            .contains("AP9B")
+    );
+}
+
+#[test]
+fn multipart_privacy_budget_withholding_keeps_default_source_importable() {
+    let mut w = workspace(
+        import("curl", "curl -X POST https://example.com")
+            .unwrap()
+            .data,
+    );
+    w.data.global_variables.push(moleapi_core::Pair {
+        id: "private".into(),
+        key: "private".into(),
+        value: "p".repeat(5000),
+        enabled: true,
+        secret: Some(true),
+        local_value: None,
+    });
+    let r = &mut w.data.collections[0].requests[0];
+    r.body_kind = "multipart".into();
+    r.body=json!({"parts":[{"id":"one","name":"field","value":{"kind":"text","text":"hello","mime":""}}]}).to_string();
+    let out = export(&w, "moleapi", false).unwrap();
+    let parsed = import("moleapi", &out.content).unwrap();
+    let body: moleapi_core::MultipartBody =
+        serde_json::from_str(&parsed.data.collections[0].requests[0].body).unwrap();
+    assert_eq!(body.parts[0].name, "[REDACTED]");
+}
+
+#[test]
+fn privacy_replacements_cannot_expand_file_body_metadata_past_import_limits() {
+    let mut w = workspace(
+        import("curl", "curl -X POST https://example.com")
+            .unwrap()
+            .data,
+    );
+    let r = &mut w.data.collections[0].requests[0];
+    r.auth.password = "x".into();
+    r.body_kind = "multipart".into();
+    r.body=json!({"parts":[{"id":"p","name":"x".repeat(100),"value":{"kind":"file","file":{"file_name":"x".repeat(100),"mime":"","base64":"AA=="}}}]}).to_string();
+    let out = export(&w, "moleapi", false).unwrap();
+    let imported = import("moleapi", &out.content).unwrap();
+    let body: moleapi_core::MultipartBody =
+        serde_json::from_str(&imported.data.collections[0].requests[0].body).unwrap();
+    assert!(body.parts[0].name.len() <= 512);
+}

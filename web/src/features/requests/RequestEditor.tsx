@@ -23,6 +23,8 @@ import { Choice, Editor, Field, PairEditor, ToolButton } from "../../shared/ui";
 import { curlTemplate, id } from "../../shared/model";
 import type { ApiResponse, RequestSpec } from "../../shared/types";
 
+import RequestBodyEditor from "../request-body/RequestBodyEditor";
+import {bodyModePatch} from "../request-body/model";
 const GraphQLWorkbench = lazy(() => import("../graphql/GraphQLWorkbench"));
 const GrpcWorkbench = lazy(() => import("../grpc/GrpcWorkbench"));
 const SocketIoWorkbench = lazy(() => import("../socketio/SocketIoWorkbench"));
@@ -53,6 +55,7 @@ const requestTabs = [
 export default function RequestEditor({
   request,
   protocolConnected = false,
+  bodyScope = "",
   update,
   send,
   save,
@@ -66,6 +69,7 @@ export default function RequestEditor({
 }: {
   request: RequestSpec;
   protocolConnected?: boolean;
+  bodyScope?: string;
   update: (patch: Partial<RequestSpec>) => void;
   send: () => void;
   save: () => void;
@@ -406,12 +410,14 @@ export default function RequestEditor({
               <div className="body-options">
                 <Choice
                   value={request.body_kind}
-                  onChange={(body_kind) => update({ body_kind })}
+                  onChange={(body_kind) => update(bodyModePatch(request,body_kind))}
                   options={[
                     { value: "none", label: t("无请求体") },
                     { value: "json", label: "JSON" },
                     { value: "text", label: "Raw Text" },
                     { value: "form", label: "x-www-form-urlencoded" },
+                    {value:"binary",label:t("二进制文件")},
+                    {value:"multipart",label:"multipart/form-data"},
                   ]}
                   label={t("请求体格式")}
                 />
@@ -425,7 +431,7 @@ export default function RequestEditor({
                     <Braces size={14} /> {t("格式化")} </Button>
                 )}
               </div>
-              {request.body_kind !== "none" ? (
+              {["binary","multipart"].includes(request.body_kind)?<RequestBodyEditor key={`${bodyScope}/${request.id}/${request.body_kind}`} kind={request.body_kind} value={request.body} change={body=>update({body})} busy={busy||sending} dark={dark}/>:request.body_kind !== "none" ? (
                 <Editor
                   value={request.body}
                   onChange={(body) => update({ body })}

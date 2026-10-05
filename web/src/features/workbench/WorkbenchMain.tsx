@@ -14,6 +14,7 @@ import { nav } from "./navigation";
 export default function WorkbenchMain() {
   useLanguage();
   const {
+    accountId,
     workspaces,
     draft,
     view,
@@ -96,6 +97,7 @@ export default function WorkbenchMain() {
               <RequestEditor
                 key={`${draft.id}/${request.id}`}
                 request={request}
+                bodyScope={JSON.stringify([accountId,draft.id,draft.data.active_environment_id])}
                 protocolConnected={
                   !!protocolSession.session &&
                   ["connecting", "open"].includes(protocolSession.session.state)

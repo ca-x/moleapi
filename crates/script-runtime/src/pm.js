@@ -180,7 +180,7 @@
       get mode() { return source.body_kind; },
       update(value) {
         if (typeof value === "string") { source.body = value; if (source.body_kind === "none") source.body_kind = "text"; }
-        else if (value && typeof value.raw === "string") { source.body = value.raw; source.body_kind = value.mode === "json" ? "json" : "text"; }
+        else if (value && typeof value.raw === "string") { if (!["none","json","text","form","binary","multipart"].includes(value.mode || "text")) throw new Error("Unsupported request body mode"); source.body = value.raw; source.body_kind = value.mode || "text"; }
         else throw new Error("Unsupported request body update; use a string or {raw,mode}");
       },
       toString: () => source.body

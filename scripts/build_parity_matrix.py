@@ -157,7 +157,7 @@ def render():
         fields=['id','module','feature','target','status','apifox_sources','postman_sources','notes','source_availability']
         writer=csv.DictWriter(file,fieldnames=fields,extrasaction='ignore');writer.writeheader()
         writer.writerows([{**f,'apifox_sources':';'.join(f['apifox_sources']),'postman_sources':';'.join(f['postman_sources']),'source_availability':json.dumps(f['source_availability'],ensure_ascii=False)} for f in features])
-    text=['# MoleAPI 完整功能对照与目标矩阵','','采集日期：2026-10-02。基于完整官方目录、已读取正文与官方界面截图。','','这份矩阵是待实施的功能目标，不是完成清单。所有条目均为 `pending`；当前代码骨架未验证，任何条目都不能被标记为“已对齐”。完整原始入口见 [Apifox 目录](APIFOX-CATALOG.md)、[Postman 目录](POSTMAN-CATALOG.md) 与 [可筛选 CSV](features.csv)。','','“正文/目录”指证据读取等级，不等于逐个控件已经实际操作。每个来源说明该功能域；细项要在对应模块规格中补充兼容性与验收条件。空来源表示本次未定位足够公开证据，不能推断竞品不支持。企业、Beta、云端功能以对应页面的版本/套餐为准。JSON/CSV 的 source_availability 保留正文中套餐/平台限制原句，source_mapping 明确是功能域参考，不是厂商逐项支持声明；具体下拉选项由公开章节层级与 UI 观察共同覆盖。','','| 模块 | 功能目标数 |','| --- | --- |']
+    text=['# MoleAPI 完整功能对照与目标矩阵','','采集日期：2026-10-02。基于完整官方目录、已读取正文与官方界面截图。','','这份矩阵是完整功能目标，不是完成清单。JSON/CSV 的 `pending` 保留采集时的研究状态；当前实现、验证证据与未完成能力见 [实现状态](IMPLEMENTATION-STATUS.md)、[协议覆盖](PROTOCOL-COVERAGE.md)和各模块规格。不能据菜单或依赖库推断已经完整对齐。完整原始入口见 [Apifox 目录](APIFOX-CATALOG.md)、[Postman 目录](POSTMAN-CATALOG.md) 与 [可筛选 CSV](features.csv)。','','“正文/目录”指证据读取等级，不等于逐个控件已经实际操作。每个来源说明该功能域；细项要在对应模块规格中补充兼容性与验收条件。空来源表示本次未定位足够公开证据，不能推断竞品不支持。企业、Beta、云端功能以对应页面的版本/套餐为准。JSON/CSV 的 source_availability 保留正文中套餐/平台限制原句，source_mapping 明确是功能域参考，不是厂商逐项支持声明；具体下拉选项由公开章节层级与 UI 观察共同覆盖。','','| 模块 | 功能目标数 |','| --- | --- |']
     for module in modules:text.append(f'| {module["title"]} (`{module["id"]}`) | {sum(f["module"]==module["id"] for f in features)} |')
     text+=['',f'总计 {len(modules)} 个模块、{len(features)} 项功能目标。数量是本项目归并/拆分后的需求条目，不是官方宣称的功能数。','']
     for module in modules:
@@ -174,7 +174,7 @@ def render():
         text.append('')
     text += ['## 不能缩减掉的兼容性验收','','- Postman Collection 2.1 JSON 与 v12 Collection 3.0 多文件 YAML 都必须有回归样例，脚本/示例/作用域不能在导入后丢失。','- `pm.*` 兼容按成员与执行阶段逐项记录，不用“支持 JS”代替“兼容 Postman”。','- OpenAPI 2.0、3.0、3.1、JSON Schema dialect、$ref/多文件与 x- 扩展分别验收。规范原文必须可保留并可往返导出。','- HTTP/SSE/WebSocket/gRPC/MQTT/MCP/A2A 各自有执行模型、持久化资源、日志以及取消/超时语义。','- 团队共享值、本地覆盖值、Vault secret 引用分开；离线工作与服务器同步冲突需要明确行为与测试。','- 对标企业/云端能力时，用本地/自托管实现对应价值，不能把付费供应商 API 假装成不依赖外部服务的本地功能。','- Windows/macOS/Linux、服务端、独立桌面、自托管同步与 Docker 均有独立构建和验收路径。','']
     (DOCS/'FEATURE-MATRIX.md').write_text('\n'.join(text))
-    cap=['# MoleAPI 能力模块与依赖','','状态：完整公开目录采集后的草拟能力边界；当前实现暂停，具体兼容性/平台行为仍需模块规格验证，初始 HTTP 骨架规格不再代表完整范围。','','| 稳定模块 ID | 职责 | 依赖 |','| --- | --- | --- |']
+    cap=['# MoleAPI 能力模块与依赖','','状态：完整公开目录采集后的模块边界。实现持续推进，当前证据见 [实现状态](IMPLEMENTATION-STATUS.md)；具体兼容性和平台行为由模块规格与实际验证记录决定，初始 HTTP 骨架规格不代表完整范围。','','| 稳定模块 ID | 职责 | 依赖 |','| --- | --- | --- |']
     cap += [f'| {m["id"]} | {m["title"]} | {", ".join(m["depends_on"]) or "—"} |' for m in modules]
     cap += ['','建议实施顺序：共享数据/工作台 → HTTP/鉴权/变量/网络 → 规范/脚本/协议 → 测试/Mock/文档 → 团队同步/版本 → CLI/Runner/工作流 → 企业/AI/治理/扩展。发行流水线在首个可构建版本起随各模块持续验证。','','每个模块单独编写需求、兼容清单与验收用例，保持可替换边界；不能把矩阵中较难的模块从范围中悄悄删除。模块规模决定分阶段实施，不表示后续模块已经获得测试或完成。','']
     (DOCS/'CAPABILITY-MAP.md').write_text('\n'.join(cap))

@@ -79,7 +79,7 @@ export interface RequestSpec {
   description: string;
   query: Pair[];
   headers: Pair[];
-  body_kind: "none" | "json" | "text" | "form";
+  body_kind: "none" | "json" | "text" | "form" | "binary" | "multipart";
   body: string;
   auth: Auth;
   timeout_ms: number;

@@ -144,6 +144,7 @@ export function curlTemplate(request: RequestSpec): string {
     parts.push("-H", quote("Authorization: Bearer {{TOKEN}}"));
   if (request.auth.kind === "basic")
     parts.push("-u", quote("{{USERNAME}}:{{PASSWORD}}"));
+  if (["binary","multipart"].includes(request.body_kind)) throw new Error("File-body cURL templates are not available; export MoleAPI source instead");
   if (request.body_kind !== "none") {
     if (request.body_kind === "json")
       parts.push("-H", quote("Content-Type: application/json"));

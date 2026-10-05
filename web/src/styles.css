@@ -1243,3 +1243,6 @@ kbd {
 .dark .data-sql-editor .cm-data-keyword {color:#db96eb;}
 .dark .data-sql-editor .cm-data-name {color:#f0919a;}
 .dark .data-sql-editor .cm-data-comment {color:#abafb8;}
+
+.request-file-body {display:flex;flex-direction:column;gap:12px;min-width:0;}
+.multipart-part {display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--gray-6);padding:12px 0;}

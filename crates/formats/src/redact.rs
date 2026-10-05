@@ -46,6 +46,85 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
             }
             request.url = redact_url(&request.url);
             request.body = redact_embedded_json(&request.body);
+            let dynamic = request.body_kind.contains("{{");
+            let file_source = serde_json::from_str::<Value>(&request.body).ok();
+            if request.body_kind == "binary"
+                || dynamic
+                    && file_source
+                        .as_ref()
+                        .is_some_and(|v| v.get("base64").is_some())
+            {
+                if let Ok(mut file) =
+                    serde_json::from_str::<moleapi_core::BinaryBody>(&request.body)
+                {
+                    file.base64 = None;
+                    file.file_name = data_privacy.screen_bounded(&file.file_name, 512);
+                    if file.file_name.is_empty() {
+                        file.file_name = "[REDACTED]".into();
+                    }
+                    if data_privacy.screen_text(&file.mime) != file.mime {
+                        file.mime.clear();
+                    }
+                    request.body = serde_json::to_string(&file).unwrap();
+                }
+            } else if (request.body_kind == "multipart"
+                || dynamic
+                    && file_source
+                        .as_ref()
+                        .is_some_and(|v| v.get("parts").is_some()))
+                && let Ok(mut body) =
+                    serde_json::from_str::<moleapi_core::MultipartBody>(&request.body)
+            {
+                let mut remaining = moleapi_core::MAX_BODY;
+                for part in &mut body.parts {
+                    match &mut part.value {
+                        moleapi_core::MultipartValue::File { file } => {
+                            file.base64 = None;
+                            file.file_name = data_privacy.screen_bounded(&file.file_name, 512);
+                            if file.file_name.is_empty() {
+                                file.file_name = "[REDACTED]".into();
+                            }
+                            if data_privacy.screen_text(&file.mime) != file.mime {
+                                file.mime.clear();
+                            }
+                        }
+                        moleapi_core::MultipartValue::Text { text, mime } => {
+                            *text = if sensitive(&part.name) {
+                                String::new()
+                            } else {
+                                let literal = data_privacy.screen_bounded(text, remaining);
+                                if literal == *text {
+                                    let screened = data_privacy.screen_generation_text(text);
+                                    if screened.len() <= remaining {
+                                        screened
+                                    } else {
+                                        String::new()
+                                    }
+                                } else {
+                                    literal
+                                }
+                            };
+                            remaining -= text.len();
+                            if data_privacy.screen_text(mime) != *mime {
+                                mime.clear();
+                            }
+                        }
+                    }
+                    part.name = data_privacy.screen_bounded(&part.name, 512);
+                    if part.name.is_empty() {
+                        part.name = "[REDACTED]".into();
+                    }
+                }
+                request.body = serde_json::to_string(&body).unwrap();
+                if request.body.len() > moleapi_core::MAX_BODY_SOURCE {
+                    for part in &mut body.parts {
+                        if let moleapi_core::MultipartValue::Text { text, .. } = &mut part.value {
+                            text.clear();
+                        }
+                    }
+                    request.body = serde_json::to_string(&body).unwrap();
+                }
+            }
             match &mut request.protocol {
                 moleapi_core::Protocol::Data { config } => {
                     request.url = data_privacy.screen_text(&redact_url(&request.url));
@@ -566,6 +645,18 @@ impl ExportPrivacy {
                         }
                     }
                 }
+                if (request.body_kind == "multipart" || request.body_kind.contains("{{"))
+                    && let Ok(body) =
+                        serde_json::from_str::<moleapi_core::MultipartBody>(&request.body)
+                {
+                    for part in body.parts {
+                        if sensitive(&part.name)
+                            && let moleapi_core::MultipartValue::Text { text, .. } = part.value
+                        {
+                            secrets.insert(text);
+                        }
+                    }
+                }
                 if request.body_kind == "form" {
                     for (key, value) in url::form_urlencoded::parse(request.body.as_bytes()) {
                         if sensitive(&key) {
@@ -644,6 +735,35 @@ impl ExportPrivacy {
             }
             None => text.into(),
         }
+    }
+    fn screen_bounded(&self, text: &str, maximum: usize) -> String {
+        if self.withhold {
+            return String::new();
+        }
+        let Some(matcher) = &self.matcher else {
+            return if text.len() <= maximum {
+                text.into()
+            } else {
+                String::new()
+            };
+        };
+        let mut output = String::new();
+        let mut last = 0;
+        for found in matcher.find_iter(text) {
+            let prefix = &text[last..found.start()];
+            if output.len().saturating_add(prefix.len()).saturating_add(10) > maximum {
+                return String::new();
+            }
+            output.push_str(prefix);
+            output.push_str("[REDACTED]");
+            last = found.end();
+        }
+        let tail = &text[last..];
+        if output.len().saturating_add(tail.len()) > maximum {
+            return String::new();
+        }
+        output.push_str(tail);
+        output
     }
     fn screen_json(&self, text: &str) -> String {
         if self.withhold {

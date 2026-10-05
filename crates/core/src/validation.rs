@@ -123,8 +123,10 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
         "Timeout must be between 1 and 120000 ms"
     );
     ensure!(
-        matches!(r.body_kind.as_str(), "none" | "json" | "text" | "form")
-            || (templates && r.body_kind.contains("{{")),
+        matches!(
+            r.body_kind.as_str(),
+            "none" | "json" | "text" | "form" | "binary" | "multipart"
+        ) || (templates && r.body_kind.contains("{{")),
         "Unsupported body kind"
     );
     ensure!(
@@ -132,7 +134,11 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
             || (templates && r.auth.kind.contains("{{")),
         "Unsupported authentication kind"
     );
-    ensure!(r.body.len() <= MAX_BODY, "Request body exceeds 5 MiB");
+    if matches!(r.body_kind.as_str(), "binary" | "multipart") {
+        crate::request_body::validate_structured_body(r, templates)?;
+    } else {
+        ensure!(r.body.len() <= MAX_BODY, "Request body exceeds 5 MiB");
+    }
     if !(templates && r.protocol.is_a2a() && r.url.is_empty())
         && !r.protocol.is_mqtt()
         && !r.protocol.is_tcp()

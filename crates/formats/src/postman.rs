@@ -151,6 +151,82 @@ fn walk(
                 result.body_kind = "form".into();
                 result.body = serializer.finish();
             }
+            "file" => {
+                let src = raw["body"]["file"]["src"].as_str().unwrap_or("");
+                result.body_kind = "binary".into();
+                result.body = serde_json::to_string(&moleapi_core::BinaryBody {
+                    file_name: src.rsplit(['/', '\\']).next().unwrap_or("").into(),
+                    mime: result
+                        .headers
+                        .iter()
+                        .find(|h| h.enabled && h.key.eq_ignore_ascii_case("content-type"))
+                        .map(|h| h.value.clone())
+                        .unwrap_or_default(),
+                    base64: None,
+                })?;
+                warnings.push(format!(
+                    "{name}: select the original binary file again; imported paths are never read"
+                ));
+            }
+            "formdata" => {
+                let mut parts = Vec::new();
+                for entry in raw["body"]["formdata"].as_array().into_iter().flatten() {
+                    let value = if entry["type"] == "file" {
+                        let mut paths: Vec<String> = match &entry["src"] {
+                            Value::Array(values) => values
+                                .iter()
+                                .filter_map(Value::as_str)
+                                .map(str::to_owned)
+                                .collect(),
+                            Value::String(value) => vec![value.clone()],
+                            _ => vec![String::new()],
+                        };
+                        if paths.is_empty() {
+                            paths.push(String::new());
+                        }
+                        for path in paths {
+                            parts.push(moleapi_core::MultipartPart {
+                                id: uid(),
+                                name: text(&entry["key"]),
+                                enabled: !entry["disabled"].as_bool().unwrap_or(false),
+                                value: moleapi_core::MultipartValue::File {
+                                    file: moleapi_core::BinaryBody {
+                                        file_name: path
+                                            .rsplit(['/', '\\'])
+                                            .next()
+                                            .unwrap_or("")
+                                            .into(),
+                                        mime: text(&entry["contentType"]),
+                                        base64: None,
+                                    },
+                                },
+                            });
+                        }
+                        warnings.push(format!(
+                            "{name}: select multipart files again; imported paths are never read"
+                        ));
+                        continue;
+                    } else {
+                        moleapi_core::MultipartValue::Text {
+                            text: text(&entry["value"]),
+                            mime: text(&entry["contentType"]),
+                        }
+                    };
+                    parts.push(moleapi_core::MultipartPart {
+                        id: uid(),
+                        name: text(&entry["key"]),
+                        enabled: !entry["disabled"].as_bool().unwrap_or(false),
+                        value,
+                    });
+                }
+                result.body_kind = "multipart".into();
+                result.body = serde_json::to_string(&moleapi_core::MultipartBody { parts })?;
+                for header in &mut result.headers {
+                    if header.key.eq_ignore_ascii_case("content-type") {
+                        header.enabled = false;
+                    }
+                }
+            }
             "" => {}
             other => warnings.push(format!(
                 "{name}: {other} Body 已保留在原始集合，需要对应协议编辑器"
@@ -272,6 +348,20 @@ pub(super) fn export(workspace: &Workspace) -> Result<String> {
         let mut request=json!({"method":r.method,"url":url,"description":r.description,"header":r.headers.iter().map(|h|json!({"key":h.key,"value":h.value,"disabled":!h.enabled})).collect::<Vec<_>>(),"auth":auth});
         if let moleapi_core::Protocol::Graphql{document,variables,variables_source,..}=&r.protocol {
             request["body"]=json!({"mode":"graphql","graphql":{"query":document,"variables":variables_source.as_deref().map(str::to_owned).unwrap_or_else(||variables.to_string())}});
+        } else if r.body_kind=="binary" {
+            let file:moleapi_core::BinaryBody=serde_json::from_str(&r.body).expect("validated binary source");
+            request["body"]=json!({"mode":"file","file":{"src":file.file_name}});
+            if !file.mime.is_empty() && !r.headers.iter().any(|h|h.enabled && h.key.eq_ignore_ascii_case("content-type")) {
+                request["header"].as_array_mut().unwrap().push(json!({"key":"Content-Type","value":file.mime,"disabled":false}));
+            }
+        } else if r.body_kind=="multipart" {
+            let body:moleapi_core::MultipartBody=serde_json::from_str(&r.body).expect("validated multipart source");
+            request["body"]=json!({"mode":"formdata","formdata":body.parts.iter().map(|p| match &p.value {
+                moleapi_core::MultipartValue::Text{text,mime}=>json!({"key":p.name,"type":"text","value":text,"contentType":mime,"disabled":!p.enabled}),
+                moleapi_core::MultipartValue::File{file}=>json!({"key":p.name,"type":"file","src":file.file_name,"contentType":file.mime,"disabled":!p.enabled}),
+            }).collect::<Vec<_>>()});
+        } else if r.body_kind=="form" {
+            request["body"]=json!({"mode":"urlencoded","urlencoded":url::form_urlencoded::parse(r.body.as_bytes()).map(|(key,value)|json!({"key":key,"value":value,"type":"text"})).collect::<Vec<_>>()});
         } else if r.body_kind!="none"{request["body"]=json!({"mode":"raw","raw":r.body,"options":{"raw":{"language":if r.body_kind=="json"{"json"}else{"text"}}}});}
         json!({"name":r.name,"request":request,"event":events(&r.pre_request_script,&r.post_response_script),"response":r.examples.iter().map(|e|json!({"name":e.name,"code":e.status,"body":e.body,"header":e.headers.iter().map(|h|json!({"key":h.key,"value":h.value})).collect::<Vec<_>>(),"originalRequest":request})).collect::<Vec<_>>()})
     }).collect::<Vec<_>>() })).collect::<Vec<_>>();

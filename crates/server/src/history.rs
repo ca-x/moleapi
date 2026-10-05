@@ -51,6 +51,18 @@ pub(crate) async fn record(
             test.actual = "[REDACTED: failed script]".into();
         }
     }
+    let uploaded_file = matches!(r.body_kind.as_str(), "binary" | "multipart");
+    if uploaded_file {
+        stored.body = "[WITHHELD: uploaded file response is live-only]".into();
+        stored.body_base64 = None;
+        stored.headers.clear();
+        stored.url = "[WITHHELD: uploaded body response is live-only]".into();
+        for test in &mut stored.tests {
+            test.name.clear();
+            test.actual.clear();
+            test.expected.clear();
+        }
+    }
     if privacy.redact_failed_response {
         // A killed/crashed worker cannot report newly tainted values. Withhold
         // affected text instead of treating unknown privacy provenance as safe.

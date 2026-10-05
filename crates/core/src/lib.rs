@@ -1,3 +1,8 @@
+mod request_body;
+pub use request_body::{
+    BinaryBody, MAX_BODY_SOURCE, MultipartBody, MultipartPart, MultipartValue,
+    validate_structured_body,
+};
 mod tls;
 pub use tls::UnverifiedCertificate;
 mod data;

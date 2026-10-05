@@ -18,7 +18,7 @@ fn append(result: &mut String, text: &str, budget: &mut usize) -> Result<()> {
     result.push_str(text);
     Ok(())
 }
-fn interpolate_budget(
+pub(crate) fn interpolate_budget(
     text: &str,
     variables: &HashMap<&str, &str>,
     budget: &mut usize,
@@ -171,7 +171,12 @@ pub fn resolve_request(
     if request.protocol.is_soap() {
         value["body"] = "".into();
     }
-    let form = interpolate(&request.body_kind, &vars)? == "form";
+    let body_kind = interpolate(&request.body_kind, &vars)?;
+    let structured_body = matches!(body_kind.as_str(), "binary" | "multipart");
+    if structured_body {
+        value["body"] = "".into();
+    }
+    let form = body_kind == "form";
     if form {
         // Decode form fields before interpolation, then encode the resolved values.
         // This also recognizes templates preserved as percent-encoded Postman fields.
@@ -186,6 +191,15 @@ pub fn resolve_request(
     };
     let mut budget = 20 * 1024 * 1024;
     replace(&mut value, &vars, &mut budget)?;
+    if structured_body {
+        value["body"] = crate::request_body::resolve_structured_body(
+            &body_kind,
+            &request.body,
+            &vars,
+            &mut budget,
+        )?
+        .into();
+    }
     if let Some((sql, file)) = data_original {
         value["protocol"]["sql"] = sql.into();
         value["protocol"]["file_base64"] = file.into();

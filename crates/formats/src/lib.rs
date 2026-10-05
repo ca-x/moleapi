@@ -51,13 +51,28 @@ pub fn import(format: &str, content: &str) -> Result<ImportResult> {
 }
 
 pub fn export(workspace: &Workspace, format: &str, include_secrets: bool) -> Result<ExportResult> {
+    for request in workspace.data.collections.iter().flat_map(|c| &c.requests) {
+        moleapi_core::validate_structured_body(request, true)?;
+    }
+    if matches!(format, "postman" | "openapi")
+        && workspace
+            .data
+            .collections
+            .iter()
+            .flat_map(|c| &c.requests)
+            .any(|r| r.body_kind.contains("{{"))
+    {
+        bail!("Dynamic body modes require MoleAPI format; external formats cannot preserve them");
+    }
     let unsupported = workspace
         .data
         .collections
         .iter()
         .flat_map(|collection| &collection.requests)
         .any(|request| match &request.protocol {
-            moleapi_core::Protocol::Http => false,
+            moleapi_core::Protocol::Http => {
+                matches!(request.body_kind.as_str(), "binary" | "multipart") && format != "postman"
+            }
             moleapi_core::Protocol::Graphql {
                 document,
                 variables,
@@ -106,6 +121,19 @@ pub fn export(workspace: &Workspace, format: &str, include_secrets: bool) -> Res
         .any(|spec| spec.kind == "protobuf");
     if matches!(format, "postman" | "openapi") && (unsupported || unsupported_specification) {
         bail!("该导出格式尚不能保留当前专用协议或服务定义配置，请使用 MoleAPI 格式导出");
+    }
+    if format == "postman"
+        && include_secrets
+        && workspace
+            .data
+            .collections
+            .iter()
+            .flat_map(|c| &c.requests)
+            .any(|r| matches!(r.body_kind.as_str(), "binary" | "multipart"))
+    {
+        bail!(
+            "Postman cannot embed selected file bytes; use MoleAPI for a complete file-body backup"
+        );
     }
     let workspace = if include_secrets {
         workspace.clone()

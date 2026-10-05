@@ -1,0 +1,16 @@
+# HTTP binary and multipart bodies
+
+Authority: full feature matrix http-005 and http request bodies, existing user authorization to implement complete capabilities before distribution. Reuse reqwest multipart, serde JSON, base64 and MIME libraries. Server/native IPC share execution. No local Docker or arbitrary server file paths.
+
+Represent binary/multipart source in existing body string as typed JSON, preserving old request models. Binary: filename, mime, optional base64 (null means withheld/reselect; empty string is an actual empty file). Multipart: ordered enabled text/file parts, repeated names, optional per-part MIME; selected files use the same binary DTO. This source is configuration, never a handwritten MIME wire format. Text fields/names/MIME interpolate independently through existing scoped resolver; opaque file bytes and selected filenames stay exact. Aggregate decoded parts <=5 MiB, <=64 parts, bounded metadata and encoded source. Save permits missing file bytes; execution must reject missing active files.
+
+reqwest owns boundaries/headers/encoding. Prepare a bounded byte snapshot once so 307/308 redirects replay identical content; existing checked destinations/downgrade and cross-origin credential rules remain. Explicit multipart Content-Type must fail instead of silently sending a mismatched boundary. UI mode changes disable stored Content-Type headers with visible explanation and preserve their values.
+
+Frontend feature/request-body uses existing Radix/CodeMirror components and bounded browser/native file selection. Binary file selection and multipart repeated text/file rows must be usable offline, bilingual, keyboard accessible. Fence deferred reads by account/workspace/request/environment plus current mode/connection; completion uses latest callbacks and cannot overwrite edits.
+
+Default workspace export withholds opaque bytes, screens known private field values, retains structured source and explains reselection. Explicit private MoleAPI export preserves originals. Postman file paths remain unselected metadata with warnings; never read imported paths. Unsupported external formats/snippet representations fail explicitly rather than relabeling source JSON as HTTP wire body. Script request snapshots must describe these modes honestly; shared full pm body mutation remains separately tracked.
+
+Verify real binary bytes/zero-byte/multipart repeated fields and binary files with mature multipart parser, content types/Unicode/variables/redirect replay/no missing-file or boundary mismatch sends, source/import/export privacy roundtrip, file limits, stale picker and UI/native shared routes. Run core/formats/server relevant tests, full tests, strict Clippy/fmt, frontend tests/typecheck/build, embedded/browser QA and independent review. Do not claim parent parity from this slice.
+
+
+Review clarifications: default typed-file withholding applies even when mode is a saved variable; external formats reject dynamic modes. Metadata interpolation is bounded before allocation, text/file expansion shares5MiB and the existing total budget, and serde writes into an8MiB bounded sink. Disabled MIME templates remain dormant. Privacy replacements are bounded with valid metadata placeholders and conservative text withholding. A generic binary MIME suggestion never overrides a user edit made during selection.

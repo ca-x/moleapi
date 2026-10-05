@@ -68,13 +68,26 @@ async fn execute_inner(
     }
     let mut method = Method::from_bytes(r.method.as_bytes())?;
     let mut headers = request_headers(r)?;
-    let mut body = raw_body.or_else(|| {
-        if r.body_kind == "none" {
-            None
-        } else {
-            Some(r.body.as_bytes().to_vec())
-        }
-    });
+    let structured = if raw_body.is_none() && matches!(r.body_kind.as_str(), "binary" | "multipart")
+    {
+        Some(crate::request_body::prepare_structured_body(r).await?)
+    } else {
+        None
+    };
+    if let Some((_, content_type)) = &structured
+        && (r.body_kind == "multipart" || !headers.contains_key("content-type"))
+    {
+        headers.insert("content-type", HeaderValue::from_str(content_type)?);
+    }
+    let mut body = raw_body
+        .or_else(|| structured.map(|(bytes, _)| bytes))
+        .or_else(|| {
+            if r.body_kind == "none" {
+                None
+            } else {
+                Some(r.body.as_bytes().to_vec())
+            }
+        });
     if r.body_kind == "json" && !headers.contains_key("content-type") {
         headers.insert("content-type", HeaderValue::from_static("application/json"));
     }
