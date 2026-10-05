@@ -705,3 +705,67 @@ fn tcp_opaque_binary_draft_requires_explicit_full_export() {
     let full = export(&w, "moleapi", true).unwrap();
     assert_eq!(import("moleapi", &full.content).unwrap().data, w.data);
 }
+
+#[test]
+fn data_request_exports_screen_credentials_copied_sql_and_keep_explicit_originals() {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    let config = moleapi_core::DataConfig {
+        source: moleapi_core::DataSource::Postgresql,
+        sql: "SELECT 'it''s-private' AS copied".into(),
+        ..Default::default()
+    };
+    let request:moleapi_core::RequestSpec=serde_json::from_value(json!({"id":"data","name":"Data request","protocol":{"kind":"data","source":"postgresql","sql":config.sql},"method":"GET","url":"postgresql://user:it%27s-private@db.example/main","description":"","query":[],"headers":[],"body_kind":"none","body":"","auth":{"kind":"none","token":"","username":"","password":""},"timeout_ms":1000,"verify_tls":true,"follow_redirects":false,"assertions":[],"examples":[]})).unwrap();
+    let mut w=workspace(serde_json::from_value(json!({"schema_version":1,"collections":[{"id":"c","name":"Data","description":"","requests":[request]}],"environments":[],"active_environment_id":null})).unwrap());
+    let format = "moleapi";
+    {
+        let safe = export(&w, format, false).unwrap();
+        assert!(
+            !safe.content.contains("it%27s-private"),
+            "{format}:{}",
+            safe.content
+        );
+        assert!(
+            !safe.content.contains("it''s-private"),
+            "{format}:{}",
+            safe.content
+        );
+        let full = export(&w, format, true).unwrap();
+        let restored = import(format, &full.content).unwrap();
+        assert_eq!(
+            restored.data.collections[0].requests[0].protocol,
+            w.data.collections[0].requests[0].protocol
+        );
+        assert_eq!(
+            restored.data.collections[0].requests[0].url,
+            w.data.collections[0].requests[0].url
+        );
+    }
+    assert!(
+        export(&w, "postman", true).is_err(),
+        "Dedicated Data configuration must not be silently exported as HTTP"
+    );
+    let request = &mut w.data.collections[0].requests[0];
+    request.url = String::new();
+    request.protocol = moleapi_core::Protocol::Data {
+        config: Box::new(moleapi_core::DataConfig {
+            source: moleapi_core::DataSource::LocalFile,
+            file_name: "selected.csv".into(),
+            file_base64: STANDARD.encode(vec![b'a'; 4 * 1024 * 1024]),
+            ..Default::default()
+        }),
+    };
+    let safe = export(&w, "moleapi", false).unwrap();
+    let safe = import("moleapi", &safe.content).unwrap();
+    let moleapi_core::Protocol::Data { config } = &safe.data.collections[0].requests[0].protocol
+    else {
+        panic!("lost Data protocol")
+    };
+    assert!(config.file_base64.is_empty());
+    let full = export(&w, "moleapi", true).unwrap();
+    assert!(full.content.len() > 5 * 1024 * 1024);
+    let restored = import("moleapi", &full.content).unwrap();
+    assert_eq!(
+        restored.data.collections[0].requests[0].protocol,
+        w.data.collections[0].requests[0].protocol
+    );
+}

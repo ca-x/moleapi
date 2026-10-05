@@ -1,0 +1,33 @@
+[package]
+name = "moleapi-data"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json = { workspace = true, features = ["raw_value"] }
+tokio.workspace = true
+moleapi-core = { path = "../core" }
+futures-util = "0.3"
+base64 = "0.22"
+bytes = "1"
+hex = "0.4"
+url = "2"
+percent-encoding = "2"
+tokio-postgres = { version = "=0.7.18", features = ["with-serde_json-1", "with-chrono-0_4", "with-uuid-1"] }
+tokio-postgres-rustls = "=0.14.0"
+mysql_async = { version = "=0.37.1", default-features = false, features = ["minimal-rust", "rustls-tls", "ring", "immediate-drop"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-native-certs = "0.8"
+rustls-pemfile = "2"
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+datafusion = { version = "=55.1.0", default-features = false, features = ["sql", "parquet", "recursive_protection", "string_expressions", "datetime_expressions", "unicode_expressions"] }
+sqlparser = { version = "=0.63.0", features = ["visitor"] }
+tempfile = "3"
+cap = "0.1"
+tokio-util = { version = "0.7", features = ["rt"] }
+chrono = "0.4"
+uuid.workspace = true

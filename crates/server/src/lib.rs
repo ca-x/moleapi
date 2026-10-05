@@ -26,7 +26,13 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-pub use moleapi_script_runtime::dispatch_worker as dispatch_script_worker;
+pub fn dispatch_script_worker() -> anyhow::Result<bool> {
+    if moleapi_script_runtime::dispatch_worker()? {
+        Ok(true)
+    } else {
+        moleapi_data::dispatch_file_worker()
+    }
+}
 use sea_orm::DatabaseConnection;
 use std::{
     path::{Path, PathBuf},

@@ -5,7 +5,7 @@
 
 MoleAPI uses Rust/Axum/SeaORM, React/Radix UI/CodeMirror, and Tauri. SQLite is the default; PostgreSQL and MySQL are also supported. The server embeds its frontend, fonts, and editors, so running the binary does not require Node.js. The desktop client uses local SQLite through in-process IPC and can optionally synchronize with your self-hosted server.
 
-**Development is ongoing; complete Apifox/Postman feature coverage has not been achieved.** [Implementation status](docs/IMPLEMENTATION-STATUS.md), [protocol coverage](docs/PROTOCOL-COVERAGE.md), and [code-generation coverage](docs/SNIPPET-COVERAGE.md) distinguish verified behavior from remaining work. Dedicated clients cover HTTP, SSE, WebSocket, GraphQL, gRPC, Socket.IO, MQTT, SOAP, MCP, A2A, TCP/TLS, and Webhook receivers. Workspaces, collections, scoped/environment variables, scripts, history, assertions, basic Mock, and collection execution are available. Multi-language request examples and full SDK/server generation are separate capabilities; the latter remains in progress.
+**Development is ongoing; complete Apifox/Postman feature coverage has not been achieved.** [Implementation status](docs/IMPLEMENTATION-STATUS.md), [protocol coverage](docs/PROTOCOL-COVERAGE.md), and [code-generation coverage](docs/SNIPPET-COVERAGE.md) distinguish verified behavior from remaining work. Dedicated clients cover HTTP, SSE, WebSocket, GraphQL, gRPC, Socket.IO, MQTT, SOAP, MCP, A2A, TCP/TLS, Data SQL, and Webhook receivers. Workspaces, collections, scoped/environment variables, scripts, history, assertions, basic Mock, and collection execution are available. Multi-language request examples and full SDK/server generation are separate capabilities; the latter remains in progress.
 
 ## Screenshots
 
@@ -14,6 +14,10 @@ These screenshots show the actual embedded self-hosted interface with synthetic 
 ![English API workbench](docs/images/workbench-en.png)
 
 ![Chinese protocol workbench](docs/images/protocol-zh-CN.png)
+
+![Data SQL result view](docs/images/data-en.png)
+
+![Chinese SQL editor and schema explorer](docs/images/data-zh-CN.png)
 
 ## Languages
 

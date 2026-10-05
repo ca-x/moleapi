@@ -39,6 +39,10 @@ pub struct Example {
 pub enum Protocol {
     #[default]
     Http,
+    Data {
+        #[serde(flatten)]
+        config: Box<crate::DataConfig>,
+    },
     Tcp {
         #[serde(flatten)]
         config: Box<crate::TcpConfig>,
@@ -129,6 +133,10 @@ fn empty_object() -> serde_json::Value {
     serde_json::json!({})
 }
 impl Protocol {
+    pub fn is_data(&self) -> bool {
+        matches!(self, Self::Data { .. })
+    }
+
     pub fn is_tcp(&self) -> bool {
         matches!(self, Self::Tcp { .. })
     }

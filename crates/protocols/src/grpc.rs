@@ -50,53 +50,7 @@ impl Decoder for DynamicDecoder {
             .map_err(|e| Status::internal(e.to_string()))
     }
 }
-// Explicit opt-out of certificate trust/hostname validation; rustls still performs
-// TLS framing, encryption, SNI and cryptographic handshake-signature validation.
-#[derive(Debug)]
-pub(crate) struct UnverifiedCertificate;
-impl rustls::client::danger::ServerCertVerifier for UnverifiedCertificate {
-    fn verify_server_cert(
-        &self,
-        _certificate: &rustls::pki_types::CertificateDer<'_>,
-        _intermediates: &[rustls::pki_types::CertificateDer<'_>],
-        _name: &rustls::pki_types::ServerName<'_>,
-        _ocsp: &[u8],
-        _now: rustls::pki_types::UnixTime,
-    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
-        Ok(rustls::client::danger::ServerCertVerified::assertion())
-    }
-    fn verify_tls12_signature(
-        &self,
-        message: &[u8],
-        certificate: &rustls::pki_types::CertificateDer<'_>,
-        signature: &rustls::DigitallySignedStruct,
-    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        rustls::crypto::verify_tls12_signature(
-            message,
-            certificate,
-            signature,
-            &rustls::crypto::ring::default_provider().signature_verification_algorithms,
-        )
-    }
-    fn verify_tls13_signature(
-        &self,
-        message: &[u8],
-        certificate: &rustls::pki_types::CertificateDer<'_>,
-        signature: &rustls::DigitallySignedStruct,
-    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        rustls::crypto::verify_tls13_signature(
-            message,
-            certificate,
-            signature,
-            &rustls::crypto::ring::default_provider().signature_verification_algorithms,
-        )
-    }
-    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-        rustls::crypto::ring::default_provider()
-            .signature_verification_algorithms
-            .supported_schemes()
-    }
-}
+pub(crate) use moleapi_core::UnverifiedCertificate;
 pub(crate) async fn channel(request: &RequestSpec, policy: NetworkPolicy) -> Result<Channel> {
     let url = protocol_url(&request.url, false)?;
     ensure!(
@@ -319,7 +273,9 @@ pub(crate) async fn run(
                         tx.send(message).await.context("gRPC input stream closed")?;
                     }
                     Command::GrpcHalfClose => break,
-                    Command::TcpData(_)
+                    Command::DataQuery { .. }
+                    | Command::DataSchema
+                    | Command::TcpData(_)
                     | Command::TcpHalfClose
                     | Command::A2a(_)
                     | Command::Mcp(_)

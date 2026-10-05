@@ -5,6 +5,7 @@ mod mcp;
 mod mqtt;
 mod tcp;
 pub use grpc::{ReflectionResult, ReflectionStatus, reflect};
+mod data;
 mod engine;
 mod graphql;
 mod models;
@@ -34,6 +35,14 @@ fn now() -> String {
     chrono::Utc::now().to_rfc3339()
 }
 pub(crate) enum Command {
+    DataQuery {
+        query_id: String,
+        sql: String,
+        read_only: bool,
+        stop: CancellationToken,
+    },
+    DataSchema,
+
     TcpData(Vec<u8>),
     TcpHalfClose,
     A2a(SendMessage),
@@ -54,6 +63,7 @@ struct Record {
 }
 pub(crate) struct Session {
     owner: String,
+    data: Mutex<data::Control>,
     record: Mutex<Record>,
     cancel: CancellationToken,
     done: watch::Sender<bool>,
@@ -71,6 +81,14 @@ pub(crate) struct Session {
 impl Session {
     pub(crate) fn event(&self, direction: &str, message: EventMessage) -> Result<()> {
         let payload_size = match &message {
+            EventMessage::DataReady { .. }
+            | EventMessage::DataSchema { .. }
+            | EventMessage::DataStarted { .. }
+            | EventMessage::DataColumns { .. }
+            | EventMessage::DataRows { .. }
+            | EventMessage::DataFinished { .. }
+            | EventMessage::DataError { .. }
+            | EventMessage::DataCancelled { .. } => serde_json::to_vec(&message)?.len(),
             EventMessage::A2aReady { .. }
             | EventMessage::A2aResult { .. }
             | EventMessage::A2aStream { .. }
@@ -326,7 +344,9 @@ impl SessionManager {
             workspace_id: workspace.into(),
             request_id: request.id.clone(),
             url: safe_url,
-            protocol: if request.protocol.is_tcp() {
+            protocol: if request.protocol.is_data() {
+                "data"
+            } else if request.protocol.is_tcp() {
                 "tcp"
             } else if request.protocol.is_a2a() {
                 "a2a"
@@ -361,6 +381,7 @@ impl SessionManager {
         let (commands, rx) = mpsc::channel(32);
         let (done, _) = watch::channel(false);
         let session = Arc::new(Session {
+            data: Mutex::new(data::Control::default()),
             owner: owner.into(),
             record: Mutex::new(Record {
                 summary: summary.clone(),
@@ -469,6 +490,24 @@ impl SessionManager {
             earliest_cursor: earliest,
             dropped_count: earliest.saturating_sub(after.saturating_add(1)),
         })
+    }
+    pub fn configure_data(
+        &self,
+        owner: &str,
+        id: &str,
+        environment: moleapi_core::Environment,
+        worker: &std::path::Path,
+    ) -> Result<()> {
+        let session = self.owned(owner, id)?;
+        ensure!(
+            session.record.lock().unwrap().summary.protocol == "data",
+            "Expected Data session"
+        );
+        ensure!(worker.is_absolute(), "Data worker path must be absolute");
+        let mut data = session.data.lock().unwrap();
+        data.environment = Some(environment);
+        data.worker = Some(worker.to_owned());
+        Ok(())
     }
     pub fn configure_tcp(
         &self,
@@ -615,6 +654,14 @@ impl SessionManager {
         let s = self.owned(owner, id)?;
         if matches!(
             &message,
+            SendMessage::DataQuery { .. }
+                | SendMessage::DataCancel { .. }
+                | SendMessage::DataSchemaRefresh
+        ) {
+            return data::send(&s, message);
+        }
+        if matches!(
+            &message,
             SendMessage::TcpSend { .. } | SendMessage::TcpHalfClose
         ) {
             return tcp::send(&s, message);
@@ -716,6 +763,9 @@ impl SessionManager {
         }
         let ping = matches!(&message, SendMessage::Ping { .. });
         let (message, size) = match message {
+            SendMessage::DataQuery { .. }
+            | SendMessage::DataCancel { .. }
+            | SendMessage::DataSchemaRefresh => unreachable!(),
             SendMessage::TcpSend { .. }
             | SendMessage::TcpHalfClose
             | SendMessage::A2aRequest { .. }

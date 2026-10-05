@@ -177,8 +177,20 @@ pub fn resolve_request(
         // This also recognizes templates preserved as percent-encoded Postman fields.
         value["body"] = serde_json::Value::String(String::new());
     }
+    let data_original = if let Protocol::Data { config } = &request.protocol {
+        value["protocol"]["sql"] = "".into();
+        value["protocol"]["file_base64"] = "".into();
+        Some((config.sql.clone(), config.file_base64.clone()))
+    } else {
+        None
+    };
     let mut budget = 20 * 1024 * 1024;
     replace(&mut value, &vars, &mut budget)?;
+    if let Some((sql, file)) = data_original {
+        value["protocol"]["sql"] = sql.into();
+        value["protocol"]["file_base64"] = file.into();
+    }
+
     if let Some(mut auth) = socketio {
         replace(&mut auth, &vars, &mut budget)?;
         value["protocol"]["auth_source"] = serde_json::to_string(&auth)?.into();

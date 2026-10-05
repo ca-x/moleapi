@@ -6,3 +6,10 @@ These are real captures of the embedded hosted MoleAPI application, taken with a
 - `protocol-zh-CN.png`: Simplified Chinese dark-theme TCP session with an actual echo, wire counters, and UTF8/Hex/Base64 views.
 
 The screenshots share the desktop frontend; they do not demonstrate native tray behavior or installer verification. Capture fixture accounts, loopback services, capability URLs and databases are temporary and are not deployed to the public server.
+
+Data captures were added on 2026-10-05 with agent-browser at 1440 × 1000:
+
+- `data-en.png`: real CSV-backed SQL query with an explicit DECIMAL cast, typed rows and JSON/CSV downloads.
+- `data-zh-CN.png`: Chinese dark-theme SQL editor and expanded customers schema on an actual connected file session.
+
+These use the same synthetic fixture account/file. Actual downloaded results preserve `18.00`, `12.50` and `7.25`; native desktop dialogs are not inferred from browser downloads.

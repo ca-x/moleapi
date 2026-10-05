@@ -16,6 +16,7 @@ tokio-util = { version = "0.7", features = ["rt"] }
 tonic.workspace = true
 moleapi-protocols = { path = "../protocols" }
 moleapi-core = { path = "../core" }
+moleapi-data = { path = "../data" }
 moleapi-script-runtime = { path = "../script-runtime" }
 moleapi-formats = { path = "../formats" }
 anyhow.workspace = true

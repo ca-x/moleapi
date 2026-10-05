@@ -5,7 +5,7 @@
 
 MoleAPI 使用 Rust/Axum/SeaORM、React/Radix UI/CodeMirror 和 Tauri。默认 SQLite，也支持 PostgreSQL 与 MySQL；服务端嵌入前端、字体和编辑器资源，运行时无需 Node.js。桌面端通过进程内 IPC 使用本地 SQLite，可独立运行并按需连接自托管服务器同步。
 
-**项目仍在开发，尚未完整覆盖 Apifox／Postman。** [实现与验证状态](docs/IMPLEMENTATION-STATUS.md)、[协议覆盖](docs/PROTOCOL-COVERAGE.md)和[代码生成覆盖](docs/SNIPPET-COVERAGE.md)记录真实证据与缺口。已有专用 HTTP、SSE、WebSocket、GraphQL、gRPC、Socket.IO、MQTT、SOAP、MCP、A2A、TCP/TLS 专用客户端和 Webhook 接收器，以及工作区、集合、环境／作用域变量、脚本、历史、断言、基础 Mock 和集合运行器。多语言请求示例与完整 SDK／服务端生成是不同能力，后者仍在推进。
+**项目仍在开发，尚未完整覆盖 Apifox／Postman。** [实现与验证状态](docs/IMPLEMENTATION-STATUS.md)、[协议覆盖](docs/PROTOCOL-COVERAGE.md)和[代码生成覆盖](docs/SNIPPET-COVERAGE.md)记录真实证据与缺口。已有专用 HTTP、SSE、WebSocket、GraphQL、gRPC、Socket.IO、MQTT、SOAP、MCP、A2A、TCP/TLS、Data SQL 专用客户端和 Webhook 接收器，以及工作区、集合、环境／作用域变量、脚本、历史、断言、基础 Mock 和集合运行器。多语言请求示例与完整 SDK／服务端生成是不同能力，后者仍在推进。
 
 ## 软件截图
 
@@ -14,6 +14,10 @@ MoleAPI 使用 Rust/Axum/SeaORM、React/Radix UI/CodeMirror 和 Tauri。默认 S
 ![英文 API 工作台](docs/images/workbench-en.png)
 
 ![中文协议工作台](docs/images/protocol-zh-CN.png)
+
+![Data SQL 查询结果](docs/images/data-en.png)
+
+![中文 SQL 编辑器与数据结构浏览器](docs/images/data-zh-CN.png)
 
 ## 语言
 

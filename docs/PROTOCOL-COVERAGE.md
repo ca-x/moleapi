@@ -17,7 +17,7 @@
 | TCP Socket/报文处理 | Apifox，Postman公开目录未定位 |真实TCP/TLS、文本/Hex/Base64、原始块/行/32位大小端长度分帧、半关闭/读取/取消/空闲限制、原始草稿/安全导出已实现；实际fixture及浏览器验证，分发验证留到整合 |Tokio、tokio-util BytesCodec/LinesCodec/LengthDelimitedCodec、tokio-rustls/rustls、hex/base64；浏览器Hex显示复用@scure/base |
 | Dubbo | Apifox，Postman公开目录未定位 |待实现 |Apache dubbo0.4.0；确认Triple与经典Dubbo/Hessian覆盖，hessian2仅是序列化库，不能据此宣称完整Dubbo客户端 |
 | Webhook监听/检查/重放 | 两者 | 已实现持久接收器、私密检查/导出、编辑二进制重放及取消；独立客户端显式本地监听已有真实套接字测试，原生UI/平台验证待完成 | Axum/Hyper、SeaORM、现有checked reqwest、base64 |
-| Data request：PG/MySQL、local/remote file SQL | Postman，Apifox公开目录未定位 |待实现；应用存储支持三种数据库不算Data客户端 |已有SQLx0.8.6优先复用；DataFusion/DuckDB候选需评估文件SQL、网络/文件访问限制和分发体积 |
+| Data request：PG/MySQL、local/remote file SQL | Postman，Apifox公开目录未定位 | 已实现专用 Data 客户端、文件 SQL、结构浏览、只读/写入、类型结果和导出；真实数据库时序及最新平台验证待 Actions | tokio-postgres/tokio-postgres-rustls、mysql_async、SQLparser、DataFusion/Arrow、CodeMirror SQL/Lezer、TanStack Table、Decimal.js、Papa Parse |
 
 不增加没有公开证据的“竞品已支持”结论；未定位不是断言不支持。HTTP传输承载SOAP/GraphQL/MCP/A2A等不等于完成它们的 schema、方法选择、事件、任务、鉴权和编辑器功能。Apifox/Postman类型与功能参考链接见[完整矩阵](FEATURE-MATRIX.md)，原始目录见[Apifox](APIFOX-CATALOG.md)/[Postman](POSTMAN-CATALOG.md)。
 
@@ -36,3 +36,10 @@ MCP 当前边界：已验证协商协议2025-11-25；不把SDK版本号当成支
 A2A 当前边界：明确选择0.3或1.0，0.3仅JSONRPC，1.0支持JSONRPC与HTTP+JSON；未实现A2A gRPC绑定、OAuth交互调试或自动推送接收。仅显式操作注册推送，message配置中的隐式注册会被拒绝。任务取消是远端操作，本地Stop终止当前请求而不伪造任务取消。Card不自动选择地址、不下载file URI；原文保存与显式含私密值导出保留原始数据，默认导出屏蔽已知私密值。真实SDK测试9项、原文/私密值互换2项及浏览器实际调用/流/任务/本地Stop已验证。
 
 TCP当前边界：只连接tcp://或tcps://显式端口；共享权限/预脚本/环境快照、检查并固定DNS地址。原始读取块不是对端报文边界；长度字段固定4字节，行编解码遵循成熟SDK。TLS实际线缆字节包括握手/记录开销。限制512发送命令、4096接收帧、20MiB输入/线缆、1MiB帧，实际配额/阻塞发送取消测试通过。已知非空私密值/私密发送会保守隐藏本次会话后续载荷；空私密变量不误隐藏。默认导出屏蔽敏感JSON/副本和不能可靠筛查的编码二进制草稿；显式完整导出保留原文。自定义分帧脚本/长度偏移、自动重连、mTLS管理、事件脚本、持久流历史仍待实现。
+
+
+Data 当前边界：数据库 URL 使用已检查并固定的地址与原始 TLS 名称，支持显式 TLS/CA/验证选项和账号密码。文件由用户选择或经检查的 HTTP(S) 获取，支持 CSV/JSON/JSONL/Parquet，不读取任意服务端文件路径。默认只读；数据库允许显式开启 DML/DDL，文件始终只读。执行一条选中/光标语句，成熟 AST 拒绝事务和已知会话控制；数据库函数仍由真实数据库权限约束，不宣称函数沙箱。结构元数据使用独立、可丢弃的检查地址连接，避免截断结果污染查询连接。
+
+文件最多 5 MiB；文件查询运行在具有堆/内存/超时限制的独立应用子进程，禁用外部存储与 spill。返回最多 1000 行、6 MiB，单行/单元格另有限制。截断数据库查询保留已读取的行并关闭连接；取消/超时关闭连接，不保证写入已回滚，DDL 可能有数据库自身的隐式提交。精确整数/小数以字符串返回；CSV 小数和 JSON 小数/混合数字列保留精确文本，可显式 CAST AS DECIMAL。JSON 结果导出保留类型、重复列名和截断信息；CSV 空单元格表示 NULL，采用成熟库转义电子表格公式。默认工作区导出移除本地文件字节和已知私密值，显式包含私密数据导出保留原件。MoleAPI 格式支持 Data 往返；Postman/OpenAPI 导出不能表示专用 Data 请求时明确拒绝。
+
+Data 独立后端审查与修复复审已完成；新增真实 PG/MySQL 精度、写入/只读、截断、取消及服务端连接消失断言在现有数据库 CI 中执行。功能源码验证与数据库/平台分发证据分开记录，不据应用存储支持推断 Data 支持。共享脚本、响应提取/断言、持久数据历史和更完整的数据源格式仍需后续整合。

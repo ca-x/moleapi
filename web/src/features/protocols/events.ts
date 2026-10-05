@@ -29,6 +29,7 @@ export function appendEvents(
 export function messageContent(event: ProtocolEvent): string {
   const message = event.message;
   switch (message.kind) {
+    case "data_ready":case "data_schema":case "data_started":case "data_columns":case "data_rows":case "data_finished":case "data_error":case "data_cancelled":return JSON.stringify(message,null,2);
     case "tcp_data": {
       if(message.redacted)return t("私密载荷已隐藏 · {{value0}} 字节", { value0: message.bytes });
       try {return [message.text!==null ? `UTF8:\n${message.text}` : t("UTF8: 非文本数据"),`Hex:\n${hex.encode(base64.decode(message.base64))}`,`Base64:\n${message.base64}`].join("\n\n");}

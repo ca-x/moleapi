@@ -1,0 +1,3 @@
+# MoleAPI PostgreSQL SDK receive boundary
+
+Upstream rust-postgres/tokio-postgres 0.7.18, downloaded through Cargo's registry with its original licenses preserved. Cargo.lock pins the dependency. The sole SDK behavior patch is in src/codec.rs: after the upstream postgres-protocol Header parser returns the declared frame length, reject peer frames over1MiB before waiting/allocating for the body. All wire parsing, authentication, TLS negotiation, request lifecycle and cancellation remain upstream code. No PostgreSQL packet encoder/parser is implemented by MoleAPI. The application additionally pins checked connection/cancellation destinations and bounds connection I/O.

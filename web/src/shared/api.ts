@@ -74,7 +74,7 @@ export async function saveFile(file: ExportResult): Promise<void> {
     ]);
     const path = await save({
       defaultPath: file.filename,
-      filters: [{ name: t("API 文件"), extensions: ["json", "yaml", "txt"] }],
+      filters: [{ name: t("API 文件"), extensions: ["json", "yaml", "txt", "csv"] }],
     });
     if (path) await writeTextFile(path, file.content);
     return;
@@ -109,8 +109,8 @@ export async function pickFile(): Promise<string | null> {
     input.onchange = () => {
       const file = input.files?.[0];
       if (!file) return resolve(null);
-      if (file.size > 5 * 1024 * 1024) {
-        reject(new LocalizedError("文件超过 5 MiB 导入限制。"));
+      if (file.size > 20 * 1024 * 1024) {
+        reject(new LocalizedError("文件超过 20 MiB 导入限制。"));
         return;
       }
       file.text().then(resolve, reject);

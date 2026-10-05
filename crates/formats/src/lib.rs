@@ -21,8 +21,8 @@ pub struct ExportResult {
 }
 
 pub fn import(format: &str, content: &str) -> Result<ImportResult> {
-    if content.len() > 5 * 1024 * 1024 {
-        bail!("导入文件超过 5 MiB 限制");
+    if content.len() > 20 * 1024 * 1024 {
+        bail!("导入文件超过 20 MiB 限制");
     }
     let result = match format {
         "openapi" => openapi::import(content)?,

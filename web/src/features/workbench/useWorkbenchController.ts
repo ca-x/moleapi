@@ -65,12 +65,13 @@ export function useWorkbenchController() {
   );
   const graphqlRun = useRef<(() => void) | null>(null);
   const mcpRun = useRef<(() => void) | null>(null);
+  const dataRun = useRef<(() => void) | null>(null);
   const a2aRun = useRef<(() => void) | null>(null);
   const sendRequest =
-    requests.request?.protocol?.kind === "a2a" ? () => a2aRun.current?.() : requests.request?.protocol?.kind === "mcp" ? () => mcpRun.current?.() : requests.request?.protocol?.kind === "graphql"
+    requests.request?.protocol?.kind === "data" ? () => dataRun.current?.() : requests.request?.protocol?.kind === "a2a" ? () => a2aRun.current?.() : requests.request?.protocol?.kind === "mcp" ? () => mcpRun.current?.() : requests.request?.protocol?.kind === "graphql"
       ? () => graphqlRun.current?.()
       : requests.request?.protocol?.kind &&
-          ["tcp", "sse", "websocket", "grpc", "socketio", "mqtt", "mcp"].includes(
+          ["data", "tcp", "sse", "websocket", "grpc", "socketio", "mqtt", "mcp"].includes(
             requests.request.protocol.kind,
           )
         ? protocolSession.connect
@@ -225,6 +226,7 @@ export function useWorkbenchController() {
     graphqlRun,
     mcpRun,
     a2aRun,
+    dataRun,
     send: sendRequest,
     busy: requests.busy || protocolSession.busy,
     sending: requests.sending || protocolSession.busy,

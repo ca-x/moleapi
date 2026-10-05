@@ -13,7 +13,7 @@ export interface ProtocolSession {
   id: string;
   workspace_id: string;
   request_id: string;
-  protocol: "tcp" | "sse" | "websocket" | "graphql" | "grpc" | "socketio" | "mqtt" | "mcp" | "a2a";
+  protocol: "data" | "tcp" | "sse" | "websocket" | "graphql" | "grpc" | "socketio" | "mqtt" | "mcp" | "a2a";
   client_half_closed?: boolean;
   url: string;
   state: SessionState;
@@ -28,6 +28,7 @@ export interface ProtocolSession {
   request_updates?: RequestUpdate[];
 }
 export type ProtocolMessage =
+  | import("../data/types").DataEvent
   | {kind:"tcp_data";base64:string;text:string|null;bytes:number;redacted:boolean}
   | {kind:"tcp_half_closed"}
   | A2aMessage
@@ -110,6 +111,9 @@ export interface EventBatch {
   dropped_count: number;
 }
 export type SendMessage =
+  | {kind:"data_query";query_id:string;sql:string;read_only:boolean}
+  | {kind:"data_cancel";query_id:string}
+  | {kind:"data_schema_refresh"}
   | {kind:"tcp_send";message:import("../tcp/types").TcpMessage}
   | {kind:"tcp_half_close"}
   | A2aCommand

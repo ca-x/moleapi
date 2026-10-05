@@ -4,6 +4,7 @@ use serde_json::Value;
 pub(super) fn workspace(source: &Workspace) -> Workspace {
     let privacy = ExportPrivacy::new(source);
     let tcp_privacy = ExportPrivacy::from_workspace(source, true);
+    let data_privacy = &tcp_privacy;
     let mut result = source.clone();
     for environment in &mut result.data.environments {
         for variable in &mut environment.variables {
@@ -46,6 +47,13 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
             request.url = redact_url(&request.url);
             request.body = redact_embedded_json(&request.body);
             match &mut request.protocol {
+                moleapi_core::Protocol::Data { config } => {
+                    request.url = data_privacy.screen_text(&redact_url(&request.url));
+                    config.file_base64.clear();
+                    config.sql = data_privacy.screen_generation_text(&config.sql);
+                    config.file_name = data_privacy.screen_text(&config.file_name);
+                    config.table_name = data_privacy.screen_text(&config.table_name);
+                }
                 moleapi_core::Protocol::Tcp { config } => {
                     request.url = tcp_privacy.screen_text(&request.url);
                     config.message.payload_source = if config.message.secret || tcp_privacy.withhold
@@ -256,7 +264,7 @@ fn redact_url(raw: &str) -> String {
     };
     if !matches!(
         url.scheme(),
-        "http" | "https" | "ws" | "wss" | "mqtt" | "mqtts"
+        "http" | "https" | "ws" | "wss" | "mqtt" | "mqtts" | "postgres" | "postgresql" | "mysql"
     ) {
         return raw.into();
     }
@@ -539,8 +547,18 @@ impl ExportPrivacy {
                 }
                 if let Ok(url) = url::Url::parse(&request.url) {
                     secrets.insert(url.username().into());
+                    secrets.insert(
+                        percent_encoding::percent_decode_str(url.username())
+                            .decode_utf8_lossy()
+                            .into_owned(),
+                    );
                     if let Some(password) = url.password() {
                         secrets.insert(password.into());
+                        secrets.insert(
+                            percent_encoding::percent_decode_str(password)
+                                .decode_utf8_lossy()
+                                .into_owned(),
+                        );
                     }
                     for (key, value) in url.query_pairs() {
                         if sensitive(&key) {
@@ -577,6 +595,8 @@ impl ExportPrivacy {
             let mut patterns = std::collections::BTreeSet::new();
             for text in &secrets {
                 patterns.insert(text.clone());
+                patterns.insert(text.replace('\'', "''"));
+                patterns.insert(text.replace('\\', "\\\\").replace('\'', "\\'"));
                 patterns.insert(STANDARD.encode(text));
                 patterns.insert(URL_SAFE_NO_PAD.encode(text));
                 let form: String = url::form_urlencoded::byte_serialize(text.as_bytes()).collect();

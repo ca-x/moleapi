@@ -96,6 +96,16 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
         }
     }
     crate::validate_tcp(r, templates)?;
+    if let Protocol::Data { config } = &r.protocol {
+        crate::validate_data_config(config)?;
+        ensure!(
+            r.body_kind == "none" && r.method == "GET",
+            "Data requests use GET marker with no HTTP body"
+        );
+        if config.source != crate::DataSource::LocalFile && (!templates || !r.url.contains("{{")) {
+            crate::data_url(&r.url, config.source)?;
+        }
+    }
     validate_script(&r.pre_request_script)?;
     validate_script(&r.post_response_script)?;
     ensure!(
@@ -123,6 +133,7 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
     if !(templates && r.protocol.is_a2a() && r.url.is_empty())
         && !r.protocol.is_mqtt()
         && !r.protocol.is_tcp()
+        && !r.protocol.is_data()
         && !matches!(&r.protocol, Protocol::Mcp { config } if config.transport == "stdio" || templates && r.url.is_empty())
         && (!templates || !r.url.contains("{{"))
     {

@@ -1,0 +1,335 @@
+[
+  {
+    "crate": "datafusion",
+    "version": "55.1.0",
+    "rust_version": "1.94.0",
+    "features": {
+      "array_expressions": [
+        "nested_expressions"
+      ],
+      "avro": [
+        "datafusion-datasource-avro"
+      ],
+      "backtrace": [
+        "datafusion-common/backtrace"
+      ],
+      "compression": [
+        "liblzma",
+        "bzip2",
+        "flate2",
+        "zstd",
+        "datafusion-datasource-arrow/compression",
+        "datafusion-datasource/compression"
+      ],
+      "crypto_expressions": [
+        "datafusion-functions/crypto_expressions"
+      ],
+      "datetime_expressions": [
+        "datafusion-functions/datetime_expressions"
+      ],
+      "default": [
+        "nested_expressions",
+        "crypto_expressions",
+        "datetime_expressions",
+        "encoding_expressions",
+        "regex_expressions",
+        "string_expressions",
+        "unicode_expressions",
+        "compression",
+        "parquet",
+        "recursive_protection",
+        "sql"
+      ],
+      "encoding_expressions": [
+        "datafusion-functions/encoding_expressions"
+      ],
+      "extended_tests": [],
+      "force_hash_collisions": [
+        "datafusion-physical-plan/force_hash_collisions",
+        "datafusion-common/force_hash_collisions"
+      ],
+      "math_expressions": [
+        "datafusion-functions/math_expressions"
+      ],
+      "nested_expressions": [
+        "datafusion-functions-nested"
+      ],
+      "parquet": [
+        "datafusion-common/parquet",
+        "dep:parquet",
+        "datafusion-datasource-parquet"
+      ],
+      "parquet_encryption": [
+        "parquet",
+        "parquet/encryption",
+        "datafusion-common/parquet_encryption",
+        "datafusion-datasource-parquet/parquet_encryption"
+      ],
+      "recursive_protection": [
+        "datafusion-common/recursive_protection",
+        "datafusion-expr/recursive_protection",
+        "datafusion-optimizer/recursive_protection",
+        "datafusion-physical-optimizer/recursive_protection",
+        "datafusion-physical-expr/recursive_protection",
+        "datafusion-sql?/recursive_protection",
+        "sqlparser?/recursive-protection"
+      ],
+      "regex_expressions": [
+        "datafusion-functions/regex_expressions"
+      ],
+      "serde": [
+        "dep:serde",
+        "arrow-schema/serde"
+      ],
+      "sql": [
+        "datafusion-common/sql",
+        "datafusion-functions-nested?/sql",
+        "datafusion-sql",
+        "sqlparser"
+      ],
+      "string_expressions": [
+        "datafusion-functions/string_expressions"
+      ],
+      "unicode_expressions": [
+        "datafusion-sql?/unicode_expressions",
+        "datafusion-functions/unicode_expressions"
+      ]
+    },
+    "repository": "https://github.com/apache/datafusion",
+    "license": "Apache-2.0"
+  },
+  {
+    "crate": "mysql_async",
+    "version": "0.37.1",
+    "rust_version": null,
+    "features": {
+      "aws-lc-rs": [
+        "rustls/aws_lc_rs",
+        "tokio-rustls/aws_lc_rs"
+      ],
+      "bigdecimal": [
+        "mysql_common/bigdecimal"
+      ],
+      "binlog": [
+        "mysql_common/binlog"
+      ],
+      "chrono": [
+        "mysql_common/chrono"
+      ],
+      "client_ed25519": [
+        "mysql_common/client_ed25519"
+      ],
+      "client_parsec": [
+        "mysql_common/client_parsec"
+      ],
+      "default": [
+        "flate2/zlib",
+        "derive"
+      ],
+      "default-rustls": [
+        "default-rustls-no-provider",
+        "aws-lc-rs"
+      ],
+      "default-rustls-no-provider": [
+        "flate2/rust_backend",
+        "derive",
+        "rustls-tls",
+        "tls12"
+      ],
+      "default-rustls-ring": [
+        "default-rustls-no-provider",
+        "ring"
+      ],
+      "derive": [
+        "mysql_common/derive"
+      ],
+      "frunk": [
+        "mysql_common/frunk"
+      ],
+      "minimal": [
+        "flate2/zlib"
+      ],
+      "minimal-rust": [
+        "flate2/rust_backend"
+      ],
+      "native-tls-tls": [
+        "native-tls",
+        "tokio-native-tls",
+        "pem"
+      ],
+      "nightly": [],
+      "ring": [
+        "rustls/ring",
+        "tokio-rustls/ring"
+      ],
+      "rust_decimal": [
+        "mysql_common/rust_decimal"
+      ],
+      "rustls-tls": [
+        "rustls",
+        "tokio-rustls",
+        "webpki-roots"
+      ],
+      "time": [
+        "mysql_common/time"
+      ],
+      "tls12": [
+        "rustls/tls12",
+        "tokio-rustls/tls12"
+      ],
+      "tracing": [
+        "dep:tracing"
+      ]
+    },
+    "repository": "https://github.com/blackbeam/mysql_async",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "crate": "tokio-postgres",
+    "version": "0.7.18",
+    "rust_version": "1.85",
+    "features": {
+      "array-impls": [
+        "postgres-types/array-impls"
+      ],
+      "default": [
+        "runtime"
+      ],
+      "js": [
+        "postgres-protocol/js",
+        "postgres-types/js"
+      ],
+      "runtime": [
+        "tokio/net",
+        "tokio/time"
+      ],
+      "with-bit-vec-0_6": [
+        "postgres-types/with-bit-vec-0_6"
+      ],
+      "with-bit-vec-0_7": [
+        "postgres-types/with-bit-vec-0_7"
+      ],
+      "with-bit-vec-0_8": [
+        "postgres-types/with-bit-vec-0_8"
+      ],
+      "with-bit-vec-0_9": [
+        "postgres-types/with-bit-vec-0_9"
+      ],
+      "with-chrono-0_4": [
+        "postgres-types/with-chrono-0_4"
+      ],
+      "with-cidr-0_2": [
+        "postgres-types/with-cidr-0_2"
+      ],
+      "with-cidr-0_3": [
+        "postgres-types/with-cidr-0_3"
+      ],
+      "with-eui48-0_4": [
+        "postgres-types/with-eui48-0_4"
+      ],
+      "with-eui48-1": [
+        "postgres-types/with-eui48-1"
+      ],
+      "with-geo-types-0_6": [
+        "postgres-types/with-geo-types-0_6"
+      ],
+      "with-geo-types-0_7": [
+        "postgres-types/with-geo-types-0_7"
+      ],
+      "with-jiff-0_1": [
+        "postgres-types/with-jiff-0_1"
+      ],
+      "with-jiff-0_2": [
+        "postgres-types/with-jiff-0_2"
+      ],
+      "with-serde_json-1": [
+        "postgres-types/with-serde_json-1"
+      ],
+      "with-smol_str-01": [
+        "postgres-types/with-smol_str-01"
+      ],
+      "with-time-0_2": [
+        "postgres-types/with-time-0_2"
+      ],
+      "with-time-0_3": [
+        "postgres-types/with-time-0_3"
+      ],
+      "with-uuid-0_8": [
+        "postgres-types/with-uuid-0_8"
+      ],
+      "with-uuid-1": [
+        "postgres-types/with-uuid-1"
+      ]
+    },
+    "repository": "https://github.com/rust-postgres/rust-postgres",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "crate": "tokio-postgres-rustls",
+    "version": "0.14.0",
+    "rust_version": null,
+    "features": {
+      "aws-lc-rs": [
+        "rustls/aws_lc_rs",
+        "tokio-rustls/aws_lc_rs"
+      ],
+      "default": [],
+      "native-certs": [
+        "dep:rustls-native-certs"
+      ],
+      "ring": [
+        "rustls/ring",
+        "tokio-rustls/ring"
+      ],
+      "webpki-roots": [
+        "dep:webpki-roots"
+      ]
+    },
+    "repository": "https://github.com/jbg/tokio-postgres-rustls",
+    "license": "MIT"
+  },
+  {
+    "crate": "sqlparser",
+    "version": "0.63.0",
+    "rust_version": null,
+    "features": {
+      "default": [
+        "std",
+        "recursive-protection"
+      ],
+      "derive-dialect": [
+        "sqlparser_derive"
+      ],
+      "json_example": [
+        "serde_json",
+        "serde"
+      ],
+      "recursive-protection": [
+        "std",
+        "recursive"
+      ],
+      "std": [],
+      "visitor": [
+        "sqlparser_derive"
+      ]
+    },
+    "repository": "https://github.com/apache/datafusion-sqlparser-rs",
+    "license": "Apache-2.0"
+  },
+  {
+    "crate": "arrow-csv",
+    "version": "60.0.0",
+    "rust_version": "1.88",
+    "features": {},
+    "repository": "https://github.com/apache/arrow-rs",
+    "license": "Apache-2.0"
+  },
+  {
+    "crate": "arrow-json",
+    "version": "60.0.0",
+    "rust_version": "1.88",
+    "features": {},
+    "repository": "https://github.com/apache/arrow-rs",
+    "license": "Apache-2.0"
+  }
+]

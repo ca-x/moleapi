@@ -1,7 +1,10 @@
 mod common;
+#[path = "data_database.rs"]
+mod data_database;
 use common::*;
 #[tokio::test]
 async fn identical_storage_auth_cas_tests_on_every_configured_database() {
+    data_database::verify_configured_data_clients().await;
     let directory = tempfile::tempdir().unwrap();
     let mut urls = vec![format!(
         "sqlite://{}?mode=rwc",

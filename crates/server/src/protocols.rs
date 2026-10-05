@@ -202,7 +202,13 @@ pub async fn create(
     }
     let stdio =
         matches!(&request.protocol, Protocol::Mcp { config } if config.transport == "stdio");
-    let mut resolved_url = if stdio {
+    let mut resolved_url = if let Protocol::Data { config } = &request.protocol {
+        if config.source == moleapi_core::DataSource::LocalFile {
+            moleapi_core::protocol_url("http://data.invalid/", false)
+        } else {
+            moleapi_core::data_url(target_url, config.source)
+        }
+    } else if stdio {
         moleapi_core::protocol_url("http://mcp.invalid/", false)
     } else if request.protocol.is_tcp() {
         moleapi_core::tcp_url(target_url)
@@ -251,6 +257,17 @@ pub async fn create(
             let _ = s.protocol_sessions.remove(&owner.0, &summary.id).await;
             return Err(e);
         }
+    }
+    if request.protocol.is_data()
+        && let Err(e) = s.protocol_sessions.configure_data(
+            &owner.0,
+            &summary.id,
+            scopes.effective(),
+            &s.script_worker,
+        )
+    {
+        let _ = s.protocol_sessions.remove(&owner.0, &summary.id).await;
+        return Err(error(e));
     }
     if request.protocol.is_tcp()
         && let Err(e) = s.protocol_sessions.configure_tcp(

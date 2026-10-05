@@ -44,6 +44,42 @@ pub struct SessionSummary {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum EventMessage {
+    DataReady {
+        info: moleapi_data::ConnectionInfo,
+    },
+    DataSchema {
+        tables: Vec<moleapi_data::SchemaTable>,
+        clear: bool,
+        done: bool,
+        truncated: bool,
+    },
+    DataStarted {
+        query_id: String,
+    },
+    DataColumns {
+        query_id: String,
+        columns: Vec<moleapi_data::Column>,
+    },
+    DataRows {
+        query_id: String,
+        rows: Vec<Vec<moleapi_data::Cell>>,
+    },
+    DataFinished {
+        query_id: String,
+        rows_affected: u64,
+        elapsed_ms: u64,
+        truncated: bool,
+        limit_reason: Option<String>,
+    },
+    DataError {
+        query_id: String,
+        message: String,
+    },
+    DataCancelled {
+        query_id: String,
+        write_outcome_unknown: bool,
+    },
+
     TcpData {
         base64: String,
         text: Option<String>,
@@ -212,6 +248,17 @@ pub struct EventBatch {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SendMessage {
+    DataQuery {
+        query_id: String,
+        sql: String,
+        #[serde(default = "data_read_only")]
+        read_only: bool,
+    },
+    DataCancel {
+        query_id: String,
+    },
+    DataSchemaRefresh,
+
     TcpSend {
         message: moleapi_core::TcpMessage,
     },
@@ -300,4 +347,8 @@ fn ack_timeout() -> u64 {
 
 fn mcp_arguments() -> String {
     "{}".into()
+}
+
+fn data_read_only() -> bool {
+    true
 }

@@ -1,0 +1,3 @@
+[build]
+# Bound simultaneous large SQL-engine link jobs on standard CI runners.
+jobs = 2

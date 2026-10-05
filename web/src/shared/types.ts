@@ -1,3 +1,4 @@
+import type { DataConfig } from "../features/data/types";
 import type { TcpConfig } from "../features/tcp/types";
 import type { A2aConfig } from "../features/a2a/types";
 import type { McpConfig } from "../features/mcp/types";
@@ -31,6 +32,7 @@ export interface GraphQLConfig {
   subscription_url?: string | null;
 }
 export type ProtocolConfig =
+  | DataConfig
   | TcpConfig
   | { kind: "http" | "sse" | "websocket" }
   | GraphQLConfig
