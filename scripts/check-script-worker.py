@@ -3,13 +3,17 @@
 import argparse
 import json
 import os
+import platform
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
+import time
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("binary", nargs="?")
 parser.add_argument("--container")
+parser.add_argument("--diagnostics", action="store_true", help="Capture bounded process/architecture evidence on timeout")
 args = parser.parse_args()
 if args.container:
     if os.environ.get("GITHUB_ACTIONS") != "true":
@@ -46,10 +50,37 @@ payload = {
     "request": request, "response": None, "private_values": [],
     "scopes": {scope: {} for scope in ["project", "collection", "environment", "data", "temporary"]},
 }
-reply = subprocess.run(
-    command, input=json.dumps(payload).encode(),
-    stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=environment, timeout=10, check=True,
-)
+started = time.monotonic()
+process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                           stderr=subprocess.PIPE, env=environment)
+try:
+    stdout, stderr = process.communicate(json.dumps(payload).encode(), timeout=10)
+except subprocess.TimeoutExpired:
+    # Diagnostics never turn a timeout into success or extend the worker acceptance limit.
+    if args.diagnostics or os.environ.get("GITHUB_ACTIONS") == "true":
+        print(f"Worker timeout evidence: host={platform.machine()} platform={sys.platform} "
+              f"pid={process.pid} elapsed={time.monotonic()-started:.3f}s", flush=True)
+        if sys.platform == "darwin" and not args.container:
+            def observe(arguments, limit=3):
+                try:
+                    observation = subprocess.run(arguments, stdout=subprocess.PIPE,
+                                                 stderr=subprocess.STDOUT, timeout=limit, check=False)
+                    print(observation.stdout.decode(errors="replace")[:32768], flush=True)
+                except (OSError, subprocess.TimeoutExpired) as error:
+                    print(f"Diagnostic unavailable: {error}", flush=True)
+            observe(["/usr/bin/file", str(binary)])
+            observe(["/bin/ps", "-p", str(process.pid), "-o", "pid,ppid,stat,etime,time,comm"])
+            with tempfile.TemporaryDirectory(prefix="moleapi-worker-sample-") as directory:
+                sample = Path(directory) / "sample.txt"
+                observe(["/usr/bin/sample", str(process.pid), "1", "10", "-file", str(sample)])
+                if sample.exists():
+                    print(sample.read_text(errors="replace")[:32768], flush=True)
+    process.kill()
+    process.communicate(timeout=3)
+    raise
+if process.returncode:
+    raise subprocess.CalledProcessError(process.returncode, command, stdout, stderr)
+reply = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
 result = json.loads(reply.stdout)
 assert result["status"] == "success", "Worker returned failure"
 assert result["output"]["logs"] == [{"level": "log", "message": "platform-worker-ok"}]
