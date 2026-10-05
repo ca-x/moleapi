@@ -1,5 +1,5 @@
 use crate::{ENGINE, generate_har};
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use moleapi_core::{Protocol, Workspace};
 use serde::Serialize;
@@ -20,11 +20,64 @@ pub fn generate_request(
     client: &str,
     include_secrets: bool,
 ) -> Result<Snippet> {
-    let request = moleapi_formats::generation_request(workspace, request_id, include_secrets)?;
+    let mut request = moleapi_formats::generation_request(workspace, request_id, include_secrets)?;
     ensure!(
         matches!(request.protocol, Protocol::Http),
         "Request snippets currently require an HTTP request"
     );
+    if request.auth.kind == "apikey" {
+        let key = request
+            .auth
+            .api_key
+            .as_ref()
+            .context("API key settings missing")?;
+        if key.location == moleapi_core::AuthLocation::Query {
+            // Preserve unresolved URL templates; the mature form decoder owns query encoding.
+            let (without_fragment, fragment) = request
+                .url
+                .split_once('#')
+                .map(|(base, part)| (base, Some(part)))
+                .unwrap_or((&request.url, None));
+            if let Some((base, query)) = without_fragment.split_once('?') {
+                let retained = url::form_urlencoded::parse(query.as_bytes())
+                    .filter(|(name, _)| name != &key.name)
+                    .collect::<Vec<_>>();
+                let query = url::form_urlencoded::Serializer::new(String::new())
+                    .extend_pairs(retained.iter().map(|(k, v)| (k.as_ref(), v.as_ref())))
+                    .finish();
+                request.url = format!(
+                    "{base}{}{}",
+                    if query.is_empty() {
+                        String::new()
+                    } else {
+                        format!("?{query}")
+                    },
+                    fragment.map(|f| format!("#{f}")).unwrap_or_default()
+                );
+            }
+        }
+        let rows = if key.location == moleapi_core::AuthLocation::Query {
+            &mut request.query
+        } else {
+            &mut request.headers
+        };
+        rows.retain(|row| {
+            if key.location == moleapi_core::AuthLocation::Header {
+                !row.key.eq_ignore_ascii_case(&key.name)
+            } else {
+                row.key != key.name
+            }
+        });
+        rows.push(moleapi_core::Pair {
+            id: "selected-api-key".into(),
+            key: key.name.clone(),
+            value: key.value.clone(),
+            enabled: true,
+            secret: Some(true),
+            local_value: None,
+        });
+        request.auth.kind = "none".into();
+    }
     let mut url = request.url.clone();
     let query = url::form_urlencoded::Serializer::new(String::new())
         .extend_pairs(
@@ -156,6 +209,24 @@ mod tests {
     use super::*;
     fn workspace(body_kind: &str, body: &str) -> Workspace {
         serde_json::from_value(json!({"id":"w","name":"Fixture","revision":1,"updated_at":"now","data":{"schema_version":1,"collections":[{"id":"c","name":"Collection","description":"","requests":[{"id":"r","name":"Request","method":"POST","url":"http://127.0.0.1/echo?original=one","description":"","query":[{"id":"q","key":"q","value":"space & + unicode 鼹鼠","enabled":true}],"headers":[],"body_kind":body_kind,"body":body,"auth":{"kind":"none","token":"","username":"","password":""},"timeout_ms":1000,"follow_redirects":false,"verify_tls":true,"assertions":[],"examples":[]}]}],"environments":[],"active_environment_id":null}})).unwrap()
+    }
+    #[test]
+    fn api_key_snippet_replaces_url_query_values_without_resolving_templates() {
+        let mut w = workspace("none", "");
+        let r = &mut w.data.collections[0].requests[0];
+        r.url = "{{base_url}}/echo?access=stale&ac%63ess=old&keep=yes#fragment".into();
+        r.auth.kind = "apikey".into();
+        r.auth.api_key = Some(Box::new(moleapi_core::ApiKeyAuth {
+            name: "access".into(),
+            value: "selected".into(),
+            location: moleapi_core::AuthLocation::Query,
+        }));
+        let snippet = generate_request(&w, "r", "shell", "curl", true).unwrap();
+        assert!(!snippet.code.contains("stale") && !snippet.code.contains("old"));
+        assert!(snippet.code.contains("access=selected") && snippet.code.contains("keep=yes"));
+        assert!(snippet.code.contains("{{base_url}}"));
+        let private = generate_request(&w, "r", "shell", "curl", false).unwrap();
+        assert!(!private.code.contains("selected"));
     }
     #[test]
     fn form_private_fields_and_copies_are_screened_after_decoding() {

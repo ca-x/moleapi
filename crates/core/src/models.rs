@@ -13,6 +13,10 @@ pub struct Pair {
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Auth {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<Box<crate::ApiKeyAuth>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub jwt: Option<Box<crate::JwtAuth>>,
     pub kind: String,
     pub token: String,
     pub username: String,
@@ -243,6 +247,8 @@ pub struct TestResult {
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Response {
+    #[serde(skip)]
+    pub private_auth_values: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub soap_fault: Option<crate::SoapFault>,
     #[serde(default)]

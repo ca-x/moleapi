@@ -151,6 +151,35 @@ pub fn resolve_request(
     } else {
         None
     };
+    let auth_kind = interpolate(&request.auth.kind, &vars)?;
+    let jwt_original = if auth_kind == "jwt" {
+        request
+            .auth
+            .jwt
+            .as_ref()
+            .map(|jwt| jwt.claims_source.clone())
+    } else {
+        None
+    };
+    let dormant_jwt = if auth_kind != "jwt" {
+        Some(value["auth"]["jwt"].clone())
+    } else {
+        None
+    };
+    let dormant_key = if auth_kind != "apikey" {
+        Some(value["auth"]["api_key"].clone())
+    } else {
+        None
+    };
+    if dormant_jwt.is_some() {
+        value["auth"]["jwt"] = serde_json::Value::Null;
+    }
+    if dormant_key.is_some() {
+        value["auth"]["api_key"] = serde_json::Value::Null;
+    }
+    if jwt_original.is_some() {
+        value["auth"]["jwt"]["claims_source"] = "".into();
+    }
     let graphql = request.protocol.is_graphql();
     let mut graphql_body = if graphql {
         Some(
@@ -191,6 +220,20 @@ pub fn resolve_request(
     };
     let mut budget = 20 * 1024 * 1024;
     replace(&mut value, &vars, &mut budget)?;
+    if let Some(jwt) = dormant_jwt
+        && !jwt.is_null()
+    {
+        value["auth"]["jwt"] = jwt;
+    }
+    if let Some(key) = dormant_key
+        && !key.is_null()
+    {
+        value["auth"]["api_key"] = key;
+    }
+    if let Some(source) = jwt_original {
+        value["auth"]["jwt"]["claims_source"] =
+            crate::authentication::resolve_jwt_claims(&source, &vars, &mut budget)?.into();
+    }
     if structured_body {
         value["body"] = crate::request_body::resolve_structured_body(
             &body_kind,

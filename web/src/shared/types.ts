@@ -50,8 +50,12 @@ export interface Pair {
   secret?: boolean;
   local_value?: string | null;
 }
+export interface ApiKeyAuth {name:string;value:string;location:"header"|"query"}
+export interface JwtAuth {algorithm:string;key:string;key_base64:boolean;claims_source:string;kid:string;name:string;prefix:string;location:"header"|"query";add_time_claims:boolean;ttl_seconds:number}
 export interface Auth {
-  kind: "none" | "bearer" | "basic";
+  api_key?:ApiKeyAuth;
+  jwt?:JwtAuth;
+  kind: "none" | "bearer" | "basic" | "apikey" | "jwt" | "digest";
   token: string;
   username: string;
   password: string;

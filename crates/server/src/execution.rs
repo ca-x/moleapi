@@ -167,6 +167,9 @@ pub(crate) async fn perform(
         crate::soap::validate_selected(&w.data, &resolved)
             .map_err(|e| ApiError::bad(e.to_string()))?;
     }
+    let resolved = moleapi_core::prepare_authentication(&resolved)
+        .map_err(|e| ApiError::bad(e.to_string()))?;
+    crate::privacy::request_values(&resolved, scopes)?;
     let mut response = moleapi_core::execute(
         &resolved,
         None,
@@ -176,6 +179,12 @@ pub(crate) async fn perform(
     )
     .await
     .map_err(|e| ApiError::bad(e.to_string()))?;
+    scopes
+        .private_values
+        .extend(response.private_auth_values.iter().cloned());
+    scopes
+        .validate()
+        .map_err(|e| ApiError::bad(e.to_string()))?;
     response.tests.extend(tests);
     if post.iter().any(|s| !s.trim().is_empty()) {
         match script_phase(s, post, &resolved, Some(&response), scopes).await {
@@ -389,6 +398,9 @@ pub(crate) async fn prepare_live(
         request.body.clear();
     }
     let resolved = moleapi_core::resolve_request(&request, Some(&effective))
+        .map_err(|e| ApiError::bad(e.to_string()))?;
+    crate::privacy::request_values(&resolved, scopes)?;
+    let resolved = moleapi_core::prepare_authentication(&resolved)
         .map_err(|e| ApiError::bad(e.to_string()))?;
     crate::privacy::request_values(&resolved, scopes)?;
     Ok((resolved, feedback, updates, request_updates))

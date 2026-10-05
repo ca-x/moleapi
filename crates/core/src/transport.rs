@@ -1,5 +1,5 @@
 use crate::*;
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use futures_util::StreamExt;
 use reqwest::{
@@ -19,7 +19,7 @@ pub async fn execute(
         "Live protocols require the session API"
     );
     let prepared = prepare_soap(&prepare_graphql(request)?)?;
-    let r = resolve_request(&prepared, environment)?;
+    let r = prepare_authentication(&resolve_request(&prepared, environment)?)?;
     validate_soap(&r, false)?;
     if r.protocol.is_graphql() {
         ensure!(
@@ -46,9 +46,10 @@ pub async fn execute_bytes(
     );
     crate::validate_request(request, false)?;
     ensure!(body.len() <= crate::MAX_BODY, "Raw HTTP body exceeds 5 MiB");
+    let prepared = prepare_authentication(request)?;
     tokio::time::timeout(
-        Duration::from_millis(request.timeout_ms),
-        execute_inner(request, policy, Some(body)),
+        Duration::from_millis(prepared.timeout_ms),
+        execute_inner(&prepared, policy, Some(body)),
     )
     .await
     .context("Request timed out")?
@@ -97,7 +98,11 @@ async fn execute_inner(
             HeaderValue::from_static("application/x-www-form-urlencoded"),
         );
     }
-    for redirect in 0..=10 {
+    let mut redirect = 0;
+    let mut private_auth_values = Vec::new();
+    let mut digest_attempts = 0;
+    let mut digest_allowed = r.auth.kind == "digest";
+    loop {
         let client = checked_client(&url, policy, r.verify_tls).await?;
         let mut builder = client
             .request(method.clone(), url.clone())
@@ -107,12 +112,50 @@ async fn execute_inner(
         }
         let response = builder.send().await.context("HTTP request failed")?;
         let status = response.status();
+        if status.as_u16() == 401 && digest_allowed && digest_attempts < 2 {
+            let mut challenge = None;
+            for value in response
+                .headers()
+                .get_all("www-authenticate")
+                .iter()
+                .take(16)
+            {
+                let value = value.to_str().context("Invalid Digest challenge header")?;
+                ensure!(value.len() <= 16384, "Digest challenge exceeds limit");
+                if let Ok(parsed) = digest_auth::parse(value) {
+                    challenge = Some(parsed);
+                    break;
+                }
+            }
+            if let Some(mut challenge) = challenge
+                && (digest_attempts == 0 || challenge.stale)
+            {
+                let target = match url.query() {
+                    Some(query) => format!("{}?{query}", url.path()),
+                    None => url.path().to_owned(),
+                };
+                let context = digest_auth::AuthContext::new_with_method(
+                    &r.auth.username,
+                    &r.auth.password,
+                    target,
+                    Some(body.as_deref().unwrap_or(&[])),
+                    method.as_str().into(),
+                );
+                let answer = challenge.respond(&context)?.to_string();
+                ensure!(answer.len() <= 16384, "Digest answer exceeds limit");
+                private_auth_values.push(answer.clone());
+                headers.insert("authorization", HeaderValue::from_str(&answer)?);
+                digest_attempts += 1;
+                drop(response);
+                continue;
+            }
+        }
         if r.follow_redirects
             && matches!(status.as_u16(), 301 | 302 | 303 | 307 | 308)
             && let Some(location) = response.headers().get("location")
         {
             ensure!(redirect < 10, "Too many redirects");
-            let next = url.join(location.to_str().context("Invalid redirect location")?)?;
+            let mut next = url.join(location.to_str().context("Invalid redirect location")?)?;
             valid_url(next.as_str())?;
             if r.protocol.is_soap() {
                 ensure!(
@@ -131,6 +174,32 @@ async fn execute_inner(
             if url.origin() != next.origin() {
                 headers.remove("authorization");
                 headers.remove("cookie");
+                for row in r.headers.iter().filter(|row| {
+                    row.enabled
+                        && (row.secret == Some(true) || crate::sensitive_query_key(&row.key))
+                }) {
+                    if let Ok(name) = HeaderName::from_bytes(row.key.as_bytes()) {
+                        headers.remove(name);
+                    }
+                }
+                let filtered = next
+                    .query_pairs()
+                    .filter(|(name, _)| {
+                        !crate::sensitive_query_key(name)
+                            && !r.query.iter().any(|row| {
+                                row.enabled && row.secret == Some(true) && row.key == name.as_ref()
+                            })
+                    })
+                    .map(|(k, v)| (k.into_owned(), v.into_owned()))
+                    .collect::<Vec<_>>();
+                next.set_query(None);
+                if !filtered.is_empty() {
+                    next.query_pairs_mut().extend_pairs(filtered);
+                }
+                digest_allowed = false;
+            } else if r.auth.kind == "digest" {
+                headers.remove("authorization");
+                digest_attempts = 0;
             }
             if status.as_u16() == 303 && method != Method::HEAD
                 || matches!(status.as_u16(), 301 | 302) && method == Method::POST
@@ -139,6 +208,7 @@ async fn execute_inner(
                 body = None;
                 headers.remove("content-type");
             }
+            redirect += 1;
             url = next;
             continue;
         }
@@ -173,6 +243,7 @@ async fn execute_inner(
         }
         let text = String::from_utf8_lossy(&bytes).into_owned();
         let mut result = Response {
+            private_auth_values,
             soap_fault: None,
             request_updates: vec![],
             logs: vec![],
@@ -196,11 +267,12 @@ async fn execute_inner(
         result.tests = assertions(&r.assertions, &result);
         return Ok(result);
     }
-    bail!("Too many redirects")
 }
 
 /// Shared authentication and forbidden hop-header handling for HTTP and live protocols.
 pub fn request_headers(r: &RequestSpec) -> Result<HeaderMap> {
+    let prepared = prepare_authentication(r)?;
+    let r = &prepared;
     let mut headers = HeaderMap::new();
     for p in r.headers.iter().filter(|p| p.enabled) {
         headers.append(
@@ -221,6 +293,9 @@ pub fn request_headers(r: &RequestSpec) -> Result<HeaderMap> {
         "te",
     ] {
         headers.remove(name);
+    }
+    if r.auth.kind == "digest" {
+        headers.remove("authorization");
     }
     if r.auth.kind == "bearer" {
         headers.insert(

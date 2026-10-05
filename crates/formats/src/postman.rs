@@ -245,20 +245,16 @@ fn walk(
                     result.auth.password = auth_value(auth, "basic", "password");
                 }
                 "apikey" => {
-                    let key = auth_value(auth, "apikey", "key");
-                    let value = auth_value(auth, "apikey", "value");
-                    if auth_value(auth, "apikey", "in") == "query" {
-                        let separator = if result.url.contains('?') { '&' } else { '?' };
-                        result.url = format!(
-                            "{}{separator}{}",
-                            result.url,
-                            url::form_urlencoded::Serializer::new(String::new())
-                                .append_pair(&key, &value)
-                                .finish()
-                        );
-                    } else {
-                        result.headers.push(pair(key, value));
-                    }
+                    result.auth.kind = "apikey".into();
+                    result.auth.api_key = Some(Box::new(moleapi_core::ApiKeyAuth {
+                        name: auth_value(auth, "apikey", "key"),
+                        value: auth_value(auth, "apikey", "value"),
+                        location: if auth_value(auth, "apikey", "in") == "query" {
+                            moleapi_core::AuthLocation::Query
+                        } else {
+                            moleapi_core::AuthLocation::Header
+                        },
+                    }));
                 }
                 "noauth" | "" => {}
                 other => warnings.push(format!("{name}: {other} 鉴权定义已保留，需要对应鉴权配置")),
@@ -344,7 +340,7 @@ fn auth_value(auth: &Value, kind: &str, key: &str) -> String {
 pub(super) fn export(workspace: &Workspace) -> Result<String> {
     let items=workspace.data.collections.iter().map(|collection|json!({"name":collection.name,"description":collection.description,"event":events(&collection.pre_request_script,&collection.post_response_script),"variable":collection.variables.iter().map(|v|json!({"key":v.key,"value":v.value,"type":"string","disabled":!v.enabled})).collect::<Vec<_>>(),"item":collection.requests.iter().map(|r| {
         let mut url=r.url.clone();if !r.query.is_empty(){let values=r.query.iter().filter(|p|p.enabled).map(|p|format!("{}={}",url::form_urlencoded::byte_serialize(p.key.as_bytes()).collect::<String>(),url::form_urlencoded::byte_serialize(p.value.as_bytes()).collect::<String>())).collect::<Vec<_>>().join("&");if !values.is_empty(){url.push(if url.contains('?'){'&'}else{'?'});url.push_str(&values);}}
-        let auth=match r.auth.kind.as_str(){"bearer"=>json!({"type":"bearer","bearer":[{"key":"token","value":r.auth.token,"type":"string"}]}),"basic"=>json!({"type":"basic","basic":[{"key":"username","value":r.auth.username,"type":"string"},{"key":"password","value":r.auth.password,"type":"string"}]}),_=>json!({"type":"noauth"})};
+        let auth=match r.auth.kind.as_str(){"apikey"=>{let key=r.auth.api_key.as_ref().expect("validated API key");json!({"type":"apikey","apikey":[{"key":"key","value":key.name,"type":"string"},{"key":"value","value":key.value,"type":"string"},{"key":"in","value":if key.location==moleapi_core::AuthLocation::Query{"query"}else{"header"},"type":"string"}]})},"bearer"=>json!({"type":"bearer","bearer":[{"key":"token","value":r.auth.token,"type":"string"}]}),"basic"=>json!({"type":"basic","basic":[{"key":"username","value":r.auth.username,"type":"string"},{"key":"password","value":r.auth.password,"type":"string"}]}),_=>json!({"type":"noauth"})};
         let mut request=json!({"method":r.method,"url":url,"description":r.description,"header":r.headers.iter().map(|h|json!({"key":h.key,"value":h.value,"disabled":!h.enabled})).collect::<Vec<_>>(),"auth":auth});
         if let moleapi_core::Protocol::Graphql{document,variables,variables_source,..}=&r.protocol {
             request["body"]=json!({"mode":"graphql","graphql":{"query":document,"variables":variables_source.as_deref().map(str::to_owned).unwrap_or_else(||variables.to_string())}});

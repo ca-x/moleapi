@@ -243,6 +243,23 @@ pub(crate) fn request_values(
             }
         }
     }
+    if let Some(key) = &request.auth.api_key {
+        capture(&key.value);
+    }
+    if let Some(jwt) = &request.auth.jwt {
+        capture(&jwt.key);
+        if jwt.key_base64 {
+            for key in std::iter::once(jwt.key.clone())
+                .chain(moleapi_core::resolve_value(&jwt.key, &environment).ok())
+            {
+                if let Ok(bytes) = STANDARD.decode(&key)
+                    && let Ok(text) = std::str::from_utf8(&bytes)
+                {
+                    capture(text);
+                }
+            }
+        }
+    }
     capture(&request.auth.token);
     capture(&request.auth.password);
     if !request.auth.password.is_empty() {
@@ -322,6 +339,35 @@ pub(crate) fn request_values(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn encoded_jwt_signing_secret_and_resolved_source_are_private() {
+        let request: moleapi_core::RequestSpec = serde_json::from_value(serde_json::json!({
+            "id":"auth", "name":"auth", "method":"GET", "url":"https://example.test",
+            "auth":{"kind":"jwt", "username":"", "password":"", "token":"", "jwt":{"key":"{{signing_key}}", "key_base64":true}},
+            "query":[], "headers":[], "body":"", "body_kind":"none", "description":"",
+            "timeout_ms":3000,"verify_tls":true,"follow_redirects":true,"assertions":[],"examples":[]
+        })).unwrap();
+        let mut scopes = moleapi_core::VariableScopes::default();
+        scopes.environment.insert(
+            "signing_key".into(),
+            STANDARD.encode("decoded-private-signing-key"),
+        );
+        request_values(&request, &mut scopes).unwrap();
+        assert!(
+            scopes
+                .private_values
+                .contains("decoded-private-signing-key")
+        );
+        let redactor = Redactor::new(&scopes.private_values).unwrap();
+        let mut history = serde_json::json!({"body":"decoded-private-signing-key", "copy":STANDARD.encode("decoded-private-signing-key")});
+        redactor.scrub(&mut history);
+        assert!(!history.to_string().contains("decoded-private-signing-key"));
+        assert!(
+            !history
+                .to_string()
+                .contains(&STANDARD.encode("decoded-private-signing-key"))
+        );
+    }
     #[test]
     fn json_and_url_escaping_cannot_leave_private_values_in_history() {
         let secret = "quote\" and space".to_owned();

@@ -5,9 +5,19 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
     let privacy = ExportPrivacy::new(source);
     let tcp_privacy = ExportPrivacy::from_workspace(source, true);
     let data_privacy = &tcp_privacy;
+    let auth_private = source
+        .data
+        .collections
+        .iter()
+        .flat_map(|c| &c.requests)
+        .any(|r| r.auth.api_key.is_some() || r.auth.jwt.is_some());
     let mut result = source.clone();
     for environment in &mut result.data.environments {
         for variable in &mut environment.variables {
+            if auth_private {
+                variable.value = privacy.screen_bounded(&variable.value, 65536);
+                variable.local_value = None;
+            }
             if variable.secret == Some(true) || sensitive(&variable.key) {
                 variable.value.clear();
                 variable.local_value = None;
@@ -15,6 +25,9 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
         }
     }
     for variable in &mut result.data.global_variables {
+        if auth_private {
+            variable.value = privacy.screen_bounded(&variable.value, 65536);
+        }
         if variable.secret == Some(true) || sensitive(&variable.key) {
             variable.value.clear();
         }
@@ -22,12 +35,68 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
     }
     for collection in &mut result.data.collections {
         for variable in &mut collection.variables {
+            if auth_private {
+                variable.value = privacy.screen_bounded(&variable.value, 65536);
+            }
             if variable.secret == Some(true) || sensitive(&variable.key) {
                 variable.value.clear();
             }
             variable.local_value = None;
         }
         for request in &mut collection.requests {
+            if let Some(key) = &mut request.auth.api_key {
+                key.value.clear();
+                let original = key.name.clone();
+                key.name = privacy.screen_bounded(&key.name, 512);
+                if key.name.is_empty() || key.name != original {
+                    key.name = "x-redacted-key".into();
+                }
+            }
+            if let Some(jwt) = &mut request.auth.jwt {
+                jwt.key.clear();
+                jwt.claims_source = privacy.screen_generation_json(&jwt.claims_source);
+                jwt.kid = privacy.screen_bounded(&jwt.kid, 512);
+                jwt.prefix = privacy.screen_bounded(&jwt.prefix, 128);
+                let name = privacy.screen_bounded(&jwt.name, 512);
+                if name != jwt.name || name.is_empty() {
+                    jwt.name = "Authorization".into();
+                }
+            }
+            if auth_private {
+                let screened_url = tcp_privacy.screen_generation_text(&request.url);
+                request.url = if screened_url != request.url {
+                    "{{redacted_url}}".into()
+                } else {
+                    screened_url
+                };
+                request.description = tcp_privacy.screen_generation_text(&request.description);
+                request.pre_request_script =
+                    tcp_privacy.screen_generation_text(&request.pre_request_script);
+                request.post_response_script =
+                    tcp_privacy.screen_generation_text(&request.post_response_script);
+                let file_body = matches!(request.body_kind.as_str(), "binary" | "multipart")
+                    || request.body_kind.contains("{{")
+                        && serde_json::from_str::<Value>(&request.body)
+                            .ok()
+                            .is_some_and(|v| v.get("base64").is_some() || v.get("parts").is_some());
+                if !file_body {
+                    request.body = if request.protocol.is_soap() {
+                        tcp_privacy.screen_xml(&request.body, false)
+                    } else {
+                        tcp_privacy.screen_generation_json(&request.body)
+                    };
+                }
+                for row in request.headers.iter_mut().chain(request.query.iter_mut()) {
+                    row.value = tcp_privacy.screen_generation_text(&row.value);
+                    row.local_value = None;
+                }
+                for example in &mut request.examples {
+                    example.body = tcp_privacy.screen_generation_json(&example.body);
+                    for row in &mut example.headers {
+                        row.value = tcp_privacy.screen_generation_text(&row.value);
+                    }
+                }
+            }
             request.auth.token.clear();
             request.auth.password.clear();
             for row in request.headers.iter_mut().chain(request.query.iter_mut()) {
@@ -524,6 +593,48 @@ impl ExportPrivacy {
         }
         for collection in &workspace.data.collections {
             for request in &collection.requests {
+                for source in request
+                    .auth
+                    .api_key
+                    .as_ref()
+                    .map(|key| key.value.as_str())
+                    .into_iter()
+                    .chain(request.auth.jwt.as_ref().map(|jwt| jwt.key.as_str()))
+                {
+                    for environment in
+                        std::iter::once(None).chain(workspace.data.environments.iter().map(Some))
+                    {
+                        for native in [false, true] {
+                            if let Ok(scopes) = moleapi_core::VariableScopes::new(
+                                &workspace.data,
+                                Some(collection),
+                                environment,
+                                &[],
+                                &[],
+                                native,
+                            ) && let Ok(value) =
+                                moleapi_core::resolve_value(source, &scopes.effective())
+                            {
+                                secrets.insert(value);
+                            }
+                        }
+                    }
+                }
+                if let Some(key) = &request.auth.api_key {
+                    secrets.insert(key.value.clone());
+                }
+                if let Some(jwt) = &request.auth.jwt {
+                    secrets.insert(jwt.key.clone());
+                    if jwt.key_base64 {
+                        use base64::Engine;
+                        if let Ok(bytes) =
+                            base64::engine::general_purpose::STANDARD.decode(&jwt.key)
+                            && let Ok(text) = String::from_utf8(bytes)
+                        {
+                            secrets.insert(text);
+                        }
+                    }
+                }
                 secrets.insert(request.auth.token.clone());
                 secrets.insert(request.auth.password.clone());
                 if let moleapi_core::Protocol::Mcp { config } = &request.protocol {
@@ -606,6 +717,12 @@ impl ExportPrivacy {
                         }
                     }
                 }
+                if let Some(key) = &request.auth.api_key {
+                    secrets.insert(key.value.clone());
+                }
+                if let Some(jwt) = &request.auth.jwt {
+                    secrets.insert(jwt.key.clone());
+                }
                 secrets.insert(request.auth.username.clone());
                 if request.auth.kind == "basic"
                     && !(request.auth.username.is_empty() && request.auth.password.is_empty())
@@ -668,6 +785,23 @@ impl ExportPrivacy {
                 }
             }
             secrets.retain(|text| !template_reference(text));
+        }
+        // A templated Base64 HMAC key can be sourced from any private variable.
+        // Decode the captured private values as well as literal signing settings.
+        if workspace
+            .data
+            .collections
+            .iter()
+            .flat_map(|c| &c.requests)
+            .any(|r| r.auth.jwt.as_ref().is_some_and(|jwt| jwt.key_base64))
+        {
+            use base64::Engine;
+            let decoded = secrets
+                .iter()
+                .filter_map(|key| base64::engine::general_purpose::STANDARD.decode(key).ok())
+                .filter_map(|bytes| String::from_utf8(bytes).ok())
+                .collect::<Vec<_>>();
+            secrets.extend(decoded);
         }
         secrets.remove("");
         if secrets.iter().any(|value| value.len() > 4096)
@@ -956,6 +1090,15 @@ pub(super) fn generation_request(
         "Request privacy budget exceeded; default generation withheld"
     );
     let mut request = request.clone();
+    if let Some(key) = &mut request.auth.api_key
+        && !template_reference(&key.value)
+    {
+        key.value = "{{API_KEY}}".into();
+    }
+    if let Some(jwt) = &mut request.auth.jwt {
+        jwt.key.clear();
+        jwt.claims_source = privacy.screen_generation_json(&jwt.claims_source);
+    }
     if !template_reference(&request.auth.token) {
         request.auth.token = "{{TOKEN}}".into();
     }
@@ -1051,6 +1194,17 @@ pub(super) fn generation_request(
     for row in request.headers.iter_mut().chain(request.query.iter_mut()) {
         row.key = privacy.screen_generation_text(&row.key);
         row.value = privacy.screen_generation_text(&row.value);
+    }
+    if let Some(key) = &mut request.auth.api_key {
+        key.name = privacy.screen_bounded(&key.name, 512);
+        if key.name.is_empty() {
+            key.name = "x-redacted-key".into();
+        }
+        key.value = if template_reference(&key.value) {
+            key.value.clone()
+        } else {
+            "{{API_KEY}}".into()
+        };
     }
     request.auth.username = privacy.screen_text(&request.auth.username);
     request.auth.password = privacy.screen_text(&request.auth.password);

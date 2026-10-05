@@ -1,6 +1,8 @@
 import { liveError } from "./../../shared/i18n/errors";
 import { t, useLanguage, liveTranslation } from "../../shared/i18n";
 import ProtocolPane from "../protocols/ProtocolPane";
+import { authenticationEligibility } from "../authentication/eligibility";
+import RequestAuthEditor from "../authentication/RequestAuthEditor";
 import RequestScripts from "../scripts/RequestScripts";
 import ExamplesEditor from "./ExamplesEditor";
 import AssertionsEditor from "../testing/AssertionsEditor";
@@ -444,65 +446,7 @@ export default function RequestEditor({
               )}
             </Tabs.Content>
             <Tabs.Content value="auth">
-              <div className="form-panel">
-                <Field label={t("鉴权类型")}>
-                  <Choice
-                    value={request.auth.kind}
-                    onChange={(kind) =>
-                      update({ auth: { ...request.auth, kind } })
-                    }
-                    options={[
-                      { value: "none", label: "No Auth" },
-                      { value: "bearer", label: "Bearer Token" },
-                      { value: "basic", label: "Basic Auth" },
-                    ]}
-                    label={t("鉴权类型")}
-                  />
-                </Field>
-                {request.auth.kind === "bearer" && (
-                  <Field
-                    label="Token"
-                    hint={t("可使用 {{api_token}} 引用环境变量。")}
-                  >
-                    <TextField.Root
-                      type="password"
-                      autoComplete="off"
-                      value={request.auth.token}
-                      onChange={(e) =>
-                        update({
-                          auth: { ...request.auth, token: e.target.value },
-                        })
-                      }
-                    />
-                  </Field>
-                )}
-                {request.auth.kind === "basic" && (
-                  <>
-                    <Field label={t("用户名")}>
-                      <TextField.Root
-                        value={request.auth.username}
-                        onChange={(e) =>
-                          update({
-                            auth: { ...request.auth, username: e.target.value },
-                          })
-                        }
-                      />
-                    </Field>
-                    <Field label={t("密码")}>
-                      <TextField.Root
-                        type="password"
-                        autoComplete="off"
-                        value={request.auth.password}
-                        onChange={(e) =>
-                          update({
-                            auth: { ...request.auth, password: e.target.value },
-                          })
-                        }
-                      />
-                    </Field>
-                  </>
-                )}
-              </div>
+              <RequestAuthEditor auth={request.auth} change={auth=>update({auth})} dark={dark} {...authenticationEligibility(request)}/>
             </Tabs.Content>
             <Tabs.Content value="assertions">
               <AssertionsEditor request={request} update={update} />

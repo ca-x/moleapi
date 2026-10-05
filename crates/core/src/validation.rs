@@ -129,11 +129,45 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
         ) || (templates && r.body_kind.contains("{{")),
         "Unsupported body kind"
     );
-    ensure!(
-        matches!(r.auth.kind.as_str(), "none" | "bearer" | "basic")
-            || (templates && r.auth.kind.contains("{{")),
-        "Unsupported authentication kind"
-    );
+    crate::validate_authentication(&r.auth, templates)?;
+    if matches!(r.auth.kind.as_str(), "apikey" | "jwt" | "digest")
+        && matches!(&r.protocol,Protocol::Mcp{config} if config.transport=="stdio")
+    {
+        bail!("STDIO auth must use explicit process configuration, not HTTP auth");
+    }
+    if matches!(r.protocol, Protocol::Grpc { .. }) {
+        let query_auth = r.auth.kind == "apikey"
+            && r.auth
+                .api_key
+                .as_ref()
+                .is_some_and(|key| key.location == crate::AuthLocation::Query)
+            || r.auth.kind == "jwt"
+                && r.auth
+                    .jwt
+                    .as_ref()
+                    .is_some_and(|jwt| jwt.location == crate::AuthLocation::Query);
+        ensure!(!query_auth, "gRPC authentication must use metadata headers");
+    }
+    if r.auth.kind == "digest" && r.protocol.is_graphql() && !templates {
+        ensure!(
+            !crate::graphql_is_subscription(r)?,
+            "Digest auth does not support GraphQL subscriptions"
+        );
+    }
+    if matches!(r.auth.kind.as_str(), "apikey" | "jwt" | "digest") {
+        ensure!(
+            !r.protocol.is_tcp()
+                && !r.protocol.is_mqtt()
+                && !matches!(&r.protocol,Protocol::Data{config} if config.source!=crate::DataSource::RemoteFile),
+            "Selected auth requires an HTTP transport"
+        );
+        if r.auth.kind == "digest" {
+            ensure!(
+                r.protocol == Protocol::Http || r.protocol.is_soap() || r.protocol.is_graphql(),
+                "Digest challenge auth requires finite HTTP requests"
+            );
+        }
+    }
     if matches!(r.body_kind.as_str(), "binary" | "multipart") {
         crate::request_body::validate_structured_body(r, templates)?;
     } else {

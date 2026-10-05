@@ -932,7 +932,7 @@
   "发送重放": "Send replay",
   "取消重放": "Cancel replay",
   "方法": "Method",
-  "查询参数": "Query parameters",
+  "查询参数": "Query parameter",
   "跟随重定向": "Follow redirects",
   "刷新": "Refresh",
   "复制": "Copy",
@@ -1006,5 +1006,18 @@
   "添加上传字段": "Add upload field",
   "请求体源数据": "Body source",
   "二进制文件": "Binary file",
-  "切换文件模式时，已有 Content-Type 会被禁用，原值保留在请求头中。": "Switching to a file mode disables existing Content-Type headers. Their values stay in the header list."
+  "切换文件模式时，已有 Content-Type 会被禁用，原值保留在请求头中。": "Switching to a file mode disables existing Content-Type headers. Their values stay in the header list.",
+  "鉴权位置": "Auth placement",
+  "鉴权字段名": "Auth field name",
+  "API Key 值": "API key value",
+  "JWT 算法": "JWT algorithm",
+  "JWT 签名密钥": "JWT signing key",
+  "HMAC 使用密钥文本；RSA、EC、EdDSA 使用私钥 PEM。不读取文件路径。": "HMAC uses a secret; RSA, EC and EdDSA use private PEM. File paths are never read.",
+  "HMAC 密钥使用 Base64 编码": "Base64-encoded HMAC secret",
+  "JWT Claims JSON": "JWT claims JSON",
+  "Token 前缀": "Token prefix",
+  "缺失时自动添加 iat 和 exp": "Add iat and exp if absent",
+  "JWT 有效秒数": "JWT lifetime in seconds",
+  "收到 401 Digest challenge 后自动签名并重试；跨域重定向不携带鉴权。": "Signs and retries after a 401 Digest challenge. Cross-origin redirects do not carry auth.",
+  "鉴权在执行时解析环境变量。默认导出移除密钥；JWT 每次执行生成。": "Auth resolves environment variables on execution. Default exports omit keys; JWT is generated per run."
 }

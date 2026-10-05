@@ -64,6 +64,25 @@ pub fn export(workspace: &Workspace, format: &str, include_secrets: bool) -> Res
     {
         bail!("Dynamic body modes require MoleAPI format; external formats cannot preserve them");
     }
+    if matches!(format, "postman" | "openapi")
+        && workspace
+            .data
+            .collections
+            .iter()
+            .flat_map(|c| &c.requests)
+            .any(|r| {
+                matches!(r.auth.kind.as_str(), "jwt" | "digest")
+                    || r.auth.kind.contains("{{")
+                    || format == "openapi" && r.auth.kind == "apikey"
+            })
+    {
+        bail!(
+            "Selected authentication requires native MoleAPI export until external mappings are verified"
+        );
+    }
+    for request in workspace.data.collections.iter().flat_map(|c| &c.requests) {
+        moleapi_core::validate_authentication(&request.auth, true)?;
+    }
     let unsupported = workspace
         .data
         .collections

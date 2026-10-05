@@ -832,13 +832,27 @@ fn multipart_privacy_budget_withholding_keeps_default_source_importable() {
         local_value: None,
     });
     let r = &mut w.data.collections[0].requests[0];
+    r.auth.kind = "apikey".into();
+    r.auth.api_key = Some(Box::new(moleapi_core::ApiKeyAuth {
+        name: "X-API-Key".into(),
+        value: "p".repeat(5000),
+        ..Default::default()
+    }));
     r.body_kind = "multipart".into();
-    r.body=json!({"parts":[{"id":"one","name":"field","value":{"kind":"text","text":"hello","mime":""}}]}).to_string();
+    r.body=json!({"parts":[{"id":"one","name":"field","value":{"kind":"text","text":"hello","mime":""}},{"id":"file","name":"upload","value":{"kind":"file","file":{"file_name":"fixture.bin","mime":"application/octet-stream","base64":"AA=="}}}]}).to_string();
     let out = export(&w, "moleapi", false).unwrap();
     let parsed = import("moleapi", &out.content).unwrap();
     let body: moleapi_core::MultipartBody =
         serde_json::from_str(&parsed.data.collections[0].requests[0].body).unwrap();
     assert_eq!(body.parts[0].name, "[REDACTED]");
+    assert_eq!(body.parts.len(), 2);
+    assert!(
+        matches!(&body.parts[1].value,moleapi_core::MultipartValue::File {file} if file.base64.is_none())
+    );
+    assert_eq!(
+        parsed.data.collections[0].requests[0].url,
+        "{{redacted_url}}"
+    );
 }
 
 #[test]
@@ -857,4 +871,131 @@ fn privacy_replacements_cannot_expand_file_body_metadata_past_import_limits() {
     let body: moleapi_core::MultipartBody =
         serde_json::from_str(&imported.data.collections[0].requests[0].body).unwrap();
     assert!(body.parts[0].name.len() <= 512);
+}
+
+#[test]
+fn jwt_default_export_scrubs_copied_encoded_and_decoded_keys() {
+    let imported = import("postman", &json!({"info":{"name":"Auth","schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},"item":[{"name":"request","request":{"method":"GET","url":"https://example.test"}}]}).to_string()).unwrap();
+    let mut w = workspace(imported.data);
+    let r = &mut w.data.collections[0].requests[0];
+    r.auth.kind = "jwt".into();
+    r.auth.jwt = Some(Box::new(moleapi_core::JwtAuth {
+        key: "c2lnbmluZy1zZWNyZXQ=".into(),
+        key_base64: true,
+        claims_source: r#"{"sub":"signing-secret","copy":"c2lnbmluZy1zZWNyZXQ="}"#.into(),
+        kid: "signing-secret".into(),
+        prefix: "signing-secret".into(),
+        name: "signing-secret".into(),
+        ..Default::default()
+    }));
+    let output = export(&w, "moleapi", false).unwrap();
+    assert!(!output.content.contains("signing-secret"));
+    assert!(!output.content.contains("c2lnbmluZy1zZWNyZXQ="));
+    let backup = export(&w, "moleapi", true).unwrap();
+    assert!(backup.content.contains("signing-secret"));
+    import("moleapi", &output.content).unwrap();
+}
+
+#[test]
+fn external_exports_reject_unmapped_or_dynamic_authentication() {
+    let imported = import("postman", &json!({"info":{"name":"Auth","schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},"item":[{"name":"request","request":{"method":"GET","url":"https://example.test"}}]}).to_string()).unwrap();
+    let mut w = workspace(imported.data);
+    w.data.collections[0].requests[0].auth.kind = "{{auth_kind}}".into();
+    assert!(export(&w, "postman", false).is_err());
+    assert!(export(&w, "openapi", true).is_err());
+    let auth = &mut w.data.collections[0].requests[0].auth;
+    auth.kind = "apikey".into();
+    auth.api_key = Some(Box::new(moleapi_core::ApiKeyAuth {
+        name: "access".into(),
+        value: "key".into(),
+        location: moleapi_core::AuthLocation::Query,
+    }));
+    assert!(export(&w, "openapi", true).is_err());
+    let result = export(&w, "postman", true).unwrap();
+    let restored = import("postman", &result.content).unwrap();
+    assert_eq!(
+        restored.data.collections[0].requests[0].auth,
+        w.data.collections[0].requests[0].auth
+    );
+}
+
+#[test]
+fn jwt_templated_base64_key_and_api_key_copies_are_private_in_http_drafts() {
+    let imported = import("postman", &json!({"info":{"name":"Auth","schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},"item":[{"name":"request","request":{"method":"POST","url":"https://example.test"}}]}).to_string()).unwrap();
+    let mut w = workspace(imported.data);
+    w.data.global_variables.push(moleapi_core::Pair {
+        id: "hmac".into(),
+        key: "hmac".into(),
+        value: "ZGVjb2RlZC1zaWduaW5nLXNlY3JldA==".into(),
+        enabled: true,
+        secret: None,
+        local_value: None,
+    });
+    let r = &mut w.data.collections[0].requests[0];
+    r.auth.kind = "jwt".into();
+    r.auth.jwt = Some(Box::new(moleapi_core::JwtAuth {
+        key: "{{hmac}}".into(),
+        algorithm: "{{alg}}".into(),
+        key_base64: true,
+        claims_source: r#"{"sub":"decoded-signing-secret"}"#.into(),
+        ..Default::default()
+    }));
+    r.auth.api_key = Some(Box::new(moleapi_core::ApiKeyAuth {
+        name: "X-Key".into(),
+        value: "literal-api-secret".into(),
+        ..Default::default()
+    }));
+    r.body_kind = "json".into();
+    r.body = r#"{"jwt":"decoded-signing-secret","api":"literal-api-secret"}"#.into();
+    r.headers.push(moleapi_core::Pair {
+        id: "copy".into(),
+        key: "X-Copy".into(),
+        value: "literal-api-secret".into(),
+        enabled: true,
+        secret: None,
+        local_value: None,
+    });
+    let output = export(&w, "moleapi", false).unwrap();
+    assert!(!output.content.contains("decoded-signing-secret"));
+    assert!(!output.content.contains("literal-api-secret"));
+    import("moleapi", &output.content).unwrap();
+    let backup = export(&w, "moleapi", true).unwrap();
+    assert!(backup.content.contains("decoded-signing-secret"));
+    assert!(backup.content.contains("literal-api-secret"));
+}
+
+#[test]
+fn api_key_usage_taints_unmarked_scoped_variables_and_copies() {
+    let mut w = workspace(import("curl", "curl https://example.test").unwrap().data);
+    w.data.global_variables.push(moleapi_core::Pair {
+        id: "credential".into(),
+        key: "credential".into(),
+        value: "actual-api-secret".into(),
+        enabled: true,
+        secret: None,
+        local_value: None,
+    });
+    let r = &mut w.data.collections[0].requests[0];
+    r.auth.kind = "apikey".into();
+    r.auth.api_key = Some(Box::new(moleapi_core::ApiKeyAuth {
+        name: "X-Key".into(),
+        value: "{{credential}}".into(),
+        ..Default::default()
+    }));
+    r.body_kind = "json".into();
+    r.body = r#"{"copy":"actual-api-secret"}"#.into();
+    let mut other = r.clone();
+    other.id = "public-copy".into();
+    other.auth.kind = "none".into();
+    other.auth.api_key = None;
+    w.data.collections[0].requests.push(other);
+    let output = export(&w, "moleapi", false).unwrap();
+    assert!(!output.content.contains("actual-api-secret"));
+    import("moleapi", &output.content).unwrap();
+    assert!(
+        export(&w, "moleapi", true)
+            .unwrap()
+            .content
+            .contains("actual-api-secret")
+    );
 }

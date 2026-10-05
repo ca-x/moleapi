@@ -1,3 +1,5 @@
+mod authentication;
+pub use authentication::*;
 mod request_body;
 pub use request_body::{
     BinaryBody, MAX_BODY_SOURCE, MultipartBody, MultipartPart, MultipartValue,
