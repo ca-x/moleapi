@@ -185,3 +185,78 @@ async fn hosted_data_sessions_are_owner_scoped_and_logout_closes_work() {
         StatusCode::UNAUTHORIZED
     );
 }
+
+#[tokio::test]
+async fn saved_data_ca_accepts_certificates_and_rejects_private_keys_before_persistence() {
+    let temp = tempfile::tempdir().unwrap();
+    let router = local(&temp.path().join("data-ca.db")).await.unwrap();
+    let certificate = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
+    let pem = certificate.cert.pem();
+    let key = certificate.signing_key.serialize_pem();
+    for (index, bad) in [
+        key.clone(),
+        format!("{pem}\n{key}"),
+        "not a certificate".into(),
+        format!("{key}\n{{{{custom_ca}}}}"),
+        format!("{{{{{key}}}}}"),
+        format!(
+            "{pem}\n{}",
+            key.replace("PRIVATE KEY", "ENCRYPTED PRIVATE KEY")
+        ),
+        format!(
+            "{pem}\n{}",
+            key.replace("PRIVATE KEY", "OPENSSH PRIVATE KEY")
+        ),
+        format!("{pem}\n-----BEGIN PRIVATE KEY-----\nunfinished"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut input = data();
+        input["collections"][0]["requests"][0]["protocol"]["ca_pem"] = json!(bad);
+        let (status, result) = call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            None,
+            Some(json!({"id":format!("bad-ca-{index}"),"name":"CA input","data":input})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{result}");
+        assert!(!result.to_string().contains(&key));
+    }
+    let mut input = data();
+    input["collections"][0]["requests"][0]["protocol"]["ca_pem"] = json!(pem);
+    let (status, result) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"certificate","name":"CA input","data":input})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{result}");
+    assert_eq!(
+        result["data"]["collections"][0]["requests"][0]["protocol"]["ca_pem"],
+        pem
+    );
+    let mut input = data();
+    input["collections"][0]["requests"][0]["protocol"]["ca_pem"] = json!("{{custom_ca}}");
+    let (status, result) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"ca-template","name":"CA input","data":input})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{result}");
+    let request: moleapi_core::RequestSpec =
+        serde_json::from_value(input["collections"][0]["requests"][0].clone()).unwrap();
+    let mut environment: moleapi_core::Environment = serde_json::from_value(json!({"id":"ca","name":"CA","variables":[{"id":"ca","key":"custom_ca","value":pem,"enabled":true}]})).unwrap();
+    let resolved = moleapi_core::resolve_request(&request, Some(&environment)).unwrap();
+    moleapi_core::validate_request(&resolved, false).unwrap();
+    environment.variables[0].value = key;
+    let result = moleapi_core::resolve_request(&request, Some(&environment));
+    assert!(result.is_err() || moleapi_core::validate_request(&result.unwrap(), false).is_err());
+}

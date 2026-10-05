@@ -88,6 +88,60 @@ pub fn validate_data_config(config: &DataConfig) -> Result<()> {
     }
     Ok(())
 }
+/// Parse public certificate bundles without accepting private keys or file paths.
+/// Saved requests may carry placeholders; resolved connection settings must call
+/// this with actual PEM before constructing any TLS configuration.
+pub fn data_ca_certificates(pem: &str) -> Result<Vec<rustls::pki_types::CertificateDer<'static>>> {
+    ensure!(pem.len() <= 65536, "Data CA certificates exceed limit");
+    if pem.is_empty() {
+        return Ok(Vec::new());
+    }
+    // The generic mature PEM parser exposes every label. rustls-pemfile alone
+    // silently skips unsupported labels (including encrypted/OpenSSH keys).
+    let blocks = pem::parse_many(pem).context("Invalid Data CA PEM")?;
+    ensure!(!blocks.is_empty(), "Data CA PEM has no certificates");
+    ensure!(
+        blocks.iter().all(|block| block.tag() == "CERTIFICATE"),
+        "Data CA field accepts certificate PEM blocks only"
+    );
+    let compact = |value: &str| {
+        value
+            .chars()
+            .filter(|c| !c.is_ascii_whitespace())
+            .collect::<String>()
+    };
+    ensure!(
+        compact(pem) == compact(&pem::encode_many(&blocks)),
+        "Data CA field accepts only complete certificate PEM blocks and whitespace"
+    );
+    let mut certificates = Vec::new();
+    let mut roots = rustls::RootCertStore::empty();
+    for block in blocks {
+        let certificate = rustls::pki_types::CertificateDer::from(block.into_contents());
+        roots
+            .add(certificate.clone())
+            .context("Invalid Data CA certificate")?;
+        certificates.push(certificate);
+    }
+    Ok(certificates)
+}
+/// One complete placeholder only; literal PEM material is never bypassed just
+/// because another part of the field contains an interpolation marker.
+pub(crate) fn data_ca_is_template(value: &str) -> bool {
+    value
+        .trim()
+        .strip_prefix("{{")
+        .and_then(|s| s.strip_suffix("}}"))
+        .map(str::trim)
+        .is_some_and(|key| {
+            !key.is_empty()
+                && key.len() <= 1024
+                && !key.contains(['{', '}'])
+                && !key.chars().any(char::is_control)
+                && pem::parse_many(key).is_ok_and(|blocks| blocks.is_empty())
+        })
+}
+
 /// A single network host only. Driver-specific options cannot override the checked destination.
 pub fn data_url(raw: &str, source: DataSource) -> Result<Url> {
     ensure!(

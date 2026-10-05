@@ -98,6 +98,9 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
     crate::validate_tcp(r, templates)?;
     if let Protocol::Data { config } = &r.protocol {
         crate::validate_data_config(config)?;
+        if !templates || !crate::data::data_ca_is_template(&config.ca_pem) {
+            crate::data_ca_certificates(&config.ca_pem)?;
+        }
         ensure!(
             r.body_kind == "none" && r.method == "GET",
             "Data requests use GET marker with no HTTP body"

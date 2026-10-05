@@ -2,7 +2,7 @@
 
 采集日期：2026-10-02。基于完整官方目录、已读取正文与官方界面截图。
 
-这份矩阵是待实施的功能目标，不是完成清单。所有条目均为 `pending`；当前代码骨架未验证，任何条目都不能被标记为“已对齐”。完整原始入口见 [Apifox 目录](APIFOX-CATALOG.md)、[Postman 目录](POSTMAN-CATALOG.md) 与 [可筛选 CSV](features.csv)。
+这份矩阵是完整功能目标，不是完成清单。JSON/CSV 的 `pending` 保留采集时的研究状态；当前实现、验证证据与未完成能力见 [实现状态](IMPLEMENTATION-STATUS.md)、[协议覆盖](PROTOCOL-COVERAGE.md)和各模块规格。不能据菜单或依赖库推断已经完整对齐。完整原始入口见 [Apifox 目录](APIFOX-CATALOG.md)、[Postman 目录](POSTMAN-CATALOG.md) 与 [可筛选 CSV](features.csv)。
 
 “正文/目录”指证据读取等级，不等于逐个控件已经实际操作。每个来源说明该功能域；细项要在对应模块规格中补充兼容性与验收条件。空来源表示本次未定位足够公开证据，不能推断竞品不支持。企业、Beta、云端功能以对应页面的版本/套餐为准。JSON/CSV 的 source_availability 保留正文中套餐/平台限制原句，source_mapping 明确是功能域参考，不是厂商逐项支持声明；具体下拉选项由公开章节层级与 UI 观察共同覆盖。
 

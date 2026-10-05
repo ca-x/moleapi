@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+pem = "=4.0.0"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 hex = "0.4"
 prost.workspace = true

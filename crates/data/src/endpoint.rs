@@ -92,18 +92,8 @@ impl Endpoint {
         for certificate in rustls_native_certs::load_native_certs().certs {
             let _ = roots.add(certificate);
         }
-        if !self.ca_pem.is_empty() {
-            let mut certificates = 0;
-            for item in rustls_pemfile::read_all(&mut self.ca_pem.as_bytes()) {
-                match item? {
-                    rustls_pemfile::Item::X509Certificate(cert) => {
-                        roots.add(cert)?;
-                        certificates += 1;
-                    }
-                    _ => anyhow::bail!("Data CA field accepts certificate PEM blocks only"),
-                }
-            }
-            ensure!(certificates > 0, "Data CA PEM has no certificates");
+        for certificate in moleapi_core::data_ca_certificates(&self.ca_pem)? {
+            roots.add(certificate)?;
         }
         let mut config = rustls::ClientConfig::builder_with_provider(std::sync::Arc::new(
             rustls::crypto::ring::default_provider(),

@@ -17,7 +17,7 @@
 | TCP Socket/报文处理 | Apifox，Postman公开目录未定位 |真实TCP/TLS、文本/Hex/Base64、原始块/行/32位大小端长度分帧、半关闭/读取/取消/空闲限制、原始草稿/安全导出已实现；实际fixture及浏览器验证，分发验证留到整合 |Tokio、tokio-util BytesCodec/LinesCodec/LengthDelimitedCodec、tokio-rustls/rustls、hex/base64；浏览器Hex显示复用@scure/base |
 | Dubbo | Apifox，Postman公开目录未定位 |待实现 |Apache dubbo0.4.0；确认Triple与经典Dubbo/Hessian覆盖，hessian2仅是序列化库，不能据此宣称完整Dubbo客户端 |
 | Webhook监听/检查/重放 | 两者 | 已实现持久接收器、私密检查/导出、编辑二进制重放及取消；独立客户端显式本地监听已有真实套接字测试，原生UI/平台验证待完成 | Axum/Hyper、SeaORM、现有checked reqwest、base64 |
-| Data request：PG/MySQL、local/remote file SQL | Postman，Apifox公开目录未定位 | 已实现专用 Data 客户端、文件 SQL、结构浏览、只读/写入、类型结果和导出；真实数据库时序及最新平台验证待 Actions | tokio-postgres/tokio-postgres-rustls、mysql_async、SQLparser、DataFusion/Arrow、CodeMirror SQL/Lezer、TanStack Table、Decimal.js、Papa Parse |
+| Data request：PG/MySQL、local/remote file SQL | Postman，Apifox公开目录未定位 | 已实现专用 Data 客户端、文件 SQL、结构浏览、只读/写入、类型结果和导出；真实 PG/MySQL 功能与取消/连接释放已通过 Actions；最新平台验证待完成 | tokio-postgres/tokio-postgres-rustls、mysql_async、SQLparser、DataFusion/Arrow、CodeMirror SQL/Lezer、TanStack Table、Decimal.js、Papa Parse |
 
 不增加没有公开证据的“竞品已支持”结论；未定位不是断言不支持。HTTP传输承载SOAP/GraphQL/MCP/A2A等不等于完成它们的 schema、方法选择、事件、任务、鉴权和编辑器功能。Apifox/Postman类型与功能参考链接见[完整矩阵](FEATURE-MATRIX.md)，原始目录见[Apifox](APIFOX-CATALOG.md)/[Postman](POSTMAN-CATALOG.md)。
 
@@ -42,4 +42,4 @@ Data 当前边界：数据库 URL 使用已检查并固定的地址与原始 TLS
 
 文件最多 5 MiB；文件查询运行在具有堆/内存/超时限制的独立应用子进程，禁用外部存储与 spill。返回最多 1000 行、6 MiB，单行/单元格另有限制。截断数据库查询保留已读取的行并关闭连接；取消/超时关闭连接，不保证写入已回滚，DDL 可能有数据库自身的隐式提交。精确整数/小数以字符串返回；CSV 小数和 JSON 小数/混合数字列保留精确文本，可显式 CAST AS DECIMAL。JSON 结果导出保留类型、重复列名和截断信息；CSV 空单元格表示 NULL，采用成熟库转义电子表格公式。默认工作区导出移除本地文件字节和已知私密值，显式包含私密数据导出保留原件。MoleAPI 格式支持 Data 往返；Postman/OpenAPI 导出不能表示专用 Data 请求时明确拒绝。
 
-Data 独立后端审查与修复复审已完成；新增真实 PG/MySQL 精度、写入/只读、截断、取消及服务端连接消失断言在现有数据库 CI 中执行。功能源码验证与数据库/平台分发证据分开记录，不据应用存储支持推断 Data 支持。共享脚本、响应提取/断言、持久数据历史和更完整的数据源格式仍需后续整合。
+Data 独立后端审查与修复复审已完成；新增真实 PG/MySQL 精度、写入/只读、截断、取消及服务端连接消失断言已通过1f66a50的数据库 CI（run37282409905）。CA 保存/导入与严格 PEM 校验的后续修复另有回归与复审。功能源码验证与数据库/平台分发证据分开记录，不据应用存储支持推断 Data 支持。共享脚本、响应提取/断言、持久数据历史和更完整的数据源格式仍需后续整合。
