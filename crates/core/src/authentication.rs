@@ -48,6 +48,7 @@ impl Default for JwtAuth {
 pub fn validate_authentication(auth: &crate::Auth, templates: bool) -> Result<()> {
     ensure!(
         ["none", "basic", "bearer", "apikey", "jwt", "digest"].contains(&auth.kind.as_str())
+            || templates && auth.kind == "inherit"
             || templates && auth.kind.contains("{{"),
         "Unsupported authentication kind"
     );

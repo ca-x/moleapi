@@ -62,12 +62,16 @@ fn canonical_specification_references_and_size_are_checked() {
     let mut r = request();
     r.specification_id = Some("spec".into());
     let mut w = WorkspaceData {
+        auth: None,
         global_variables: vec![],
         pre_request_script: String::new(),
         post_response_script: String::new(),
         specifications: vec![],
         schema_version: 1,
         collections: vec![Collection {
+            variables_enabled: None,
+            parent_id: None,
+            auth: None,
             variables: vec![],
             pre_request_script: String::new(),
             post_response_script: String::new(),

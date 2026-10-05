@@ -1,3 +1,4 @@
+import RequestAuthEditor from "../authentication/RequestAuthEditor";
 import LanguageSelector from "../../shared/i18n/LanguageSelector";
 import { t, useLanguage, message } from "../../shared/i18n";
 import { Button, Card, Flex, Text, TextField } from "@radix-ui/themes";
@@ -19,6 +20,8 @@ export default function SettingsPanel() {
     logout,
     dirty,
     save,
+    dark,
+    updateData,
   } = useWorkbench();
   return (
     <Flex direction="column" gap="4">
@@ -38,6 +41,7 @@ export default function SettingsPanel() {
           />
         </Field>
       )}
+      {draft && <Field label={t("工作区鉴权")}><RequestAuthEditor auth={draft.data.auth ?? {kind:"none",token:"",username:"",password:""}} change={auth=>updateData(data=>({...data,auth}))} dark={dark} inherit={false}/></Field>}
       {native && sync.data?.connected && (
         <Card>
           <Text as="p" size="2">

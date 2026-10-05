@@ -24,30 +24,15 @@ pub(super) fn import(content: &str) -> Result<ImportResult> {
     let mut collections = vec![];
     let mut warnings = vec![];
     let spec_id = uid();
-    let ancestors = source.get("auth").cloned().into_iter().collect::<Vec<_>>();
     walk(
-        &source["item"],
+        &source,
         &name,
         &mut collections,
         &mut warnings,
         &spec_id,
-        &ancestors,
+        None,
+        0,
     )?;
-    let variables: Vec<moleapi_core::Pair> = source["variable"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .map(|value| {
-            let mut result = pair(value["key"].as_str().unwrap_or(""), text(&value["value"]));
-            result.enabled = !value["disabled"].as_bool().unwrap_or(false);
-            result
-        })
-        .collect();
-    for collection in &mut collections {
-        collection.variables = variables.clone();
-        collection.pre_request_script = event_script(&source, "prerequest");
-        collection.post_response_script = event_script(&source, "test");
-    }
     let mut data = data(collections, vec![]);
     data.specifications.push(Specification {
         id: spec_id,
@@ -63,28 +48,40 @@ pub(super) fn import(content: &str) -> Result<ImportResult> {
     })
 }
 fn walk(
-    items: &Value,
+    container: &Value,
     path: &str,
     collections: &mut Vec<Collection>,
     warnings: &mut Vec<String>,
     spec_id: &str,
-    ancestors: &[Value],
+    parent_id: Option<&str>,
+    depth: usize,
 ) -> Result<()> {
+    anyhow::ensure!(
+        depth < moleapi_core::MAX_COLLECTION_DEPTH,
+        "Postman folder depth exceeds limit"
+    );
+    anyhow::ensure!(
+        collections.len() < moleapi_core::MAX_COLLECTIONS,
+        "Postman folder limit exceeded"
+    );
+    let collection_id = uid();
     let mut requests = vec![];
-    for (index, item) in items.as_array().into_iter().flatten().enumerate() {
+    for (index, item) in container["item"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .enumerate()
+    {
         let name = item["name"].as_str().unwrap_or("请求");
         if item.get("item").is_some() {
-            let mut parents = ancestors.to_vec();
-            if let Some(auth) = item.get("auth") {
-                parents.push(auth.clone());
-            }
             walk(
-                &item["item"],
+                item,
                 &format!("{path} / {name}"),
                 collections,
                 warnings,
                 spec_id,
-                &parents,
+                Some(&collection_id),
+                depth + 1,
             )?;
             continue;
         }
@@ -232,34 +229,7 @@ fn walk(
                 "{name}: {other} Body 已保留在原始集合，需要对应协议编辑器"
             )),
         }
-        let auth = raw.get("auth").or_else(|| ancestors.last());
-        if let Some(auth) = auth {
-            match auth["type"].as_str().unwrap_or("") {
-                "bearer" => {
-                    result.auth.kind = "bearer".into();
-                    result.auth.token = auth_value(auth, "bearer", "token");
-                }
-                "basic" => {
-                    result.auth.kind = "basic".into();
-                    result.auth.username = auth_value(auth, "basic", "username");
-                    result.auth.password = auth_value(auth, "basic", "password");
-                }
-                "apikey" => {
-                    result.auth.kind = "apikey".into();
-                    result.auth.api_key = Some(Box::new(moleapi_core::ApiKeyAuth {
-                        name: auth_value(auth, "apikey", "key"),
-                        value: auth_value(auth, "apikey", "value"),
-                        location: if auth_value(auth, "apikey", "in") == "query" {
-                            moleapi_core::AuthLocation::Query
-                        } else {
-                            moleapi_core::AuthLocation::Header
-                        },
-                    }));
-                }
-                "noauth" | "" => {}
-                other => warnings.push(format!("{name}: {other} 鉴权定义已保留，需要对应鉴权配置")),
-            }
-        }
+        result.auth = import_auth(raw.get("auth"), warnings, name).unwrap_or_else(inherit_auth);
         result.pre_request_script = event_script(item, "prerequest");
         result.post_response_script = event_script(item, "test");
         for response in item["response"].as_array().into_iter().flatten() {
@@ -281,18 +251,115 @@ fn walk(
         }
         requests.push(result);
     }
-    if !requests.is_empty() {
-        collections.push(Collection {
-            variables: vec![],
-            pre_request_script: String::new(),
-            post_response_script: String::new(),
-            id: uid(),
-            name: path.into(),
-            description: String::new(),
-            requests,
-        });
+    anyhow::ensure!(
+        collections.len() < moleapi_core::MAX_COLLECTIONS,
+        "Postman collection limit exceeded"
+    );
+    if depth > 0
+        && container["variable"]
+            .as_array()
+            .is_some_and(|v| !v.is_empty())
+    {
+        warnings.push(format!("{path}: 目录变量保留为源定义，Postman Runtime 尚不执行它们；可在 MoleAPI 目录设置中启用"));
     }
+    let mut variables = import_variables(&container["variable"]);
+    if depth > 0 {
+        for variable in &mut variables {
+            variable.secret = Some(true);
+        }
+    }
+    collections.push(Collection {
+        variables_enabled: if depth > 0 { Some(false) } else { None },
+        parent_id: parent_id.map(str::to_owned),
+        auth: import_auth(container.get("auth"), warnings, path),
+        variables,
+        pre_request_script: event_script(container, "prerequest"),
+        post_response_script: event_script(container, "test"),
+        id: collection_id,
+        name: container["name"].as_str().unwrap_or(path).into(),
+        description: text(&container["description"]),
+        requests,
+    });
     Ok(())
+}
+fn inherit_auth() -> moleapi_core::Auth {
+    moleapi_core::Auth {
+        kind: "inherit".into(),
+        token: String::new(),
+        username: String::new(),
+        password: String::new(),
+        api_key: None,
+        jwt: None,
+    }
+}
+fn import_variables(value: &Value) -> Vec<moleapi_core::Pair> {
+    value
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|value| {
+            let mut result = pair(value["key"].as_str().unwrap_or(""), text(&value["value"]));
+            result.enabled = !value["disabled"].as_bool().unwrap_or(false);
+            result
+        })
+        .collect()
+}
+fn import_auth(
+    value: Option<&Value>,
+    warnings: &mut Vec<String>,
+    name: &str,
+) -> Option<moleapi_core::Auth> {
+    let value = value.filter(|v| !v.is_null())?;
+    let mut auth = inherit_auth();
+    match value["type"].as_str().unwrap_or("") {
+        "bearer" => {
+            auth.kind = "bearer".into();
+            auth.token = auth_value(value, "bearer", "token");
+        }
+        "basic" => {
+            auth.kind = "basic".into();
+            auth.username = auth_value(value, "basic", "username");
+            auth.password = auth_value(value, "basic", "password");
+        }
+        "apikey" => {
+            auth.kind = "apikey".into();
+            auth.api_key = Some(Box::new(moleapi_core::ApiKeyAuth {
+                name: auth_value(value, "apikey", "key"),
+                value: auth_value(value, "apikey", "value"),
+                location: if auth_value(value, "apikey", "in") == "query" {
+                    moleapi_core::AuthLocation::Query
+                } else {
+                    moleapi_core::AuthLocation::Header
+                },
+            }));
+        }
+        "noauth" => auth.kind = "none".into(),
+        "" => return None,
+        other => {
+            auth.kind = "none".into();
+            warnings.push(format!(
+                "{name}: {other} 鉴权定义已保留，需要对应鉴权配置；未执行父级回退"
+            ));
+        }
+    }
+    Some(auth)
+}
+fn export_auth(auth: &moleapi_core::Auth) -> Result<Value> {
+    Ok(match auth.kind.as_str() {
+        "inherit" => Value::Null,
+        "none" => json!({"type":"noauth"}),
+        "bearer" => {
+            json!({"type":"bearer","bearer":[{"key":"token","value":auth.token,"type":"string"}]})
+        }
+        "basic" => {
+            json!({"type":"basic","basic":[{"key":"username","value":auth.username,"type":"string"},{"key":"password","value":auth.password,"type":"string"}]})
+        }
+        "apikey" => {
+            let key = auth.api_key.as_ref().context("API key settings missing")?;
+            json!({"type":"apikey","apikey":[{"key":"key","value":key.name,"type":"string"},{"key":"value","value":key.value,"type":"string"},{"key":"in","value":if key.location==moleapi_core::AuthLocation::Query{"query"}else{"header"},"type":"string"}]})
+        }
+        _ => bail!("Selected authentication cannot be preserved in Postman format"),
+    })
 }
 fn event_script(item: &Value, listen: &str) -> String {
     item["event"]
@@ -337,30 +404,156 @@ fn auth_value(auth: &Value, kind: &str, key: &str) -> String {
         .unwrap_or_default()
 }
 
-pub(super) fn export(workspace: &Workspace) -> Result<String> {
-    let items=workspace.data.collections.iter().map(|collection|json!({"name":collection.name,"description":collection.description,"event":events(&collection.pre_request_script,&collection.post_response_script),"variable":collection.variables.iter().map(|v|json!({"key":v.key,"value":v.value,"type":"string","disabled":!v.enabled})).collect::<Vec<_>>(),"item":collection.requests.iter().map(|r| {
-        let mut url=r.url.clone();if !r.query.is_empty(){let values=r.query.iter().filter(|p|p.enabled).map(|p|format!("{}={}",url::form_urlencoded::byte_serialize(p.key.as_bytes()).collect::<String>(),url::form_urlencoded::byte_serialize(p.value.as_bytes()).collect::<String>())).collect::<Vec<_>>().join("&");if !values.is_empty(){url.push(if url.contains('?'){'&'}else{'?'});url.push_str(&values);}}
-        let auth=match r.auth.kind.as_str(){"apikey"=>{let key=r.auth.api_key.as_ref().expect("validated API key");json!({"type":"apikey","apikey":[{"key":"key","value":key.name,"type":"string"},{"key":"value","value":key.value,"type":"string"},{"key":"in","value":if key.location==moleapi_core::AuthLocation::Query{"query"}else{"header"},"type":"string"}]})},"bearer"=>json!({"type":"bearer","bearer":[{"key":"token","value":r.auth.token,"type":"string"}]}),"basic"=>json!({"type":"basic","basic":[{"key":"username","value":r.auth.username,"type":"string"},{"key":"password","value":r.auth.password,"type":"string"}]}),_=>json!({"type":"noauth"})};
-        let mut request=json!({"method":r.method,"url":url,"description":r.description,"header":r.headers.iter().map(|h|json!({"key":h.key,"value":h.value,"disabled":!h.enabled})).collect::<Vec<_>>(),"auth":auth});
-        if let moleapi_core::Protocol::Graphql{document,variables,variables_source,..}=&r.protocol {
-            request["body"]=json!({"mode":"graphql","graphql":{"query":document,"variables":variables_source.as_deref().map(str::to_owned).unwrap_or_else(||variables.to_string())}});
-        } else if r.body_kind=="binary" {
-            let file:moleapi_core::BinaryBody=serde_json::from_str(&r.body).expect("validated binary source");
-            request["body"]=json!({"mode":"file","file":{"src":file.file_name}});
-            if !file.mime.is_empty() && !r.headers.iter().any(|h|h.enabled && h.key.eq_ignore_ascii_case("content-type")) {
-                request["header"].as_array_mut().unwrap().push(json!({"key":"Content-Type","value":file.mime,"disabled":false}));
-            }
-        } else if r.body_kind=="multipart" {
-            let body:moleapi_core::MultipartBody=serde_json::from_str(&r.body).expect("validated multipart source");
-            request["body"]=json!({"mode":"formdata","formdata":body.parts.iter().map(|p| match &p.value {
+fn export_request(r: &moleapi_core::RequestSpec) -> Result<Value> {
+    let mut url = r.url.clone();
+    if !r.query.is_empty() {
+        let values = r
+            .query
+            .iter()
+            .filter(|p| p.enabled)
+            .map(|p| {
+                format!(
+                    "{}={}",
+                    url::form_urlencoded::byte_serialize(p.key.as_bytes()).collect::<String>(),
+                    url::form_urlencoded::byte_serialize(p.value.as_bytes()).collect::<String>()
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("&");
+        if !values.is_empty() {
+            url.push(if url.contains('?') { '&' } else { '?' });
+            url.push_str(&values);
+        }
+    }
+    let auth = export_auth(&r.auth)?;
+    let mut request = json!({"method":r.method,"url":url,"description":r.description,"header":r.headers.iter().map(|h|json!({"key":h.key,"value":h.value,"disabled":!h.enabled})).collect::<Vec<_>>(),"auth":auth});
+    if let moleapi_core::Protocol::Graphql {
+        document,
+        variables,
+        variables_source,
+        ..
+    } = &r.protocol
+    {
+        request["body"] = json!({"mode":"graphql","graphql":{"query":document,"variables":variables_source.as_deref().map(str::to_owned).unwrap_or_else(||variables.to_string())}});
+    } else if r.body_kind == "binary" {
+        let file: moleapi_core::BinaryBody =
+            serde_json::from_str(&r.body).expect("validated binary source");
+        request["body"] = json!({"mode":"file","file":{"src":file.file_name}});
+        if !file.mime.is_empty()
+            && !r
+                .headers
+                .iter()
+                .any(|h| h.enabled && h.key.eq_ignore_ascii_case("content-type"))
+        {
+            request["header"]
+                .as_array_mut()
+                .unwrap()
+                .push(json!({"key":"Content-Type","value":file.mime,"disabled":false}));
+        }
+    } else if r.body_kind == "multipart" {
+        let body: moleapi_core::MultipartBody =
+            serde_json::from_str(&r.body).expect("validated multipart source");
+        request["body"] = json!({"mode":"formdata","formdata":body.parts.iter().map(|p| match &p.value {
                 moleapi_core::MultipartValue::Text{text,mime}=>json!({"key":p.name,"type":"text","value":text,"contentType":mime,"disabled":!p.enabled}),
                 moleapi_core::MultipartValue::File{file}=>json!({"key":p.name,"type":"file","src":file.file_name,"contentType":file.mime,"disabled":!p.enabled}),
             }).collect::<Vec<_>>()});
-        } else if r.body_kind=="form" {
-            request["body"]=json!({"mode":"urlencoded","urlencoded":url::form_urlencoded::parse(r.body.as_bytes()).map(|(key,value)|json!({"key":key,"value":value,"type":"text"})).collect::<Vec<_>>()});
-        } else if r.body_kind!="none"{request["body"]=json!({"mode":"raw","raw":r.body,"options":{"raw":{"language":if r.body_kind=="json"{"json"}else{"text"}}}});}
-        json!({"name":r.name,"request":request,"event":events(&r.pre_request_script,&r.post_response_script),"response":r.examples.iter().map(|e|json!({"name":e.name,"code":e.status,"body":e.body,"header":e.headers.iter().map(|h|json!({"key":h.key,"value":h.value})).collect::<Vec<_>>(),"originalRequest":request})).collect::<Vec<_>>()})
-    }).collect::<Vec<_>>() })).collect::<Vec<_>>();
+    } else if r.body_kind == "form" {
+        request["body"] = json!({"mode":"urlencoded","urlencoded":url::form_urlencoded::parse(r.body.as_bytes()).map(|(key,value)|json!({"key":key,"value":value,"type":"text"})).collect::<Vec<_>>()});
+    } else if r.body_kind != "none" {
+        request["body"] = json!({"mode":"raw","raw":r.body,"options":{"raw":{"language":if r.body_kind=="json"{"json"}else{"text"}}}});
+    }
+    Ok(
+        json!({"name":r.name,"request":request,"event":events(&r.pre_request_script,&r.post_response_script),"response":r.examples.iter().map(|e|json!({"name":e.name,"code":e.status,"body":e.body,"header":e.headers.iter().map(|h|json!({"key":h.key,"value":h.value})).collect::<Vec<_>>(),"originalRequest":request})).collect::<Vec<_>>()}),
+    )
+}
+fn export_collection(
+    workspace: &Workspace,
+    collection: &Collection,
+    depth: usize,
+) -> Result<Value> {
+    anyhow::ensure!(
+        depth < moleapi_core::MAX_COLLECTION_DEPTH,
+        "Collection depth exceeds limit"
+    );
+    let mut items = collection
+        .requests
+        .iter()
+        .map(export_request)
+        .collect::<Result<Vec<_>>>()?;
+    for child in workspace
+        .data
+        .collections
+        .iter()
+        .filter(|c| c.parent_id.as_deref() == Some(collection.id.as_str()))
+    {
+        items.push(export_collection(workspace, child, depth + 1)?);
+    }
+    let mut value = json!({"name":collection.name,"description":collection.description,"event":events(&collection.pre_request_script,&collection.post_response_script),"variable":collection.variables.iter().map(|v|json!({"key":v.key,"value":v.value,"type":"string","disabled":!v.enabled})).collect::<Vec<_>>(),"item":items});
+    if let Some(auth) = &collection.auth {
+        value["auth"] = export_auth(auth)?;
+    }
+    Ok(value)
+}
+pub(super) fn export(workspace: &Workspace) -> Result<String> {
+    anyhow::ensure!(
+        !workspace
+            .data
+            .collections
+            .iter()
+            .any(|c| c.parent_id.is_some()
+                && c.variables_enabled != Some(false)
+                && c.variables.iter().any(|v| v.enabled)),
+        "MoleAPI executes folder variables that Postman Runtime currently ignores; disable folder-variable execution or use MoleAPI export"
+    );
+    let roots = workspace
+        .data
+        .collections
+        .iter()
+        .filter(|c| c.parent_id.is_none())
+        .collect::<Vec<_>>();
+    let direct_root = roots.len() == 1
+        && workspace.data.auth.is_none()
+        && workspace.data.global_variables.is_empty()
+        && workspace.data.pre_request_script.is_empty()
+        && workspace.data.post_response_script.is_empty();
+    // Postman collection export snapshots the selected environment. Keep source
+    // hierarchy when those values cannot override differently-valued folder vars.
+    if let Some(environment) = workspace
+        .data
+        .environments
+        .iter()
+        .find(|e| Some(&e.id) == workspace.data.active_environment_id.as_ref())
+    {
+        for row in environment.variables.iter().filter(|v| v.enabled) {
+            anyhow::ensure!(
+                !workspace
+                    .data
+                    .collections
+                    .iter()
+                    .filter(|c| !direct_root || c.parent_id.is_some())
+                    .flat_map(|c| &c.variables)
+                    .any(|v| v.enabled && v.key == row.key && v.value != row.value),
+                "Selected environment conflicts with folder variables; use MoleAPI until separate Postman environment exports are available"
+            );
+        }
+    }
+    anyhow::ensure!(
+        direct_root
+            || !workspace.data.collections.iter().any(
+                |c| c.variables_enabled != Some(false) && c.variables.iter().any(|v| v.enabled)
+            ),
+        "Wrapped collection variables are ignored by Postman Runtime; use a single direct collection or MoleAPI export"
+    );
+    anyhow::ensure!(
+        !direct_root
+            || roots[0].variables_enabled != Some(false)
+            || !roots[0].variables.iter().any(|v| v.enabled),
+        "Source-only root collection variables would become active in Postman; use MoleAPI export until that flag can be preserved"
+    );
+    let items = roots
+        .iter()
+        .map(|c| export_collection(workspace, c, 0))
+        .collect::<Result<Vec<_>>>()?;
     let variables = workspace
         .data
         .environments
@@ -373,7 +566,53 @@ pub(super) fn export(workspace: &Workspace) -> Result<String> {
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    let result = json!({"info":{"name":workspace.name,"schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},"item":items,"variable":variables});
+    let mut result = json!({"info":{"name":workspace.name,"schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},"item":items,"variable":variables});
+    if direct_root {
+        result["info"]["name"] = json!(roots[0].name);
+        let collection = export_collection(workspace, roots[0], 0)?;
+        for field in ["item", "event", "auth", "description"] {
+            if let Some(value) = collection.get(field) {
+                result[field] = value.clone();
+            }
+        }
+        let mut vars = collection["variable"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        vars.extend(result["variable"].as_array().into_iter().flatten().cloned());
+        result["variable"] = json!(vars);
+    } else {
+        result["event"] = json!(events(
+            &workspace.data.pre_request_script,
+            &workspace.data.post_response_script
+        ));
+        if let Some(auth) = &workspace.data.auth {
+            result["auth"] = export_auth(auth)?;
+        }
+        let mut vars = workspace
+            .data
+            .global_variables
+            .iter()
+            .map(|v| json!({"key":v.key,"value":v.value,"type":"string","disabled":!v.enabled}))
+            .collect::<Vec<_>>();
+        vars.extend(result["variable"].as_array().into_iter().flatten().cloned());
+        result["variable"] = json!(vars);
+    }
+    let mut merged = Vec::<Value>::new();
+    let mut positions = std::collections::HashMap::<String, usize>::new();
+    for value in result["variable"].as_array().into_iter().flatten() {
+        let key = value["key"]
+            .as_str()
+            .context("Variable key missing")?
+            .to_owned();
+        if let Some(index) = positions.get(&key) {
+            merged[*index] = value.clone();
+        } else {
+            positions.insert(key, merged.len());
+            merged.push(value.clone());
+        }
+    }
+    result["variable"] = json!(merged);
     let schema: Value = serde_json::from_str(include_str!("../schemas/postman21.json"))?;
     jsonschema::validator_for(&schema)?
         .validate(&result)

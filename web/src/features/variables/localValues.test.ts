@@ -150,3 +150,18 @@ it("switching development and production selects independent overrides for the s
   expect(executionLocals(source, undefined, null, buckets, false)).toEqual([]);
   expect(source.data.environments.map((env) => env.variables[0].value)).toEqual(["dev-shared", "prod-shared"]);
 });
+
+it("merges inherited browser local values while a child shared declaration shadows the parent local",()=>{
+ const w=workspace();const root=w.data.collections[0];root.id="root";root.variables=[{id:"one",key:"token",value:"root-shared",enabled:true},{id:"two",key:"root-only",value:"root",enabled:true}];
+ const child={id:"leaf",parent_id:"root",name:"Leaf",description:"",variables:[{id:"leaf-token",key:"token",value:"leaf-shared",enabled:true}],requests:[]};w.data.collections.push(child);
+ const buckets={[bucketKey("collection","root")]:{token:"root-private", "root-only":"root-local"}};
+ const values=executionLocals(w,"leaf",null,buckets,false);
+ expect(values.find(v=>v.key==="token")).toBeUndefined();expect(values.find(v=>v.key==="root-only")?.value).toBe("root-local");
+ const override=executionLocals(w,"leaf",null,{...buckets,[bucketKey("collection","leaf")]:{token:"leaf-local"}},false);
+ expect(override.find(v=>v.key==="token")?.value).toBe("leaf-local");
+});
+
+it("source-only imported folder variables cannot activate retained browser overrides",()=>{
+ const w=workspace();const c=w.data.collections[0];c.variables_enabled=false;c.variables=[{id:"x",key:"token",value:"source",enabled:true}];
+ expect(executionLocals(w,c.id,null,{[bucketKey("collection",c.id)]:{token:"retained-private"}},false)).toEqual([]);
+});

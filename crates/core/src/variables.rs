@@ -26,14 +26,16 @@ impl VariableScopes {
         native: bool,
     ) -> Result<Self> {
         let mut result = Self::default();
-        for (name, pairs) in [
-            ("project", workspace.global_variables.as_slice()),
-            (
-                "collection",
-                collection
-                    .map(|c| c.variables.as_slice())
-                    .unwrap_or_default(),
-            ),
+        let mut inputs = vec![("project", workspace.global_variables.as_slice())];
+        if let Some(collection) = collection {
+            for parent in crate::collection_chain(workspace, collection)?
+                .into_iter()
+                .filter(|c| c.variables_enabled != Some(false))
+            {
+                inputs.push(("collection", parent.variables.as_slice()));
+            }
+        }
+        inputs.extend([
             (
                 "environment",
                 environment
@@ -42,7 +44,8 @@ impl VariableScopes {
             ),
             ("data", data),
             ("temporary", temporary),
-        ] {
+        ]);
+        for (name, pairs) in inputs {
             validate_variables(pairs)?;
             for pair in pairs.iter().filter(|p| p.enabled) {
                 let value = if native || matches!(name, "data" | "temporary") {

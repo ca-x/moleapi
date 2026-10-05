@@ -97,6 +97,7 @@ export default function WorkbenchMain() {
               <RequestEditor
                 key={`${draft.id}/${request.id}`}
                 request={request}
+                workspaceData={draft.data}
                 bodyScope={JSON.stringify([accountId,draft.id,draft.data.active_environment_id])}
                 protocolConnected={
                   !!protocolSession.session &&

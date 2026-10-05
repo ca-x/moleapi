@@ -130,7 +130,8 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
         "Unsupported body kind"
     );
     crate::validate_authentication(&r.auth, templates)?;
-    if matches!(r.auth.kind.as_str(), "apikey" | "jwt" | "digest")
+    if !matches!(r.auth.kind.as_str(), "none" | "inherit")
+        && !(templates && r.auth.kind.contains("{{"))
         && matches!(&r.protocol,Protocol::Mcp{config} if config.transport=="stdio")
     {
         bail!("STDIO auth must use explicit process configuration, not HTTP auth");
@@ -260,6 +261,13 @@ pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
         data.schema_version == 1,
         "Unsupported workspace schema version"
     );
+    ensure!(
+        data.collections.len() <= crate::MAX_COLLECTIONS,
+        "Collection limit exceeded"
+    );
+    if let Some(auth) = &data.auth {
+        crate::validate_authentication(auth, true)?;
+    }
     validate_variables(&data.global_variables)?;
     validate_script(&data.pre_request_script)?;
     validate_script(&data.post_response_script)?;
@@ -295,6 +303,10 @@ pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
     let mut requests = HashSet::new();
     let mut environments = HashSet::new();
     for c in &data.collections {
+        crate::collection_chain(data, c)?;
+        if let Some(auth) = &c.auth {
+            crate::validate_authentication(auth, true)?;
+        }
         validate_variables(&c.variables)?;
         validate_script(&c.pre_request_script)?;
         validate_script(&c.post_response_script)?;
@@ -308,6 +320,8 @@ pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
                 "Request IDs must be unique and nonempty"
             );
             validate_request(r, true)?;
+            let inherited = crate::inherit_request_authentication(data, Some(c), r, None)?;
+            validate_request(&inherited, true)?;
             if let Some(id) = &r.specification_id {
                 ensure!(
                     specifications.contains(id),

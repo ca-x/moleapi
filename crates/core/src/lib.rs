@@ -1,3 +1,5 @@
+mod inheritance;
+pub use inheritance::*;
 mod authentication;
 pub use authentication::*;
 mod request_body;

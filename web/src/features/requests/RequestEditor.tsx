@@ -2,6 +2,7 @@ import { liveError } from "./../../shared/i18n/errors";
 import { t, useLanguage, liveTranslation } from "../../shared/i18n";
 import ProtocolPane from "../protocols/ProtocolPane";
 import { authenticationEligibility } from "../authentication/eligibility";
+import { inheritedAuthSource } from "../authentication/inheritedSource";
 import RequestAuthEditor from "../authentication/RequestAuthEditor";
 import RequestScripts from "../scripts/RequestScripts";
 import ExamplesEditor from "./ExamplesEditor";
@@ -56,6 +57,7 @@ const requestTabs = [
 ];
 export default function RequestEditor({
   request,
+  workspaceData,
   protocolConnected = false,
   bodyScope = "",
   update,
@@ -70,6 +72,7 @@ export default function RequestEditor({
   error,
 }: {
   request: RequestSpec;
+  workspaceData?: import("../../shared/types").WorkspaceData;
   protocolConnected?: boolean;
   bodyScope?: string;
   update: (patch: Partial<RequestSpec>) => void;
@@ -109,7 +112,7 @@ export default function RequestEditor({
         "examples",
         ...(tcp ? ["settings"] : []),
         ...(data || tcp || grpc || mcpStdio || (mqtt && !mqttWebSocket)
-          ? ["query", ...(tcp || mqtt || mcpStdio ? ["headers", "auth"] : [])]
+          ? ["query", ...(tcp || mqtt ? ["headers", "auth"] : mcpStdio ? ["headers"] : [])]
           : []),
       ].includes(tab)
     )
@@ -354,7 +357,7 @@ export default function RequestEditor({
                     : tcp || grpc || mqtt || mcp || a2a
                       ? ![
                           ...(mqtt && !mqttWebSocket ? ["headers"] : []),
-                          ...(tcp || mcpStdio ? ["headers", "auth"] : []),
+                          ...(tcp ? ["headers", "auth"] : mcpStdio ? ["headers"] : []),
                           ...(tcp || grpc || mcpStdio || (mqtt && !mqttWebSocket)
                             ? ["query"]
                             : []),
@@ -446,7 +449,8 @@ export default function RequestEditor({
               )}
             </Tabs.Content>
             <Tabs.Content value="auth">
-              <RequestAuthEditor auth={request.auth} change={auth=>update({auth})} dark={dark} {...authenticationEligibility(request)}/>
+              <RequestAuthEditor auth={request.auth} change={auth=>update({auth})} dark={dark} credentials={!mcpStdio} {...authenticationEligibility(request)}/>
+              {request.auth.kind==="inherit" && workspaceData && <Text size="1" color="gray">{t("继承来源：{{value0}}",{value0:(()=>{const source=inheritedAuthSource(workspaceData,request);return source.scope==="collection"?source.name:source.scope==="workspace"?t("工作区鉴权"):source.scope==="dynamic"?t("执行时解析环境变量后确定"):"No Auth";})()})}</Text>}
             </Tabs.Content>
             <Tabs.Content value="assertions">
               <AssertionsEditor request={request} update={update} />

@@ -48,6 +48,24 @@ pub(crate) fn variables(
         .map_err(|e| ApiError::bad(e.to_string()))?;
     Ok(scopes)
 }
+fn capture_parent_auth(
+    w: &Workspace,
+    chain: &[&Collection],
+    r: &RequestSpec,
+    scopes: &mut VariableScopes,
+) -> Result<(), ApiError> {
+    for auth in w
+        .data
+        .auth
+        .iter()
+        .chain(chain.iter().filter_map(|c| c.auth.as_ref()))
+    {
+        let mut source = r.clone();
+        source.auth = auth.clone();
+        crate::privacy::request_values(&source, scopes)?;
+    }
+    Ok(())
+}
 struct PhaseFailure {
     error: ApiError,
     private_values: std::collections::BTreeSet<String>,
@@ -90,20 +108,20 @@ pub(crate) async fn perform(
 ) -> Result<Response, ApiError> {
     moleapi_core::validate_request(r, true).map_err(|e| ApiError::bad(e.to_string()))?;
     crate::privacy::request_values(r, scopes)?;
-    let pre = vec![
-        w.data.pre_request_script.clone(),
-        collection
-            .map(|c| c.pre_request_script.clone())
-            .unwrap_or_default(),
-        r.pre_request_script.clone(),
-    ];
-    let post = vec![
-        r.post_response_script.clone(),
-        collection
-            .map(|c| c.post_response_script.clone())
-            .unwrap_or_default(),
-        w.data.post_response_script.clone(),
-    ];
+    let chain = collection
+        .map(|c| moleapi_core::collection_chain(&w.data, c))
+        .transpose()
+        .map_err(|e| ApiError::bad(e.to_string()))?
+        .unwrap_or_default();
+    capture_parent_auth(w, &chain, r, scopes)?;
+    let pre = std::iter::once(w.data.pre_request_script.clone())
+        .chain(chain.iter().map(|c| c.pre_request_script.clone()))
+        .chain(std::iter::once(r.pre_request_script.clone()))
+        .collect::<Vec<_>>();
+    let post = std::iter::once(r.post_response_script.clone())
+        .chain(chain.iter().rev().map(|c| c.post_response_script.clone()))
+        .chain(std::iter::once(w.data.post_response_script.clone()))
+        .collect::<Vec<_>>();
     let prepared = moleapi_core::prepare_soap(
         &moleapi_core::prepare_graphql(r).map_err(|e| ApiError::bad(e.to_string()))?,
     )
@@ -161,6 +179,14 @@ pub(crate) async fn perform(
         return Err(ApiError::bad("Pre scripts cannot change the SOAP protocol"));
     }
     let effective = scopes.effective();
+    let request = moleapi_core::inherit_request_authentication(
+        &w.data,
+        collection,
+        &request,
+        Some(&effective),
+    )
+    .map_err(|e| ApiError::bad(e.to_string()))?;
+    crate::privacy::request_values(&request, scopes)?;
     let resolved = moleapi_core::resolve_request(&request, Some(&effective))
         .map_err(|e| ApiError::bad(e.to_string()))?;
     if r.protocol.is_soap() {
@@ -282,13 +308,12 @@ pub(crate) async fn prepare_live(
     ),
     ApiError,
 > {
-    if [
-        &w.data.post_response_script,
-        &collection.post_response_script,
-        &r.post_response_script,
-    ]
-    .iter()
-    .any(|s| !s.trim().is_empty())
+    let chain = moleapi_core::collection_chain(&w.data, collection)
+        .map_err(|e| ApiError::bad(e.to_string()))?;
+    if std::iter::once(&w.data.post_response_script)
+        .chain(chain.iter().map(|c| &c.post_response_script))
+        .chain(std::iter::once(&r.post_response_script))
+        .any(|script| !script.trim().is_empty())
     {
         return Err(ApiError::bad(
             "Post-response scripts are unavailable for live protocols until a per-event script contract exists",
@@ -296,11 +321,11 @@ pub(crate) async fn prepare_live(
     }
     moleapi_core::validate_request(r, true).map_err(|e| ApiError::bad(e.to_string()))?;
     crate::privacy::request_values(r, scopes)?;
-    let scripts = vec![
-        w.data.pre_request_script.clone(),
-        collection.pre_request_script.clone(),
-        r.pre_request_script.clone(),
-    ];
+    capture_parent_auth(w, &chain, r, scopes)?;
+    let scripts = std::iter::once(w.data.pre_request_script.clone())
+        .chain(chain.iter().map(|c| c.pre_request_script.clone()))
+        .chain(std::iter::once(r.pre_request_script.clone()))
+        .collect::<Vec<_>>();
     let prepared = moleapi_core::prepare_graphql(r).map_err(|e| ApiError::bad(e.to_string()))?;
     let mut prepared = moleapi_core::prepare_grpc(&prepared);
     if let moleapi_core::Protocol::Socketio { auth_source, .. } = &prepared.protocol {
@@ -397,6 +422,14 @@ pub(crate) async fn prepare_live(
     {
         request.body.clear();
     }
+    let request = moleapi_core::inherit_request_authentication(
+        &w.data,
+        Some(collection),
+        &request,
+        Some(&effective),
+    )
+    .map_err(|e| ApiError::bad(e.to_string()))?;
+    crate::privacy::request_values(&request, scopes)?;
     let resolved = moleapi_core::resolve_request(&request, Some(&effective))
         .map_err(|e| ApiError::bad(e.to_string()))?;
     crate::privacy::request_values(&resolved, scopes)?;

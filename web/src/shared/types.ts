@@ -55,7 +55,7 @@ export interface JwtAuth {algorithm:string;key:string;key_base64:boolean;claims_
 export interface Auth {
   api_key?:ApiKeyAuth;
   jwt?:JwtAuth;
-  kind: "none" | "bearer" | "basic" | "apikey" | "jwt" | "digest";
+  kind: "inherit" | "none" | "bearer" | "basic" | "apikey" | "jwt" | "digest";
   token: string;
   username: string;
   password: string;
@@ -97,6 +97,9 @@ export interface RequestSpec {
   post_response_script?: string;
 }
 export interface Collection {
+  variables_enabled?:boolean | null;
+  parent_id?: string | null;
+  auth?: Auth | null;
   variables?: Pair[];
   pre_request_script?: string;
   post_response_script?: string;
@@ -118,6 +121,7 @@ export interface Specification {
   dialect: string;
 }
 export interface WorkspaceData {
+  auth?: Auth | null;
   global_variables?: Pair[];
   pre_request_script?: string;
   post_response_script?: string;

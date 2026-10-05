@@ -1,17 +1,57 @@
 use moleapi_core::Workspace;
 use serde_json::Value;
 
+fn redact_auth(auth: &mut moleapi_core::Auth, privacy: &ExportPrivacy) {
+    if let Some(key) = &mut auth.api_key {
+        key.value.clear();
+        let original = key.name.clone();
+        key.name = privacy.screen_bounded(&key.name, 512);
+        if key.name.is_empty() || key.name != original {
+            key.name = "x-redacted-key".into();
+        }
+    }
+    if let Some(jwt) = &mut auth.jwt {
+        jwt.key.clear();
+        jwt.claims_source = privacy.screen_generation_json(&jwt.claims_source);
+        jwt.kid = privacy.screen_bounded(&jwt.kid, 512);
+        jwt.prefix = privacy.screen_bounded(&jwt.prefix, 128);
+        let name = privacy.screen_bounded(&jwt.name, 512);
+        if name != jwt.name || name.is_empty() {
+            jwt.name = "Authorization".into();
+        }
+    }
+    auth.username = privacy.screen_bounded(&auth.username, 4096);
+    auth.token.clear();
+    auth.password.clear();
+}
 pub(super) fn workspace(source: &Workspace) -> Workspace {
     let privacy = ExportPrivacy::new(source);
     let tcp_privacy = ExportPrivacy::from_workspace(source, true);
     let data_privacy = &tcp_privacy;
-    let auth_private = source
-        .data
-        .collections
-        .iter()
-        .flat_map(|c| &c.requests)
-        .any(|r| r.auth.api_key.is_some() || r.auth.jwt.is_some());
+    let auth_private = source.data.auth.is_some()
+        || source.data.collections.iter().any(|c| c.auth.is_some())
+        || source
+            .data
+            .collections
+            .iter()
+            .flat_map(|c| &c.requests)
+            .any(|r| r.auth.api_key.is_some() || r.auth.jwt.is_some());
     let mut result = source.clone();
+    if auth_private {
+        result.data.pre_request_script = tcp_privacy.screen_bounded(
+            &result.data.pre_request_script,
+            moleapi_core::MAX_SCRIPT_BYTES,
+        );
+        result.data.post_response_script = tcp_privacy.screen_bounded(
+            &result.data.post_response_script,
+            moleapi_core::MAX_SCRIPT_BYTES,
+        );
+    }
+
+    if let Some(auth) = &mut result.data.auth {
+        redact_auth(auth, &privacy);
+    }
+
     for environment in &mut result.data.environments {
         for variable in &mut environment.variables {
             if auth_private {
@@ -34,6 +74,26 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
         variable.local_value = None;
     }
     for collection in &mut result.data.collections {
+        if auth_private {
+            collection.name = tcp_privacy.screen_bounded(&collection.name, 256);
+            if collection.name.is_empty() {
+                collection.name = "[REDACTED]".into();
+            }
+            collection.description = tcp_privacy.screen_generation_text(&collection.description);
+            collection.pre_request_script = tcp_privacy.screen_bounded(
+                &collection.pre_request_script,
+                moleapi_core::MAX_SCRIPT_BYTES,
+            );
+            collection.post_response_script = tcp_privacy.screen_bounded(
+                &collection.post_response_script,
+                moleapi_core::MAX_SCRIPT_BYTES,
+            );
+        }
+
+        if let Some(auth) = &mut collection.auth {
+            redact_auth(auth, &privacy);
+        }
+
         for variable in &mut collection.variables {
             if auth_private {
                 variable.value = privacy.screen_bounded(&variable.value, 65536);
@@ -44,24 +104,7 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
             variable.local_value = None;
         }
         for request in &mut collection.requests {
-            if let Some(key) = &mut request.auth.api_key {
-                key.value.clear();
-                let original = key.name.clone();
-                key.name = privacy.screen_bounded(&key.name, 512);
-                if key.name.is_empty() || key.name != original {
-                    key.name = "x-redacted-key".into();
-                }
-            }
-            if let Some(jwt) = &mut request.auth.jwt {
-                jwt.key.clear();
-                jwt.claims_source = privacy.screen_generation_json(&jwt.claims_source);
-                jwt.kid = privacy.screen_bounded(&jwt.kid, 512);
-                jwt.prefix = privacy.screen_bounded(&jwt.prefix, 128);
-                let name = privacy.screen_bounded(&jwt.name, 512);
-                if name != jwt.name || name.is_empty() {
-                    jwt.name = "Authorization".into();
-                }
-            }
+            redact_auth(&mut request.auth, &privacy);
             if auth_private {
                 let screened_url = tcp_privacy.screen_generation_text(&request.url);
                 request.url = if screened_url != request.url {
@@ -70,10 +113,12 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
                     screened_url
                 };
                 request.description = tcp_privacy.screen_generation_text(&request.description);
-                request.pre_request_script =
-                    tcp_privacy.screen_generation_text(&request.pre_request_script);
-                request.post_response_script =
-                    tcp_privacy.screen_generation_text(&request.post_response_script);
+                request.pre_request_script = tcp_privacy
+                    .screen_bounded(&request.pre_request_script, moleapi_core::MAX_SCRIPT_BYTES);
+                request.post_response_script = tcp_privacy.screen_bounded(
+                    &request.post_response_script,
+                    moleapi_core::MAX_SCRIPT_BYTES,
+                );
                 let file_body = matches!(request.body_kind.as_str(), "binary" | "multipart")
                     || request.body_kind.contains("{{")
                         && serde_json::from_str::<Value>(&request.body)
@@ -558,12 +603,67 @@ struct ExportPrivacy {
     matcher: Option<aho_corasick::AhoCorasick>,
     withhold: bool,
 }
+/// Limit repeated scope expansion separately from the final private-pattern budget.
+struct ProjectionBudget {
+    scopes: usize,
+    rows: usize,
+    bytes: usize,
+}
+impl ProjectionBudget {
+    fn new() -> Self {
+        Self {
+            scopes: 4096,
+            rows: 65536,
+            bytes: 16 * 1024 * 1024,
+        }
+    }
+    fn scope(
+        &mut self,
+        data: &moleapi_core::WorkspaceData,
+        collection: Option<&moleapi_core::Collection>,
+        environment: Option<&moleapi_core::Environment>,
+        native: bool,
+    ) -> Result<moleapi_core::VariableScopes, ()> {
+        if self.scopes == 0 {
+            return Err(());
+        }
+        self.scopes -= 1;
+        let chain = collection
+            .map(|c| moleapi_core::collection_chain(data, c))
+            .transpose()
+            .map_err(|_| ())?
+            .unwrap_or_default();
+        for rows in std::iter::once(data.global_variables.as_slice())
+            .chain(chain.iter().map(|c| c.variables.as_slice()))
+            .chain(environment.map(|e| e.variables.as_slice()))
+        {
+            if rows.len() > self.rows {
+                return Err(());
+            }
+            self.rows -= rows.len();
+            for row in rows {
+                let cost = row
+                    .key
+                    .len()
+                    .saturating_add(row.value.len())
+                    .saturating_add(row.local_value.as_ref().map_or(0, String::len));
+                if cost > self.bytes {
+                    return Err(());
+                }
+                self.bytes -= cost;
+            }
+        }
+        moleapi_core::VariableScopes::new(data, collection, environment, &[], &[], native)
+            .map_err(|_| ())
+    }
+}
 impl ExportPrivacy {
     fn new(workspace: &Workspace) -> Self {
         Self::from_workspace(workspace, false)
     }
     fn from_workspace(workspace: &Workspace, generation: bool) -> Self {
         let mut secrets = std::collections::BTreeSet::new();
+        let mut projection = ProjectionBudget::new();
         let mut pairs = |rows: &[moleapi_core::Pair]| {
             for row in rows {
                 if generation && let Some(value) = &row.local_value {
@@ -591,6 +691,65 @@ impl ExportPrivacy {
                 }
             }
         }
+        // Parent credentials may resolve against overridden leaf scope values.
+        for collection in std::iter::once(None).chain(workspace.data.collections.iter().map(Some)) {
+            let chain = collection
+                .map(|c| moleapi_core::collection_chain(&workspace.data, c))
+                .transpose()
+                .ok()
+                .flatten()
+                .unwrap_or_default();
+            for auth in workspace
+                .data
+                .auth
+                .iter()
+                .chain(chain.iter().filter_map(|c| c.auth.as_ref()))
+            {
+                let sources = std::iter::once(auth.token.as_str())
+                    .chain(std::iter::once(auth.password.as_str()))
+                    .chain(auth.api_key.as_ref().map(|key| key.value.as_str()))
+                    .chain(auth.jwt.as_ref().map(|jwt| jwt.key.as_str()))
+                    .collect::<Vec<_>>();
+                for source in sources {
+                    if source.is_empty() {
+                        continue;
+                    }
+                    secrets.insert(source.into());
+                    if !source.contains("{{") {
+                        continue;
+                    }
+                    for environment in
+                        std::iter::once(None).chain(workspace.data.environments.iter().map(Some))
+                    {
+                        for native in [false, true] {
+                            let Ok(scopes) =
+                                projection.scope(&workspace.data, collection, environment, native)
+                            else {
+                                return Self {
+                                    matcher: None,
+                                    withhold: true,
+                                };
+                            };
+                            if let Ok(value) =
+                                moleapi_core::resolve_value(source, &scopes.effective())
+                            {
+                                secrets.insert(value);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if let Some(auth) = &workspace.data.auth {
+            secrets.insert(auth.token.clone());
+            secrets.insert(auth.password.clone());
+            if let Some(key) = &auth.api_key {
+                secrets.insert(key.value.clone());
+            }
+            if let Some(jwt) = &auth.jwt {
+                secrets.insert(jwt.key.clone());
+            }
+        }
         for collection in &workspace.data.collections {
             for request in &collection.requests {
                 for source in request
@@ -601,18 +760,29 @@ impl ExportPrivacy {
                     .into_iter()
                     .chain(request.auth.jwt.as_ref().map(|jwt| jwt.key.as_str()))
                 {
+                    if source.is_empty() {
+                        continue;
+                    }
+                    secrets.insert(source.into());
+                    if !source.contains("{{") {
+                        continue;
+                    }
                     for environment in
                         std::iter::once(None).chain(workspace.data.environments.iter().map(Some))
                     {
                         for native in [false, true] {
-                            if let Ok(scopes) = moleapi_core::VariableScopes::new(
+                            let Ok(scopes) = projection.scope(
                                 &workspace.data,
                                 Some(collection),
                                 environment,
-                                &[],
-                                &[],
                                 native,
-                            ) && let Ok(value) =
+                            ) else {
+                                return Self {
+                                    matcher: None,
+                                    withhold: true,
+                                };
+                            };
+                            if let Ok(value) =
                                 moleapi_core::resolve_value(source, &scopes.effective())
                             {
                                 secrets.insert(value);
@@ -790,10 +960,22 @@ impl ExportPrivacy {
         // Decode the captured private values as well as literal signing settings.
         if workspace
             .data
-            .collections
+            .auth
             .iter()
-            .flat_map(|c| &c.requests)
-            .any(|r| r.auth.jwt.as_ref().is_some_and(|jwt| jwt.key_base64))
+            .chain(
+                workspace
+                    .data
+                    .collections
+                    .iter()
+                    .filter_map(|c| c.auth.as_ref()),
+            )
+            .any(|auth| auth.jwt.as_ref().is_some_and(|jwt| jwt.key_base64))
+            || workspace
+                .data
+                .collections
+                .iter()
+                .flat_map(|c| &c.requests)
+                .any(|r| r.auth.jwt.as_ref().is_some_and(|jwt| jwt.key_base64))
         {
             use base64::Engine;
             let decoded = secrets
@@ -1074,13 +1256,20 @@ pub(super) fn generation_request(
     request_id: &str,
     include_secrets: bool,
 ) -> anyhow::Result<moleapi_core::RequestSpec> {
-    let request = source
+    let (collection, source_request) = source
         .data
         .collections
         .iter()
-        .flat_map(|c| &c.requests)
-        .find(|r| r.id == request_id)
+        .flat_map(|c| c.requests.iter().map(move |r| (c, r)))
+        .find(|(_, r)| r.id == request_id)
         .ok_or_else(|| anyhow::anyhow!("Request not found"))?;
+    let inherited = moleapi_core::inherit_request_authentication(
+        &source.data,
+        Some(collection),
+        source_request,
+        None,
+    )?;
+    let request = &inherited;
     if include_secrets {
         return Ok(request.clone());
     }

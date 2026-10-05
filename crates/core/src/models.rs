@@ -197,6 +197,12 @@ pub struct RequestSpec {
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Collection {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub variables_enabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth: Option<Auth>,
     #[serde(default)]
     pub variables: Vec<Pair>,
     #[serde(default)]
@@ -216,6 +222,8 @@ pub struct Environment {
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct WorkspaceData {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth: Option<Auth>,
     #[serde(default)]
     pub global_variables: Vec<Pair>,
     #[serde(default)]

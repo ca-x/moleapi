@@ -111,6 +111,9 @@ pub(super) fn import(content: &str) -> Result<ImportResult> {
         name: "cURL 导入".into(),
         data: data(
             vec![Collection {
+                variables_enabled: None,
+                parent_id: None,
+                auth: None,
                 variables: vec![],
                 pre_request_script: String::new(),
                 post_response_script: String::new(),

@@ -107,7 +107,15 @@ fn postman_official_schema_and_inherited_auth() {
     let source = postman();
     let result = import("postman", &source.to_string()).unwrap();
     assert_eq!(
-        result.data.collections[0].requests[0].auth.token,
+        moleapi_core::inherited_authentication(
+            &result.data,
+            Some(&result.data.collections[0]),
+            &result.data.collections[0].requests[0],
+            None
+        )
+        .unwrap()
+        .auth
+        .token,
         "top-secret-token"
     );
     assert_eq!(result.data.specifications[0].source, source.to_string());
@@ -466,7 +474,14 @@ fn soap_exports_screen_xml_values_and_preserve_schema_definitions_and_explicit_s
 #[test]
 fn soap_default_export_withholds_decoded_private_entities_in_plain_data_fields() {
     let mut source = workspace(import("postman", &postman().to_string()).unwrap().data);
-    source.data.collections[0].variables[0].value = "a&b".into();
+    source
+        .data
+        .collections
+        .iter_mut()
+        .find(|c| c.parent_id.is_none())
+        .unwrap()
+        .variables[0]
+        .value = "a&b".into();
     let request = &mut source.data.collections[0].requests[0];
     request.protocol = serde_json::from_value(json!({"kind":"soap","version":"1.1"})).unwrap();
     request.body = r#"<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><text>a&#38;b</text></s:Body></s:Envelope>"#.into();
@@ -486,6 +501,7 @@ fn soap_default_export_withholds_decoded_private_entities_in_plain_data_fields()
 fn mcp_native_and_host_sources_roundtrip_and_default_exports_screen_credentials() {
     let mut source = workspace(import("postman", &postman().to_string()).unwrap().data);
     let request = &mut source.data.collections[0].requests[0];
+    request.auth.kind = "none".into();
     let raw = r#"{ "command": "/usr/bin/node", "args": ["server.js", "--password", "cli-secret", "--api-key=key-secret"], "env": { "TENANT": "private-env" }, "extra": { "duplicate": "cli-secret", "public": "keep" } }"#;
     request.protocol = serde_json::from_value(json!({"kind":"mcp","transport":"stdio","command":"/usr/bin/node","args":["server.js","--password","cli-secret","--api-key=key-secret"],"env":[{"id":"env","key":"TENANT","value":"private-env","secret":true,"enabled":true}],"arguments_source":"{\"plain\":\"private-env\",\"password\":23,\"public\":\"keep\"}","config_source":raw})).unwrap();
     let safe = export(&source, "moleapi", false).unwrap();
@@ -525,6 +541,7 @@ fn mcp_native_and_host_sources_roundtrip_and_default_exports_screen_credentials(
 fn mcp_default_exports_screen_original_and_repeated_transport_credentials_after_edits() {
     let mut source = workspace(import("postman", &postman().to_string()).unwrap().data);
     let request = &mut source.data.collections[0].requests[0];
+    request.auth.kind = "none".into();
     request.url = "https://example.test/known-bearer/private".into();
     request.auth.token = "known-bearer".into();
     request.headers.push(
@@ -563,7 +580,14 @@ fn mcp_default_exports_screen_original_and_repeated_transport_credentials_after_
 #[test]
 fn mcp_default_exports_do_not_leak_known_secrets_in_json_keys_or_scalars() {
     let mut source = workspace(import("postman", &postman().to_string()).unwrap().data);
-    source.data.collections[0].variables[0].value = "31337".into();
+    source
+        .data
+        .collections
+        .iter_mut()
+        .find(|c| c.parent_id.is_none())
+        .unwrap()
+        .variables[0]
+        .value = "31337".into();
     let request = &mut source.data.collections[0].requests[0];
     request.protocol = serde_json::from_value(json!({"kind":"mcp","arguments_source":"{\"31337\":\"public\",\"count\":31337,\"keep\":\"public\"}","config_source":"{\"url\":\"https://example.test/mcp\",\"extra\":{\"31337\":\"public\",\"count\":31337}}"})).unwrap();
     let safe = export(&source, "moleapi", false).unwrap();
@@ -608,7 +632,14 @@ fn a2a_native_sources_and_drafts_restore_and_default_export_screens_credentials(
 #[test]
 fn a2a_canonical_card_source_default_export_excludes_copied_private_data() {
     let mut source = workspace(import("postman", &postman().to_string()).unwrap().data);
-    source.data.collections[0].variables[0].value = "31337".into();
+    source
+        .data
+        .collections
+        .iter_mut()
+        .find(|c| c.parent_id.is_none())
+        .unwrap()
+        .variables[0]
+        .value = "31337".into();
     let card = r#"{ "name": "Fixture", "description": "safe", "version": "1", "protocolVersion": "0.3.0", "url": "https://example.test/a2a", "capabilities": {}, "defaultInputModes": ["text/plain"], "defaultOutputModes": ["text/plain"], "skills": [], "extension": { "31337": "private-key", "number": 31337, "copied": "31337", "keep": "public" } }"#;
     source
         .data
@@ -997,5 +1028,250 @@ fn api_key_usage_taints_unmarked_scoped_variables_and_copies() {
             .unwrap()
             .content
             .contains("actual-api-secret")
+    );
+}
+
+#[test]
+fn inherited_credentials_native_restore_default_screening_and_static_generation() {
+    let mut w = workspace(import("curl", "curl https://example.test").unwrap().data);
+    let root = &mut w.data.collections[0];
+    root.auth=Some(serde_json::from_value(json!({"kind":"apikey","token":"","username":"","password":"","api_key":{"name":"X-Key","value":"{{credential}}","location":"header"}})).unwrap());
+    root.variables.push(moleapi_core::Pair {
+        id: "private-use".into(),
+        key: "credential".into(),
+        value: "parent-private-secret".into(),
+        enabled: true,
+        secret: None,
+        local_value: None,
+    });
+    root.requests[0].auth.kind = "inherit".into();
+    root.requests[0].body_kind = "json".into();
+    root.requests[0].body = r#"{"copy":"parent-private-secret"}"#.into();
+    let request_id = root.requests[0].id.clone();
+    let full = export(&w, "moleapi", true).unwrap();
+    let restored = import("moleapi", &full.content).unwrap();
+    assert_eq!(restored.data, w.data);
+    let private = export(&w, "moleapi", false).unwrap();
+    assert!(!private.content.contains("parent-private-secret"));
+    import("moleapi", &private.content).unwrap();
+    let snippet = moleapi_formats::generation_request(&w, &request_id, true).unwrap();
+    assert_eq!(snippet.auth.kind, "apikey");
+    assert_eq!(snippet.auth.api_key.unwrap().value, "{{credential}}");
+    assert_eq!(w.data.collections[0].requests[0].auth.kind, "inherit");
+    assert!(export(&w, "postman", true).is_ok());
+}
+
+#[test]
+fn postman_nested_folders_auth_variables_scripts_and_explicit_noauth_roundtrip() {
+    let source = json!({"info":{"name":"Nested","schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},"auth":{"type":"bearer","bearer":[{"key":"token","value":"{{credential}}","type":"string"}]},"variable":[{"key":"credential","value":"root-private-secret"}],"event":[{"listen":"prerequest","script":{"exec":["pm.variables.set('trace','root');"]}}],"item":[{"name":"Folder","description":"Folder description","variable":[{"key":"credential","value":"folder-private-secret"}],"event":[{"listen":"prerequest","script":{"exec":["pm.variables.set('trace',pm.variables.get('trace')+'folder');"]}}],"item":[{"name":"Inherited","request":{"method":"GET","url":"https://example.test","auth":null}},{"name":"Anonymous","request":{"method":"GET","url":"https://example.test","auth":{"type":"noauth"}}},{"name":"Nested folder","auth":{"type":"basic","basic":[{"key":"username","value":"user"},{"key":"password","value":"basic-private-secret"}]},"item":[{"name":"Basic","request":{"method":"GET","url":"https://example.test"}}]}]},{"name":"Empty folder","item":[]}]});
+    let imported = import("postman", &source.to_string()).unwrap();
+    assert_eq!(imported.data.collections.len(), 4);
+    for name in ["Inherited", "Basic"] {
+        let (collection, r) = imported
+            .data
+            .collections
+            .iter()
+            .flat_map(|c| c.requests.iter().map(move |r| (c, r)))
+            .find(|(_, r)| r.name == name)
+            .unwrap();
+        assert_eq!(r.auth.kind, "inherit");
+        assert!(r.auth.token.is_empty());
+        let scopes = moleapi_core::VariableScopes::new(
+            &imported.data,
+            Some(collection),
+            None,
+            &[],
+            &[],
+            false,
+        )
+        .unwrap();
+        let resolved = moleapi_core::inherit_request_authentication(
+            &imported.data,
+            Some(collection),
+            r,
+            Some(&scopes.effective()),
+        )
+        .unwrap();
+        let resolved = moleapi_core::resolve_request(&resolved, Some(&scopes.effective())).unwrap();
+        if name == "Inherited" {
+            assert_eq!(resolved.auth.token, "root-private-secret");
+        } else {
+            assert_eq!(resolved.auth.password, "basic-private-secret");
+        }
+    }
+    let mut w = workspace(imported.data);
+    w.name = "Nested".into();
+    let exported = export(&w, "postman", true).unwrap();
+    let value: Value = serde_json::from_str(&exported.content).unwrap();
+    assert_eq!(value["auth"]["type"], "bearer");
+    assert_eq!(value["item"][0]["name"], "Folder");
+    assert_eq!(value["item"][0]["description"], "Folder description");
+    assert_eq!(value["item"][0]["item"][0]["request"]["auth"], Value::Null);
+    assert_eq!(
+        value["item"][0]["item"][1]["request"]["auth"]["type"],
+        "noauth"
+    );
+    let roundtrip = import("postman", &exported.content).unwrap();
+    assert_eq!(roundtrip.data.collections.len(), 4);
+    let folder = roundtrip
+        .data
+        .collections
+        .iter()
+        .find(|c| c.name == "Folder")
+        .unwrap();
+    assert_eq!(folder.variables[0].value, "folder-private-secret");
+    assert!(folder.pre_request_script.contains("+'folder'"));
+    let r = folder
+        .requests
+        .iter()
+        .find(|r| r.name == "Anonymous")
+        .unwrap();
+    assert_eq!(
+        moleapi_core::inherited_authentication(&roundtrip.data, Some(folder), r, None)
+            .unwrap()
+            .auth
+            .kind,
+        "none"
+    );
+    let private = export(&w, "postman", false).unwrap();
+    for secret in [
+        "root-private-secret",
+        "folder-private-secret",
+        "basic-private-secret",
+    ] {
+        assert!(!private.content.contains(secret), "{secret}");
+    }
+    import("postman", &private.content).unwrap();
+}
+
+#[test]
+fn parent_script_copies_and_large_scope_projection_are_withheld_safely() {
+    let mut w = workspace(import("curl", "curl https://example.test").unwrap().data);
+    w.data.auth=Some(serde_json::from_value(json!({"kind":"bearer","token":"parent-private-script-copy","username":"","password":""})).unwrap());
+    w.data.pre_request_script = "// parent-private-script-copy".into();
+    w.data.post_response_script = w.data.pre_request_script.clone();
+    w.data.collections[0].pre_request_script = w.data.pre_request_script.clone();
+    w.data.collections[0].post_response_script = w.data.pre_request_script.clone();
+    w.data.collections[0].description = "parent-private-script-copy".into();
+    let private = export(&w, "moleapi", false).unwrap();
+    assert!(!private.content.contains("parent-private-script-copy"));
+    import("moleapi", &private.content).unwrap();
+    w.data.auth.as_mut().unwrap().token = "{{credential}}".into();
+    w.data.global_variables = (0..900)
+        .map(|index| moleapi_core::Pair {
+            id: format!("global{index}"),
+            key: if index == 0 {
+                "credential".into()
+            } else {
+                format!("g{index}")
+            },
+            value: "large-projection-private".into(),
+            enabled: true,
+            secret: None,
+            local_value: None,
+        })
+        .collect();
+    w.data.environments = (0..100)
+        .map(|index| moleapi_core::Environment {
+            id: format!("e{index}"),
+            name: "Env".into(),
+            variables: vec![],
+        })
+        .collect();
+    w.data.active_environment_id = None;
+    let private = export(&w, "moleapi", false).unwrap();
+    assert!(!private.content.contains("large-projection-private"));
+    let restored = import("moleapi", &private.content).unwrap();
+    assert_eq!(
+        restored.data.collections[0].requests[0].url,
+        "{{redacted_url}}"
+    );
+    assert!(
+        export(&w, "moleapi", true)
+            .unwrap()
+            .content
+            .contains("large-projection-private")
+    );
+}
+
+#[test]
+fn repeated_short_credential_copies_cannot_expand_scripts_past_import_limits() {
+    let mut w = workspace(import("curl", "curl https://example.test").unwrap().data);
+    w.data.auth = Some(
+        serde_json::from_value(json!({"kind":"bearer","token":"p","username":"","password":""}))
+            .unwrap(),
+    );
+    let script = format!("//{}", "p".repeat(50000));
+    w.data.pre_request_script = script.clone();
+    w.data.post_response_script = script.clone();
+    w.data.collections[0].pre_request_script = script.clone();
+    w.data.collections[0].post_response_script = script.clone();
+    w.data.collections[0].requests[0].pre_request_script = script.clone();
+    w.data.collections[0].requests[0].post_response_script = script;
+    let private = export(&w, "moleapi", false).unwrap();
+    let imported = import("moleapi", &private.content).unwrap();
+    for script in [
+        &imported.data.pre_request_script,
+        &imported.data.post_response_script,
+        &imported.data.collections[0].pre_request_script,
+        &imported.data.collections[0].post_response_script,
+        &imported.data.collections[0].requests[0].pre_request_script,
+        &imported.data.collections[0].requests[0].post_response_script,
+    ] {
+        assert!(script.len() <= moleapi_core::MAX_SCRIPT_BYTES);
+    }
+}
+
+#[test]
+fn executable_moleapi_folder_variables_cannot_silently_become_ignored_postman_definitions() {
+    let mut w = workspace(import("curl", "curl https://example.test").unwrap().data);
+    let root_id = w.data.collections[0].id.clone();
+    let mut folder = w.data.collections[0].clone();
+    folder.id = "folder-runtime".into();
+    folder.parent_id = Some(root_id);
+    folder.requests.clear();
+    folder.variables.push(moleapi_core::Pair {
+        id: "foldervar".into(),
+        key: "public".into(),
+        value: "folder-value".into(),
+        enabled: true,
+        secret: None,
+        local_value: None,
+    });
+    w.data.collections.push(folder);
+    assert!(export(&w, "postman", true).is_err());
+    w.data.collections[1].variables_enabled = Some(false);
+    let result = export(&w, "postman", true).unwrap();
+    let imported = import("postman", &result.content).unwrap();
+    assert!(
+        imported
+            .data
+            .collections
+            .iter()
+            .find(|c| c.name == w.data.collections[1].name && c.parent_id.is_some())
+            .unwrap()
+            .variables_enabled
+            == Some(false)
+    );
+}
+
+#[test]
+fn source_only_root_variables_do_not_become_executable_in_postman() {
+    let mut w = workspace(import("curl", "curl https://example.test").unwrap().data);
+    w.data.collections[0].variables_enabled = Some(false);
+    w.data.collections[0].variables.push(moleapi_core::Pair {
+        id: "root-source".into(),
+        key: "source".into(),
+        value: "inert".into(),
+        enabled: true,
+        secret: None,
+        local_value: None,
+    });
+    assert!(export(&w, "postman", true).is_err());
+    assert_eq!(
+        import("moleapi", &export(&w, "moleapi", true).unwrap().content)
+            .unwrap()
+            .data,
+        w.data
     );
 }

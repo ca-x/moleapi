@@ -1,3 +1,7 @@
+import { useState, useEffect } from "react";
+import CollectionSettingsDialog from "../collections/CollectionSettingsDialog";
+import type { CollectionSettingsTarget } from "../collections/CollectionSettingsDialog";
+import { collectionRows, removeCollectionTree } from "../collections/tree";
 import { t, useLanguage, message } from "../../shared/i18n";
 import { requestLabel } from "../../shared/model";
 import {
@@ -10,6 +14,7 @@ import {
 } from "@radix-ui/themes";
 import {
   ChevronDown,
+  ChevronRight,
   Folder,
   MoreHorizontal,
   Plus,
@@ -23,6 +28,9 @@ import { useWorkbench } from "../workbench/context";
 export default function CollectionSidebar() {
   useLanguage();
   const state = useWorkbench();
+  const [target,setTarget] = useState<CollectionSettingsTarget | null>(null);
+  const [collapsed,setCollapsed]=useState(new Set<string>());
+  useEffect(()=>{setTarget(null);setCollapsed(new Set());},[state.accountId,state.draft?.id]);
   const {
     draft,
     requestId,
@@ -69,10 +77,10 @@ export default function CollectionSidebar() {
         </TextField.Slot>
       </TextField.Root>
       <ScrollArea className="collection-tree">
-        {draft?.data.collections.map((collection) => (
-          <div key={collection.id} className="collection-group">
+        {collectionRows(draft?.data.collections ?? [],filter ? new Set() : collapsed).map(({collection,depth}) => (
+          <div key={collection.id} className="collection-group" style={{marginInlineStart:Math.min(depth,6)*12}}>
             <Flex align="center" gap="2" className="collection-name">
-              <ChevronDown size={13} />
+              <ToolButton label={collapsed.has(collection.id)?t("展开目录"):t("折叠目录")} onClick={()=>setCollapsed(current=>{const next=new Set(current);if(next.has(collection.id))next.delete(collection.id);else next.add(collection.id);return next;})}>{collapsed.has(collection.id)?<ChevronRight size={13}/>:<ChevronDown size={13}/>}</ToolButton>
               <Folder size={15} />
               <Text size="2" className="truncate">
                 {collection.name}
@@ -80,6 +88,7 @@ export default function CollectionSidebar() {
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger>
                   <Button
+                    data-collection-actions={collection.id}
                     aria-label={t("{{value0}} 操作", { value0: collection.name })}
                     variant="ghost"
                     color="gray"
@@ -89,6 +98,8 @@ export default function CollectionSidebar() {
                   </Button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content>
+                  <DropdownMenu.Item onSelect={()=>setTarget({kind:"edit",id:collection.id})}>{t("集合与目录设置")}</DropdownMenu.Item>
+                  <DropdownMenu.Item onSelect={()=>{setCollapsed(current=>{const next=new Set(current);next.delete(collection.id);return next;});setTarget({kind:"create",parent_id:collection.id});}}>{t("新建目录")}</DropdownMenu.Item>
                   <DropdownMenu.Item onSelect={() => addRequest(collection.id)}> {t("新建请求")} </DropdownMenu.Item>
                   <DropdownMenu.Item
                     onSelect={() => {
@@ -102,21 +113,16 @@ export default function CollectionSidebar() {
                     onSelect={() =>
                       setGuard({
                         title: message("删除集合"),
-                        description: message("删除「{{value0}}」及其请求。保存后生效。", { value0: collection.name }),
+                        description: message("删除「{{value0}}」及其所有子目录和请求。保存后生效。", { value0: collection.name }),
                         action: () =>
-                          updateData((data) => ({
-                            ...data,
-                            collections: data.collections.filter(
-                              (c) => c.id !== collection.id,
-                            ),
-                          })),
+                          updateData(data => removeCollectionTree(data,collection.id)),
                       })
                     }
                   > {t("删除集合")} </DropdownMenu.Item>
                 </DropdownMenu.Content>
               </DropdownMenu.Root>
             </Flex>
-            {collection.requests
+            {(filter || !collapsed.has(collection.id)) && collection.requests
               .filter((r) =>
                 `${r.name} ${r.url}`
                   .toLowerCase()
@@ -198,17 +204,18 @@ export default function CollectionSidebar() {
                   </DropdownMenu.Root>
                 </div>
               ))}
-            <Button
+            {(filter || !collapsed.has(collection.id)) && <Button
               size="1"
               color="gray"
               variant="ghost"
               className="add-request"
               onClick={() => addRequest(collection.id)}
             >
-              <Plus size={13} /> {t("新建请求")} </Button>
+              <Plus size={13} /> {t("新建请求")} </Button>}
           </div>
         ))}
       </ScrollArea>
+      {draft && target && (target.kind==="create" || draft.data.collections.some(c=>c.id===target.id)) && <CollectionSettingsDialog key={`${state.accountId}/${draft.id}/${target.kind}/${target.kind==="edit"?target.id:target.parent_id}`} target={target} close={()=>setTarget(null)}/>}
       <div className="sidebar-bottom">
         <Text size="1" color="gray">
           {t("{{count}} 个请求", { count: draft?.data.collections.reduce((n, c) => n + c.requests.length, 0) || 0 })} </Text>

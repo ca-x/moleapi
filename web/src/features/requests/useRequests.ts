@@ -52,6 +52,7 @@ export function useRequests(
     }));
   const addRequest = (collectionId: string) => {
     const next = newRequest();
+    next.auth.kind="inherit";
     updateData((data) => ({
       ...data,
       collections: data.collections.map((c) =>

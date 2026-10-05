@@ -1,3 +1,4 @@
+import { collectionAncestors } from "../collections/tree";
 import type { Pair, VariableUpdate, Workspace } from "../../shared/types";
 export type LocalBuckets = Record<string, Record<string, string>>;
 export const bucketKey = (scope: string, target = "") =>
@@ -30,12 +31,7 @@ export function executionLocals(
   const result = new Map<string, VariableUpdate>();
   const scopes: [string, string, Pair[]][] = [
     ["project", "", workspace.data.global_variables || []],
-    [
-      "collection",
-      collectionId || "",
-      workspace.data.collections.find((c) => c.id === collectionId)
-        ?.variables || [],
-    ],
+    ...collectionId ? collectionAncestors(workspace.data.collections,collectionId).filter(c=>c.variables_enabled!==false).map(c=>["collection",c.id,c.variables??[]] as [string,string,Pair[]]) : [],
     [
       "environment",
       environmentId || "",
@@ -49,6 +45,7 @@ export function executionLocals(
       (scope === "collection" && !collectionId)
     )
       continue;
+    if (scope==="collection") for(const pair of pairs.filter(p=>p.enabled)) result.delete(`${scope}\0${pair.key}`);
     if (isNative)
       for (const pair of pairs)
         if (

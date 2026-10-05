@@ -51,6 +51,27 @@ pub fn import(format: &str, content: &str) -> Result<ImportResult> {
 }
 
 pub fn export(workspace: &Workspace, format: &str, include_secrets: bool) -> Result<ExportResult> {
+    if let Some(auth) = &workspace.data.auth {
+        moleapi_core::validate_authentication(auth, true)?;
+    }
+    for collection in &workspace.data.collections {
+        moleapi_core::collection_chain(&workspace.data, collection)?;
+        if let Some(auth) = &collection.auth {
+            moleapi_core::validate_authentication(auth, true)?;
+        }
+    }
+    if format == "openapi"
+        && (workspace.data.auth.is_some()
+            || workspace.data.collections.iter().any(|c| {
+                c.auth.is_some()
+                    || c.parent_id.is_some()
+                    || c.requests.iter().any(|r| r.auth.kind == "inherit")
+            }))
+    {
+        bail!(
+            "Inherited authentication and collection hierarchy require MoleAPI/Postman export until OpenAPI mappings are verified"
+        );
+    }
     for request in workspace.data.collections.iter().flat_map(|c| &c.requests) {
         moleapi_core::validate_structured_body(request, true)?;
     }
@@ -218,6 +239,7 @@ pub(crate) fn data(
 ) -> WorkspaceData {
     let environment_id = uid();
     WorkspaceData {
+        auth: None,
         global_variables: vec![],
         pre_request_script: String::new(),
         post_response_script: String::new(),
