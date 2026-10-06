@@ -47,7 +47,10 @@ impl Default for JwtAuth {
 }
 pub fn validate_authentication(auth: &crate::Auth, templates: bool) -> Result<()> {
     ensure!(
-        ["none", "basic", "bearer", "apikey", "jwt", "digest"].contains(&auth.kind.as_str())
+        [
+            "none", "basic", "bearer", "apikey", "jwt", "digest", "oauth2"
+        ]
+        .contains(&auth.kind.as_str())
             || templates && auth.kind == "inherit"
             || templates && auth.kind.contains("{{"),
         "Unsupported authentication kind"
@@ -97,6 +100,19 @@ pub fn validate_authentication(auth: &crate::Auth, templates: bool) -> Result<()
         }
         Ok(())
     };
+    if let Some(oauth) = &auth.oauth2 {
+        ensure!(
+            serde_json::to_vec(oauth)?.len() <= 256 * 1024,
+            "OAuth2 settings exceed limit"
+        );
+        if auth.kind == "oauth2" {
+            crate::validate_oauth2(oauth, templates, false)?;
+            validate_name(&oauth.name, oauth.location)?;
+        }
+    }
+    if auth.kind == "oauth2" {
+        ensure!(auth.oauth2.is_some(), "Configure OAuth2 authentication");
+    }
     if auth.kind == "apikey" {
         let key = auth.api_key.as_ref().context("Configure the API key")?;
         validate_name(&key.name, key.location)?;
@@ -238,6 +254,10 @@ pub fn sign_jwt(config: &JwtAuth) -> Result<String> {
 /// Materialize API placement only after variables resolve. Never called by save/export.
 pub fn prepare_authentication(request: &crate::RequestSpec) -> Result<crate::RequestSpec> {
     validate_authentication(&request.auth, false)?;
+    ensure!(
+        request.auth.kind != "oauth2",
+        "OAuth2 authentication requires an owner-bound token vault"
+    );
     let mut r = request.clone();
     let (name, value, location) = match r.auth.kind.as_str() {
         "apikey" => {

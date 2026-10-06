@@ -1,3 +1,5 @@
+import OAuth2ConfigEditor from "./oauth2/OAuth2ConfigEditor";
+import {oauth2Config} from "./oauth2/types";
 import {TextField,TextArea,Checkbox,Flex,Text} from "@radix-ui/themes";
 import {Choice,Field,Editor} from "../../shared/ui";
 import {t,useLanguage} from "../../shared/i18n";
@@ -9,7 +11,7 @@ export default function RequestAuthEditor({auth,change,dark,api=true,digest=true
  function setKey(patch:Partial<ApiKeyAuth>){change({...auth,api_key:{...key,...patch}});}
  function setJwt(patch:Partial<JwtAuth>){change({...auth,jwt:{...jwt,...patch}});}
  return <div className="form-panel">
-  <Choice label={t("鉴权类型")} value={auth.kind} options={[...(inherit?[{value:"inherit",label:t("继承父级鉴权")}]:[]),{value:"none",label:"No Auth"},...(credentials?[{value:"bearer",label:"Bearer Token"},{value:"basic",label:"Basic Auth"}]:[]),...(api?[{value:"apikey",label:"API Key"},{value:"jwt",label:"JWT"}]:[]),...(digest?[{value:"digest",label:"Digest Auth"}]:[])]} onChange={kind=>change({...auth,kind:kind as Auth["kind"],...(kind==="apikey"?{api_key:key}:kind==="jwt"?{jwt}:{})})}/>
+  <Choice label={t("鉴权类型")} value={auth.kind} options={[...(inherit?[{value:"inherit",label:t("继承父级鉴权")}]:[]),{value:"none",label:"No Auth"},...(credentials?[{value:"bearer",label:"Bearer Token"},{value:"basic",label:"Basic Auth"}]:[]),...(api?[{value:"apikey",label:"API Key"},{value:"jwt",label:"JWT"},{value:"oauth2",label:"OAuth 2.0"}]:[]),...(digest?[{value:"digest",label:"Digest Auth"}]:[])]} onChange={kind=>change({...auth,kind:kind as Auth["kind"],...(kind==="apikey"?{api_key:key}:kind==="jwt"?{jwt}:kind==="oauth2"?{oauth2:auth.oauth2??oauth2Config()}:{})})}/>
   {auth.kind==="inherit"&&<Text size="1" color="gray">{t("执行时使用最近目录、集合或工作区的鉴权；No Auth 停止继承。")}</Text>}
   {auth.kind==="bearer"&&<Field label="Token" hint={t("可使用 {{api_token}} 引用环境变量。") }><TextField.Root type="password" autoComplete="off" value={auth.token} onChange={e=>change({...auth,token:e.target.value})}/></Field>}
   {["basic","digest"].includes(auth.kind)&&<><Field label={t("用户名")}><TextField.Root autoComplete="off" value={auth.username} onChange={e=>change({...auth,username:e.target.value})}/></Field><Field label={t("密码")}><TextField.Root type="password" autoComplete="off" value={auth.password} onChange={e=>change({...auth,password:e.target.value})}/></Field></>}
@@ -23,6 +25,7 @@ export default function RequestAuthEditor({auth,change,dark,api=true,digest=true
    <Text as="label" size="2"><Flex gap="2"><Checkbox checked={jwt.add_time_claims} onCheckedChange={v=>setJwt({add_time_claims:v===true})}/>{t("缺失时自动添加 iat 和 exp")}</Flex></Text>
    {jwt.add_time_claims&&<Field label={t("JWT 有效秒数")}><TextField.Root type="number" min={1} max={86400} value={jwt.ttl_seconds} onChange={e=>setJwt({ttl_seconds:Number(e.target.value)})}/></Field>}
   </>}
+  {auth.kind==="oauth2"&&<OAuth2ConfigEditor config={auth.oauth2??oauth2Config()} change={oauth2=>change({...auth,oauth2})} query={query}/>}
   {auth.kind==="digest"&&<Text size="1" color="gray">{t("收到 401 Digest challenge 后自动签名并重试；跨域重定向不携带鉴权。")}</Text>}
   {["apikey","jwt"].includes(auth.kind)&&<Text size="1" color="gray">{t("鉴权在执行时解析环境变量。默认导出移除密钥；JWT 每次执行生成。")}</Text>}
  </div>;

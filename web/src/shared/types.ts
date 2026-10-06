@@ -1,3 +1,4 @@
+import type {OAuth2Auth} from "../features/authentication/oauth2/types";
 import type { DataConfig } from "../features/data/types";
 import type { TcpConfig } from "../features/tcp/types";
 import type { A2aConfig } from "../features/a2a/types";
@@ -53,9 +54,10 @@ export interface Pair {
 export interface ApiKeyAuth {name:string;value:string;location:"header"|"query"}
 export interface JwtAuth {algorithm:string;key:string;key_base64:boolean;claims_source:string;kid:string;name:string;prefix:string;location:"header"|"query";add_time_claims:boolean;ttl_seconds:number}
 export interface Auth {
+  oauth2?:OAuth2Auth;
   api_key?:ApiKeyAuth;
   jwt?:JwtAuth;
-  kind: "inherit" | "none" | "bearer" | "basic" | "apikey" | "jwt" | "digest";
+  kind: "inherit" | "none" | "bearer" | "basic" | "apikey" | "jwt" | "digest" | "oauth2";
   token: string;
   username: string;
   password: string;

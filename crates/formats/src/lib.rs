@@ -92,7 +92,7 @@ pub fn export(workspace: &Workspace, format: &str, include_secrets: bool) -> Res
             .iter()
             .flat_map(|c| &c.requests)
             .any(|r| {
-                matches!(r.auth.kind.as_str(), "jwt" | "digest")
+                matches!(r.auth.kind.as_str(), "jwt" | "digest" | "oauth2")
                     || r.auth.kind.contains("{{")
                     || format == "openapi" && r.auth.kind == "apikey"
             })

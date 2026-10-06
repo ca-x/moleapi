@@ -166,6 +166,14 @@ pub fn resolve_request(
     } else {
         None
     };
+    let dormant_oauth2 = if auth_kind != "oauth2" {
+        Some(value["auth"]["oauth2"].clone())
+    } else {
+        None
+    };
+    if dormant_oauth2.is_some() {
+        value["auth"]["oauth2"] = serde_json::Value::Null;
+    }
     let dormant_key = if auth_kind != "apikey" {
         Some(value["auth"]["api_key"].clone())
     } else {
@@ -229,6 +237,11 @@ pub fn resolve_request(
         && !key.is_null()
     {
         value["auth"]["api_key"] = key;
+    }
+    if let Some(oauth) = dormant_oauth2
+        && !oauth.is_null()
+    {
+        value["auth"]["oauth2"] = oauth;
     }
     if let Some(source) = jwt_original {
         value["auth"]["jwt"]["claims_source"] =

@@ -8,6 +8,7 @@ mod graphql;
 mod grpc;
 mod history;
 mod mock;
+mod oauth2;
 mod privacy;
 mod protocol_admission;
 mod protocols;
@@ -54,6 +55,8 @@ struct AppState {
     sync_lock: Arc<tokio::sync::Mutex<()>>,
     script_slots: Arc<tokio::sync::Semaphore>,
     generation_slots: Arc<tokio::sync::Semaphore>,
+    oauth2_slots: Arc<tokio::sync::Semaphore>,
+    oauth2_flows: Arc<oauth2::flows::Hub>,
     script_worker: PathBuf,
     protocol_sessions: Arc<moleapi_protocols::SessionManager>,
     protocol_admission: Arc<protocol_admission::AdmissionGates>,
@@ -164,6 +167,8 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         sync_lock: Arc::new(tokio::sync::Mutex::new(())),
         script_slots: Arc::new(tokio::sync::Semaphore::new(4)),
         generation_slots: Arc::new(tokio::sync::Semaphore::new(4)),
+        oauth2_slots: Arc::new(tokio::sync::Semaphore::new(8)),
+        oauth2_flows: Arc::default(),
         script_worker,
         protocol_sessions: moleapi_protocols::SessionManager::new(),
         protocol_admission: Arc::new(protocol_admission::AdmissionGates::default()),
@@ -213,6 +218,24 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         )
         .route("/workspaces/{id}/run", post(runner::run))
         .route("/workspaces/{id}/export", post(formats::export))
+        .route("/oauth2/flows", post(oauth2::flows::begin))
+        .route("/oauth2/flows/{id}", get(oauth2::flows::status))
+        .route("/oauth2/flows/{id}/cancel", post(oauth2::flows::cancel))
+        .route("/oauth2/flows/{id}/complete", post(oauth2::flows::complete))
+        .route("/oauth2/tokens/acquire", post(oauth2::acquire))
+        .route(
+            "/workspaces/{workspace}/oauth2/tokens/{token}/refresh",
+            post(oauth2::refresh),
+        )
+        .route(
+            "/workspaces/{workspace}/oauth2/tokens/{token}/secret",
+            get(oauth2::reveal),
+        )
+        .route("/workspaces/{id}/oauth2/tokens", get(oauth2::list))
+        .route(
+            "/workspaces/{workspace}/oauth2/tokens/{token}",
+            axum::routing::delete(oauth2::remove).patch(oauth2::rename),
+        )
         .route("/execute", post(execution::execute))
         .route("/generation/snippets/catalog", get(generation::catalog))
         .route("/generation/snippets", post(generation::generate))

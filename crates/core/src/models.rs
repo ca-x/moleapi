@@ -14,6 +14,8 @@ pub struct Pair {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Auth {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oauth2: Option<Box<crate::OAuth2Auth>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_key: Option<Box<crate::ApiKeyAuth>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub jwt: Option<Box<crate::JwtAuth>>,

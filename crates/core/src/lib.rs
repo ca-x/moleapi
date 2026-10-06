@@ -1,3 +1,5 @@
+mod oauth2_auth;
+pub use oauth2_auth::*;
 mod inheritance;
 pub use inheritance::*;
 mod authentication;

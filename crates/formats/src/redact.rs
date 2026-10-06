@@ -20,6 +20,46 @@ fn redact_auth(auth: &mut moleapi_core::Auth, privacy: &ExportPrivacy) {
             jwt.name = "Authorization".into();
         }
     }
+    if let Some(oauth) = &mut auth.oauth2 {
+        oauth.client_secret.clear();
+        oauth.password.clear();
+        oauth.token_id = None;
+        oauth.client_id = privacy.screen_bounded(&oauth.client_id, 4096);
+        oauth.username = privacy.screen_bounded(&oauth.username, 4096);
+        for row in oauth
+            .token_params
+            .iter_mut()
+            .chain(&mut oauth.authorization_params)
+            .chain(&mut oauth.token_headers)
+        {
+            if row.secret == Some(true) || sensitive(&row.key) {
+                row.value.clear();
+            }
+            row.value = privacy.screen_bounded(&row.value, 8192);
+            row.local_value = None;
+        }
+        for url in [
+            &mut oauth.authorization_url,
+            &mut oauth.token_url,
+            &mut oauth.device_url,
+            &mut oauth.revocation_url,
+            &mut oauth.introspection_url,
+            &mut oauth.redirect_url,
+        ] {
+            let value = privacy.screen_bounded(url, 8192);
+            if value != *url {
+                *url = "{{redacted_oauth_url}}".into();
+            }
+        }
+        let name = privacy.screen_bounded(&oauth.name, 512);
+        if name != oauth.name {
+            oauth.name = "Authorization".into();
+        }
+        oauth.prefix = privacy.screen_bounded(&oauth.prefix, 128);
+        for scope in &mut oauth.scopes {
+            *scope = privacy.screen_bounded(scope, 1024);
+        }
+    }
     auth.username = privacy.screen_bounded(&auth.username, 4096);
     auth.token.clear();
     auth.password.clear();
@@ -35,7 +75,7 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
             .collections
             .iter()
             .flat_map(|c| &c.requests)
-            .any(|r| r.auth.api_key.is_some() || r.auth.jwt.is_some());
+            .any(|r| r.auth.api_key.is_some() || r.auth.jwt.is_some() || r.auth.oauth2.is_some());
     let mut result = source.clone();
     if auth_private {
         result.data.pre_request_script = tcp_privacy.screen_bounded(
@@ -709,6 +749,8 @@ impl ExportPrivacy {
                     .chain(std::iter::once(auth.password.as_str()))
                     .chain(auth.api_key.as_ref().map(|key| key.value.as_str()))
                     .chain(auth.jwt.as_ref().map(|jwt| jwt.key.as_str()))
+                    .chain(auth.oauth2.as_ref().map(|o| o.client_secret.as_str()))
+                    .chain(auth.oauth2.as_ref().map(|o| o.password.as_str()))
                     .collect::<Vec<_>>();
                 for source in sources {
                     if source.is_empty() {
@@ -740,6 +782,43 @@ impl ExportPrivacy {
                 }
             }
         }
+        for auth in workspace
+            .data
+            .auth
+            .iter()
+            .chain(
+                workspace
+                    .data
+                    .collections
+                    .iter()
+                    .filter_map(|c| c.auth.as_ref()),
+            )
+            .chain(
+                workspace
+                    .data
+                    .collections
+                    .iter()
+                    .flat_map(|c| c.requests.iter().map(|r| &r.auth)),
+            )
+        {
+            if let Some(oauth) = &auth.oauth2 {
+                secrets.insert(oauth.client_secret.clone());
+                secrets.insert(oauth.password.clone());
+                for row in oauth
+                    .token_params
+                    .iter()
+                    .chain(&oauth.authorization_params)
+                    .chain(&oauth.token_headers)
+                {
+                    if row.secret == Some(true) || sensitive(&row.key) {
+                        secrets.insert(row.value.clone());
+                        if let Some(local) = &row.local_value {
+                            secrets.insert(local.clone());
+                        }
+                    }
+                }
+            }
+        }
         if let Some(auth) = &workspace.data.auth {
             secrets.insert(auth.token.clone());
             secrets.insert(auth.password.clone());
@@ -759,6 +838,14 @@ impl ExportPrivacy {
                     .map(|key| key.value.as_str())
                     .into_iter()
                     .chain(request.auth.jwt.as_ref().map(|jwt| jwt.key.as_str()))
+                    .chain(
+                        request
+                            .auth
+                            .oauth2
+                            .as_ref()
+                            .map(|o| o.client_secret.as_str()),
+                    )
+                    .chain(request.auth.oauth2.as_ref().map(|o| o.password.as_str()))
                 {
                     if source.is_empty() {
                         continue;

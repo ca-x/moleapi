@@ -109,6 +109,7 @@ pub fn inherited_authentication(
             password: String::new(),
             api_key: None,
             jwt: None,
+            oauth2: None,
         },
         source: AuthenticationSource::Default,
     })

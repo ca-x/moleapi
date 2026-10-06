@@ -137,6 +137,15 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
         bail!("STDIO auth must use explicit process configuration, not HTTP auth");
     }
     if matches!(r.protocol, Protocol::Grpc { .. }) {
+        ensure!(
+            r.auth.kind != "oauth2"
+                || r.auth
+                    .oauth2
+                    .as_ref()
+                    .is_none_or(|o| o.location == crate::AuthLocation::Header),
+            "gRPC authentication must use metadata headers"
+        );
+
         let query_auth = r.auth.kind == "apikey"
             && r.auth
                 .api_key
@@ -155,7 +164,7 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
             "Digest auth does not support GraphQL subscriptions"
         );
     }
-    if matches!(r.auth.kind.as_str(), "apikey" | "jwt" | "digest") {
+    if matches!(r.auth.kind.as_str(), "apikey" | "jwt" | "digest" | "oauth2") {
         ensure!(
             !r.protocol.is_tcp()
                 && !r.protocol.is_mqtt()

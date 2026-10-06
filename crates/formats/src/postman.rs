@@ -290,6 +290,7 @@ fn inherit_auth() -> moleapi_core::Auth {
         password: String::new(),
         api_key: None,
         jwt: None,
+        oauth2: None,
     }
 }
 fn import_variables(value: &Value) -> Vec<moleapi_core::Pair> {

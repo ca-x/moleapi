@@ -260,6 +260,20 @@ pub(crate) fn request_values(
             }
         }
     }
+    if let Some(oauth) = &request.auth.oauth2 {
+        capture(&oauth.client_secret);
+        capture(&oauth.password);
+        for row in oauth
+            .token_params
+            .iter()
+            .chain(&oauth.authorization_params)
+            .chain(&oauth.token_headers)
+        {
+            if row.secret == Some(true) || moleapi_core::sensitive_query_key(&row.key) {
+                capture(&row.value);
+            }
+        }
+    }
     capture(&request.auth.token);
     capture(&request.auth.password);
     if !request.auth.password.is_empty() {

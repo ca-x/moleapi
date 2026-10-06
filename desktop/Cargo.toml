@@ -17,6 +17,7 @@ serde_json.workspace = true
 moleapi-server = { path = "../crates/server", default-features = false }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-dialog = "2"
+tauri-plugin-opener = "=2.7.0"
 tauri-plugin-fs = "2"
 tauri-plugin-single-instance = "2"
 tower = { version = "0.5", features = ["util"] }

@@ -77,7 +77,7 @@ pub async fn create(
     let mut scopes =
         execution::variables(&s, &w, Some(collection), environment, &[], &[], &c.locals)?;
     let (mut request, mut feedback, mut updates, mut request_updates) =
-        execution::prepare_live(&s, &w, &c.request, collection, &mut scopes).await?;
+        execution::prepare_live(&s, &owner.0, &w, &c.request, collection, &mut scopes).await?;
     if let Protocol::A2a { config } = &mut request.protocol
         && let Some(spec_id) = &request.specification_id
     {

@@ -193,6 +193,7 @@ pub(crate) async fn perform(
         crate::soap::validate_selected(&w.data, &resolved)
             .map_err(|e| ApiError::bad(e.to_string()))?;
     }
+    let resolved = crate::oauth2::prepare(s, owner, &w.id, &resolved, scopes).await?;
     let resolved = moleapi_core::prepare_authentication(&resolved)
         .map_err(|e| ApiError::bad(e.to_string()))?;
     crate::privacy::request_values(&resolved, scopes)?;
@@ -295,6 +296,7 @@ pub async fn execute(
 /// Prepare a live connection with the same isolated pre-script worker and scoped values.
 pub(crate) async fn prepare_live(
     s: &AppState,
+    owner: &str,
     w: &Workspace,
     r: &RequestSpec,
     collection: &Collection,
@@ -433,6 +435,7 @@ pub(crate) async fn prepare_live(
     let resolved = moleapi_core::resolve_request(&request, Some(&effective))
         .map_err(|e| ApiError::bad(e.to_string()))?;
     crate::privacy::request_values(&resolved, scopes)?;
+    let resolved = crate::oauth2::prepare(s, owner, &w.id, &resolved, scopes).await?;
     let resolved = moleapi_core::prepare_authentication(&resolved)
         .map_err(|e| ApiError::bad(e.to_string()))?;
     crate::privacy::request_values(&resolved, scopes)?;

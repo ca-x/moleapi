@@ -218,7 +218,7 @@ pub async fn discover(
     };
     let dialect = config.dialect.clone();
     let (mut request, _, _, _) =
-        execution::prepare_live(&s, &w, &c.request, collection, &mut scopes).await?;
+        execution::prepare_live(&s, &owner.0, &w, &c.request, collection, &mut scopes).await?;
     request.protocol = moleapi_core::Protocol::Http;
     request.method = "GET".into();
     request.body_kind = "none".into();

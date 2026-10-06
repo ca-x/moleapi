@@ -83,6 +83,7 @@ fn main() {
     };
     let application = builder
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
             let directory = app.path().app_data_dir()?;

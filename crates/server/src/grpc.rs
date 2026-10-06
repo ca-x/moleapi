@@ -106,7 +106,7 @@ pub async fn reflect(
         message_source: "{}".into(),
     };
     let (request, mut feedback, mut variable_updates, mut request_updates) =
-        execution::prepare_live(&s, &w, &request, collection, &mut scopes).await?;
+        execution::prepare_live(&s, &owner.0, &w, &request, collection, &mut scopes).await?;
     let redactor = Redactor::new(&scopes.private_values)?;
     let scrub = |text: &str| {
         let mut value = serde_json::json!(text);
