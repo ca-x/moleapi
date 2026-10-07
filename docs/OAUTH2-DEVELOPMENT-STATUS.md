@@ -1,9 +1,21 @@
-# OAuth 2.0 development snapshot
+# OAuth 2.0 implementation checkpoint
 
-This branch preserves ongoing OAuth 2.0 implementation. It is not part of v0.1.0 and is not a completed OAuth 2.0 release.
+This development branch extends the v0.1.0 preview. The full Apifox/Postman capability goal remains unfinished.
 
-Implemented source includes the oauth2 5.0 SDK adapter, authorization URL and PKCE/state handling, client credentials/password/code/implicit/device grant helpers, owner/workspace token vault, refresh leases, execution integration, manual callback completion, and bilingual configuration/token dialogs.
+## Available behavior
 
-Remaining work includes automatic hosted and desktop loopback callbacks, exposing revocation/introspection controls, broader device-flow and concurrency/privacy coverage, frontend lifecycle tests, browser QA, and independent review. Desktop opener integration still needs native platform compilation. See [the specification](specs/oauth2.md) for acceptance criteria.
+OAuth2 5.0 owns authorization code, implicit, client credentials, password and device grants, SHA256 PKCE, CSRF state, request encoding, token parsing, refresh, introspection and revocation. Checked Rust transport pins destinations, rejects redirects and bounds responses/timeouts.
 
-Only the previously verified application revision is on main and tagged v0.1.0. This development snapshot must pass the remaining acceptance criteria before release integration.
+Private tokens are scoped to account/workspace and authorization profile. The manager acquires, imports, selects, renames, reveals/copies, refreshes, inspects, revokes and deletes tokens. Credentials are excluded from ordinary workspace exports and synchronization. Provider inspection exposes only active status, scopes and expiry. Revoked/expired tokens cannot execute.
+
+Browser grants support manual URL completion, hosted automatic callbacks and a native IPv4 loopback listener. Register the exact callback URI with the provider. Hosted URI: your server origin plus `/api/oauth2/callback`. Native default URI: `http://127.0.0.1:49152/api/oauth2/callback`; the port must be available and explicitly configured. The native listener is created only for local mode and stops on completion, cancellation, expiry or workspace deletion. Browser callbacks never reveal private credentials, verifier, account identity or token IDs. Implicit fragments are removed from browser history before posting to the state-bound broker.
+
+In multi-instance hosting, authorization creation, callback and status polling must reach the same instance (for example with sticky routing), because short-lived browser flow state stays in memory. Refresh leases are persisted using revision CAS and work across instances sharing the database.
+
+## Verification and remaining work
+
+At this checkpoint 302 Rust tests pass (20 external tests ignored), 173 frontend tests pass, strict Clippy, formatting and frontend/embedded-server builds pass. Fixtures exercise all grants, device authorization_pending/slow_down/expiry, logout during device startup, workspace cancellation, rotating refresh, multi-instance lease contention/recovery, invalid refresh retry, TLS revocation, imports, secret-safe exports, single-use callbacks and real loopback PKCE exchange. Focused independent backend/UI reviews were completed.
+
+Agent-browser verified hosted browser authorization, automatic token selection, provider inspection and an actual authenticated HTTP request. English/light and Chinese/dark screenshots are included, with a separate Chinese390px overflow check. These web and loopback fixtures do not establish native Tauri opener/tray or signed installer behavior on every OS.
+
+Remaining OAuth work includes provider-specific source import/export mappings, active-field-only variable resolution, broader cross-database OAuth race coverage and native-platform OAuth/browser QA. Full SDK/server generation, other authentication providers and the broader protocol/testing/Mock/docs/collaboration/integration capability matrix remain separate work. See [the specification](specs/oauth2.md).

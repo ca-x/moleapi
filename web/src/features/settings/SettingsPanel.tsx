@@ -41,7 +41,7 @@ export default function SettingsPanel() {
           />
         </Field>
       )}
-      {draft && <Field label={t("工作区鉴权")}><RequestAuthEditor auth={draft.data.auth ?? {kind:"none",token:"",username:"",password:""}} change={auth=>updateData(data=>({...data,auth}))} dark={dark} inherit={false}/></Field>}
+      {draft && <Field label={t("工作区鉴权")}><RequestAuthEditor auth={draft.data.auth ?? {kind:"none",token:"",username:"",password:""}} change={auth=>updateData(data=>({...data,auth}))} dark={dark} inherit={false} collectionId={null}/></Field>}
       {native && sync.data?.connected && (
         <Card>
           <Text as="p" size="2">

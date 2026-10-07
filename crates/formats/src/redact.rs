@@ -36,6 +36,11 @@ fn redact_auth(auth: &mut moleapi_core::Auth, privacy: &ExportPrivacy) {
                 row.value.clear();
             }
             row.value = privacy.screen_bounded(&row.value, 8192);
+            if privacy.screen_bounded(&row.key, 1024) != row.key {
+                row.key = "redacted_oauth_parameter".into();
+                row.value.clear();
+                row.enabled = false;
+            }
             row.local_value = None;
         }
         for url in [
@@ -751,6 +756,22 @@ impl ExportPrivacy {
                     .chain(auth.jwt.as_ref().map(|jwt| jwt.key.as_str()))
                     .chain(auth.oauth2.as_ref().map(|o| o.client_secret.as_str()))
                     .chain(auth.oauth2.as_ref().map(|o| o.password.as_str()))
+                    .chain(
+                        auth.oauth2
+                            .iter()
+                            .flat_map(|oauth| {
+                                oauth
+                                    .token_params
+                                    .iter()
+                                    .chain(&oauth.authorization_params)
+                                    .chain(&oauth.token_headers)
+                            })
+                            .filter(|row| row.secret == Some(true) || sensitive(&row.key))
+                            .flat_map(|row| {
+                                std::iter::once(row.value.as_str())
+                                    .chain(row.local_value.as_deref())
+                            }),
+                    )
                     .collect::<Vec<_>>();
                 for source in sources {
                     if source.is_empty() {

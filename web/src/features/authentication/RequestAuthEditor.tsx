@@ -6,7 +6,7 @@ import {t,useLanguage} from "../../shared/i18n";
 import type {Auth,JwtAuth,ApiKeyAuth} from "../../shared/types";
 export const jwtConfig=():JwtAuth=>({algorithm:"HS256",key:"",key_base64:false,claims_source:"{}",kid:"",name:"Authorization",prefix:"Bearer",location:"header",add_time_claims:true,ttl_seconds:3600});
 export const apiKeyConfig=():ApiKeyAuth=>({name:"X-API-Key",value:"",location:"header"});
-export default function RequestAuthEditor({auth,change,dark,api=true,digest=true,query=true,inherit=true,credentials=true}:{auth:Auth;change:(value:Auth)=>void;dark:boolean;api?:boolean;digest?:boolean;query?:boolean;inherit?:boolean;credentials?:boolean}){
+export default function RequestAuthEditor({auth,change,dark,api=true,digest=true,query=true,inherit=true,credentials=true,collectionId}:{auth:Auth;change:(value:Auth)=>void;dark:boolean;api?:boolean;digest?:boolean;query?:boolean;inherit?:boolean;credentials?:boolean;collectionId?:string|null}){
  useLanguage();const key=auth.api_key??apiKeyConfig(),jwt=auth.jwt??jwtConfig();
  function setKey(patch:Partial<ApiKeyAuth>){change({...auth,api_key:{...key,...patch}});}
  function setJwt(patch:Partial<JwtAuth>){change({...auth,jwt:{...jwt,...patch}});}
@@ -25,7 +25,7 @@ export default function RequestAuthEditor({auth,change,dark,api=true,digest=true
    <Text as="label" size="2"><Flex gap="2"><Checkbox checked={jwt.add_time_claims} onCheckedChange={v=>setJwt({add_time_claims:v===true})}/>{t("缺失时自动添加 iat 和 exp")}</Flex></Text>
    {jwt.add_time_claims&&<Field label={t("JWT 有效秒数")}><TextField.Root type="number" min={1} max={86400} value={jwt.ttl_seconds} onChange={e=>setJwt({ttl_seconds:Number(e.target.value)})}/></Field>}
   </>}
-  {auth.kind==="oauth2"&&<OAuth2ConfigEditor config={auth.oauth2??oauth2Config()} change={oauth2=>change({...auth,oauth2})} query={query}/>}
+  {auth.kind==="oauth2"&&<OAuth2ConfigEditor config={auth.oauth2??oauth2Config()} change={oauth2=>change({...auth,oauth2})} query={query} collectionId={collectionId}/>}
   {auth.kind==="digest"&&<Text size="1" color="gray">{t("收到 401 Digest challenge 后自动签名并重试；跨域重定向不携带鉴权。")}</Text>}
   {["apikey","jwt"].includes(auth.kind)&&<Text size="1" color="gray">{t("鉴权在执行时解析环境变量。默认导出移除密钥；JWT 每次执行生成。")}</Text>}
  </div>;

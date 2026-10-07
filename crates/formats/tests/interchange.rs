@@ -1275,3 +1275,25 @@ fn source_only_root_variables_do_not_become_executable_in_postman() {
         w.data
     );
 }
+
+#[test]
+fn oauth_parent_parameter_templates_and_copied_keys_are_private() {
+    let mut w = workspace(import("curl", "curl https://example.test").unwrap().data);
+    w.data.global_variables.push(
+        serde_json::from_value(
+            json!({"id":"secret","key":"credential","value":"scoped-oauth-secret","enabled":true}),
+        )
+        .unwrap(),
+    );
+    w.data.auth=Some(serde_json::from_value(json!({"kind":"oauth2","token":"","username":"","password":"","oauth2":{"client_id":"client","client_secret":"literal-oauth-secret","token_url":"https://provider.test/token","grant":"client_credentials","token_params":[{"id":"parameter","key":"resource_secret","value":"{{credential}}","secret":true,"enabled":true}],"authorization_params":[{"id":"copy","key":"literal-oauth-secret","value":"copied-value","enabled":true}]}})).unwrap());
+    w.data.collections[0].requests[0].auth.kind = "inherit".into();
+    w.data.collections[0].requests[0].body_kind = "text".into();
+    w.data.collections[0].requests[0].body =
+        "copied scoped-oauth-secret literal-oauth-secret".into();
+    let safe = export(&w, "moleapi", false).unwrap().content;
+    assert!(!safe.contains("scoped-oauth-secret"));
+    assert!(!safe.contains("literal-oauth-secret"));
+    let full = export(&w, "moleapi", true).unwrap().content;
+    assert!(full.contains("scoped-oauth-secret"));
+    assert!(full.contains("literal-oauth-secret"));
+}

@@ -4,8 +4,8 @@ import {Checkbox,Flex,Text,TextField} from "@radix-ui/themes";
 import {Choice,Field,PairEditor} from "../../../shared/ui";
 import {t,useLanguage} from "../../../shared/i18n";
 import type {OAuth2Auth} from "./types";
-export default function OAuth2ConfigEditor({config,change,query=true}:{config:OAuth2Auth;change:(value:OAuth2Auth)=>void;query?:boolean}) {
- useLanguage();const [scopeText,setScopeText]=useState(config.scopes.join(" "));const scopesKey=config.scopes.join(" ");useEffect(()=>setScopeText(scopesKey),[scopesKey]);const update=(patch:Partial<OAuth2Auth>)=>change({...config,...patch});
+export default function OAuth2ConfigEditor({config,change,query=true,collectionId}:{config:OAuth2Auth;change:(value:OAuth2Auth)=>void;query?:boolean;collectionId?:string|null}) {
+ useLanguage();const [scopeText,setScopeText]=useState(config.scopes.join(" "));const scopesKey=config.scopes.join(" ");useEffect(()=>setScopeText(current=>current.split(/\s+/).filter(Boolean).join(" ")===scopesKey?current:scopesKey),[scopesKey]);const update=(patch:Partial<OAuth2Auth>)=>change({...config,...patch});
  const url=(key:"authorization_url"|"token_url"|"device_url"|"redirect_url"|"revocation_url"|"introspection_url",label:string)=><Field label={label}><TextField.Root value={config[key]} maxLength={8192} onChange={e=>update({[key]:e.target.value})}/></Field>;
  return <Flex direction="column" gap="3">
   <Choice label={t("OAuth2 授权方式")} value={config.grant} options={[{value:"authorization_code",label:"Authorization Code"},{value:"implicit",label:"Implicit"},{value:"client_credentials",label:"Client Credentials"},{value:"password",label:"Password"},{value:"device_code",label:"Device Code"}]} onChange={grant=>update({grant})}/>
@@ -27,7 +27,7 @@ export default function OAuth2ConfigEditor({config,change,query=true}:{config:OA
    <Field label={t("Token 附加参数")}><PairEditor rows={config.token_params} onChange={token_params=>update({token_params})} secrets/></Field>
    <Field label={t("Token 请求头")}><PairEditor rows={config.token_headers} onChange={token_headers=>update({token_headers})} secrets/></Field>
   </details>
-  <TokenManager config={config} select={token_id=>update({token_id})}/>
+  <TokenManager config={config} select={token_id=>update({token_id})} collectionId={collectionId} redirect={redirect_url=>update({redirect_url})}/>
   <Text size="1" color="gray">{t("Token 凭据独立保存在当前账户与工作区，不随工作区默认导出或同步。")}</Text>
  </Flex>;
 }

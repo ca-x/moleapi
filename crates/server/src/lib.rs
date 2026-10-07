@@ -223,6 +223,7 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         .route("/oauth2/flows/{id}/cancel", post(oauth2::flows::cancel))
         .route("/oauth2/flows/{id}/complete", post(oauth2::flows::complete))
         .route("/oauth2/tokens/acquire", post(oauth2::acquire))
+        .route("/oauth2/tokens/import", post(oauth2::token_actions::import))
         .route(
             "/workspaces/{workspace}/oauth2/tokens/{token}/refresh",
             post(oauth2::refresh),
@@ -230,6 +231,14 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         .route(
             "/workspaces/{workspace}/oauth2/tokens/{token}/secret",
             get(oauth2::reveal),
+        )
+        .route(
+            "/workspaces/{workspace}/oauth2/tokens/{token}/revoke",
+            post(oauth2::token_actions::revoke),
+        )
+        .route(
+            "/workspaces/{workspace}/oauth2/tokens/{token}/introspect",
+            post(oauth2::token_actions::introspect),
         )
         .route("/workspaces/{id}/oauth2/tokens", get(oauth2::list))
         .route(
@@ -298,6 +307,7 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
             stop: tokio_util::sync::CancellationToken::new(),
         });
     let router = Router::new()
+        .merge(oauth2::callbacks::router())
         .merge(receiver)
         .nest("/api", api)
         .layer(DefaultBodyLimit::max(25 * 1024 * 1024))

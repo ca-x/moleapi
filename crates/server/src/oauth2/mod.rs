@@ -1,4 +1,6 @@
+pub(crate) mod callbacks;
 pub(crate) mod flows;
+pub(crate) mod token_actions;
 use oauth2::TokenResponse;
 mod vault;
 use crate::{ApiError, AppState, auth::Identity, workspaces::owned};
@@ -181,7 +183,13 @@ async fn refresh_token(
                 vault::release(s, owner, token, revision).await?;
                 return Err(ApiError::not_found());
             }
-            vault::finish(s, owner, token, revision, response).await
+            match vault::finish(s, owner, token.clone(), revision, response).await {
+                Ok(token) => Ok(token),
+                Err(error) => {
+                    vault::release(s, owner, token, revision).await?;
+                    Err(error)
+                }
+            }
         }
         Err(error) => {
             vault::release(s, owner, token, revision).await?;
@@ -233,7 +241,11 @@ pub(crate) async fn rename(
         return Err(ApiError::bad("Invalid OAuth2 token label"));
     }
     let (mut token, revision) = vault::load(&s, &owner.0, &workspace, &id).await?;
-    if token.lease.is_some() {
+    if token
+        .lease
+        .as_ref()
+        .is_some_and(|lease| lease.expires_at > chrono::Utc::now().timestamp())
+    {
         return Err(ApiError::bad("OAuth2 token is being refreshed"));
     }
     token.label = input.label;
@@ -298,6 +310,14 @@ pub(crate) async fn prepare(
             ));
         }
         token = refresh_token(s, owner, workspace, id, config, request.verify_tls, None).await?;
+    }
+    if token
+        .expires_at
+        .is_some_and(|expires| expires <= chrono::Utc::now().timestamp())
+    {
+        return Err(ApiError::bad(
+            "OAuth2 provider returned an expired token; authorize again",
+        ));
     }
     if token
         .response
