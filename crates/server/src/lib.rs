@@ -1,5 +1,6 @@
 mod a2a;
 mod auth;
+mod cookies;
 mod entities;
 mod execution;
 mod formats;
@@ -55,6 +56,7 @@ struct AppState {
     sync_lock: Arc<tokio::sync::Mutex<()>>,
     script_slots: Arc<tokio::sync::Semaphore>,
     generation_slots: Arc<tokio::sync::Semaphore>,
+    cookies: Arc<cookies::Jars>,
     oauth2_slots: Arc<tokio::sync::Semaphore>,
     oauth2_flows: Arc<oauth2::flows::Hub>,
     script_worker: PathBuf,
@@ -167,6 +169,7 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         sync_lock: Arc::new(tokio::sync::Mutex::new(())),
         script_slots: Arc::new(tokio::sync::Semaphore::new(4)),
         generation_slots: Arc::new(tokio::sync::Semaphore::new(4)),
+        cookies: Arc::default(),
         oauth2_slots: Arc::new(tokio::sync::Semaphore::new(8)),
         oauth2_flows: Arc::default(),
         script_worker,
@@ -176,6 +179,13 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         webhooks: Arc::new(webhooks::Hub::default()),
     };
     let protected = Router::new()
+        .route(
+            "/workspaces/{id}/cookies",
+            get(cookies::list)
+                .patch(cookies::configure)
+                .post(cookies::insert)
+                .delete(cookies::remove),
+        )
         .route(
             "/workspaces/{id}/webhooks",
             get(webhooks::list).post(webhooks::create),

@@ -6,6 +6,8 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+cookie_store = { version = "=0.22.1", default-features = false }
+psl = "=2.1.240"
 hawk = "=5.0.1"
 aws-sigv4 = { version="=1.4.5", default-features=false, features=["sign-http", "http1"] }
 aws-credential-types = "=1.2.14"

@@ -12,6 +12,15 @@ pub async fn execute(
     environment: Option<&Environment>,
     policy: NetworkPolicy,
 ) -> Result<Response> {
+    execute_with_cookies(request, environment, policy, None).await
+}
+/// Shared finite transport with an optional private session jar.
+pub async fn execute_with_cookies(
+    request: &RequestSpec,
+    environment: Option<&Environment>,
+    policy: NetworkPolicy,
+    cookies: Option<&CookieJar>,
+) -> Result<Response> {
     ensure!(
         request.protocol == Protocol::Http
             || request.protocol.is_graphql()
@@ -29,7 +38,7 @@ pub async fn execute(
     }
     tokio::time::timeout(
         Duration::from_millis(r.timeout_ms),
-        execute_inner(&r, policy, None),
+        execute_inner(&r, policy, None, cookies),
     )
     .await
     .context("Request timed out")?
@@ -49,7 +58,7 @@ pub async fn execute_bytes(
     let prepared = prepare_authentication(request)?;
     tokio::time::timeout(
         Duration::from_millis(prepared.timeout_ms),
-        execute_inner(&prepared, policy, Some(body)),
+        execute_inner(&prepared, policy, Some(body), None),
     )
     .await
     .context("Request timed out")?
@@ -58,7 +67,9 @@ async fn execute_inner(
     r: &RequestSpec,
     policy: NetworkPolicy,
     raw_body: Option<Vec<u8>>,
+    cookies: Option<&CookieJar>,
 ) -> Result<Response> {
+    let cookie_generation = cookies.map(CookieJar::generation);
     let start = Instant::now();
     let mut url = valid_url(&r.url)?;
     {
@@ -112,6 +123,20 @@ async fn execute_inner(
             builder = builder.body(b.clone());
         }
         let mut request = builder.build()?;
+        if !request.headers().contains_key("cookie")
+            && let (Some(jar), Some(generation)) = (cookies, cookie_generation)
+            && let Some(value) = jar.header(&url, generation)
+        {
+            private_auth_values.push(value.clone());
+            for pair in value.split("; ") {
+                if let Some((_, value)) = pair.split_once('=') {
+                    private_auth_values.push(value.into());
+                }
+            }
+            request
+                .headers_mut()
+                .insert("cookie", HeaderValue::from_str(&value)?);
+        }
         if signing_allowed && r.auth.kind == "aws" {
             private_auth_values.extend(crate::sign_aws_request(
                 r.auth.aws.as_ref().context("AWS settings missing")?,
@@ -130,6 +155,17 @@ async fn execute_inner(
             .execute(request)
             .await
             .context("HTTP request failed")?;
+        for raw in response.headers().get_all("set-cookie").iter() {
+            if let Ok(raw) = raw.to_str() {
+                private_auth_values.push(raw.into());
+                if let Ok(parsed) = cookie_store::Cookie::parse(raw, &url) {
+                    private_auth_values.push(parsed.value().into());
+                }
+                if let (Some(jar), Some(generation)) = (cookies, cookie_generation) {
+                    jar.receive(&url, raw, generation);
+                }
+            }
+        }
         let status = response.status();
         if status.as_u16() == 401 && digest_allowed && digest_attempts < 2 {
             let mut challenge = None;

@@ -1124,5 +1124,22 @@
   "Hawk 应用 ID": "Hawk application ID",
   "Hawk 委托 ID": "Hawk delegation ID",
   "应用与委托参与签名。启用请求体哈希时，按实际发送的内容和 MIME 类型计算。": "Application and delegation attributes are authenticated. Payload hashing uses the actual transmitted content and MIME type.",
-  "令牌来自旧配置版本，请重新获取或导入；工作区和原始配置已保留。": "This token uses an older profile version. Acquire or import it again; the workspace and original configuration are preserved."
+  "令牌来自旧配置版本，请重新获取或导入；工作区和原始配置已保留。": "This token uses an older profile version. Acquire or import it again; the workspace and original configuration are preserved.",
+  "管理 Cookie": "Manage cookies",
+  "Cookie 按账号、工作区和当前环境隔离，仅保存在进程内存中；退出账号或重启后清除，不参与同步和导出。": "Cookies are isolated by account, workspace and current environment. They stay in process memory, are cleared on logout or restart, and are excluded from sync and exports.",
+  "自动接收和发送 Cookie": "Receive and send cookies automatically",
+  "用于 HTTP、SOAP 和 GraphQL 查询；手动 Cookie Header 优先。其他协议不使用此 Cookie 库。": "Used for HTTP, SOAP and GraphQL queries. Manual Cookie headers take precedence. Other protocols do not use this jar.",
+  "隐藏 Cookie 值": "Hide cookie values",
+  "显示 Cookie 值": "Reveal cookie values",
+  "清空 Cookie": "Clear cookies",
+  "域名 / 路径": "Domain / path",
+  "属性": "Attributes",
+  "Cookie 值：{{value0}}": "Cookie value: {{value0}}",
+  "删除 Cookie：{{value0}}": "Delete cookie: {{value0}}",
+  "当前环境没有 Cookie。": "No cookies in the current environment.",
+  "Cookie 来源 URL": "Cookie origin URL",
+  "输入一个完整 Set-Cookie 值，例如 sid=value; Path=/; HttpOnly。再次添加相同域名、路径和名称可更新 Cookie。": "Enter one full Set-Cookie value, such as sid=value; Path=/; HttpOnly. Add the same domain, path and name again to update a cookie.",
+  "添加 Cookie": "Add cookie",
+  "删除": "Delete",
+  "正在加载…": "Loading…"
 }

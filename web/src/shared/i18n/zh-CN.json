@@ -1124,5 +1124,22 @@
   "Hawk 应用 ID": "Hawk 应用 ID",
   "Hawk 委托 ID": "Hawk 委托 ID",
   "应用与委托参与签名。启用请求体哈希时，按实际发送的内容和 MIME 类型计算。": "应用与委托参与签名。启用请求体哈希时，按实际发送的内容和 MIME 类型计算。",
-  "令牌来自旧配置版本，请重新获取或导入；工作区和原始配置已保留。": "令牌来自旧配置版本，请重新获取或导入；工作区和原始配置已保留。"
+  "令牌来自旧配置版本，请重新获取或导入；工作区和原始配置已保留。": "令牌来自旧配置版本，请重新获取或导入；工作区和原始配置已保留。",
+  "管理 Cookie": "管理 Cookie",
+  "Cookie 按账号、工作区和当前环境隔离，仅保存在进程内存中；退出账号或重启后清除，不参与同步和导出。": "Cookie 按账号、工作区和当前环境隔离，仅保存在进程内存中；退出账号或重启后清除，不参与同步和导出。",
+  "自动接收和发送 Cookie": "自动接收和发送 Cookie",
+  "用于 HTTP、SOAP 和 GraphQL 查询；手动 Cookie Header 优先。其他协议不使用此 Cookie 库。": "用于 HTTP、SOAP 和 GraphQL 查询；手动 Cookie Header 优先。其他协议不使用此 Cookie 库。",
+  "隐藏 Cookie 值": "隐藏 Cookie 值",
+  "显示 Cookie 值": "显示 Cookie 值",
+  "清空 Cookie": "清空 Cookie",
+  "域名 / 路径": "域名 / 路径",
+  "属性": "属性",
+  "Cookie 值：{{value0}}": "Cookie 值：{{value0}}",
+  "删除 Cookie：{{value0}}": "删除 Cookie：{{value0}}",
+  "当前环境没有 Cookie。": "当前环境没有 Cookie。",
+  "Cookie 来源 URL": "Cookie 来源 URL",
+  "输入一个完整 Set-Cookie 值，例如 sid=value; Path=/; HttpOnly。再次添加相同域名、路径和名称可更新 Cookie。": "输入一个完整 Set-Cookie 值，例如 sid=value; Path=/; HttpOnly。再次添加相同域名、路径和名称可更新 Cookie。",
+  "添加 Cookie": "添加 Cookie",
+  "删除": "删除",
+  "正在加载…": "正在加载…"
 }

@@ -21,6 +21,8 @@ These screenshots show the actual embedded self-hosted interface with synthetic 
 
 ![OAuth2 authorization and private token management](docs/images/oauth2-en.png)
 
+![Private cookies isolated by workspace and environment](docs/images/cookies-en.png)
+
 ## Languages
 
 Simplified Chinese and English UI can be selected on the sign-in screen or in workbench settings; the preference is remembered. Request names, variables, original specifications, scripts, real service responses, and generated code remain unchanged user data. Native tray menus follow the application language; native system dialogs depend on the operating system. Additional languages use embedded localization catalogs.

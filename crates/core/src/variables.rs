@@ -8,6 +8,8 @@ pub const MAX_SCRIPT_BYTES: usize = 256 * 1024;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct VariableScopes {
+    #[serde(skip)]
+    pub environment_id: Option<String>,
     pub project: BTreeMap<String, String>,
     pub collection: BTreeMap<String, String>,
     pub environment: BTreeMap<String, String>,
@@ -25,7 +27,10 @@ impl VariableScopes {
         temporary: &[Pair],
         native: bool,
     ) -> Result<Self> {
-        let mut result = Self::default();
+        let mut result = Self {
+            environment_id: environment.map(|e| e.id.clone()),
+            ..Self::default()
+        };
         let mut inputs = vec![("project", workspace.global_variables.as_slice())];
         if let Some(collection) = collection {
             for parent in crate::collection_chain(workspace, collection)?

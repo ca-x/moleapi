@@ -1,5 +1,6 @@
 import { liveError } from "./../../shared/i18n/errors";
 import { t, useLanguage, liveTranslation } from "../../shared/i18n";
+import CookieManager from "../cookies/CookieManager";
 import ProtocolPane from "../protocols/ProtocolPane";
 import { authenticationEligibility } from "../authentication/eligibility";
 import { inheritedAuthSource } from "../authentication/inheritedSource";
@@ -58,6 +59,7 @@ const requestTabs = [
 export default function RequestEditor({
   request,
   workspaceData,
+  cookieWorkspace,
   protocolConnected = false,
   bodyScope = "",
   update,
@@ -72,6 +74,7 @@ export default function RequestEditor({
   error,
 }: {
   request: RequestSpec;
+  cookieWorkspace?: string;
   workspaceData?: import("../../shared/types").WorkspaceData;
   protocolConnected?: boolean;
   bodyScope?: string;
@@ -476,6 +479,7 @@ export default function RequestEditor({
             </Tabs.Content>
             <Tabs.Content value="settings">
               <div className="form-panel">
+                {cookieWorkspace && <CookieManager key={bodyScope} workspace={cookieWorkspace} environment={workspaceData?.active_environment_id} url={request.url}/>}
                 <Field label={t("请求超时 (ms)")} hint={t("最大 120000ms。")}>
                   <TextField.Root
                     type="number"
