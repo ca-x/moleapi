@@ -1,5 +1,5 @@
 [workspace]
-exclude = ["vendor/mysql_async", "vendor/tokio-postgres", "vendor/a2a-rs","vendor/a2a-types","vendor/a2a-client", "vendor/a2a-client-legacy", "vendor/rmcp", "vendor/graphql-ws-client", "vendor/cynic-introspection", "vendor/protox-parse", "vendor/rust_socketio", "vendor/rust_engineio", "vendor/rumqttc", "vendor/wsdl", "vendor/hawk"]
+exclude = ["vendor/mysql_async", "vendor/tokio-postgres", "vendor/a2a-rs","vendor/a2a-types","vendor/a2a-client", "vendor/a2a-client-legacy", "vendor/rmcp", "vendor/graphql-ws-client", "vendor/cynic-introspection", "vendor/protox-parse", "vendor/rust_socketio", "vendor/rust_engineio", "vendor/rumqttc", "vendor/wsdl", "vendor/hawk", "vendor/hyperx"]
 members = ["crates/core", "crates/server", "crates/formats", "crates/script-runtime", "crates/protocols", "crates/generation", "crates/data", "desktop"]
 default-members = ["crates/core", "crates/server", "crates/formats", "crates/script-runtime", "crates/protocols", "crates/generation", "crates/data"]
 resolver = "3"
@@ -65,3 +65,5 @@ tokio-postgres = { path = "vendor/tokio-postgres" }
 mysql_async = { path = "vendor/mysql_async" }
 
 hawk = { path = "vendor/hawk" }
+
+hyperx = { path = "vendor/hyperx" }

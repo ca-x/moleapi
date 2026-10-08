@@ -166,6 +166,14 @@ pub fn resolve_request(
     } else {
         None
     };
+    let dormant_ntlm = if auth_kind != "ntlm" {
+        Some(value["auth"]["ntlm"].clone())
+    } else {
+        None
+    };
+    if dormant_ntlm.is_some() {
+        value["auth"]["ntlm"] = serde_json::Value::Null;
+    }
     let dormant_oauth1 = if auth_kind != "oauth1" {
         Some(value["auth"]["oauth1"].clone())
     } else {
@@ -286,6 +294,9 @@ pub fn resolve_request(
     };
     let mut budget = 20 * 1024 * 1024;
     replace(&mut value, &vars, &mut budget)?;
+    if let Some(config) = dormant_ntlm {
+        value["auth"]["ntlm"] = config;
+    }
     if let Some(config) = dormant_oauth1 {
         value["auth"]["oauth1"] = config;
     }

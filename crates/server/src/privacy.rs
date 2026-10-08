@@ -260,6 +260,14 @@ pub(crate) fn request_values(
             }
         }
     }
+    if request.auth.kind == "ntlm" {
+        capture(&request.auth.username);
+    }
+    if let Some(c) = &request.auth.ntlm {
+        capture(&request.auth.username);
+        capture(&c.domain);
+        capture(&c.workstation);
+    }
     if let Some(c) = &request.auth.oauth1 {
         for value in moleapi_core::oauth1_private_sources(c) {
             capture(&value);

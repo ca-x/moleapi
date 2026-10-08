@@ -1,3 +1,5 @@
+mod ntlm_auth;
+pub use ntlm_auth::{NtlmAuth, validate_ntlm};
 mod oauth1_auth;
 pub use oauth1_auth::*;
 mod cookies;

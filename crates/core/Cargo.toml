@@ -6,6 +6,17 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+sspi = {version="=0.23.0",default-features=false,features=["ring"]}
+hyper = {version="1",features=["client","http1"]}
+hyper-util = {version="0.1",features=["tokio"]}
+http-body-util = "0.1"
+bytes = "1"
+tokio-rustls = {version="0.26",default-features=false,features=["ring","tls12"]}
+webpki-roots = "1"
+x509-parser = "=0.18.1"
+www-authenticate = "=0.4.0"
+hyperx = "1"
+http-auth = {version="=0.1.10",default-features=false}
 serde_urlencoded = "0.7"
 oauth1-request = { version = "=0.6.1", default-features = false, features = ["std", "hmac-sha1", "rsa-sha1-09"] }
 percent-encoding = "2"
@@ -53,6 +64,8 @@ quick-xml = "0.38"
 xsd-parser = "=1.5.2"
 
 [dev-dependencies]
+hyper = {version="1",features=["server","http1"]}
+rcgen = "0.14"
 sha2 = "0.10"
 prost-types = "0.14"
 axum = { workspace = true, features = ["multipart"] }

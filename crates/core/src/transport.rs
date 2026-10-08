@@ -113,16 +113,28 @@ async fn execute_inner(
     let mut private_auth_values = Vec::new();
     let mut digest_attempts = 0;
     let mut digest_allowed = r.auth.kind == "digest";
+    let mut ntlm_allowed = r.auth.kind == "ntlm";
+    let mut ntlm_connection: Option<crate::ntlm_auth::Connection> = None;
+    let mut ntlm_handshake: Option<crate::ntlm_auth::Handshake> = None;
     let mut signing_allowed = matches!(r.auth.kind.as_str(), "aws" | "hawk" | "oauth1");
     loop {
-        let client = checked_client(&url, policy, r.verify_tls).await?;
-        let mut builder = client
-            .request(method.clone(), url.clone())
-            .headers(headers.clone());
-        if let Some(b) = &body {
-            builder = builder.body(b.clone());
+        let client = if ntlm_allowed {
+            if ntlm_connection.is_none() {
+                let binding = r.auth.ntlm.as_deref().is_none_or(|c| c.channel_binding);
+                ntlm_connection = Some(
+                    crate::ntlm_auth::Connection::connect(&url, policy, r.verify_tls, binding)
+                        .await?,
+                );
+            }
+            None
+        } else {
+            Some(checked_client(&url, policy, r.verify_tls).await?)
+        };
+        let mut request = reqwest::Request::new(method.clone(), url.clone());
+        *request.headers_mut() = headers.clone();
+        if let Some(bytes) = &body {
+            *request.body_mut() = Some(bytes.clone().into());
         }
-        let mut request = builder.build()?;
         if !request.headers().contains_key("cookie")
             && let (Some(jar), Some(generation)) = (cookies, cookie_generation)
             && let Some(value) = jar.header(&url, generation)
@@ -158,10 +170,15 @@ async fn execute_inner(
                 std::time::SystemTime::now(),
             )?);
         }
-        let response = client
-            .execute(request)
-            .await
-            .context("HTTP request failed")?;
+        let response = if let Some(connection) = ntlm_connection.as_mut() {
+            connection.send(request).await?
+        } else {
+            client
+                .context("HTTP client missing")?
+                .execute(request)
+                .await
+                .context("HTTP request failed")?
+        };
         for raw in response.headers().get_all("set-cookie").iter() {
             if let Ok(raw) = raw.to_str() {
                 private_auth_values.push(raw.into());
@@ -174,6 +191,48 @@ async fn execute_inner(
             }
         }
         let status = response.status();
+        if status.as_u16() == 401
+            && ntlm_allowed
+            && ntlm_handshake.as_ref().is_none_or(|h| !h.complete())
+        {
+            let challenge = crate::ntlm_auth::challenge(response.headers())?;
+            ensure!(
+                ntlm_handshake.is_none() || challenge.is_some(),
+                "NTLM server did not send a Type2 challenge"
+            );
+            if let Some(challenge) = challenge {
+                ensure!(
+                    !response
+                        .headers()
+                        .get_all("connection")
+                        .iter()
+                        .any(|v| v.to_str().is_ok_and(|s| s
+                            .split(',')
+                            .any(|v| v.trim().eq_ignore_ascii_case("close")))),
+                    "NTLM server closed the authentication connection"
+                );
+                if ntlm_handshake.is_none() {
+                    let host = url
+                        .host_str()
+                        .context("NTLM host missing")?
+                        .trim_matches(['[', ']']);
+                    let binding = ntlm_connection.as_ref().and_then(|c| c.binding.as_deref());
+                    ntlm_handshake =
+                        Some(crate::ntlm_auth::Handshake::new(&r.auth, host, binding)?);
+                }
+                let header = ntlm_handshake
+                    .as_mut()
+                    .unwrap()
+                    .next(challenge.as_deref())?;
+                private_auth_values.push(header.clone());
+                if let Some(encoded) = header.strip_prefix("NTLM ") {
+                    private_auth_values.push(encoded.into());
+                }
+                crate::ntlm_auth::drain(response).await?;
+                headers.insert("authorization", HeaderValue::from_str(&header)?);
+                continue;
+            }
+        }
         if status.as_u16() == 401 && digest_allowed && digest_attempts < 2 {
             let mut challenge = None;
             for value in response
@@ -260,9 +319,15 @@ async fn execute_inner(
                 }
                 digest_allowed = false;
                 signing_allowed = false;
+                ntlm_allowed = false;
             } else if r.auth.kind == "digest" {
                 headers.remove("authorization");
                 digest_attempts = 0;
+            }
+            if r.auth.kind == "ntlm" {
+                headers.remove("authorization");
+                ntlm_handshake = None;
+                ntlm_connection = None;
             }
             if status.as_u16() == 303 && method != Method::HEAD
                 || matches!(status.as_u16(), 301 | 302) && method == Method::POST
@@ -357,7 +422,7 @@ pub fn request_headers(r: &RequestSpec) -> Result<HeaderMap> {
     ] {
         headers.remove(name);
     }
-    if r.auth.kind == "digest" {
+    if matches!(r.auth.kind.as_str(), "digest" | "ntlm") {
         headers.remove("authorization");
     }
     if r.auth.kind == "bearer" {

@@ -57,14 +57,16 @@ export interface AwsAuth {access_key:string;secret_key:string;session_token:stri
 export interface HawkAuth {id:string;key:string;algorithm:string;nonce:string;timestamp:string;ext:string;app:string;delegation:string;user:string;include_payload_hash:boolean}
 export interface OAuth1Grant {request_token_url:string;authorization_url:string;access_token_url:string;callback_url:string;request_params:Pair[];access_params:Pair[]}
 export interface OAuth1Auth {grant?:OAuth1Grant|null;token_id?:string|null;consumer_key:string;consumer_secret:string;token:string;token_secret:string;private_key:string;algorithm:string;location:"header"|"query"|"body"|"automatic";realm:string;nonce:string;timestamp:string;callback:string;verifier:string;include_version:boolean;include_body_hash:boolean;include_empty_params:boolean}
+export interface NtlmAuth {domain:string;workstation:string;channel_binding:boolean}
 export interface Auth {
+  ntlm?:NtlmAuth;
   oauth1?:OAuth1Auth;
   hawk?:HawkAuth;
   aws?:AwsAuth;
   oauth2?:OAuth2Auth;
   api_key?:ApiKeyAuth;
   jwt?:JwtAuth;
-  kind: "inherit" | "none" | "bearer" | "basic" | "apikey" | "jwt" | "digest" | "oauth2" | "aws" | "hawk" | "oauth1";
+  kind: "inherit" | "none" | "bearer" | "basic" | "apikey" | "jwt" | "digest" | "oauth2" | "aws" | "hawk" | "oauth1" | "ntlm";
   token: string;
   username: string;
   password: string;

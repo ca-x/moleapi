@@ -293,6 +293,7 @@ fn inherit_auth() -> moleapi_core::Auth {
         oauth2: None,
         aws: None,
         hawk: None,
+        ntlm: None,
         oauth1: None,
     }
 }
@@ -335,6 +336,16 @@ fn import_auth(
                 } else {
                     moleapi_core::AuthLocation::Header
                 },
+            }));
+        }
+        "ntlm" => {
+            auth.kind = "ntlm".into();
+            auth.username = auth_value(value, "ntlm", "username");
+            auth.password = auth_value(value, "ntlm", "password");
+            auth.ntlm = Some(Box::new(moleapi_core::NtlmAuth {
+                domain: auth_value(value, "ntlm", "domain"),
+                workstation: auth_value(value, "ntlm", "workstation"),
+                channel_binding: false,
             }));
         }
         "oauth1" => {
@@ -449,6 +460,14 @@ fn export_auth(auth: &moleapi_core::Auth) -> Result<Value> {
         "apikey" => {
             let key = auth.api_key.as_ref().context("API key settings missing")?;
             json!({"type":"apikey","apikey":[{"key":"key","value":key.name,"type":"string"},{"key":"value","value":key.value,"type":"string"},{"key":"in","value":if key.location==moleapi_core::AuthLocation::Query{"query"}else{"header"},"type":"string"}]})
+        }
+        "ntlm" => {
+            let c = auth.ntlm.as_deref().cloned().unwrap_or_default();
+            ensure!(
+                !c.channel_binding,
+                "Postman NTLM cannot preserve automatic TLS channel binding"
+            );
+            json!({"type":"ntlm","ntlm":[{"key":"username","value":auth.username,"type":"string"},{"key":"password","value":auth.password,"type":"string"},{"key":"domain","value":c.domain,"type":"string"},{"key":"workstation","value":c.workstation,"type":"string"}]})
         }
         "oauth1" => {
             let c = auth.oauth1.as_ref().context("OAuth1 settings missing")?;

@@ -1179,5 +1179,10 @@
   "请求 Token 附加参数": "Extra request-token parameters",
   "访问 Token 附加参数": "Extra access-token parameters",
   "签名使用实际 URL 和请求体，支持环境变量及父级继承。选择私有 Token 后，执行时使用令牌库中的凭据。": "Signs the actual URL and body with variables and inherited authentication. Selected private tokens use vault credentials at execution time.",
-  "回调 URL 无效": "Invalid callback URL"
+  "回调 URL 无效": "Invalid callback URL",
+  "NTLM 域（可选）": "NTLM domain (optional)",
+  "域留空时可在用户名中使用 DOMAIN\\user 或 user@domain。": "Leave domain blank to use DOMAIN\\user or user@domain in the username.",
+  "NTLM 工作站（可选）": "NTLM workstation (optional)",
+  "HTTPS 使用 TLS 通道绑定": "Use TLS channel binding for HTTPS",
+  "使用 NTLMv2，握手保持在同一条 HTTP/1.1 连接中。不会读取系统登录凭据；断连时停止认证，不向跨域重定向发送凭据。": "Uses NTLMv2 on one HTTP/1.1 connection with explicit credentials. A closed connection stops authentication; cross-origin redirects do not receive credentials."
 }

@@ -20,6 +20,13 @@ fn redact_auth(auth: &mut moleapi_core::Auth, privacy: &ExportPrivacy) {
             jwt.name = "Authorization".into();
         }
     }
+    if auth.kind == "ntlm" || auth.ntlm.is_some() {
+        auth.username.clear();
+    }
+    if let Some(c) = &mut auth.ntlm {
+        c.domain.clear();
+        c.workstation.clear();
+    }
     if let Some(c) = &mut auth.oauth1 {
         c.consumer_key.clear();
         c.consumer_secret.clear();
@@ -175,6 +182,7 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
                     || r.auth.aws.is_some()
                     || r.auth.hawk.is_some()
                     || r.auth.oauth1.is_some()
+                    || r.auth.ntlm.is_some()
             });
     let mut result = source.clone();
     if auth_private {
@@ -851,6 +859,14 @@ impl ExportPrivacy {
                     .flat_map(|c| moleapi_core::oauth1_private_sources(c))
                     .collect();
                 let sources = std::iter::once(auth.token.as_str())
+                    .chain(auth.ntlm.iter().flat_map(|c| {
+                        [
+                            auth.username.as_str(),
+                            c.domain.as_str(),
+                            c.workstation.as_str(),
+                        ]
+                    }))
+                    .chain((auth.kind == "ntlm").then_some(auth.username.as_str()))
                     .chain(std::iter::once(auth.password.as_str()))
                     .chain(auth.api_key.as_ref().map(|key| key.value.as_str()))
                     .chain(auth.jwt.as_ref().map(|jwt| jwt.key.as_str()))
@@ -935,6 +951,16 @@ impl ExportPrivacy {
                     .flat_map(|c| c.requests.iter().map(|r| &r.auth)),
             )
         {
+            if auth.kind == "ntlm" {
+                secrets.insert(auth.username.clone());
+            }
+            if let Some(c) = &auth.ntlm {
+                secrets.extend([
+                    auth.username.clone(),
+                    c.domain.clone(),
+                    c.workstation.clone(),
+                ]);
+            }
             if let Some(c) = &auth.oauth1 {
                 secrets.extend(moleapi_core::oauth1_private_sources(c));
             }
@@ -989,6 +1015,14 @@ impl ExportPrivacy {
                     .as_ref()
                     .map(|key| key.value.as_str())
                     .into_iter()
+                    .chain(request.auth.ntlm.iter().flat_map(|c| {
+                        [
+                            request.auth.username.as_str(),
+                            c.domain.as_str(),
+                            c.workstation.as_str(),
+                        ]
+                    }))
+                    .chain((request.auth.kind == "ntlm").then_some(request.auth.username.as_str()))
                     .chain(request.auth.jwt.as_ref().map(|jwt| jwt.key.as_str()))
                     .chain(
                         request

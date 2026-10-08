@@ -1510,3 +1510,61 @@ fn oauth1_grant_parameters_endpoint_secrets_and_vault_ids_are_private_in_default
             .is_none()
     );
 }
+#[test]
+fn ntlm_inherited_environment_identity_is_private_and_postman_options_roundtrip() {
+    let mut w = workspace(import("curl", "curl https://example.test").unwrap().data);
+    w.data.collections[0].auth=Some(serde_json::from_value(json!({"kind":"ntlm","token":"","username":"{{principal}}","password":"{{credential}}","ntlm":{"domain":"{{domain}}","workstation":"{{workstation}}","channel_binding":false}})).unwrap());
+    for (key, value) in [
+        ("principal", "private-ntlm-user"),
+        ("credential", "private-ntlm-password"),
+        ("domain", "private-ntlm-domain"),
+        ("workstation", "private-ntlm-station"),
+    ] {
+        w.data.global_variables.push(
+            serde_json::from_value(json!({"id":key,"key":key,"value":value,"enabled":true}))
+                .unwrap(),
+        );
+    }
+    let r = &mut w.data.collections[0].requests[0];
+    r.auth.kind = "inherit".into();
+    r.body_kind = "text".into();
+    r.body =
+        "private-ntlm-user private-ntlm-password private-ntlm-domain private-ntlm-station".into();
+    let safe = export(&w, "moleapi", false).unwrap().content;
+    for value in [
+        "private-ntlm-user",
+        "private-ntlm-password",
+        "private-ntlm-domain",
+        "private-ntlm-station",
+    ] {
+        assert!(!safe.contains(value), "{safe}");
+    }
+    let postman = export(&w, "postman", true).unwrap().content;
+    let restored = import("postman", &postman).unwrap();
+    let collection = restored
+        .data
+        .collections
+        .iter()
+        .find(|c| !c.requests.is_empty())
+        .unwrap();
+    let auth = moleapi_core::inherited_authentication(
+        &restored.data,
+        Some(collection),
+        &collection.requests[0],
+        None,
+    )
+    .unwrap()
+    .auth;
+    assert_eq!(auth.kind, "ntlm");
+    assert_eq!(auth.username, "{{principal}}");
+    assert_eq!(auth.ntlm.unwrap().domain, "{{domain}}");
+    w.data.collections[0]
+        .auth
+        .as_mut()
+        .unwrap()
+        .ntlm
+        .as_mut()
+        .unwrap()
+        .channel_binding = true;
+    assert!(export(&w, "postman", true).is_err());
+}

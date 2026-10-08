@@ -44,6 +44,9 @@ rust-embed = { version = "8", optional = true, features = ["interpolate-folder-p
 mime_guess = { version = "2", optional = true }
 
 [dev-dependencies]
+hyper = {version="1",features=["server","http1"]}
+sspi = {version="=0.23.0",default-features=false,features=["ring"]}
+http-body-util = "0.1"
 hawk = "=5.0.1"
 bytes = "1"
 a2a-rs = { version = "=0.10.0", default-features = false, features = ["jsonrpc-server", "http-server"] }
@@ -65,7 +68,6 @@ async-graphql = { version = "=7.2.1", default-features = false }
 async-graphql-axum = "=7.2.1"
 axum = { workspace = true, features = ["ws"] }
 tower = { version = "0.5", features = ["util"] }
-http-body-util = "0.1"
 tempfile = "3"
 
 [build-dependencies]
