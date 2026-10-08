@@ -299,12 +299,18 @@ pub(crate) fn tls_config(c: &RequestNetwork, verify: bool) -> Result<rustls::Cli
     }
     Ok(config)
 }
-pub async fn checked_request_client(
+/// Validated policy/TLS inputs shared by SDKs using different reqwest versions.
+pub struct PreparedRequestNetwork {
+    pub addresses: Vec<SocketAddr>,
+    pub proxy: Option<Url>,
+    pub tls: rustls::ClientConfig,
+}
+pub async fn prepare_request_network(
     url: &Url,
     policy: crate::NetworkPolicy,
     verify: bool,
     c: Option<&RequestNetwork>,
-) -> Result<reqwest::Client> {
+) -> Result<PreparedRequestNetwork> {
     let default = RequestNetwork::default();
     let c = c.unwrap_or(&default);
     validate_request_network(c, false)?;
@@ -327,6 +333,27 @@ pub async fn checked_request_client(
     } else {
         network_destination(url, policy, Some(c)).await?
     };
+    let mut tls = tls_config(c, verify)?;
+    tls.alpn_protocols = match c.http_mode {
+        HttpMode::Http1 => vec![b"http/1.1".to_vec()],
+        _ => vec![b"h2".to_vec(), b"http/1.1".to_vec()],
+    };
+    Ok(PreparedRequestNetwork {
+        addresses,
+        proxy: selected_proxy,
+        tls,
+    })
+}
+pub async fn checked_request_client_builder(
+    url: &Url,
+    policy: crate::NetworkPolicy,
+    verify: bool,
+    c: Option<&RequestNetwork>,
+) -> Result<reqwest::ClientBuilder> {
+    let default = RequestNetwork::default();
+    let c = c.unwrap_or(&default);
+    let prepared = prepare_request_network(url, policy, verify, Some(c)).await?;
+    let addresses = prepared.addresses;
     let host = url
         .host_str()
         .context("Destination host missing")?
@@ -345,20 +372,24 @@ pub async fn checked_request_client(
         HttpMode::Auto => {}
         HttpMode::Http2PriorKnowledge => builder = builder.http2_prior_knowledge(),
     }
-    let mut tls = tls_config(c, verify)?;
-    tls.alpn_protocols = match c.http_mode {
-        HttpMode::Http1 => vec![b"http/1.1".to_vec()],
-        _ => vec![b"h2".to_vec(), b"http/1.1".to_vec()],
-    };
-    builder = builder.use_preconfigured_tls(tls);
-    if let Some(url) = selected_proxy {
+    builder = builder.use_preconfigured_tls(prepared.tls);
+    if let Some(url) = prepared.proxy {
         let mut proxy = reqwest::Proxy::all(url)?;
         if !c.proxy.username.is_empty() || !c.proxy.password.is_empty() {
             proxy = proxy.basic_auth(&c.proxy.username, &c.proxy.password);
         }
         builder = builder.proxy(proxy);
     }
-    builder
+    Ok(builder)
+}
+pub async fn checked_request_client(
+    url: &Url,
+    policy: crate::NetworkPolicy,
+    verify: bool,
+    c: Option<&RequestNetwork>,
+) -> Result<reqwest::Client> {
+    checked_request_client_builder(url, policy, verify, c)
+        .await?
         .build()
         .context("Request network client could not be built")
 }

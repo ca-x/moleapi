@@ -1241,5 +1241,7 @@
   "添加 DNS 覆盖": "Add DNS override",
   "正在读取证书文件…": "Reading certificate file…",
   "无法读取证书文件：检查编码及大小（PEM 128 KiB、私钥 64 KiB、PFX 192 KiB）。": "Unable to read certificate file: check encoding and size (PEM 128 KiB, key 64 KiB, PFX 192 KiB).",
-  "重置网络设置": "Reset network settings"
+  "重置网络设置": "Reset network settings",
+  "WebSocket 升级需要 HTTP/1.1。": "WebSocket upgrade requires HTTP/1.1.",
+  "适用于 HTTP、SOAP、SSE、WebSocket、GraphQL、A2A 和 MCP HTTP 请求。支持环境变量；停用后保留草稿。": "For HTTP, SOAP, SSE, WebSocket, GraphQL, A2A and MCP HTTP requests. Variables are supported; disabling preserves drafts."
 }

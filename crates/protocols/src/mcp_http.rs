@@ -22,6 +22,7 @@ pub(super) struct CheckedHttp {
     pub endpoint: String,
     pub policy: NetworkPolicy,
     pub verify_tls: bool,
+    pub network: Option<Box<moleapi_core::RequestNetwork>>,
     pub timeout: Duration,
     pub headers: reqwest::header::HeaderMap,
     pub received: Arc<AtomicUsize>,
@@ -38,26 +39,48 @@ impl CheckedHttp {
         }
         let url =
             moleapi_core::protocol_url(uri, false).map_err(|_| failure("Invalid MCP endpoint"))?;
-        let addresses = moleapi_core::checked_destination(&url, self.policy)
-            .await
-            .map_err(|_| failure("MCP endpoint blocked or DNS failed"))?;
+        let prepared = moleapi_core::prepare_request_network(
+            &url,
+            self.policy,
+            self.verify_tls,
+            self.network.as_deref(),
+        )
+        .await
+        .map_err(|_| failure("MCP network configuration or destination policy rejected"))?;
+        let defaults = moleapi_core::RequestNetwork::default();
+        let network = self.network.as_deref().unwrap_or(&defaults);
         let mut headers = http::HeaderMap::new();
         for (key, value) in &self.headers {
             headers.insert(key.clone(), value.clone());
         }
-        // reqwest 0.13's provider-free feature requires an explicit process default.
-        // Reuse the workspace's ring provider without overriding a caller-installed provider.
-        if rustls::crypto::CryptoProvider::get_default().is_none() {
-            let _ = rustls::crypto::ring::default_provider().install_default();
-        }
-        reqwest_mcp::Client::builder()
+        let mut builder = reqwest_mcp::Client::builder()
             .no_proxy()
             .redirect(reqwest_mcp::redirect::Policy::none())
-            .danger_accept_invalid_certs(!self.verify_tls)
-            .resolve_to_addrs(url.host_str().unwrap().trim_matches(['[', ']']), &addresses)
-            .connect_timeout(self.timeout.min(Duration::from_secs(15)))
+            .resolve_to_addrs(
+                url.host_str().unwrap().trim_matches(['[', ']']),
+                &prepared.addresses,
+            )
+            .connect_timeout(
+                self.timeout
+                    .min(Duration::from_millis(network.connect_timeout_ms)),
+            )
             .timeout(self.timeout)
             .default_headers(headers)
+            .tls_backend_preconfigured(prepared.tls);
+        builder = match network.http_mode {
+            moleapi_core::HttpMode::Http1 => builder.http1_only(),
+            moleapi_core::HttpMode::Auto => builder,
+            moleapi_core::HttpMode::Http2PriorKnowledge => builder.http2_prior_knowledge(),
+        };
+        if let Some(proxy) = prepared.proxy {
+            let mut proxy = reqwest_mcp::Proxy::all(proxy)
+                .map_err(|_| failure("Invalid MCP proxy configuration"))?;
+            if !network.proxy.username.is_empty() || !network.proxy.password.is_empty() {
+                proxy = proxy.basic_auth(&network.proxy.username, &network.proxy.password);
+            }
+            builder = builder.proxy(proxy);
+        }
+        builder
             .build()
             .map_err(|_| failure("MCP HTTP client configuration failed"))
     }

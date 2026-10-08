@@ -134,10 +134,26 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
         ensure!(
             matches!(
                 r.protocol,
-                Protocol::Http | Protocol::Soap { .. } | Protocol::Graphql { .. }
+                Protocol::Http
+                    | Protocol::Soap { .. }
+                    | Protocol::Graphql { .. }
+                    | Protocol::Sse
+                    | Protocol::Websocket
+                    | Protocol::A2a { .. }
+                    | Protocol::Mcp { .. }
             ),
-            "Selected network settings require a finite HTTP transport"
+            "Selected network settings require a supported HTTP transport"
         );
+        ensure!(
+            !matches!(&r.protocol, Protocol::Mcp{config} if config.transport != "http"),
+            "Network settings require MCP HTTP transport"
+        );
+        if r.protocol == Protocol::Websocket {
+            ensure!(
+                c.http_mode == crate::HttpMode::Http1,
+                "WebSocket upgrade requires HTTP/1.1 network mode"
+            );
+        }
         if r.auth.kind == "ntlm" {
             ensure!(
                 c.http_mode == crate::HttpMode::Http1,
@@ -159,7 +175,13 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
         ensure!(
             matches!(
                 r.protocol,
-                Protocol::Http | Protocol::Soap { .. } | Protocol::Graphql { .. }
+                Protocol::Http
+                    | Protocol::Soap { .. }
+                    | Protocol::Graphql { .. }
+                    | Protocol::Sse
+                    | Protocol::Websocket
+                    | Protocol::A2a { .. }
+                    | Protocol::Mcp { .. }
             ),
             "Request signing requires a finite HTTP request"
         );

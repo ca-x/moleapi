@@ -761,3 +761,64 @@ async fn http_json_stream_rejects_complex_unknown_fields_before_sdk_typed_decode
     );
     server.abort();
 }
+
+#[tokio::test]
+async fn a2a_sdk_and_card_discovery_share_network_dns_settings() {
+    let (url, server) = mature_fixture().await;
+    let port = url::Url::parse(&url).unwrap().port().unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let router = local(&temp.path().join("a2a-network.db")).await.unwrap();
+    let mut data = example_data();
+    let request = &mut data["collections"][0]["requests"][0];
+    request["protocol"] =
+        json!({"kind":"a2a","dialect":"1.0","transport":"jsonrpc","params_source":"{unfinished"});
+    request["url"] = json!(format!("http://a2a-network.test:{port}/"));
+    request["timeout_ms"] = json!(5000);
+    request["examples"] = json!([]);
+    request["network"] = json!({"dns":[{"hostname":"a2a-network.test","addresses":["127.0.0.1"]}]});
+    let (status, w) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"w","name":"A2A network","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{w}");
+    let request = w["data"]["collections"][0]["requests"][0].clone();
+    let (status, card) = call(
+        &router,
+        "POST",
+        "/api/a2a/cards/discover",
+        None,
+        Some(json!({"workspace_id":"w","request":request})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{card}");
+    let (status, session) = call(
+        &router,
+        "POST",
+        "/api/sessions",
+        None,
+        Some(json!({"workspace_id":"w","request":request})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{session}");
+    let id = session["id"].as_str().unwrap();
+    event(&router, id, "", "a2a_ready").await;
+    send(&router,id,"network-send","message/send",json!({"message":{"messageId":"network","role":"ROLE_USER","parts":[{"text":"Network SDK"}]}})).await;
+    let response = event(&router, id, "network-send", "a2a_result").await;
+    assert_eq!(
+        response["result"]["task"]["status"]["state"], "TASK_STATE_COMPLETED",
+        "{response}"
+    );
+    call(
+        &router,
+        "DELETE",
+        &format!("/api/sessions/{id}"),
+        None,
+        None,
+    )
+    .await;
+    server.abort();
+}

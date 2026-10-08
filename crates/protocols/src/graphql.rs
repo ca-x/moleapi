@@ -6,7 +6,7 @@ use graphql_ws_client::{
     Connection, Message as GqlMessage, graphql::GraphqlOperation, protocol::Event,
 };
 use moleapi_core::{
-    GraphqlPayload, checked_client, graphql_is_subscription, graphql_payload, protocol_url,
+    GraphqlPayload, checked_request_client, graphql_is_subscription, graphql_payload, protocol_url,
     request_headers,
 };
 use reqwest_websocket::{RequestBuilderExt, WebSocket};
@@ -165,6 +165,13 @@ pub(crate) async fn run(
         graphql_is_subscription(&request)?,
         "GraphQL query/mutation requests use the execute API"
     );
+    ensure!(
+        request
+            .network
+            .as_deref()
+            .is_none_or(|c| c.http_mode == moleapi_core::HttpMode::Http1),
+        "GraphQL WebSocket subscription requires HTTP/1.1 network mode"
+    );
     let Protocol::Graphql {
         connection_params,
         subscription_url,
@@ -190,7 +197,13 @@ pub(crate) async fn run(
     let mut parameters = connection_params.clone();
     let connect = async {
         for redirect in 0..=10 {
-            let client = checked_client(&url, policy, request.verify_tls).await?;
+            let client = checked_request_client(
+                &url,
+                policy,
+                request.verify_tls,
+                request.network.as_deref(),
+            )
+            .await?;
             let response = client
                 .get(url.clone())
                 .headers(headers.clone())

@@ -236,12 +236,13 @@ pub async fn discover(
         url.query_pairs_mut().append_pair(&pair.key, &pair.value);
     }
     request.url = url.into();
-    let client = moleapi_core::checked_client(
+    let client = moleapi_core::checked_request_client(
         &url::Url::parse(&request.url).map_err(|e| ApiError::bad(e.to_string()))?,
         moleapi_core::NetworkPolicy {
             allow_private_network: s.local || s.config.allow_private_network,
         },
         request.verify_tls,
+        request.network.as_deref(),
     )
     .await
     .map_err(|_| {

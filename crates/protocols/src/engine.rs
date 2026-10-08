@@ -2,7 +2,7 @@ use crate::*;
 use anyhow::{Context, bail, ensure};
 use eventsource_stream::Eventsource;
 use futures_util::{SinkExt, StreamExt};
-use moleapi_core::{Pair, checked_client, protocol_url, request_headers};
+use moleapi_core::{Pair, checked_request_client, protocol_url, request_headers};
 use reqwest_websocket::RequestBuilderExt;
 
 pub(crate) fn headers(response: &reqwest::Response, mask: &dyn Fn(&str) -> String) -> Vec<Pair> {
@@ -76,7 +76,13 @@ pub(crate) async fn run(
         .map_err(|_| anyhow::anyhow!("Invalid WebSocket scheme"))?;
         let connect = async {
             for redirect in 0..=10 {
-                let client = checked_client(&url, policy, request.verify_tls).await?;
+                let client = checked_request_client(
+                    &url,
+                    policy,
+                    request.verify_tls,
+                    request.network.as_deref(),
+                )
+                .await?;
                 let config = tungstenite::protocol::WebSocketConfig::default()
                     .max_message_size(Some(MAX_MESSAGE))
                     .max_frame_size(Some(MAX_MESSAGE))
@@ -178,7 +184,13 @@ pub(crate) async fn run(
     );
     let connect = async {
         for redirect in 0..=10 {
-            let client = checked_client(&url, policy, request.verify_tls).await?;
+            let client = checked_request_client(
+                &url,
+                policy,
+                request.verify_tls,
+                request.network.as_deref(),
+            )
+            .await?;
             let response = client
                 .get(url.clone())
                 .headers(request_headers.clone())

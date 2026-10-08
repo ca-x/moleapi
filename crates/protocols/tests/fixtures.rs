@@ -526,3 +526,80 @@ async fn engine_rejects_non_get_or_active_body_modes_before_connecting() {
     assert_eq!(connections.load(Ordering::SeqCst), 1);
     server.abort();
 }
+
+#[tokio::test]
+async fn sse_and_websocket_network_dns_settings_preserve_handshake_host_and_private_policy() {
+    let router = Router::new()
+        .route(
+            "/events",
+            get(|headers: axum::http::HeaderMap| async move {
+                assert!(
+                    headers["host"]
+                        .to_str()
+                        .unwrap()
+                        .starts_with("live-network.test:")
+                );
+                (
+                    [("content-type", "text/event-stream")],
+                    "data: network-settings\n\n",
+                )
+            }),
+        )
+        .route(
+            "/socket",
+            get(
+                |headers: axum::http::HeaderMap, ws: WebSocketUpgrade| async move {
+                    assert!(
+                        headers["host"]
+                            .to_str()
+                            .unwrap()
+                            .starts_with("live-network.test:")
+                    );
+                    ws.on_upgrade(|mut socket| async move {
+                        socket
+                            .send(AxumMessage::Text("network-settings".into()))
+                            .await
+                            .unwrap();
+                        socket.send(AxumMessage::Close(None)).await.unwrap();
+                    })
+                },
+            ),
+        );
+    let (url, server) = serve(router).await;
+    let port = url::Url::parse(&url).unwrap().port().unwrap();
+    let manager = SessionManager::new();
+    for (kind, scheme, path) in [("sse", "http", "events"), ("websocket", "ws", "socket")] {
+        let mut r = request(&format!("{scheme}://live-network.test:{port}/{path}"), kind);
+        r.network = Some(Box::new(moleapi_core::RequestNetwork {
+            dns: vec![moleapi_core::DnsOverride {
+                hostname: "live-network.test".into(),
+                addresses: vec!["127.0.0.1".into()],
+            }],
+            ..Default::default()
+        }));
+        moleapi_core::validate_request(&r, false).unwrap();
+        let denied = start(&manager, r.clone(), false);
+        assert!(
+            wait(&manager, &denied, SessionState::Error)
+                .await
+                .reason
+                .unwrap()
+                .contains("blocked")
+        );
+        let id = start(&manager, r, true);
+        wait(&manager, &id, SessionState::Closed).await;
+        assert!(
+            manager
+                .events("owner", &id, 0)
+                .unwrap()
+                .events
+                .iter()
+                .any(|event| match &event.message {
+                    EventMessage::Sse { data, .. } => data == "network-settings",
+                    EventMessage::Text { text } => text == "network-settings",
+                    _ => false,
+                })
+        );
+    }
+    server.abort();
+}

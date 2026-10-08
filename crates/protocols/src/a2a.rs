@@ -273,21 +273,19 @@ async fn invoke(
             .append_pair(&pair.key, &pair.value);
     }
     validate_params(method, &resolved, &config.dialect)?;
-    // Build an injected, no-proxy, no-redirect client freshly for each invocation. SDKs never negotiate URLs.
-    let addresses = moleapi_core::checked_destination(&endpoint, policy).await?;
-    let client = reqwest::Client::builder()
-        .no_proxy()
-        .redirect(reqwest::redirect::Policy::none())
-        .danger_accept_invalid_certs(!request.verify_tls)
-        .resolve_to_addrs(
-            endpoint.host_str().unwrap().trim_matches(['[', ']']),
-            &addresses,
-        )
-        .timeout(Duration::from_millis(
-            request.timeout_ms.clamp(100, 300_000),
-        ))
-        .default_headers(moleapi_core::request_headers(request)?)
-        .build()?;
+    // Inject a checked client per invocation; SDKs cannot negotiate transport URLs.
+    let client = moleapi_core::checked_request_client_builder(
+        &endpoint,
+        policy,
+        request.verify_tls,
+        request.network.as_deref(),
+    )
+    .await?
+    .timeout(Duration::from_millis(
+        request.timeout_ms.clamp(100, 300_000),
+    ))
+    .default_headers(moleapi_core::request_headers(request)?)
+    .build()?;
     // SDK card inputs are synthetic only when no source was selected; a supplied card keeps capabilities.
     let mut card: Value = if let Some(source) = &config.card_source {
         serde_json::from_str(source)?

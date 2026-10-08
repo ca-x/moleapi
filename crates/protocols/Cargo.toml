@@ -44,7 +44,7 @@ rustls-native-certs = "0.8"
 rumqttc = { version = "=0.25.1", default-features = false, features = ["use-rustls-no-provider", "websocket"] }
 
 rmcp = { version = "=3.5.0", default-features = false, features = ["client", "macros", "transport-child-process", "transport-streamable-http-client-reqwest"] }
-reqwest-mcp = { package = "reqwest", version = "0.13", default-features = false, features = ["rustls-no-provider", "json", "stream"] }
+reqwest-mcp = { package = "reqwest", version = "0.13", default-features = false, features = ["rustls-no-provider", "json", "stream", "socks", "http2"] }
 http = "1"
 sse-stream = "0.2.6"
 process-wrap = { version = "10", features = ["tokio1"] }

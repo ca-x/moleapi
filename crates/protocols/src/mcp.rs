@@ -694,6 +694,7 @@ pub(super) async fn run(
                 endpoint: endpoint.to_string(),
                 policy,
                 verify_tls: request_spec.verify_tls,
+                network: request_spec.network.clone(),
                 timeout,
                 headers: moleapi_core::request_headers(&request_spec)?,
                 received: Arc::default(),

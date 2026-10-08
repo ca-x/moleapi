@@ -1256,3 +1256,68 @@ async fn introspection_cannot_promote_private_response_schema_metadata_into_a_sh
     assert!(introspected["error"].as_str().unwrap().contains("withheld"));
     server.abort();
 }
+
+#[tokio::test]
+async fn subscription_network_dns_override_reaches_original_endpoint_and_http2_upgrade_rejects() {
+    let (url, server) = fixture().await;
+    let port = url::Url::parse(&url).unwrap().port().unwrap();
+    let tmp = tempfile::tempdir().unwrap();
+    let router = local(&tmp.path().join("subscription-network.db"))
+        .await
+        .unwrap();
+    let mut d = graphql_data(
+        &format!("http://graphql-network.test:{port}/graphql"),
+        "subscription {ticks}",
+    );
+    let r = &mut d["collections"][0]["requests"][0];
+    r["protocol"]["subscription_url"] =
+        json!(format!("ws://graphql-network.test:{port}/subscriptions"));
+    r["network"] = json!({"dns":[{"hostname":"graphql-network.test","addresses":["127.0.0.1"]}]});
+    let w = workspace(&router, None, d).await;
+    let request = w["data"]["collections"][0]["requests"][0].clone();
+    let (status, s) = call(
+        &router,
+        "POST",
+        "/api/sessions",
+        None,
+        Some(json!({"workspace_id":"w","request":request})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{s}");
+    let id = s["id"].as_str().unwrap();
+    wait(&router, id, "closed").await;
+    let (_, events) = call(
+        &router,
+        "GET",
+        &format!("/api/sessions/{id}/events"),
+        None,
+        None,
+    )
+    .await;
+    assert!(
+        events["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["message"]["kind"] == "graphql_next"
+                && e["message"]["payload"]["data"]["ticks"] == 1),
+        "{events}"
+    );
+    let mut request = w["data"]["collections"][0]["requests"][0].clone();
+    request["network"]["http_mode"] = json!("auto");
+    let (status, s) = call(
+        &router,
+        "POST",
+        "/api/sessions",
+        None,
+        Some(json!({"workspace_id":"w","request":request})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{s}");
+    let result = wait(&router, s["id"].as_str().unwrap(), "error").await;
+    assert!(
+        result["reason"].as_str().unwrap().contains("HTTP/1.1"),
+        "{result}"
+    );
+    server.abort();
+}

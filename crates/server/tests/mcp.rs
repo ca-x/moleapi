@@ -850,3 +850,35 @@ async fn private_method_keys_and_scalar_reflections_are_withheld() {
     .await;
     server.abort();
 }
+
+#[tokio::test]
+async fn mcp_http_sdk_applies_scoped_network_dns_settings_to_initialization_and_calls() {
+    let (url, server) = serve(fixture::router(false)).await;
+    let port = url::Url::parse(&url).unwrap().port().unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let router = local(&temp.path().join("mcp-network.db")).await.unwrap();
+    let mut data = mcp_data(&format!("http://mcp-network.test:{port}/mcp"));
+    data["global_variables"] =
+        json!([{"id":"host","key":"network_host","value":"mcp-network.test","enabled":true}]);
+    data["collections"][0]["requests"][0]["network"] =
+        json!({"dns":[{"hostname":"{{network_host}}","addresses":["127.0.0.1"]}]});
+    let w = save(&router, data, None).await;
+    let session = connect(&router, &w, None).await;
+    let id = session["id"].as_str().unwrap();
+    event(&router, id, |e| e["kind"] == "mcp_capabilities").await;
+    send(&router, id, tool("network-echo", "echo")).await;
+    let result = event(&router, id, |e| e["request_id"] == "network-echo").await;
+    assert_eq!(
+        result["result"]["structuredContent"]["text"], "fixture-input",
+        "{result}"
+    );
+    call(
+        &router,
+        "DELETE",
+        &format!("/api/sessions/{id}"),
+        None,
+        None,
+    )
+    .await;
+    server.abort();
+}

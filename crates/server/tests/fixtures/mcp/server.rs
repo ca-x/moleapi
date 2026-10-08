@@ -177,7 +177,12 @@ pub fn router(loop_pages: bool) -> axum::Router {
             })
         },
         std::sync::Arc::new(LocalSessionManager::default()),
-        StreamableHttpServerConfig::default(),
+        StreamableHttpServerConfig::default().with_allowed_hosts([
+            "localhost",
+            "127.0.0.1",
+            "::1",
+            "mcp-network.test",
+        ]),
     );
     axum::Router::new().nest_service("/mcp", service)
 }
