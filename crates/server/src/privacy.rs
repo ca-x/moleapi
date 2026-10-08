@@ -260,6 +260,11 @@ pub(crate) fn request_values(
             }
         }
     }
+    if let Some(c) = &request.auth.edgegrid {
+        capture(&c.access_token);
+        capture(&c.client_token);
+        capture(&c.client_secret);
+    }
     if request.auth.kind == "ntlm" {
         capture(&request.auth.username);
     }

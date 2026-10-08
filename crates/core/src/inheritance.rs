@@ -113,6 +113,7 @@ pub fn inherited_authentication(
             aws: None,
             hawk: None,
             ntlm: None,
+            edgegrid: None,
             oauth1: None,
         },
         source: AuthenticationSource::Default,

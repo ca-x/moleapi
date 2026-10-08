@@ -294,6 +294,7 @@ fn inherit_auth() -> moleapi_core::Auth {
         aws: None,
         hawk: None,
         ntlm: None,
+        edgegrid: None,
         oauth1: None,
     }
 }
@@ -337,6 +338,40 @@ fn import_auth(
                     moleapi_core::AuthLocation::Header
                 },
             }));
+        }
+        "edgegrid" => {
+            auth.kind = "edgegrid".into();
+            let size = auth_value(value, "edgegrid", "maxBodySize");
+            let headers = auth_value(value, "edgegrid", "headersToSign");
+            let mut c = moleapi_core::EdgeGridAuth {
+                access_token: auth_value(value, "edgegrid", "accessToken"),
+                client_token: auth_value(value, "edgegrid", "clientToken"),
+                client_secret: auth_value(value, "edgegrid", "clientSecret"),
+                base_url: auth_value(value, "edgegrid", "baseURL"),
+                nonce: auth_value(value, "edgegrid", "nonce"),
+                timestamp: auth_value(value, "edgegrid", "timestamp"),
+                headers_to_sign: headers
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_owned)
+                    .collect(),
+                ..Default::default()
+            };
+            if let Ok(names) = serde_json::from_str::<Vec<String>>(&headers) {
+                c.headers_to_sign = names;
+            }
+            if !size.is_empty() && size != "0" {
+                if let Ok(number) = size.parse::<usize>() {
+                    c.max_body_bytes = number;
+                } else {
+                    auth.kind = "none".into();
+                    warnings.push(format!(
+                        "{name}: templated EdgeGrid maxBodySize requires native reconfiguration"
+                    ));
+                }
+            }
+            auth.edgegrid = Some(Box::new(c));
         }
         "ntlm" => {
             auth.kind = "ntlm".into();
@@ -460,6 +495,17 @@ fn export_auth(auth: &moleapi_core::Auth) -> Result<Value> {
         "apikey" => {
             let key = auth.api_key.as_ref().context("API key settings missing")?;
             json!({"type":"apikey","apikey":[{"key":"key","value":key.name,"type":"string"},{"key":"value","value":key.value,"type":"string"},{"key":"in","value":if key.location==moleapi_core::AuthLocation::Query{"query"}else{"header"},"type":"string"}]})
+        }
+        "edgegrid" => {
+            let c = auth
+                .edgegrid
+                .as_deref()
+                .context("EdgeGrid settings missing")?;
+            ensure!(
+                c.headers_to_sign.iter().all(|name| !name.contains(',')),
+                "Postman EdgeGrid cannot preserve a comma within a signed header name"
+            );
+            json!({"type":"edgegrid","edgegrid":[{"key":"accessToken","value":c.access_token,"type":"string"},{"key":"clientToken","value":c.client_token,"type":"string"},{"key":"clientSecret","value":c.client_secret,"type":"string"},{"key":"baseURL","value":c.base_url,"type":"string"},{"key":"nonce","value":c.nonce,"type":"string"},{"key":"timestamp","value":c.timestamp,"type":"string"},{"key":"headersToSign","value":c.headers_to_sign.join(","),"type":"string"},{"key":"maxBodySize","value":c.max_body_bytes,"type":"number"}]})
         }
         "ntlm" => {
             let c = auth.ntlm.as_deref().cloned().unwrap_or_default();

@@ -20,6 +20,19 @@ fn redact_auth(auth: &mut moleapi_core::Auth, privacy: &ExportPrivacy) {
             jwt.name = "Authorization".into();
         }
     }
+    if let Some(c) = &mut auth.edgegrid {
+        c.access_token.clear();
+        c.client_token.clear();
+        c.client_secret.clear();
+        c.base_url = privacy.screen_bounded(&c.base_url, 8192);
+        c.nonce = privacy.screen_bounded(&c.nonce, 1024);
+        c.timestamp = privacy.screen_bounded(&c.timestamp, 128);
+        for name in &mut c.headers_to_sign {
+            if privacy.screen_bounded(name, 512) != *name {
+                *name = "{{redacted_edgegrid_header}}".into();
+            }
+        }
+    }
     if auth.kind == "ntlm" || auth.ntlm.is_some() {
         auth.username.clear();
     }
@@ -183,6 +196,7 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
                     || r.auth.hawk.is_some()
                     || r.auth.oauth1.is_some()
                     || r.auth.ntlm.is_some()
+                    || r.auth.edgegrid.is_some()
             });
     let mut result = source.clone();
     if auth_private {
@@ -859,6 +873,13 @@ impl ExportPrivacy {
                     .flat_map(|c| moleapi_core::oauth1_private_sources(c))
                     .collect();
                 let sources = std::iter::once(auth.token.as_str())
+                    .chain(auth.edgegrid.iter().flat_map(|c| {
+                        [
+                            c.access_token.as_str(),
+                            c.client_token.as_str(),
+                            c.client_secret.as_str(),
+                        ]
+                    }))
                     .chain(auth.ntlm.iter().flat_map(|c| {
                         [
                             auth.username.as_str(),
@@ -951,6 +972,13 @@ impl ExportPrivacy {
                     .flat_map(|c| c.requests.iter().map(|r| &r.auth)),
             )
         {
+            if let Some(c) = &auth.edgegrid {
+                secrets.extend([
+                    c.access_token.clone(),
+                    c.client_token.clone(),
+                    c.client_secret.clone(),
+                ]);
+            }
             if auth.kind == "ntlm" {
                 secrets.insert(auth.username.clone());
             }
@@ -1015,6 +1043,13 @@ impl ExportPrivacy {
                     .as_ref()
                     .map(|key| key.value.as_str())
                     .into_iter()
+                    .chain(request.auth.edgegrid.iter().flat_map(|c| {
+                        [
+                            c.access_token.as_str(),
+                            c.client_token.as_str(),
+                            c.client_secret.as_str(),
+                        ]
+                    }))
                     .chain(request.auth.ntlm.iter().flat_map(|c| {
                         [
                             request.auth.username.as_str(),

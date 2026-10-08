@@ -49,7 +49,7 @@ pub fn validate_authentication(auth: &crate::Auth, templates: bool) -> Result<()
     ensure!(
         [
             "none", "basic", "bearer", "apikey", "jwt", "digest", "oauth2", "aws", "hawk",
-            "oauth1", "ntlm"
+            "oauth1", "ntlm", "edgegrid"
         ]
         .contains(&auth.kind.as_str())
             || templates && auth.kind == "inherit"
@@ -83,6 +83,17 @@ pub fn validate_authentication(auth: &crate::Auth, templates: bool) -> Result<()
     if auth.kind == "aws" {
         crate::validate_aws(
             auth.aws.as_ref().context("AWS settings missing")?,
+            templates,
+        )?;
+    }
+    if let Some(c) = &auth.edgegrid {
+        crate::edgegrid_auth::validate_edgegrid_fields(c)?;
+    }
+    if auth.kind == "edgegrid" {
+        crate::validate_edgegrid(
+            auth.edgegrid
+                .as_deref()
+                .context("EdgeGrid settings missing")?,
             templates,
         )?;
     }

@@ -27,6 +27,8 @@ MoleAPI 使用 Rust/Axum/SeaORM、React/Radix UI/CodeMirror 和 Tauri。默认 S
 
 ![与独立 HTTP 服务互通的 NTLMv2 认证](docs/images/ntlm-zh-CN.png)
 
+![通过独立签名验证的 EdgeGrid 二进制请求](docs/images/edgegrid-zh-CN.png)
+
 ## 语言
 
 软件提供简体中文和英文界面，在登录页或工作台设置中切换并记忆选择。请求名称、变量、规范原文、脚本、实际服务响应和生成代码属于用户数据，保持原文。原生托盘菜单跟随界面语言；系统原生对话框按操作系统能力显示。新增语言使用嵌入式国际化目录。

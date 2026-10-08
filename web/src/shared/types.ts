@@ -58,7 +58,9 @@ export interface HawkAuth {id:string;key:string;algorithm:string;nonce:string;ti
 export interface OAuth1Grant {request_token_url:string;authorization_url:string;access_token_url:string;callback_url:string;request_params:Pair[];access_params:Pair[]}
 export interface OAuth1Auth {grant?:OAuth1Grant|null;token_id?:string|null;consumer_key:string;consumer_secret:string;token:string;token_secret:string;private_key:string;algorithm:string;location:"header"|"query"|"body"|"automatic";realm:string;nonce:string;timestamp:string;callback:string;verifier:string;include_version:boolean;include_body_hash:boolean;include_empty_params:boolean}
 export interface NtlmAuth {domain:string;workstation:string;channel_binding:boolean}
+export interface EdgeGridAuth {access_token:string;client_token:string;client_secret:string;base_url:string;headers_to_sign:string[];nonce:string;timestamp:string;max_body_bytes:number}
 export interface Auth {
+  edgegrid?:EdgeGridAuth;
   ntlm?:NtlmAuth;
   oauth1?:OAuth1Auth;
   hawk?:HawkAuth;
@@ -66,7 +68,7 @@ export interface Auth {
   oauth2?:OAuth2Auth;
   api_key?:ApiKeyAuth;
   jwt?:JwtAuth;
-  kind: "inherit" | "none" | "bearer" | "basic" | "apikey" | "jwt" | "digest" | "oauth2" | "aws" | "hawk" | "oauth1" | "ntlm";
+  kind: "inherit" | "none" | "bearer" | "basic" | "apikey" | "jwt" | "digest" | "oauth2" | "aws" | "hawk" | "oauth1" | "ntlm" | "edgegrid";
   token: string;
   username: string;
   password: string;

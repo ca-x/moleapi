@@ -166,6 +166,14 @@ pub fn resolve_request(
     } else {
         None
     };
+    let dormant_edgegrid = if auth_kind != "edgegrid" {
+        Some(value["auth"]["edgegrid"].clone())
+    } else {
+        None
+    };
+    if dormant_edgegrid.is_some() {
+        value["auth"]["edgegrid"] = serde_json::Value::Null;
+    }
     let dormant_ntlm = if auth_kind != "ntlm" {
         Some(value["auth"]["ntlm"].clone())
     } else {
@@ -294,6 +302,9 @@ pub fn resolve_request(
     };
     let mut budget = 20 * 1024 * 1024;
     replace(&mut value, &vars, &mut budget)?;
+    if let Some(c) = dormant_edgegrid {
+        value["auth"]["edgegrid"] = c;
+    }
     if let Some(config) = dormant_ntlm {
         value["auth"]["ntlm"] = config;
     }

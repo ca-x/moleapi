@@ -6,6 +6,8 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+tropel-auth = {version="=0.6.0",default-features=false}
+chrono = "0.4"
 sspi = {version="=0.23.0",default-features=false,features=["ring"]}
 hyper = {version="1",features=["client","http1"]}
 hyper-util = {version="0.1",features=["tokio"]}

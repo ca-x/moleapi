@@ -1184,5 +1184,15 @@
   "域留空时可在用户名中使用 DOMAIN\\user 或 user@domain。": "Leave domain blank to use DOMAIN\\user or user@domain in the username.",
   "NTLM 工作站（可选）": "NTLM workstation (optional)",
   "HTTPS 使用 TLS 通道绑定": "Use TLS channel binding for HTTPS",
-  "使用 NTLMv2，握手保持在同一条 HTTP/1.1 连接中。不会读取系统登录凭据；断连时停止认证，不向跨域重定向发送凭据。": "Uses NTLMv2 on one HTTP/1.1 connection with explicit credentials. A closed connection stops authentication; cross-origin redirects do not receive credentials."
+  "使用 NTLMv2，握手保持在同一条 HTTP/1.1 连接中。不会读取系统登录凭据；断连时停止认证，不向跨域重定向发送凭据。": "Uses NTLMv2 on one HTTP/1.1 connection with explicit credentials. A closed connection stops authentication; cross-origin redirects do not receive credentials.",
+  "EdgeGrid 高级设置": "Advanced EdgeGrid settings",
+  "EdgeGrid 签名 Base URL（可选）": "EdgeGrid signing base URL (optional)",
+  "留空使用实际请求 Host；覆盖只影响签名 Host，不修改实际请求地址。": "Leave blank for the actual request host. An override affects signing authority only, leaving the transport URL unchanged.",
+  "参与签名的 Header 名称": "Header names to sign",
+  "按顺序使用英文逗号分隔；每个名称可引用环境变量。": "Use comma-separated names in signing order. Each name can reference a variable.",
+  "EdgeGrid 最大哈希字节数": "EdgeGrid maximum hashed bytes",
+  "POST 只哈希这些前缀字节，完整请求体仍会发送；其他方法不哈希请求体。": "POST hashes only this byte prefix; the complete body is still sent. Other methods do not hash their bodies.",
+  "EdgeGrid 时间戳（可选）": "EdgeGrid timestamp (optional)",
+  "格式为 yyyyMMddTHH:mm:ss+0000；留空使用当前 UTC 时间。": "Use yyyyMMddTHH:mm:ss+0000. Leave blank for current UTC time.",
+  "使用 EG1-HMAC-SHA256 签名实际请求。凭据支持变量和继承；跨域重定向不会携带签名。": "Signs the actual request with EG1-HMAC-SHA256, variables and inherited credentials. Cross-origin redirects do not receive the signature."
 }

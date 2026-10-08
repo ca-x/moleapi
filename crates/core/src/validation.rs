@@ -136,7 +136,10 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
     {
         bail!("STDIO auth must use explicit process configuration, not HTTP auth");
     }
-    if matches!(r.auth.kind.as_str(), "aws" | "hawk" | "oauth1" | "ntlm") {
+    if matches!(
+        r.auth.kind.as_str(),
+        "aws" | "hawk" | "oauth1" | "ntlm" | "edgegrid"
+    ) {
         ensure!(
             matches!(
                 r.protocol,

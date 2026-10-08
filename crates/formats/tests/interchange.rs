@@ -1568,3 +1568,51 @@ fn ntlm_inherited_environment_identity_is_private_and_postman_options_roundtrip(
         .channel_binding = true;
     assert!(export(&w, "postman", true).is_err());
 }
+#[test]
+fn edgegrid_parent_variable_credentials_are_private_and_postman_options_roundtrip() {
+    let mut w = workspace(import("curl", "curl https://example.test").unwrap().data);
+    w.data.auth=Some(serde_json::from_value(json!({"kind":"edgegrid","token":"","username":"","password":"","edgegrid":{"access_token":"{{access}}","client_token":"{{client}}","client_secret":"{{key}}","headers_to_sign":["X-Z","X-A"],"max_body_bytes":64,"base_url":"https://signer.example/","timestamp":"20240101T12:00:00+0000","nonce":"fixed-nonce"}})).unwrap());
+    for (key, value) in [
+        ("access", "private-edgegrid-access"),
+        ("client", "private-edgegrid-client"),
+        ("key", "private-edgegrid-secret"),
+    ] {
+        w.data.global_variables.push(
+            serde_json::from_value(json!({"id":key,"key":key,"value":value,"enabled":true}))
+                .unwrap(),
+        );
+    }
+    let r = &mut w.data.collections[0].requests[0];
+    r.auth.kind = "inherit".into();
+    r.description =
+        "private-edgegrid-access private-edgegrid-client private-edgegrid-secret".into();
+    let safe = export(&w, "moleapi", false).unwrap().content;
+    for secret in [
+        "private-edgegrid-access",
+        "private-edgegrid-client",
+        "private-edgegrid-secret",
+    ] {
+        assert!(!safe.contains(secret));
+    }
+    let postman = export(&w, "postman", true).unwrap().content;
+    let restored = import("postman", &postman).unwrap();
+    let collection = restored
+        .data
+        .collections
+        .iter()
+        .find(|c| !c.requests.is_empty())
+        .unwrap();
+    let auth = moleapi_core::inherited_authentication(
+        &restored.data,
+        Some(collection),
+        &collection.requests[0],
+        None,
+    )
+    .unwrap()
+    .auth;
+    assert_eq!(auth.kind, "edgegrid");
+    assert_eq!(
+        auth.edgegrid.unwrap(),
+        w.data.auth.unwrap().edgegrid.unwrap()
+    );
+}

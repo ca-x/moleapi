@@ -5876,6 +5876,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "bytes",
+ "chrono",
  "cookie_store",
  "cynic",
  "cynic-introspection",
@@ -5917,6 +5918,7 @@ dependencies = [
  "sspi",
  "tokio",
  "tokio-rustls",
+ "tropel-auth",
  "url 2.5.8",
  "uuid",
  "webpki-roots 1.0.9",
@@ -11271,6 +11273,26 @@ dependencies = [
  "serde",
  "thiserror 2.0.21",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "tropel-auth"
+version = "0.6.0"
+dependencies = [
+ "base64 0.23.1",
+ "getrandom 0.4.3",
+ "hex",
+ "hmac 0.13.0",
+ "md-5 0.11.0",
+ "percent-encoding 2.3.2",
+ "rand 0.10.3",
+ "serde",
+ "serde_json",
+ "sha1 0.11.0",
+ "sha2 0.11.0",
+ "thiserror 2.0.21",
+ "url 2.5.8",
+ "web-time",
 ]
 
 [[package]]

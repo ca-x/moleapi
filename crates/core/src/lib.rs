@@ -1,3 +1,5 @@
+mod edgegrid_auth;
+pub use edgegrid_auth::*;
 mod ntlm_auth;
 pub use ntlm_auth::{NtlmAuth, validate_ntlm};
 mod oauth1_auth;
