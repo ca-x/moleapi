@@ -1,3 +1,4 @@
+import AwsAuthEditor,{awsConfig} from "./aws/AwsAuthEditor";
 import OAuth2ConfigEditor from "./oauth2/OAuth2ConfigEditor";
 import {oauth2Config} from "./oauth2/types";
 import {TextField,TextArea,Checkbox,Flex,Text} from "@radix-ui/themes";
@@ -6,12 +7,13 @@ import {t,useLanguage} from "../../shared/i18n";
 import type {Auth,JwtAuth,ApiKeyAuth} from "../../shared/types";
 export const jwtConfig=():JwtAuth=>({algorithm:"HS256",key:"",key_base64:false,claims_source:"{}",kid:"",name:"Authorization",prefix:"Bearer",location:"header",add_time_claims:true,ttl_seconds:3600});
 export const apiKeyConfig=():ApiKeyAuth=>({name:"X-API-Key",value:"",location:"header"});
-export default function RequestAuthEditor({auth,change,dark,api=true,digest=true,query=true,inherit=true,credentials=true,collectionId}:{auth:Auth;change:(value:Auth)=>void;dark:boolean;api?:boolean;digest?:boolean;query?:boolean;inherit?:boolean;credentials?:boolean;collectionId?:string|null}){
+export default function RequestAuthEditor({auth,change,dark,api=true,digest=true,query=true,inherit=true,credentials=true,collectionId,signing=true}:{auth:Auth;change:(value:Auth)=>void;dark:boolean;api?:boolean;digest?:boolean;query?:boolean;inherit?:boolean;credentials?:boolean;signing?:boolean;collectionId?:string|null}){
  useLanguage();const key=auth.api_key??apiKeyConfig(),jwt=auth.jwt??jwtConfig();
  function setKey(patch:Partial<ApiKeyAuth>){change({...auth,api_key:{...key,...patch}});}
  function setJwt(patch:Partial<JwtAuth>){change({...auth,jwt:{...jwt,...patch}});}
  return <div className="form-panel">
-  <Choice label={t("鉴权类型")} value={auth.kind} options={[...(inherit?[{value:"inherit",label:t("继承父级鉴权")}]:[]),{value:"none",label:"No Auth"},...(credentials?[{value:"bearer",label:"Bearer Token"},{value:"basic",label:"Basic Auth"}]:[]),...(api?[{value:"apikey",label:"API Key"},{value:"jwt",label:"JWT"},{value:"oauth2",label:"OAuth 2.0"}]:[]),...(digest?[{value:"digest",label:"Digest Auth"}]:[])]} onChange={kind=>change({...auth,kind:kind as Auth["kind"],...(kind==="apikey"?{api_key:key}:kind==="jwt"?{jwt}:kind==="oauth2"?{oauth2:auth.oauth2??oauth2Config()}:{})})}/>
+  <Choice label={t("鉴权类型")} value={auth.kind} options={[...(inherit?[{value:"inherit",label:t("继承父级鉴权")}]:[]),{value:"none",label:"No Auth"},...(credentials?[{value:"bearer",label:"Bearer Token"},{value:"basic",label:"Basic Auth"}]:[]),...(api?[{value:"apikey",label:"API Key"},{value:"jwt",label:"JWT"},{value:"oauth2",label:"OAuth 2.0"}]:[]),...(digest?[{value:"digest",label:"Digest Auth"}]:[]),...(signing?[{value:"aws",label:"AWS Signature V4"}]:[])]} onChange={kind=>change({...auth,kind:kind as Auth["kind"],...(kind==="apikey"?{api_key:key}:kind==="jwt"?{jwt}:kind==="oauth2"?{oauth2:auth.oauth2??oauth2Config()}:kind==="aws"?{aws:auth.aws??awsConfig()}:{})})}/>
+  {auth.kind==="aws"&&<AwsAuthEditor config={auth.aws??awsConfig()} change={aws=>change({...auth,aws})}/> }
   {auth.kind==="inherit"&&<Text size="1" color="gray">{t("执行时使用最近目录、集合或工作区的鉴权；No Auth 停止继承。")}</Text>}
   {auth.kind==="bearer"&&<Field label="Token" hint={t("可使用 {{api_token}} 引用环境变量。") }><TextField.Root type="password" autoComplete="off" value={auth.token} onChange={e=>change({...auth,token:e.target.value})}/></Field>}
   {["basic","digest"].includes(auth.kind)&&<><Field label={t("用户名")}><TextField.Root autoComplete="off" value={auth.username} onChange={e=>change({...auth,username:e.target.value})}/></Field><Field label={t("密码")}><TextField.Root type="password" autoComplete="off" value={auth.password} onChange={e=>change({...auth,password:e.target.value})}/></Field></>}

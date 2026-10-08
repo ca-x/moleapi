@@ -53,11 +53,13 @@ export interface Pair {
 }
 export interface ApiKeyAuth {name:string;value:string;location:"header"|"query"}
 export interface JwtAuth {algorithm:string;key:string;key_base64:boolean;claims_source:string;kid:string;name:string;prefix:string;location:"header"|"query";add_time_claims:boolean;ttl_seconds:number}
+export interface AwsAuth {access_key:string;secret_key:string;session_token:string;region:string;service:string;location:"header"|"query";expires_seconds:number;unsigned_payload:boolean}
 export interface Auth {
+  aws?:AwsAuth;
   oauth2?:OAuth2Auth;
   api_key?:ApiKeyAuth;
   jwt?:JwtAuth;
-  kind: "inherit" | "none" | "bearer" | "basic" | "apikey" | "jwt" | "digest" | "oauth2";
+  kind: "inherit" | "none" | "bearer" | "basic" | "apikey" | "jwt" | "digest" | "oauth2" | "aws";
   token: string;
   username: string;
   password: string;

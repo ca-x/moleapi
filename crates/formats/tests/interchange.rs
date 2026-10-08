@@ -1297,3 +1297,52 @@ fn oauth_parent_parameter_templates_and_copied_keys_are_private() {
     assert!(full.contains("scoped-oauth-secret"));
     assert!(full.contains("literal-oauth-secret"));
 }
+
+#[test]
+fn aws_parent_environment_secrets_are_private_and_header_auth_roundtrips() {
+    let mut w = workspace(import("curl", "curl https://example.test").unwrap().data);
+    w.data.auth=Some(serde_json::from_value(json!({"kind":"aws","token":"","username":"","password":"","aws":{"access_key":"{{aws_id}}","secret_key":"{{aws_secret}}","session_token":"{{aws_session}}","region":"us-east-1","service":"service"}})).unwrap());
+    for (key, value) in [
+        ("aws_id", "SYNTHETICACCESS"),
+        ("aws_secret", "secret-aws-key"),
+        ("aws_session", "secret-aws-session"),
+    ] {
+        w.data.global_variables.push(
+            serde_json::from_value(json!({"id":key,"key":key,"value":value,"enabled":true}))
+                .unwrap(),
+        );
+    }
+    w.data.collections[0].requests[0].auth.kind = "inherit".into();
+    w.data.collections[0].requests[0].body_kind = "text".into();
+    w.data.collections[0].requests[0].body =
+        "SYNTHETICACCESS secret-aws-key secret-aws-session".into();
+    let safe = export(&w, "moleapi", false).unwrap().content;
+    for secret in ["SYNTHETICACCESS", "secret-aws-key", "secret-aws-session"] {
+        assert!(!safe.contains(secret));
+    }
+    let full = export(&w, "moleapi", true).unwrap().content;
+    assert!(full.contains("secret-aws-key"));
+    let postman = export(&w, "postman", true).unwrap().content;
+    let restored = import("postman", &postman).unwrap();
+    let collection = restored
+        .data
+        .collections
+        .iter()
+        .find(|collection| !collection.requests.is_empty())
+        .unwrap();
+    let effective = moleapi_core::inherited_authentication(
+        &restored.data,
+        Some(collection),
+        &collection.requests[0],
+        None,
+    )
+    .unwrap();
+    assert_eq!(effective.auth.kind, "aws");
+    assert_eq!(
+        effective.auth.aws.as_ref().unwrap().secret_key,
+        "{{aws_secret}}"
+    );
+    w.data.auth.as_mut().unwrap().aws.as_mut().unwrap().location =
+        moleapi_core::AuthLocation::Query;
+    assert!(export(&w, "postman", true).is_err());
+}

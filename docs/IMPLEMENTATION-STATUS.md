@@ -144,3 +144,9 @@ Default exports screen parent credentials and copied source across scripts, desc
 ## OAuth 2.0 checkpoint
 
 OAuth2 SDK grants, PKCE/state, private owner/workspace token vault, refresh/CAS leases, token import/rename/reveal/copy/delete/introspection/revocation and hosted/native-loopback automatic callbacks are implemented. Fresh checkpoint verification is recorded in [OAuth2 implementation status](OAUTH2-DEVELOPMENT-STATUS.md), which also records unresolved mappings, variable-resolution and native/cross-database evidence limits. This does not complete the full parity matrix.
+
+## AWS Signature V4 checkpoint
+
+The official aws-sigv4 1.4.5 SDK signs finite HTTP, SOAP and non-subscription GraphQL requests after actual query/headers/body preparation. Header and query placement, supplied session credentials, service/region scopes, bounded presign TTL, S3 path/checksum defaults and automatic S3 UNSIGNED-PAYLOAD presigning are available. Signing is repeated for same-origin redirects and disabled across origins. Actual binary/multipart bytes, published AWS vectors and an independent Postman aws4 S3 vector are verified. Default exports and history redact credentials, including inherited/unmarked variable copies; native explicit backup retains them. Postman header-auth source roundtrip is supported; native presign/unsigned settings and unsupported protocol/generation mappings remain explicit.
+
+Fresh local checkpoint: 311 Rust tests pass (20 external tests ignored), 174 frontend tests pass, strict Clippy and formatting pass. Agent-browser exercised the embedded AWS editor, header execution and switching to query presigning against a synthetic HTTP fixture. Focused independent backend/UI reviews approved the slice. Additional authentication providers, source mappings and full SDK/server generation remain required by the complete matrix.

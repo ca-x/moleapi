@@ -1,0 +1,3 @@
+Vectors copied without modification from the official aws-sigv41.4.5 crate, aws-signing-test-suite/v4/get-vanilla. Source: https://github.com/smithy-lang/smithy-rs/tree/main/aws/rust-runtime/aws-sigv4/aws-signing-test-suite . Apache-2.0; example credentials are published synthetic AWS vectors. Context:2015-08-30T12:36:00Z, service=service, region=us-east-1, query expiry3600seconds.
+
+An additional S3 presign oracle is reproducible with `node scripts/verify_aws_s3_presign.cjs /path/to/aws4`. The pinned expected signature comes from aws4 1.13.2, the independent library used by Postman Runtime7.56.1; it establishes S3 UNSIGNED-PAYLOAD and repeated-slash behavior. This dependency is only a trusted local verification fixture and is not bundled in the frontend.

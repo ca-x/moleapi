@@ -1,5 +1,5 @@
 use crate::{ImportResult, data, pair, request, uid};
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, bail, ensure};
 use moleapi_core::{Collection, Specification, Workspace};
 use serde_json::{Value, json};
 
@@ -291,6 +291,7 @@ fn inherit_auth() -> moleapi_core::Auth {
         api_key: None,
         jwt: None,
         oauth2: None,
+        aws: None,
     }
 }
 fn import_variables(value: &Value) -> Vec<moleapi_core::Pair> {
@@ -334,6 +335,27 @@ fn import_auth(
                 },
             }));
         }
+        "awsv4" => {
+            auth.kind = "aws".into();
+            let mut aws = moleapi_core::AwsAuth {
+                access_key: auth_value(value, "awsv4", "accessKey"),
+                secret_key: auth_value(value, "awsv4", "secretKey"),
+                session_token: auth_value(value, "awsv4", "sessionToken"),
+                ..Default::default()
+            };
+            for (key, field) in [("region", &mut aws.region), ("service", &mut aws.service)] {
+                let supplied = auth_value(value, "awsv4", key);
+                if !supplied.is_empty() {
+                    *field = supplied;
+                }
+            }
+            if auth_value(value, "awsv4", "addAuthDataToQuery") == "true" {
+                aws.location = moleapi_core::AuthLocation::Query;
+                aws.unsigned_payload = aws.service == "s3";
+                warnings.push(format!("{name}: AWS query signing imported with explicit900second expiry; review the native expiry setting"));
+            }
+            auth.aws = Some(Box::new(aws));
+        }
         "noauth" => auth.kind = "none".into(),
         "" => return None,
         other => {
@@ -358,6 +380,14 @@ fn export_auth(auth: &moleapi_core::Auth) -> Result<Value> {
         "apikey" => {
             let key = auth.api_key.as_ref().context("API key settings missing")?;
             json!({"type":"apikey","apikey":[{"key":"key","value":key.name,"type":"string"},{"key":"value","value":key.value,"type":"string"},{"key":"in","value":if key.location==moleapi_core::AuthLocation::Query{"query"}else{"header"},"type":"string"}]})
+        }
+        "aws" => {
+            let aws = auth.aws.as_ref().context("AWS settings missing")?;
+            ensure!(
+                aws.location == moleapi_core::AuthLocation::Header && !aws.unsigned_payload,
+                "AWS presign/unsigned payload settings require native MoleAPI export"
+            );
+            json!({"type":"awsv4","awsv4":[{"key":"accessKey","value":aws.access_key,"type":"string"},{"key":"secretKey","value":aws.secret_key,"type":"string"},{"key":"sessionToken","value":aws.session_token,"type":"string"},{"key":"region","value":aws.region,"type":"string"},{"key":"service","value":aws.service,"type":"string"},{"key":"addAuthDataToQuery","value":false,"type":"boolean"}]})
         }
         _ => bail!("Selected authentication cannot be preserved in Postman format"),
     })

@@ -260,6 +260,11 @@ pub(crate) fn request_values(
             }
         }
     }
+    if let Some(aws) = &request.auth.aws {
+        capture(&aws.access_key);
+        capture(&aws.secret_key);
+        capture(&aws.session_token);
+    }
     if let Some(oauth) = &request.auth.oauth2 {
         capture(&oauth.client_secret);
         capture(&oauth.password);

@@ -102,6 +102,7 @@ async fn execute_inner(
     let mut private_auth_values = Vec::new();
     let mut digest_attempts = 0;
     let mut digest_allowed = r.auth.kind == "digest";
+    let mut aws_allowed = r.auth.kind == "aws";
     loop {
         let client = checked_client(&url, policy, r.verify_tls).await?;
         let mut builder = client
@@ -110,7 +111,18 @@ async fn execute_inner(
         if let Some(b) = &body {
             builder = builder.body(b.clone());
         }
-        let response = builder.send().await.context("HTTP request failed")?;
+        let mut request = builder.build()?;
+        if aws_allowed {
+            private_auth_values.extend(crate::sign_aws_request(
+                r.auth.aws.as_ref().context("AWS settings missing")?,
+                &mut request,
+                std::time::SystemTime::now(),
+            )?);
+        }
+        let response = client
+            .execute(request)
+            .await
+            .context("HTTP request failed")?;
         let status = response.status();
         if status.as_u16() == 401 && digest_allowed && digest_attempts < 2 {
             let mut challenge = None;
@@ -197,6 +209,7 @@ async fn execute_inner(
                     next.query_pairs_mut().extend_pairs(filtered);
                 }
                 digest_allowed = false;
+                aws_allowed = false;
             } else if r.auth.kind == "digest" {
                 headers.remove("authorization");
                 digest_attempts = 0;

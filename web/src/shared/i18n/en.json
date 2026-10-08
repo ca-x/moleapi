@@ -1102,5 +1102,14 @@
   "OAuth2 Token 响应 JSON": "OAuth2 token response JSON",
   "粘贴包含 access_token 和 token_type 的响应，可选 refresh_token、expires_in 和 scope。凭据仅存入当前账户的私有令牌库。": "Paste a response containing access_token and token_type, optionally refresh_token, expires_in and scope. Credentials are stored only in this account's private token vault.",
   "Token 响应必须是有效 JSON": "The token response must be valid JSON.",
-  "导入 Token": "Import token"
+  "导入 Token": "Import token",
+  "AWS 会话 Token（可选）": "AWS session token (optional)",
+  "AWS 区域": "AWS region",
+  "AWS 服务": "AWS service",
+  "AWS 签名位置": "AWS signature placement",
+  "预签名查询参数": "Presigned query parameters",
+  "AWS 预签名有效秒数": "AWS presign expiry in seconds",
+  "使用 UNSIGNED-PAYLOAD": "Use UNSIGNED-PAYLOAD",
+  "根据实际发送的请求生成签名。凭据可引用环境变量；S3 自动使用专用路径和校验设置。": "Sign the actual outgoing request. Credentials support environment references; S3 uses its dedicated path and checksum settings.",
+  "S3 预签名自动使用 UNSIGNED-PAYLOAD。": "S3 presigning automatically uses UNSIGNED-PAYLOAD."
 }

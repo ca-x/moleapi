@@ -1,3 +1,5 @@
+mod aws_auth;
+pub use aws_auth::*;
 mod oauth2_auth;
 pub use oauth2_auth::*;
 mod inheritance;

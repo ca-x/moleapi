@@ -166,6 +166,14 @@ pub fn resolve_request(
     } else {
         None
     };
+    let dormant_aws = if auth_kind != "aws" {
+        Some(value["auth"]["aws"].clone())
+    } else {
+        None
+    };
+    if dormant_aws.is_some() {
+        value["auth"]["aws"] = serde_json::Value::Null;
+    }
     let dormant_oauth2 = if auth_kind != "oauth2" {
         Some(value["auth"]["oauth2"].clone())
     } else {
@@ -228,6 +236,9 @@ pub fn resolve_request(
     };
     let mut budget = 20 * 1024 * 1024;
     replace(&mut value, &vars, &mut budget)?;
+    if let Some(aws) = dormant_aws {
+        value["auth"]["aws"] = aws;
+    }
     if let Some(jwt) = dormant_jwt
         && !jwt.is_null()
     {

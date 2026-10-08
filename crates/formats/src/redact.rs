@@ -20,6 +20,17 @@ fn redact_auth(auth: &mut moleapi_core::Auth, privacy: &ExportPrivacy) {
             jwt.name = "Authorization".into();
         }
     }
+    if let Some(aws) = &mut auth.aws {
+        aws.access_key.clear();
+        aws.secret_key.clear();
+        aws.session_token.clear();
+        if privacy.screen_bounded(&aws.region, 128) != aws.region {
+            aws.region = "{{redacted_aws_region}}".into();
+        }
+        if privacy.screen_bounded(&aws.service, 128) != aws.service {
+            aws.service = "{{redacted_aws_service}}".into();
+        }
+    }
     if let Some(oauth) = &mut auth.oauth2 {
         oauth.client_secret.clear();
         oauth.password.clear();
@@ -80,7 +91,12 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
             .collections
             .iter()
             .flat_map(|c| &c.requests)
-            .any(|r| r.auth.api_key.is_some() || r.auth.jwt.is_some() || r.auth.oauth2.is_some());
+            .any(|r| {
+                r.auth.api_key.is_some()
+                    || r.auth.jwt.is_some()
+                    || r.auth.oauth2.is_some()
+                    || r.auth.aws.is_some()
+            });
     let mut result = source.clone();
     if auth_private {
         result.data.pre_request_script = tcp_privacy.screen_bounded(
@@ -756,6 +772,13 @@ impl ExportPrivacy {
                     .chain(auth.jwt.as_ref().map(|jwt| jwt.key.as_str()))
                     .chain(auth.oauth2.as_ref().map(|o| o.client_secret.as_str()))
                     .chain(auth.oauth2.as_ref().map(|o| o.password.as_str()))
+                    .chain(auth.aws.iter().flat_map(|aws| {
+                        [
+                            aws.access_key.as_str(),
+                            aws.secret_key.as_str(),
+                            aws.session_token.as_str(),
+                        ]
+                    }))
                     .chain(
                         auth.oauth2
                             .iter()
@@ -822,6 +845,11 @@ impl ExportPrivacy {
                     .flat_map(|c| c.requests.iter().map(|r| &r.auth)),
             )
         {
+            if let Some(aws) = &auth.aws {
+                secrets.insert(aws.access_key.clone());
+                secrets.insert(aws.secret_key.clone());
+                secrets.insert(aws.session_token.clone());
+            }
             if let Some(oauth) = &auth.oauth2 {
                 secrets.insert(oauth.client_secret.clone());
                 secrets.insert(oauth.password.clone());
@@ -867,6 +895,13 @@ impl ExportPrivacy {
                             .map(|o| o.client_secret.as_str()),
                     )
                     .chain(request.auth.oauth2.as_ref().map(|o| o.password.as_str()))
+                    .chain(request.auth.aws.iter().flat_map(|aws| {
+                        [
+                            aws.access_key.as_str(),
+                            aws.secret_key.as_str(),
+                            aws.session_token.as_str(),
+                        ]
+                    }))
                 {
                     if source.is_empty() {
                         continue;

@@ -13,5 +13,5 @@ export function authenticationEligibility(request: RequestSpec) {
       digest = !!operation && operation.operation !== "subscription";
     } catch { digest = false; }
   }
-  return { api, digest, query: kind !== "grpc" };
+  return { api, digest, signing: digest, query: kind !== "grpc" };
 }

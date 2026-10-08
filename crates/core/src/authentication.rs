@@ -48,7 +48,7 @@ impl Default for JwtAuth {
 pub fn validate_authentication(auth: &crate::Auth, templates: bool) -> Result<()> {
     ensure!(
         [
-            "none", "basic", "bearer", "apikey", "jwt", "digest", "oauth2"
+            "none", "basic", "bearer", "apikey", "jwt", "digest", "oauth2", "aws"
         ]
         .contains(&auth.kind.as_str())
             || templates && auth.kind == "inherit"
@@ -75,6 +75,15 @@ pub fn validate_authentication(auth: &crate::Auth, templates: bool) -> Result<()
                 && jwt.algorithm.len() <= 128,
             "JWT fields exceed limits"
         );
+    }
+    if let Some(aws) = &auth.aws {
+        crate::aws_auth::validate_aws_fields(aws)?;
+    }
+    if auth.kind == "aws" {
+        crate::validate_aws(
+            auth.aws.as_ref().context("AWS settings missing")?,
+            templates,
+        )?;
     }
     let validate_name = |name: &str, location: AuthLocation| -> Result<()> {
         ensure!(

@@ -6,6 +6,9 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+aws-sigv4 = { version="=1.4.5", default-features=false, features=["sign-http", "http1"] }
+aws-credential-types = "=1.2.14"
+http = "1"
 oauth2 = {version="=5.0.0",default-features=false}
 jsonwebtoken = { version="=11.1.0", default-features=false, features=["rust_crypto","use_pem"] }
 digest_auth = "=0.3.1"
@@ -40,5 +43,6 @@ quick-xml = "0.38"
 xsd-parser = "=1.5.2"
 
 [dev-dependencies]
+sha2 = "0.10"
 prost-types = "0.14"
 axum = { workspace = true, features = ["multipart"] }
