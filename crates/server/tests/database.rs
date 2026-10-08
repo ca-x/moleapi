@@ -87,6 +87,44 @@ async fn identical_storage_auth_cas_tests_on_every_configured_database() {
         let (status, w) = call(&router, "POST", "/api/workspaces", Some(&a), Some(body)).await;
         assert_eq!(status, StatusCode::OK, "{w}");
         assert_eq!(w["revision"], 1);
+        // Private OAuth1 documents use the same transactions on every configured engine.
+        let (status,oauth1)=call(&router,"POST","/api/oauth1/tokens/import",Some(&a),Some(json!({"workspace_id":"shared-id","config":{"consumer_key":"database-consumer"},"label":"Database token","token":{"token":"database-private-oauth1","secret":"database-private-secret"}}))).await;
+        assert_eq!(status, StatusCode::OK, "{oauth1}");
+        assert!(!oauth1.to_string().contains("database-private-oauth1"));
+        let oauth1_id = oauth1["id"].as_str().unwrap();
+        let oauth1_path = format!("/api/workspaces/shared-id/oauth1/tokens/{oauth1_id}");
+        let (status, secret) = call(
+            &router_again,
+            "GET",
+            &format!("{oauth1_path}/secret"),
+            Some(&a),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{secret}");
+        assert_eq!(secret["token"], "database-private-oauth1");
+        assert_eq!(
+            call(
+                &router,
+                "GET",
+                &format!("{oauth1_path}/secret"),
+                Some(&b),
+                None
+            )
+            .await
+            .0,
+            StatusCode::NOT_FOUND
+        );
+        let (status, renamed) = call(
+            &router,
+            "PATCH",
+            &oauth1_path,
+            Some(&a),
+            Some(json!({"label":"Renamed database token"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{renamed}");
+        assert_eq!(renamed["label"], "Renamed database token");
         // Run real callback persistence/privacy/CAS/cascade on every configured engine.
         let (status, receiver) = call(&router, "POST", "/api/workspaces/shared-id/webhooks", Some(&a),
             Some(json!({"name":"Database receiver","response":{"status":201,"body":"{\"received\":true}","headers":[]}}))).await;
@@ -252,6 +290,18 @@ async fn identical_storage_auth_cas_tests_on_every_configured_database() {
         );
         assert_eq!(
             call(&router, "GET", &capture_path, Some(&a), None).await.0,
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            call(
+                &router_again,
+                "GET",
+                &format!("{oauth1_path}/secret"),
+                Some(&a),
+                None
+            )
+            .await
+            .0,
             StatusCode::NOT_FOUND
         );
         assert_eq!(

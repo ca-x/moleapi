@@ -15,7 +15,7 @@ export default function RequestAuthEditor({auth,change,dark,api=true,digest=true
  function setJwt(patch:Partial<JwtAuth>){change({...auth,jwt:{...jwt,...patch}});}
  return <div className="form-panel">
   <Choice label={t("鉴权类型")} value={auth.kind} options={[...(inherit?[{value:"inherit",label:t("继承父级鉴权")}]:[]),{value:"none",label:"No Auth"},...(credentials?[{value:"bearer",label:"Bearer Token"},{value:"basic",label:"Basic Auth"}]:[]),...(api?[{value:"apikey",label:"API Key"},{value:"jwt",label:"JWT"},{value:"oauth2",label:"OAuth 2.0"}]:[]),...(digest?[{value:"digest",label:"Digest Auth"}]:[]),...(signing?[{value:"oauth1",label:"OAuth 1.0"},{value:"aws",label:"AWS Signature V4"},{value:"hawk",label:"Hawk"}]:[])]} onChange={kind=>change({...auth,kind:kind as Auth["kind"],...(kind==="apikey"?{api_key:key}:kind==="jwt"?{jwt}:kind==="oauth2"?{oauth2:auth.oauth2??oauth2Config()}:kind==="aws"?{aws:auth.aws??awsConfig()}:kind==="hawk"?{hawk:auth.hawk??hawkConfig()}:kind==="oauth1"?{oauth1:auth.oauth1??oauth1Config()}:{})})}/>
-  {auth.kind==="oauth1"&&<OAuth1AuthEditor config={auth.oauth1??oauth1Config()} change={oauth1=>change({...auth,oauth1})}/>}
+  {auth.kind==="oauth1"&&<OAuth1AuthEditor config={auth.oauth1??oauth1Config()} change={oauth1=>change({...auth,oauth1})} collectionId={collectionId}/>}
   {auth.kind==="hawk"&&<HawkAuthEditor config={auth.hawk??hawkConfig()} change={hawk=>change({...auth,hawk})}/>}
   {auth.kind==="aws"&&<AwsAuthEditor config={auth.aws??awsConfig()} change={aws=>change({...auth,aws})}/> }
   {auth.kind==="inherit"&&<Text size="1" color="gray">{t("执行时使用最近目录、集合或工作区的鉴权；No Auth 停止继承。")}</Text>}

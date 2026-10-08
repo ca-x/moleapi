@@ -453,6 +453,10 @@ fn export_auth(auth: &moleapi_core::Auth) -> Result<Value> {
         "oauth1" => {
             let c = auth.oauth1.as_ref().context("OAuth1 settings missing")?;
             ensure!(
+                c.token_id.is_none(),
+                "Postman cannot export an owner-bound OAuth1 vault token; use manual credentials"
+            );
+            ensure!(
                 matches!(
                     c.location,
                     moleapi_core::OAuth1Location::Header | moleapi_core::OAuth1Location::Automatic

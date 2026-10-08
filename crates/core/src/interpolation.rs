@@ -177,10 +177,19 @@ pub fn resolve_request(
     if auth_kind == "oauth1"
         && let Some(c) = &request.auth.oauth1
     {
+        value["auth"]["oauth1"]["grant"] = serde_json::Value::Null;
+        if c.token_id.is_some() {
+            value["auth"]["oauth1"]["token"] = "".into();
+            value["auth"]["oauth1"]["token_secret"] = "".into();
+        }
         if c.location != crate::OAuth1Location::Header {
             value["auth"]["oauth1"]["realm"] = "".into();
         }
-        let token = interpolate(&c.token, &vars)?;
+        let token = if c.token_id.is_some() {
+            String::new()
+        } else {
+            interpolate(&c.token, &vars)?
+        };
         value["auth"]["oauth1"]["token"] = token.clone().into();
         if token.is_empty() {
             value["auth"]["oauth1"]["token_secret"] = "".into();

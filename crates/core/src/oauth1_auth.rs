@@ -15,7 +15,9 @@ use std::{
     num::NonZeroU64,
     time::{SystemTime, UNIX_EPOCH},
 };
+mod grants;
 mod methods;
+pub use grants::*;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OAuth1Location {
@@ -28,6 +30,10 @@ pub enum OAuth1Location {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct OAuth1Auth {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grant: Option<Box<OAuth1Grant>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token_id: Option<String>,
     pub consumer_key: String,
     pub consumer_secret: String,
     pub token: String,
@@ -47,6 +53,8 @@ pub struct OAuth1Auth {
 impl Default for OAuth1Auth {
     fn default() -> Self {
         Self {
+            grant: None,
+            token_id: None,
             consumer_key: String::new(),
             consumer_secret: String::new(),
             token: String::new(),
@@ -66,6 +74,15 @@ impl Default for OAuth1Auth {
     }
 }
 pub(crate) fn validate_oauth1_fields(c: &OAuth1Auth) -> Result<()> {
+    if let Some(grant) = &c.grant {
+        validate_oauth1_grant_fields(grant)?;
+    }
+    ensure!(
+        c.token_id
+            .as_ref()
+            .is_none_or(|id| !id.is_empty() && id.len() <= 128),
+        "Invalid OAuth1 token ID"
+    );
     ensure!(
         [
             &c.consumer_key,

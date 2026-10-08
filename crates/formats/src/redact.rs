@@ -27,6 +27,51 @@ fn redact_auth(auth: &mut moleapi_core::Auth, privacy: &ExportPrivacy) {
         c.token_secret.clear();
         c.private_key.clear();
         c.verifier.clear();
+        c.token_id = None;
+        if let Some(g) = &mut c.grant {
+            for raw in [
+                &mut g.request_token_url,
+                &mut g.authorization_url,
+                &mut g.access_token_url,
+                &mut g.callback_url,
+            ] {
+                if let Ok(mut url) = url::Url::parse(raw) {
+                    let _ = url.set_username("");
+                    let _ = url.set_password(None);
+                    *raw =
+                        privacy.screen_bounded(&moleapi_core::redact_url(url.as_str(), None), 8192);
+                } else {
+                    *raw = privacy.screen_bounded(raw, 8192);
+                    // Preserve templated authorities, but screen sensitive query values with URL's parser.
+                    if let Some((prefix, query)) = raw.split_once('?')
+                        && let Ok(url) =
+                            url::Url::parse(&format!("https://moleapi.invalid/?{query}"))
+                    {
+                        let redacted = moleapi_core::redact_url(url.as_str(), None);
+                        if let Ok(url) = url::Url::parse(&redacted) {
+                            *raw = format!(
+                                "{prefix}?{}{}",
+                                url.query().unwrap_or_default(),
+                                url.fragment().map(|f| format!("#{f}")).unwrap_or_default()
+                            );
+                        }
+                    }
+                }
+            }
+            for row in g.request_params.iter_mut().chain(&mut g.access_params) {
+                if row.secret == Some(true) || sensitive(&row.key) || row.key.contains("{{") {
+                    row.value.clear();
+                }
+                row.value = privacy.screen_bounded(&row.value, 8192);
+                row.local_value = None;
+                if privacy.screen_bounded(&row.key, 1024) != row.key {
+                    row.key = "redacted_oauth1_parameter".into();
+                    row.value.clear();
+                    row.enabled = false;
+                }
+            }
+        }
+
         for value in [&mut c.realm, &mut c.nonce, &mut c.callback] {
             *value = privacy.screen_bounded(value, 4096);
         }
@@ -800,6 +845,11 @@ impl ExportPrivacy {
                 .iter()
                 .chain(chain.iter().filter_map(|c| c.auth.as_ref()))
             {
+                let oauth1_sources: Vec<String> = auth
+                    .oauth1
+                    .iter()
+                    .flat_map(|c| moleapi_core::oauth1_private_sources(c))
+                    .collect();
                 let sources = std::iter::once(auth.token.as_str())
                     .chain(std::iter::once(auth.password.as_str()))
                     .chain(auth.api_key.as_ref().map(|key| key.value.as_str()))
@@ -811,16 +861,7 @@ impl ExportPrivacy {
                             .iter()
                             .flat_map(|hawk| [hawk.id.as_str(), hawk.key.as_str()]),
                     )
-                    .chain(auth.oauth1.iter().flat_map(|c| {
-                        [
-                            c.consumer_key.as_str(),
-                            c.consumer_secret.as_str(),
-                            c.token.as_str(),
-                            c.token_secret.as_str(),
-                            c.private_key.as_str(),
-                            c.verifier.as_str(),
-                        ]
-                    }))
+                    .chain(oauth1_sources.iter().map(String::as_str))
                     .chain(auth.aws.iter().flat_map(|aws| {
                         [
                             aws.access_key.as_str(),
@@ -895,16 +936,7 @@ impl ExportPrivacy {
             )
         {
             if let Some(c) = &auth.oauth1 {
-                for value in [
-                    &c.consumer_key,
-                    &c.consumer_secret,
-                    &c.token,
-                    &c.token_secret,
-                    &c.private_key,
-                    &c.verifier,
-                ] {
-                    secrets.insert(value.clone());
-                }
+                secrets.extend(moleapi_core::oauth1_private_sources(c));
             }
             if let Some(hawk) = &auth.hawk {
                 secrets.insert(hawk.id.clone());
@@ -945,6 +977,12 @@ impl ExportPrivacy {
         }
         for collection in &workspace.data.collections {
             for request in &collection.requests {
+                let oauth1_sources: Vec<String> = request
+                    .auth
+                    .oauth1
+                    .iter()
+                    .flat_map(|c| moleapi_core::oauth1_private_sources(c))
+                    .collect();
                 for source in request
                     .auth
                     .api_key
@@ -967,16 +1005,7 @@ impl ExportPrivacy {
                             .iter()
                             .flat_map(|hawk| [hawk.id.as_str(), hawk.key.as_str()]),
                     )
-                    .chain(request.auth.oauth1.iter().flat_map(|c| {
-                        [
-                            c.consumer_key.as_str(),
-                            c.consumer_secret.as_str(),
-                            c.token.as_str(),
-                            c.token_secret.as_str(),
-                            c.private_key.as_str(),
-                            c.verifier.as_str(),
-                        ]
-                    }))
+                    .chain(oauth1_sources.iter().map(String::as_str))
                     .chain(request.auth.aws.iter().flat_map(|aws| {
                         [
                             aws.access_key.as_str(),

@@ -9,6 +9,7 @@ mod graphql;
 mod grpc;
 mod history;
 mod mock;
+mod oauth1;
 mod oauth2;
 mod privacy;
 mod protocol_admission;
@@ -57,6 +58,8 @@ struct AppState {
     script_slots: Arc<tokio::sync::Semaphore>,
     generation_slots: Arc<tokio::sync::Semaphore>,
     cookies: Arc<cookies::Jars>,
+    oauth1_slots: Arc<tokio::sync::Semaphore>,
+    oauth1_flows: Arc<oauth1::flows::Hub>,
     oauth2_slots: Arc<tokio::sync::Semaphore>,
     oauth2_flows: Arc<oauth2::flows::Hub>,
     script_worker: PathBuf,
@@ -170,6 +173,8 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         script_slots: Arc::new(tokio::sync::Semaphore::new(4)),
         generation_slots: Arc::new(tokio::sync::Semaphore::new(4)),
         cookies: Arc::default(),
+        oauth1_slots: Arc::new(tokio::sync::Semaphore::new(8)),
+        oauth1_flows: Arc::default(),
         oauth2_slots: Arc::new(tokio::sync::Semaphore::new(8)),
         oauth2_flows: Arc::default(),
         script_worker,
@@ -179,6 +184,20 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         webhooks: Arc::new(webhooks::Hub::default()),
     };
     let protected = Router::new()
+        .route("/oauth1/flows", post(oauth1::flows::begin))
+        .route("/oauth1/flows/{id}", get(oauth1::flows::status))
+        .route("/oauth1/flows/{id}/cancel", post(oauth1::flows::cancel))
+        .route("/oauth1/flows/{id}/complete", post(oauth1::flows::complete))
+        .route("/oauth1/tokens/import", post(oauth1::import))
+        .route("/workspaces/{id}/oauth1/tokens", get(oauth1::list))
+        .route(
+            "/workspaces/{workspace}/oauth1/tokens/{token}/secret",
+            get(oauth1::reveal),
+        )
+        .route(
+            "/workspaces/{workspace}/oauth1/tokens/{token}",
+            axum::routing::delete(oauth1::remove).patch(oauth1::rename),
+        )
         .route(
             "/workspaces/{id}/cookies",
             get(cookies::list)
@@ -318,6 +337,7 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         });
     let router = Router::new()
         .merge(oauth2::callbacks::router())
+        .merge(oauth1::callbacks::router())
         .merge(receiver)
         .nest("/api", api)
         .layer(DefaultBodyLimit::max(25 * 1024 * 1024))

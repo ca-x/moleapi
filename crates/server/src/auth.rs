@@ -207,6 +207,7 @@ pub async fn logout(
     *generation = next;
     state.cookies.clear_scope(&owner.0, None);
     state.oauth2_flows.cancel_owner(&owner.0);
+    state.oauth1_flows.cancel_owner(&owner.0);
     state.webhooks.cancel_scope(&owner.0, None, None);
     state.protocol_sessions.close_owner(&owner.0).await;
     Ok(Json(serde_json::json!({"ok":true})))
@@ -263,6 +264,8 @@ mod tests {
             script_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
             generation_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
             cookies: std::sync::Arc::default(),
+            oauth1_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(8)),
+            oauth1_flows: std::sync::Arc::default(),
             oauth2_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(8)),
             oauth2_flows: std::sync::Arc::default(),
             protocol_sessions: moleapi_protocols::SessionManager::new(),

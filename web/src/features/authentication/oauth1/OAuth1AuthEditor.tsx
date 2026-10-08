@@ -1,10 +1,13 @@
 import {Checkbox,Flex,Text,TextArea,TextField} from "@radix-ui/themes";
-import {Choice,Field} from "../../../shared/ui";
+import TokenManager from "./TokenManager";
+import {Choice,Field,PairEditor} from "../../../shared/ui";
 import {t,useLanguage} from "../../../shared/i18n";
-import type {OAuth1Auth} from "../../../shared/types";
+import type {OAuth1Auth,OAuth1Grant} from "../../../shared/types";
+export const oauth1GrantConfig=():OAuth1Grant=>({request_token_url:"",authorization_url:"",access_token_url:"",callback_url:"oob",request_params:[],access_params:[]});
 export const oauth1Config=():OAuth1Auth=>({consumer_key:"",consumer_secret:"",token:"",token_secret:"",private_key:"",algorithm:"HMAC-SHA1",location:"header",realm:"",nonce:"",timestamp:"",callback:"",verifier:"",include_version:true,include_body_hash:false,include_empty_params:true});
-export default function OAuth1AuthEditor({config,change}:{config:OAuth1Auth;change:(value:OAuth1Auth)=>void}) {
+export default function OAuth1AuthEditor({config,change,collectionId}:{config:OAuth1Auth;change:(value:OAuth1Auth)=>void;collectionId?:string|null}) {
  useLanguage();const update=(patch:Partial<OAuth1Auth>)=>change({...config,...patch}),rsa=config.algorithm.startsWith("RSA-");
+ const grant=config.grant??oauth1GrantConfig();const updateGrant=(patch:Partial<OAuth1Grant>)=>update({grant:{...grant,...patch}});
  return <Flex direction="column" gap="3">
  <Choice label={t("OAuth1 签名算法")} value={config.algorithm} options={["HMAC-SHA1","HMAC-SHA256","HMAC-SHA512","RSA-SHA1","RSA-SHA256","RSA-SHA512","PLAINTEXT"].map(value=>({value,label:value}))} onChange={algorithm=>update({algorithm})}/>
  <Field label="Consumer Key"><TextField.Root autoComplete="off" value={config.consumer_key} maxLength={4096} onChange={e=>update({consumer_key:e.target.value})}/></Field>
@@ -23,6 +26,12 @@ export default function OAuth1AuthEditor({config,change}:{config:OAuth1Auth;chan
  <Field label="Callback"><TextField.Root value={config.callback} maxLength={4096} onChange={e=>update({callback:e.target.value})}/></Field><Field label="Verifier"><TextField.Root type="password" autoComplete="off" value={config.verifier} maxLength={4096} onChange={e=>update({verifier:e.target.value})}/></Field>
  </Flex></details>
  {config.algorithm==="PLAINTEXT"&&<Text size="1" color="gray">{t("PLAINTEXT 签名包含共享密钥，请使用 HTTPS 保护传输。")}</Text>}
- <Text size="1" color="gray">{t("签名使用实际 URL 和请求体，支持环境变量及父级继承。此面板配置请求签名；OAuth1 授权和自动获取 Token 尚未提供。")}</Text>
+ <details><summary>{t("OAuth1 授权端点")}</summary><Flex direction="column" gap="3" mt="3">
+ {([ ["request_token_url",t("请求 Token URL")],["authorization_url",t("授权 URL")],["access_token_url",t("访问 Token URL")],["callback_url",t("回调 URI")] ] as const).map(([key,label])=><Field key={key} label={label}><TextField.Root value={grant[key]} maxLength={8192} onChange={e=>updateGrant({[key]:e.target.value})}/></Field>)}
+ <Field label={t("请求 Token 附加参数")}><PairEditor rows={grant.request_params} onChange={request_params=>updateGrant({request_params})} secrets/></Field>
+ <Field label={t("访问 Token 附加参数")}><PairEditor rows={grant.access_params} onChange={access_params=>updateGrant({access_params})} secrets/></Field>
+ </Flex></details>
+ <TokenManager config={config} select={token_id=>update({token_id})} callback={callback_url=>updateGrant({callback_url})} collectionId={collectionId}/>
+ <Text size="1" color="gray">{t("签名使用实际 URL 和请求体，支持环境变量及父级继承。选择私有 Token 后，执行时使用令牌库中的凭据。")}</Text>
  </Flex>;
 }

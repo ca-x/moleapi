@@ -200,14 +200,35 @@ pub fn validate_variables(pairs: &[Pair]) -> Result<()> {
     Ok(())
 }
 pub fn scrub_local_values(data: &mut WorkspaceData) {
+    fn auth(auth: &mut crate::Auth) {
+        if let Some(c) = &mut auth.oauth1
+            && let Some(grant) = &mut c.grant
+        {
+            for row in grant
+                .request_params
+                .iter_mut()
+                .chain(&mut grant.access_params)
+            {
+                row.local_value = None;
+            }
+        }
+    }
+    if let Some(a) = &mut data.auth {
+        auth(a);
+    }
+
     for pair in &mut data.global_variables {
         pair.local_value = None;
     }
     for collection in &mut data.collections {
+        if let Some(a) = &mut collection.auth {
+            auth(a);
+        }
         for pair in &mut collection.variables {
             pair.local_value = None;
         }
         for request in &mut collection.requests {
+            auth(&mut request.auth);
             for pair in request.query.iter_mut().chain(&mut request.headers) {
                 pair.local_value = None;
             }

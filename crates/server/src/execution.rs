@@ -196,6 +196,7 @@ pub(crate) async fn perform(
         crate::soap::validate_selected(&w.data, &resolved)
             .map_err(|e| ApiError::bad(e.to_string()))?;
     }
+    let resolved = crate::oauth1::prepare(s, owner, &w.id, &request, &resolved, scopes).await?;
     let resolved = crate::oauth2::prepare(s, owner, &w.id, &resolved, scopes).await?;
     let resolved = moleapi_core::prepare_authentication(&resolved)
         .map_err(|e| ApiError::bad(e.to_string()))?;

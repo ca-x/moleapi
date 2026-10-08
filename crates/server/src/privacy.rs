@@ -261,15 +261,8 @@ pub(crate) fn request_values(
         }
     }
     if let Some(c) = &request.auth.oauth1 {
-        for value in [
-            &c.consumer_key,
-            &c.consumer_secret,
-            &c.token,
-            &c.token_secret,
-            &c.private_key,
-            &c.verifier,
-        ] {
-            capture(value);
+        for value in moleapi_core::oauth1_private_sources(c) {
+            capture(&value);
         }
     }
     if let Some(hawk) = &request.auth.hawk {

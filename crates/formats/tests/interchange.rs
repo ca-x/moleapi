@@ -1460,3 +1460,53 @@ fn oauth1_parent_source_and_copies_are_private_with_explicit_postman_placement_m
         .location = moleapi_core::OAuth1Location::Query;
     assert!(export(&w, "postman", true).is_err());
 }
+#[test]
+fn oauth1_grant_parameters_endpoint_secrets_and_vault_ids_are_private_in_default_backup() {
+    let mut w = workspace(import("curl", "curl https://example.test").unwrap().data);
+    w.data.auth=Some(serde_json::from_value(json!({"kind":"oauth1","token":"","username":"","password":"","oauth1":{"consumer_key":"consumer","consumer_secret":"secret","token_id":"private-vault-reference","grant":{"request_token_url":"https://{{host}}/request?api_key=literal-endpoint-private","authorization_url":"https://example.test/auth","access_token_url":"{{access_endpoint}}","callback_url":"oob","request_params":[{"id":"p","key":"client_secret","value":"{{extra_secret}}","local_value":"local-private-override","enabled":true}],"access_params":[]}}})).unwrap());
+    w.data.global_variables.push(
+        serde_json::from_value(
+            json!({"id":"e","key":"extra_secret","value":"resolved-extra-private","enabled":true}),
+        )
+        .unwrap(),
+    );
+    w.data.collections[0].requests[0].body_kind = "text".into();
+    w.data.collections[0].requests[0].body="literal-endpoint-private resolved-extra-private local-private-override private-vault-reference".into();
+    let safe = export(&w, "moleapi", false).unwrap().content;
+    for secret in [
+        "literal-endpoint-private",
+        "resolved-extra-private",
+        "local-private-override",
+        "private-vault-reference",
+    ] {
+        assert!(!safe.contains(secret), "{safe}");
+    }
+    let restored = import("moleapi", &safe).unwrap();
+    let c = restored.data.auth.unwrap().oauth1.unwrap();
+    assert!(c.token_id.is_none());
+    let g = c.grant.unwrap();
+    assert!(g.request_token_url.contains("{{host}}"));
+    assert_eq!(g.access_token_url, "{{access_endpoint}}");
+    assert_eq!(g.callback_url, "oob");
+    assert!(
+        export(&w, "moleapi", true)
+            .unwrap()
+            .content
+            .contains("local-private-override")
+    );
+    assert!(export(&w, "postman", true).is_err());
+    let mut synced = w.data.clone();
+    moleapi_core::scrub_local_values(&mut synced);
+    assert!(
+        synced
+            .auth
+            .unwrap()
+            .oauth1
+            .unwrap()
+            .grant
+            .unwrap()
+            .request_params[0]
+            .local_value
+            .is_none()
+    );
+}

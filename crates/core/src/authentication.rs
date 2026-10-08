@@ -285,6 +285,15 @@ pub fn prepare_authentication(request: &crate::RequestSpec) -> Result<crate::Req
         request.auth.kind != "oauth2",
         "OAuth2 authentication requires an owner-bound token vault"
     );
+    ensure!(
+        request.auth.kind != "oauth1"
+            || request
+                .auth
+                .oauth1
+                .as_ref()
+                .is_none_or(|c| c.token_id.is_none()),
+        "OAuth1 token selection requires an owner-bound token vault"
+    );
     let mut r = request.clone();
     let (name, value, location) = match r.auth.kind.as_str() {
         "apikey" => {

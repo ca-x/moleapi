@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+serde_urlencoded = "0.7"
 oauth1-request = { version = "=0.6.1", default-features = false, features = ["std", "hmac-sha1", "rsa-sha1-09"] }
 percent-encoding = "2"
 hmac = "0.12"
