@@ -1,3 +1,5 @@
+mod asap_auth;
+pub use asap_auth::*;
 mod edgegrid_auth;
 pub use edgegrid_auth::*;
 mod ntlm_auth;

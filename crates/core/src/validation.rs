@@ -138,7 +138,7 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
     }
     if matches!(
         r.auth.kind.as_str(),
-        "aws" | "hawk" | "oauth1" | "ntlm" | "edgegrid"
+        "aws" | "hawk" | "oauth1" | "ntlm" | "edgegrid" | "asap"
     ) {
         ensure!(
             matches!(

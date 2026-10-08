@@ -1194,5 +1194,16 @@
   "POST 只哈希这些前缀字节，完整请求体仍会发送；其他方法不哈希请求体。": "POST 只哈希这些前缀字节，完整请求体仍会发送；其他方法不哈希请求体。",
   "EdgeGrid 时间戳（可选）": "EdgeGrid 时间戳（可选）",
   "格式为 yyyyMMddTHH:mm:ss+0000；留空使用当前 UTC 时间。": "格式为 yyyyMMddTHH:mm:ss+0000；留空使用当前 UTC 时间。",
-  "使用 EG1-HMAC-SHA256 签名实际请求。凭据支持变量和继承；跨域重定向不会携带签名。": "使用 EG1-HMAC-SHA256 签名实际请求。凭据支持变量和继承；跨域重定向不会携带签名。"
+  "使用 EG1-HMAC-SHA256 签名实际请求。凭据支持变量和继承；跨域重定向不会携带签名。": "使用 EG1-HMAC-SHA256 签名实际请求。凭据支持变量和继承；跨域重定向不会携带签名。",
+  "ASAP 签名算法": "ASAP 签名算法",
+  "ASAP 私钥": "ASAP 私钥",
+  "支持 PKCS8、RSA PKCS1、EC SEC1 PEM 和带 kid 的 PKCS8 data URI；不会读取文件路径或远程密钥。": "支持 PKCS8、RSA PKCS1、EC SEC1 PEM 和带 kid 的 PKCS8 data URI；不会读取文件路径或远程密钥。",
+  "多个 Audience 按顺序用英文逗号分隔，每项可使用变量。": "多个 Audience 按顺序用英文逗号分隔，每项可使用变量。",
+  "Subject / sub（可选）": "Subject / sub（可选）",
+  "留空时使用 Issuer。": "留空时使用 Issuer。",
+  "ASAP 有效秒数": "ASAP 有效秒数",
+  "ASAP Claims JSON": "ASAP Claims JSON",
+  "Claims 优先于独立字段；未提供时自动生成 jti、iat 和 exp。字符串变量按 JSON 类型安全解析。": "Claims 优先于独立字段；未提供时自动生成 jti、iat 和 exp。字符串变量按 JSON 类型安全解析。",
+  "每次执行生成新的 ASAP Bearer Token，支持变量和父级继承。默认导出和历史记录隐藏密钥与生成的 Token。": "每次执行生成新的 ASAP Bearer Token，支持变量和父级继承。默认导出和历史记录隐藏密钥与生成的 Token。",
+  "ASAP 使用 Postman Runtime 扩展；官方 Collection 2.1 schema 未列出此认证类型。": "ASAP 使用 Postman Runtime 扩展；官方 Collection 2.1 schema 未列出此认证类型。"
 }

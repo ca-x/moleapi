@@ -3,6 +3,36 @@ use anyhow::{Context, Result, bail, ensure};
 use moleapi_core::{Collection, Specification, Workspace};
 use serde_json::{Value, json};
 
+/// Postman Runtime implements ASAP although the published 2.1 enum predates it.
+/// This narrowly documented overlay leaves every other schema rule unchanged.
+pub(super) fn has_runtime_asap(value: &Value) -> bool {
+    value.get("auth").is_some_and(|auth| auth["type"] == "asap")
+        || value
+            .get("item")
+            .and_then(Value::as_array)
+            .is_some_and(|items| items.iter().any(has_runtime_asap))
+        || value.get("request").is_some_and(has_runtime_asap)
+        || value
+            .get("response")
+            .and_then(Value::as_array)
+            .is_some_and(|items| {
+                items
+                    .iter()
+                    .any(|item| item.get("originalRequest").is_some_and(has_runtime_asap))
+            })
+}
+fn collection_schema(runtime_asap: bool) -> Result<Value> {
+    let mut schema: Value = serde_json::from_str(include_str!("../schemas/postman21.json"))?;
+    if runtime_asap {
+        schema["definitions"]["auth"]["properties"]["type"]["enum"]
+            .as_array_mut()
+            .context("Postman auth enum missing")?
+            .push(json!("asap"));
+        schema["definitions"]["auth"]["properties"]["asap"] =
+            json!({"type":"array","items":{"$ref":"#/definitions/auth-attribute"}});
+    }
+    Ok(schema)
+}
 pub(super) fn import(content: &str) -> Result<ImportResult> {
     let source: Value = serde_json::from_str(content).context("Postman Collection JSON 无效")?;
     let schema = source["info"]["schema"]
@@ -11,9 +41,9 @@ pub(super) fn import(content: &str) -> Result<ImportResult> {
     if !schema.contains("v2.1.0") {
         bail!("此入口接受 Postman 2.1 JSON；其他版本请使用对应格式入口");
     }
-    let official: Value = serde_json::from_str(include_str!("../schemas/postman21.json"))
-        .context("内置官方 Collection schema 无效")?;
-    let validator = jsonschema::validator_for(&official).context("无法加载官方 Postman schema")?;
+    let runtime_asap = has_runtime_asap(&source);
+    let schema = collection_schema(runtime_asap)?;
+    let validator = jsonschema::validator_for(&schema).context("无法加载 Postman schema")?;
     if let Err(error) = validator.validate(&source) {
         bail!("Postman Collection 结构无效: {error}");
     }
@@ -22,7 +52,11 @@ pub(super) fn import(content: &str) -> Result<ImportResult> {
         .unwrap_or("Postman 导入")
         .to_string();
     let mut collections = vec![];
-    let mut warnings = vec![];
+    let mut warnings = if runtime_asap {
+        vec!["ASAP uses a verified Postman Runtime extension not listed in the official Collection2.1 schema".into()]
+    } else {
+        vec![]
+    };
     let spec_id = uid();
     walk(
         &source,
@@ -295,6 +329,7 @@ fn inherit_auth() -> moleapi_core::Auth {
         hawk: None,
         ntlm: None,
         edgegrid: None,
+        asap: None,
         oauth1: None,
     }
 }
@@ -338,6 +373,41 @@ fn import_auth(
                     moleapi_core::AuthLocation::Header
                 },
             }));
+        }
+        "asap" => {
+            auth.kind = "asap".into();
+            let audience = auth_value(value, "asap", "aud");
+            let claims = auth_value(value, "asap", "claims");
+            let ttl = auth_value(value, "asap", "exp");
+            let algorithm = auth_value(value, "asap", "alg");
+            let mut c = moleapi_core::AsapAuth {
+                private_key: auth_value(value, "asap", "privateKey"),
+                key_id: auth_value(value, "asap", "kid"),
+                issuer: auth_value(value, "asap", "iss"),
+                subject: auth_value(value, "asap", "sub"),
+                audience: if audience.is_empty() {
+                    vec![]
+                } else {
+                    serde_json::from_str::<Vec<String>>(&audience)
+                        .unwrap_or_else(|_| vec![audience])
+                },
+                ..Default::default()
+            };
+            if !claims.is_empty() {
+                c.claims_source = claims;
+            }
+            if !algorithm.is_empty() {
+                c.algorithm = algorithm;
+            }
+            if !ttl.is_empty() && ttl != "0" {
+                if let Ok(value) = ttl.parse::<u64>() {
+                    c.ttl_seconds = value;
+                } else {
+                    auth.kind = "none".into();
+                    warnings.push(format!("{name}: templated or negative ASAP lifetime requires native reconfiguration"));
+                }
+            }
+            auth.asap = Some(Box::new(c));
         }
         "edgegrid" => {
             auth.kind = "edgegrid".into();
@@ -495,6 +565,17 @@ fn export_auth(auth: &moleapi_core::Auth) -> Result<Value> {
         "apikey" => {
             let key = auth.api_key.as_ref().context("API key settings missing")?;
             json!({"type":"apikey","apikey":[{"key":"key","value":key.name,"type":"string"},{"key":"value","value":key.value,"type":"string"},{"key":"in","value":if key.location==moleapi_core::AuthLocation::Query{"query"}else{"header"},"type":"string"}]})
+        }
+        "asap" => {
+            let c = auth.asap.as_deref().context("ASAP settings missing")?;
+            let audience = if c.audience.len() == 1 {
+                json!(c.audience[0])
+            } else {
+                json!(c.audience)
+            };
+            let claims: Value =
+                serde_json::from_str(&c.claims_source).context("Invalid ASAP claims JSON")?;
+            json!({"type":"asap","asap":[{"key":"alg","value":c.algorithm,"type":"string"},{"key":"privateKey","value":c.private_key,"type":"string"},{"key":"kid","value":c.key_id,"type":"string"},{"key":"iss","value":c.issuer,"type":"string"},{"key":"sub","value":c.subject,"type":"string"},{"key":"aud","value":audience,"type":"string"},{"key":"exp","value":c.ttl_seconds,"type":"number"},{"key":"claims","value":claims,"type":"string"}]})
         }
         "edgegrid" => {
             let c = auth
@@ -830,9 +911,13 @@ pub(super) fn export(workspace: &Workspace) -> Result<String> {
         }
     }
     result["variable"] = json!(merged);
-    let schema: Value = serde_json::from_str(include_str!("../schemas/postman21.json"))?;
+    let runtime_asap = has_runtime_asap(&result);
+    if runtime_asap {
+        result["info"]["_moleapi_runtime_auth_extensions"] = json!(["asap"]);
+    }
+    let schema = collection_schema(runtime_asap)?;
     jsonschema::validator_for(&schema)?
         .validate(&result)
-        .map_err(|e| anyhow::anyhow!("导出结果不符合官方 Postman schema: {e}"))?;
+        .map_err(|e| anyhow::anyhow!("导出结果不符合 Postman schema 或声明的 Runtime 扩展: {e}"))?;
     Ok(serde_json::to_string_pretty(&result)?)
 }

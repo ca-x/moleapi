@@ -1194,5 +1194,16 @@
   "POST 只哈希这些前缀字节，完整请求体仍会发送；其他方法不哈希请求体。": "POST hashes only this byte prefix; the complete body is still sent. Other methods do not hash their bodies.",
   "EdgeGrid 时间戳（可选）": "EdgeGrid timestamp (optional)",
   "格式为 yyyyMMddTHH:mm:ss+0000；留空使用当前 UTC 时间。": "Use yyyyMMddTHH:mm:ss+0000. Leave blank for current UTC time.",
-  "使用 EG1-HMAC-SHA256 签名实际请求。凭据支持变量和继承；跨域重定向不会携带签名。": "Signs the actual request with EG1-HMAC-SHA256, variables and inherited credentials. Cross-origin redirects do not receive the signature."
+  "使用 EG1-HMAC-SHA256 签名实际请求。凭据支持变量和继承；跨域重定向不会携带签名。": "Signs the actual request with EG1-HMAC-SHA256, variables and inherited credentials. Cross-origin redirects do not receive the signature.",
+  "ASAP 签名算法": "ASAP signing algorithm",
+  "ASAP 私钥": "ASAP private key",
+  "支持 PKCS8、RSA PKCS1、EC SEC1 PEM 和带 kid 的 PKCS8 data URI；不会读取文件路径或远程密钥。": "Supports PKCS8, RSA PKCS1, EC SEC1 PEM and PKCS8 data URIs with kid. No file paths or remote key loading.",
+  "多个 Audience 按顺序用英文逗号分隔，每项可使用变量。": "Use comma-separated audiences in order. Each entry can reference a variable.",
+  "Subject / sub（可选）": "Subject / sub (optional)",
+  "留空时使用 Issuer。": "Leave blank to use issuer.",
+  "ASAP 有效秒数": "ASAP lifetime in seconds",
+  "ASAP Claims JSON": "ASAP claims JSON",
+  "Claims 优先于独立字段；未提供时自动生成 jti、iat 和 exp。字符串变量按 JSON 类型安全解析。": "Claims override individual fields. Missing jti, iat and exp are generated. String variables resolve safely within JSON.",
+  "每次执行生成新的 ASAP Bearer Token，支持变量和父级继承。默认导出和历史记录隐藏密钥与生成的 Token。": "Generates an ASAP bearer token for each execution with variables and inherited authentication. Default exports and history hide keys and generated tokens.",
+  "ASAP 使用 Postman Runtime 扩展；官方 Collection 2.1 schema 未列出此认证类型。": "ASAP uses a Postman Runtime extension absent from the official Collection 2.1 schema."
 }

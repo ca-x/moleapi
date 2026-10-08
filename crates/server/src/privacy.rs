@@ -260,6 +260,18 @@ pub(crate) fn request_values(
             }
         }
     }
+    if let Some(c) = &request.auth.asap {
+        for value in moleapi_core::asap_private_sources(c) {
+            capture(&value);
+        }
+        if let Ok(key) = moleapi_core::resolve_value(&c.private_key, &environment) {
+            let mut resolved = (**c).clone();
+            resolved.private_key = key;
+            for value in moleapi_core::asap_private_sources(&resolved) {
+                capture(&value);
+            }
+        }
+    }
     if let Some(c) = &request.auth.edgegrid {
         capture(&c.access_token);
         capture(&c.client_token);

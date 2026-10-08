@@ -166,6 +166,36 @@ pub fn resolve_request(
     } else {
         None
     };
+    let dormant_asap = if auth_kind != "asap" {
+        Some(value["auth"]["asap"].clone())
+    } else {
+        None
+    };
+    if dormant_asap.is_some() {
+        value["auth"]["asap"] = serde_json::Value::Null;
+    }
+    let asap_claims = if auth_kind == "asap"
+        && let Some(c) = &request.auth.asap
+    {
+        let resolved =
+            crate::authentication::resolve_jwt_claims(&c.claims_source, &vars, &mut 65536)?;
+        let claims = serde_json::from_str::<serde_json::Value>(&resolved)?;
+        let claims = claims
+            .as_object()
+            .context("ASAP claims must be an object")?;
+        for (key, field) in [("iss", "issuer"), ("sub", "subject"), ("kid", "key_id")] {
+            if crate::asap_auth::overrides(claims, key) {
+                value["auth"]["asap"][field] = "".into();
+            }
+        }
+        if crate::asap_auth::overrides(claims, "aud") {
+            value["auth"]["asap"]["audience"] = serde_json::json!([]);
+        }
+        value["auth"]["asap"]["claims_source"] = "".into();
+        Some(resolved)
+    } else {
+        None
+    };
     let dormant_edgegrid = if auth_kind != "edgegrid" {
         Some(value["auth"]["edgegrid"].clone())
     } else {
@@ -302,6 +332,12 @@ pub fn resolve_request(
     };
     let mut budget = 20 * 1024 * 1024;
     replace(&mut value, &vars, &mut budget)?;
+    if let Some(c) = dormant_asap {
+        value["auth"]["asap"] = c;
+    }
+    if let Some(claims) = asap_claims {
+        value["auth"]["asap"]["claims_source"] = claims.into();
+    }
     if let Some(c) = dormant_edgegrid {
         value["auth"]["edgegrid"] = c;
     }

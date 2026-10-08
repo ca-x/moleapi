@@ -15,6 +15,8 @@ pub struct ImportResult {
 }
 #[derive(Serialize)]
 pub struct ExportResult {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
     pub filename: String,
     pub content: String,
     pub mime: String,
@@ -198,14 +200,28 @@ pub fn export(workspace: &Workspace, format: &str, include_secrets: bool) -> Res
             }
         })
         .collect::<String>();
+    let runtime_asap = format == "postman"
+        && serde_json::from_str::<serde_json::Value>(&content)
+            .is_ok_and(|source| postman::has_runtime_asap(&source));
+    let suffix = if runtime_asap {
+        "postman_runtime_collection.json"
+    } else {
+        suffix
+    };
     Ok(ExportResult {
+        warnings: if runtime_asap {
+            vec!["postman_runtime_asap".into()]
+        } else {
+            vec![]
+        },
         filename: format!(
-            "{}.{suffix}",
+            "{}.{}",
             if filename.trim_matches('_').is_empty() {
                 "workspace"
             } else {
                 &filename
-            }
+            },
+            suffix
         ),
         content,
         mime: "application/json".into(),

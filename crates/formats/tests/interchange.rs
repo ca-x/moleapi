@@ -1616,3 +1616,63 @@ fn edgegrid_parent_variable_credentials_are_private_and_postman_options_roundtri
         w.data.auth.unwrap().edgegrid.unwrap()
     );
 }
+#[test]
+fn asap_private_pem_data_uri_and_copied_der_are_private_and_postman_source_roundtrips() {
+    let keys: Value =
+        serde_json::from_str(include_str!("../../core/tests/fixtures/asap/keys.json")).unwrap();
+    let mut w = workspace(import("curl", "curl https://example.test").unwrap().data);
+    let uri = format!(
+        "data:application/pkcs8;kid=asap-key;base64,{}",
+        keys["RSA"]["der_base64"].as_str().unwrap()
+    );
+    w.data.auth=Some(serde_json::from_value(json!({"kind":"asap","token":"","username":"","password":"","asap":{"algorithm":"PS512","private_key":"{{key}}","key_id":"asap-key","issuer":"issuer","audience":["first","second"],"subject":"subject","ttl_seconds":120,"claims_source":"{\"custom\":\"value\"}"}})).unwrap());
+    w.data.global_variables.push(
+        serde_json::from_value(json!({"id":"k","key":"key","value":uri,"enabled":true})).unwrap(),
+    );
+    let r = &mut w.data.collections[0].requests[0];
+    r.auth.kind = "inherit".into();
+    r.body_kind = "text".into();
+    r.body = keys["RSA"]["der_base64"].as_str().unwrap().into();
+    r.description = keys["RSA"]["pkcs8"].as_str().unwrap().into();
+    let safe = export(&w, "moleapi", false).unwrap().content;
+    assert!(!safe.contains(keys["RSA"]["der_base64"].as_str().unwrap()));
+    assert!(!safe.contains("BEGIN PRIVATE KEY"));
+    let file = export(&w, "postman", true).unwrap();
+    assert!(file.warnings.contains(&"postman_runtime_asap".into()));
+    assert!(file.filename.ends_with("postman_runtime_collection.json"));
+    let postman = file.content;
+    let restored = import("postman", &postman).unwrap();
+    let collection = restored
+        .data
+        .collections
+        .iter()
+        .find(|c| !c.requests.is_empty())
+        .unwrap();
+    let auth = moleapi_core::inherited_authentication(
+        &restored.data,
+        Some(collection),
+        &collection.requests[0],
+        None,
+    )
+    .unwrap()
+    .auth;
+    assert_eq!(auth.kind, "asap");
+    assert_eq!(auth.asap.unwrap(), w.data.auth.unwrap().asap.unwrap());
+}
+#[test]
+fn asap_runtime_overlay_keeps_attribute_and_other_auth_schema_rules_strict() {
+    let base = json!({"info":{"name":"Runtime auth","schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},"auth":{"type":"asap","asap":[{"key":"alg","value":"RS256","type":"string"}]},"item":[]});
+    let imported = import("postman", &base.to_string()).unwrap();
+    assert!(
+        imported
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Runtime extension"))
+    );
+    let mut bad = base.clone();
+    bad["auth"]["asap"] = json!({"kid":"not-an-array"});
+    assert!(import("postman", &bad.to_string()).is_err());
+    bad = base;
+    bad["auth"]["type"] = json!("unknown-helper");
+    assert!(import("postman", &bad.to_string()).is_err());
+}

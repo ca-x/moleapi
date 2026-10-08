@@ -6,6 +6,11 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+jose-rs = {version="=0.9.0",default-features=false}
+data-url = "=0.3.2"
+p256 = {version="0.13",features=["pem","pkcs8"]}
+p384 = {version="0.13",features=["pem","pkcs8"]}
+p521 = {version="0.13",features=["pem","pkcs8"]}
 tropel-auth = {version="=0.6.0",default-features=false}
 chrono = "0.4"
 sspi = {version="=0.23.0",default-features=false,features=["ring"]}

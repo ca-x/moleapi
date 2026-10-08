@@ -40,6 +40,7 @@ export function useInterchange(workspace: ReturnType<typeof useWorkspace>) {
       "POST",
       { format, include_secrets: includeSecrets },
     );
+    if(result.warnings?.includes("postman_runtime_asap"))toast.message(liveTranslation("ASAP 使用 Postman Runtime 扩展；官方 Collection 2.1 schema 未列出此认证类型。"));
     await saveFile(result);
     return true;
   }

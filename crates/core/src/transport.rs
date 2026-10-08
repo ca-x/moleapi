@@ -116,8 +116,10 @@ async fn execute_inner(
     let mut ntlm_allowed = r.auth.kind == "ntlm";
     let mut ntlm_connection: Option<crate::ntlm_auth::Connection> = None;
     let mut ntlm_handshake: Option<crate::ntlm_auth::Handshake> = None;
-    let mut signing_allowed =
-        matches!(r.auth.kind.as_str(), "aws" | "hawk" | "oauth1" | "edgegrid");
+    let mut signing_allowed = matches!(
+        r.auth.kind.as_str(),
+        "aws" | "hawk" | "oauth1" | "edgegrid" | "asap"
+    );
     loop {
         let client = if ntlm_allowed {
             if ntlm_connection.is_none() {
@@ -149,6 +151,13 @@ async fn execute_inner(
             request
                 .headers_mut()
                 .insert("cookie", HeaderValue::from_str(&value)?);
+        }
+        if signing_allowed && r.auth.kind == "asap" {
+            private_auth_values.extend(crate::sign_asap_request(
+                r.auth.asap.as_deref().context("ASAP settings missing")?,
+                &mut request,
+                std::time::SystemTime::now(),
+            )?);
         }
         if signing_allowed && r.auth.kind == "edgegrid" {
             private_auth_values.extend(crate::sign_edgegrid_request(

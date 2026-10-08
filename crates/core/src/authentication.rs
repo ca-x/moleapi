@@ -49,7 +49,7 @@ pub fn validate_authentication(auth: &crate::Auth, templates: bool) -> Result<()
     ensure!(
         [
             "none", "basic", "bearer", "apikey", "jwt", "digest", "oauth2", "aws", "hawk",
-            "oauth1", "ntlm", "edgegrid"
+            "oauth1", "ntlm", "edgegrid", "asap"
         ]
         .contains(&auth.kind.as_str())
             || templates && auth.kind == "inherit"
@@ -83,6 +83,15 @@ pub fn validate_authentication(auth: &crate::Auth, templates: bool) -> Result<()
     if auth.kind == "aws" {
         crate::validate_aws(
             auth.aws.as_ref().context("AWS settings missing")?,
+            templates,
+        )?;
+    }
+    if let Some(c) = &auth.asap {
+        crate::asap_auth::validate_asap_fields(c)?;
+    }
+    if auth.kind == "asap" {
+        crate::validate_asap(
+            auth.asap.as_deref().context("ASAP settings missing")?,
             templates,
         )?;
     }

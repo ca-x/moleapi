@@ -20,6 +20,19 @@ fn redact_auth(auth: &mut moleapi_core::Auth, privacy: &ExportPrivacy) {
             jwt.name = "Authorization".into();
         }
     }
+    if let Some(c) = &mut auth.asap {
+        c.private_key.clear();
+        c.key_id = privacy.screen_bounded(&c.key_id, 4096);
+        c.issuer = privacy.screen_bounded(&c.issuer, 4096);
+        c.subject = privacy.screen_bounded(&c.subject, 4096);
+        for audience in &mut c.audience {
+            *audience = privacy.screen_bounded(audience, 4096);
+        }
+        c.claims_source = privacy.screen_generation_json(&c.claims_source);
+        if privacy.screen_bounded(&c.algorithm, 128) != c.algorithm {
+            c.algorithm = "{{redacted_asap_algorithm}}".into();
+        }
+    }
     if let Some(c) = &mut auth.edgegrid {
         c.access_token.clear();
         c.client_token.clear();
@@ -197,6 +210,7 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
                     || r.auth.oauth1.is_some()
                     || r.auth.ntlm.is_some()
                     || r.auth.edgegrid.is_some()
+                    || r.auth.asap.is_some()
             });
     let mut result = source.clone();
     if auth_private {
@@ -872,7 +886,14 @@ impl ExportPrivacy {
                     .iter()
                     .flat_map(|c| moleapi_core::oauth1_private_sources(c))
                     .collect();
+                let asap_sources: Vec<String> = auth
+                    .asap
+                    .iter()
+                    .flat_map(|c| moleapi_core::asap_private_sources(c))
+                    .collect();
                 let sources = std::iter::once(auth.token.as_str())
+                    .chain(asap_sources.iter().map(String::as_str))
+                    .chain(auth.asap.iter().map(|c| c.private_key.as_str()))
                     .chain(auth.edgegrid.iter().flat_map(|c| {
                         [
                             c.access_token.as_str(),
@@ -946,6 +967,13 @@ impl ExportPrivacy {
                             if let Ok(value) =
                                 moleapi_core::resolve_value(source, &scopes.effective())
                             {
+                                if let Some(c) = &auth.asap
+                                    && source == c.private_key
+                                {
+                                    let mut resolved = (**c).clone();
+                                    resolved.private_key = value.clone();
+                                    secrets.extend(moleapi_core::asap_private_sources(&resolved));
+                                }
                                 secrets.insert(value);
                             }
                         }
@@ -972,6 +1000,9 @@ impl ExportPrivacy {
                     .flat_map(|c| c.requests.iter().map(|r| &r.auth)),
             )
         {
+            if let Some(c) = &auth.asap {
+                secrets.extend(moleapi_core::asap_private_sources(c));
+            }
             if let Some(c) = &auth.edgegrid {
                 secrets.extend([
                     c.access_token.clone(),
@@ -1037,12 +1068,20 @@ impl ExportPrivacy {
                     .iter()
                     .flat_map(|c| moleapi_core::oauth1_private_sources(c))
                     .collect();
+                let asap_sources: Vec<String> = request
+                    .auth
+                    .asap
+                    .iter()
+                    .flat_map(|c| moleapi_core::asap_private_sources(c))
+                    .collect();
                 for source in request
                     .auth
                     .api_key
                     .as_ref()
                     .map(|key| key.value.as_str())
                     .into_iter()
+                    .chain(asap_sources.iter().map(String::as_str))
+                    .chain(request.auth.asap.iter().map(|c| c.private_key.as_str()))
                     .chain(request.auth.edgegrid.iter().flat_map(|c| {
                         [
                             c.access_token.as_str(),
@@ -1108,6 +1147,13 @@ impl ExportPrivacy {
                             if let Ok(value) =
                                 moleapi_core::resolve_value(source, &scopes.effective())
                             {
+                                if let Some(c) = &request.auth.asap
+                                    && source == c.private_key
+                                {
+                                    let mut resolved = (**c).clone();
+                                    resolved.private_key = value.clone();
+                                    secrets.extend(moleapi_core::asap_private_sources(&resolved));
+                                }
                                 secrets.insert(value);
                             }
                         }

@@ -114,6 +114,7 @@ pub fn inherited_authentication(
             hawk: None,
             ntlm: None,
             edgegrid: None,
+            asap: None,
             oauth1: None,
         },
         source: AuthenticationSource::Default,

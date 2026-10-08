@@ -14,6 +14,8 @@ pub struct Pair {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Auth {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asap: Option<Box<crate::AsapAuth>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub edgegrid: Option<Box<crate::EdgeGridAuth>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ntlm: Option<Box<crate::NtlmAuth>>,

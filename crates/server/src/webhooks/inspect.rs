@@ -245,6 +245,7 @@ pub async fn export(
     }
     let content=serde_json::to_string_pretty(&serde_json::json!({"schema":"moleapi-webhooks/1","receiver":config,"captures":values,"include_secrets":input.include_secrets})).map_err(|_|ApiError::internal())?;
     Ok(Json(moleapi_formats::ExportResult {
+        warnings: vec![],
         filename: "webhook-captures.json".into(),
         content,
         mime: "application/json".into(),
