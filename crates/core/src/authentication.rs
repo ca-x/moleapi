@@ -48,7 +48,7 @@ impl Default for JwtAuth {
 pub fn validate_authentication(auth: &crate::Auth, templates: bool) -> Result<()> {
     ensure!(
         [
-            "none", "basic", "bearer", "apikey", "jwt", "digest", "oauth2", "aws", "hawk"
+            "none", "basic", "bearer", "apikey", "jwt", "digest", "oauth2", "aws", "hawk", "oauth1"
         ]
         .contains(&auth.kind.as_str())
             || templates && auth.kind == "inherit"
@@ -82,6 +82,15 @@ pub fn validate_authentication(auth: &crate::Auth, templates: bool) -> Result<()
     if auth.kind == "aws" {
         crate::validate_aws(
             auth.aws.as_ref().context("AWS settings missing")?,
+            templates,
+        )?;
+    }
+    if let Some(config) = &auth.oauth1 {
+        crate::oauth1_auth::validate_oauth1_fields(config)?;
+    }
+    if auth.kind == "oauth1" {
+        crate::validate_oauth1(
+            auth.oauth1.as_ref().context("OAuth1 settings missing")?,
             templates,
         )?;
     }

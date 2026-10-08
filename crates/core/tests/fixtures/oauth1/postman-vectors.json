@@ -1,0 +1,268 @@
+[
+  {
+    "config": {
+      "consumer_key": "consumer/雪",
+      "consumer_secret": "secret&雪",
+      "token": "token+value",
+      "token_secret": "token/secret",
+      "nonce": "nonce雪",
+      "timestamp": "1700000000",
+      "include_version": true,
+      "include_empty_params": true,
+      "algorithm": "HMAC-SHA1",
+      "private_key": "",
+      "include_body_hash": false
+    },
+    "url": "https://example.com:8443/resource?%E9%9B%AA=%26&z=last&%25=one&same=%C3%A9&same=z&empty=&plus=a+b",
+    "body": "same=%2B&%E9%9B%AA=%E2%98%83&empty=&form=yes",
+    "binary": false,
+    "expected": "N4BapOlJq5/4bSQJlCVUfvcJAZg="
+  },
+  {
+    "config": {
+      "consumer_key": "consumer/雪",
+      "consumer_secret": "secret&雪",
+      "token": "token+value",
+      "token_secret": "token/secret",
+      "nonce": "nonce雪",
+      "timestamp": "1700000000",
+      "include_version": true,
+      "include_empty_params": true,
+      "algorithm": "HMAC-SHA1",
+      "private_key": "",
+      "include_body_hash": true
+    },
+    "url": "https://example.com:8443/resource?%E9%9B%AA=%26&z=last&%25=one&same=%C3%A9&same=z&empty=&plus=a+b",
+    "body": "AAH/QQ==",
+    "binary": true,
+    "expected": "dEiQ0AHq36smBzl2IgXBuceOdXM="
+  },
+  {
+    "config": {
+      "consumer_key": "consumer/雪",
+      "consumer_secret": "secret&雪",
+      "token": "token+value",
+      "token_secret": "token/secret",
+      "nonce": "nonce雪",
+      "timestamp": "1700000000",
+      "include_version": true,
+      "include_empty_params": true,
+      "algorithm": "HMAC-SHA256",
+      "private_key": "",
+      "include_body_hash": false
+    },
+    "url": "https://example.com:8443/resource?%E9%9B%AA=%26&z=last&%25=one&same=%C3%A9&same=z&empty=&plus=a+b",
+    "body": "same=%2B&%E9%9B%AA=%E2%98%83&empty=&form=yes",
+    "binary": false,
+    "expected": "fDrY88q5o+aCYX1aWgU9Vxz91NM4vkX+8MAieRKXQHc="
+  },
+  {
+    "config": {
+      "consumer_key": "consumer/雪",
+      "consumer_secret": "secret&雪",
+      "token": "token+value",
+      "token_secret": "token/secret",
+      "nonce": "nonce雪",
+      "timestamp": "1700000000",
+      "include_version": true,
+      "include_empty_params": true,
+      "algorithm": "HMAC-SHA256",
+      "private_key": "",
+      "include_body_hash": true
+    },
+    "url": "https://example.com:8443/resource?%E9%9B%AA=%26&z=last&%25=one&same=%C3%A9&same=z&empty=&plus=a+b",
+    "body": "AAH/QQ==",
+    "binary": true,
+    "expected": "FwgPX2M8xVU+Z2DqTWlwPMZzjpYogITI7bBPWgkH3Xc="
+  },
+  {
+    "config": {
+      "consumer_key": "consumer/雪",
+      "consumer_secret": "secret&雪",
+      "token": "token+value",
+      "token_secret": "token/secret",
+      "nonce": "nonce雪",
+      "timestamp": "1700000000",
+      "include_version": true,
+      "include_empty_params": true,
+      "algorithm": "HMAC-SHA512",
+      "private_key": "",
+      "include_body_hash": false
+    },
+    "url": "https://example.com:8443/resource?%E9%9B%AA=%26&z=last&%25=one&same=%C3%A9&same=z&empty=&plus=a+b",
+    "body": "same=%2B&%E9%9B%AA=%E2%98%83&empty=&form=yes",
+    "binary": false,
+    "expected": "/jz8TYjHJeTs0PmhCQS79JXoGkwoTzYd9wk7vgGh25xMxbLQ1KsmTFALgLRqeYhyyQlTDMBcUmh8KJiDk9M63g=="
+  },
+  {
+    "config": {
+      "consumer_key": "consumer/雪",
+      "consumer_secret": "secret&雪",
+      "token": "token+value",
+      "token_secret": "token/secret",
+      "nonce": "nonce雪",
+      "timestamp": "1700000000",
+      "include_version": true,
+      "include_empty_params": true,
+      "algorithm": "HMAC-SHA512",
+      "private_key": "",
+      "include_body_hash": true
+    },
+    "url": "https://example.com:8443/resource?%E9%9B%AA=%26&z=last&%25=one&same=%C3%A9&same=z&empty=&plus=a+b",
+    "body": "AAH/QQ==",
+    "binary": true,
+    "expected": "rf2H6vkDtM3oS6fPbOSaMFk+iA+F4ioNckVniH/cEKv8xEfZgTdDhSy2aZSkDB9W02jAULTREKIpq/YwvJPPyg=="
+  },
+  {
+    "config": {
+      "consumer_key": "consumer/雪",
+      "consumer_secret": "secret&雪",
+      "token": "token+value",
+      "token_secret": "token/secret",
+      "nonce": "nonce雪",
+      "timestamp": "1700000000",
+      "include_version": true,
+      "include_empty_params": true,
+      "algorithm": "RSA-SHA1",
+      "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCthxFfqAiE4V1z\n1YqKVw5rmsgdExWJ7D8NfiXZq91xpK/+qhYosrU1XRq1I5Bn0mi+xve5B26/d//w\n6Mz8wqAB4YNzrV9yBqJEnGHhH6rGJ5Hx0llJRhGRrMWgrB7v//vnqZYfvg84blhX\nxHBxcYY0aOfeT30tm7krlM/IEO4A6XfBuS2vt7sWx+TW9CCMD5rhw0lHVorDoSX7\n2mwJaTYA+nNWS9QQMWLxQyGrHg1HtGcaOZe6+V+tB1BJGU9wM0AtRCT2R41weKMb\nsue5T89RRaSRYI013WxowblLlFbRriMZmBnQGPbGhdblUC9I9+AiAOnE2l/tDCKH\nm6gbzQS5AgMBAAECggEABCAllHjAIBmkEUaSzURx2DLVPmS3YsCyRJG62GSexo6H\n7SXx0iyihIbmxUb3zlIZMaz1E4n20vhJRlrgkcNWTskj6Q6GigVYmwk9Rf8M3jpv\nXLiXrRdsgEJDbhUdhK75OBom8rD/92NfOBH4augMLOeQGK/a3ehZhAzdDkiBwhWA\n0awGhh2tBskQXehKKBub8NnHoVxoay33qV+V0GBAIRT+9LxWtttQ2d1Vy24ITa0a\nGO1hpnI5Cw2ispVDhpCvUu1W0gt5JOlLnaIAy1CvSGVzoY3PCERz35N7ljRVW78Q\nuT0/+AC5FK+EWioksF8+UbiOaZSwCRgVrMlYM4fj0QKBgQDq/SkztaaPhWhaSMrm\nhRpLfu1Ep1Iy8bv0jXUEbF7BRl/8IJxMVW6gSKKQLR6y5LwcBEUQPP1KSgswask4\nnICMonGmAU6vY4ocg68EOTZFQ2I/VAX98qkoUpUQLczBV/EhcJaBsSL6ScRwmOtE\nQMz3/M8y0Rtx+t+/o2n6NXsIqQKBgQC9CxKamROhvz039UuTTM2/MugDFQiMYa0x\nYA+7iTtqoaZ5TrvsKrnvqvVcsBNmgrIClWTWDk1U56X4MfKqrxtRK3XaBMyjvjNs\ntTMy01d8HdPyX1psFv1I03jEMfCmCURVQme78BqXReI7nLeVxzf1MUUpjKbR4vS0\nu+VyMnVVkQKBgAWRhDVue4jxH1zsVqqJwurBEjxLPr5oTgzogTpemww3b7TYzPte\nFuYDcp66Av04QGDllQFigJoPER7PmP8XblBm1QybAVNUp4QvdqlB9dBEXYKkqhOv\neWS0OEYO38hBHjytn1NpcCvALcCBTynp4zGJMxvAKsdTq5Ot+qfsNoMpAoGAPKH8\niZFndo17+SK35rrPku+k8rggUcZSYm/JHAFcCUtntajHJWxezrwqjlv7HPn2VlXM\nTcuwifbyiLScfJpFTLd/yTmY2Tv8CnXjwf1/JdP7UtW6jsig3GbXaTYLVXXLcP0n\ngGP2Y2aKtUwCpguLqxzubfEq4E7G5eEOKp58e8ECgYAkMOssdo/guS6i+JsvgWAU\ncKrHVkL2QhGK7rDc9hKkC32zEoGt3vLDAo1usrcm7xCtgDcbUlWyPskAWYovpSaz\nwgBfDc/ao0L3AU9wQkPs1nfbGuvaDxpP5oxWgjXXWxwW5zlYwV20RUPYqND89IBw\nGf32PrRSDMTeUdnmeelCJg==\n-----END PRIVATE KEY-----\n",
+      "include_body_hash": false
+    },
+    "url": "https://example.com:8443/resource?%E9%9B%AA=%26&z=last&%25=one&same=%C3%A9&same=z&empty=&plus=a+b",
+    "body": "same=%2B&%E9%9B%AA=%E2%98%83&empty=&form=yes",
+    "binary": false,
+    "expected": "ggryD7tg62OYAD3KH+LFCSityF21A1qa3e6vySx4LraOKt5bojhXPML7kBPYknqtlGZPqUOgoQFb/WA1lPzHtDQ7JPKl7RU2T4I+/vDGgLok+Uibab59SdrHuGWhpc+ixAW6SoQe+lsgCBEKHJjpkUsRQamChINEFbtzItGyMeAuLQxfcpfw2OFj9OEQJ8AwWsB1fhY9Un0P+SJhSZzzagBpUVSlZ+jV+28ahbCptJDCHlpMBHfrnLD6M6DLPuFMaHvcUyj0WEPZZVmyvkzzHiYbNiNTjNqSAAx6LGPEbxowmuVCV64+vqynYsfQJ2UdfSj/SPWvpSHEfbO22o3OHw=="
+  },
+  {
+    "config": {
+      "consumer_key": "consumer/雪",
+      "consumer_secret": "secret&雪",
+      "token": "token+value",
+      "token_secret": "token/secret",
+      "nonce": "nonce雪",
+      "timestamp": "1700000000",
+      "include_version": true,
+      "include_empty_params": true,
+      "algorithm": "RSA-SHA1",
+      "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCthxFfqAiE4V1z\n1YqKVw5rmsgdExWJ7D8NfiXZq91xpK/+qhYosrU1XRq1I5Bn0mi+xve5B26/d//w\n6Mz8wqAB4YNzrV9yBqJEnGHhH6rGJ5Hx0llJRhGRrMWgrB7v//vnqZYfvg84blhX\nxHBxcYY0aOfeT30tm7krlM/IEO4A6XfBuS2vt7sWx+TW9CCMD5rhw0lHVorDoSX7\n2mwJaTYA+nNWS9QQMWLxQyGrHg1HtGcaOZe6+V+tB1BJGU9wM0AtRCT2R41weKMb\nsue5T89RRaSRYI013WxowblLlFbRriMZmBnQGPbGhdblUC9I9+AiAOnE2l/tDCKH\nm6gbzQS5AgMBAAECggEABCAllHjAIBmkEUaSzURx2DLVPmS3YsCyRJG62GSexo6H\n7SXx0iyihIbmxUb3zlIZMaz1E4n20vhJRlrgkcNWTskj6Q6GigVYmwk9Rf8M3jpv\nXLiXrRdsgEJDbhUdhK75OBom8rD/92NfOBH4augMLOeQGK/a3ehZhAzdDkiBwhWA\n0awGhh2tBskQXehKKBub8NnHoVxoay33qV+V0GBAIRT+9LxWtttQ2d1Vy24ITa0a\nGO1hpnI5Cw2ispVDhpCvUu1W0gt5JOlLnaIAy1CvSGVzoY3PCERz35N7ljRVW78Q\nuT0/+AC5FK+EWioksF8+UbiOaZSwCRgVrMlYM4fj0QKBgQDq/SkztaaPhWhaSMrm\nhRpLfu1Ep1Iy8bv0jXUEbF7BRl/8IJxMVW6gSKKQLR6y5LwcBEUQPP1KSgswask4\nnICMonGmAU6vY4ocg68EOTZFQ2I/VAX98qkoUpUQLczBV/EhcJaBsSL6ScRwmOtE\nQMz3/M8y0Rtx+t+/o2n6NXsIqQKBgQC9CxKamROhvz039UuTTM2/MugDFQiMYa0x\nYA+7iTtqoaZ5TrvsKrnvqvVcsBNmgrIClWTWDk1U56X4MfKqrxtRK3XaBMyjvjNs\ntTMy01d8HdPyX1psFv1I03jEMfCmCURVQme78BqXReI7nLeVxzf1MUUpjKbR4vS0\nu+VyMnVVkQKBgAWRhDVue4jxH1zsVqqJwurBEjxLPr5oTgzogTpemww3b7TYzPte\nFuYDcp66Av04QGDllQFigJoPER7PmP8XblBm1QybAVNUp4QvdqlB9dBEXYKkqhOv\neWS0OEYO38hBHjytn1NpcCvALcCBTynp4zGJMxvAKsdTq5Ot+qfsNoMpAoGAPKH8\niZFndo17+SK35rrPku+k8rggUcZSYm/JHAFcCUtntajHJWxezrwqjlv7HPn2VlXM\nTcuwifbyiLScfJpFTLd/yTmY2Tv8CnXjwf1/JdP7UtW6jsig3GbXaTYLVXXLcP0n\ngGP2Y2aKtUwCpguLqxzubfEq4E7G5eEOKp58e8ECgYAkMOssdo/guS6i+JsvgWAU\ncKrHVkL2QhGK7rDc9hKkC32zEoGt3vLDAo1usrcm7xCtgDcbUlWyPskAWYovpSaz\nwgBfDc/ao0L3AU9wQkPs1nfbGuvaDxpP5oxWgjXXWxwW5zlYwV20RUPYqND89IBw\nGf32PrRSDMTeUdnmeelCJg==\n-----END PRIVATE KEY-----\n",
+      "include_body_hash": true
+    },
+    "url": "https://example.com:8443/resource?%E9%9B%AA=%26&z=last&%25=one&same=%C3%A9&same=z&empty=&plus=a+b",
+    "body": "AAH/QQ==",
+    "binary": true,
+    "expected": "Y0+7+ve6zmt6S+kzjhqBaolbyuqc+2bdaKmJmKnarY60ir4PgByQMFgHVq74fcJskAKr4+EtPWwY1H3KeGmgAKkwzmB8S+DwNPR4pPuXtz80DEl/Oe7RxXfspJ798wg20qKG0MS4kZEMbjj4o7xKGgjQ09DL7nR8HW9wfgN5G3dqwFO1ETslMF6D7ZIDCp997vL0XfzEAmL+Co4WV12nm3nBUsJpH029OUL966q9bxV0tg/v3BA6J4PaecI9BPAbVL8rNqLhTdgrBI1YpxhVuy7z2w689iQctOpwF39FHcLl2lJqTyoxiOJvHefdXYJkxSCWTUCW6wn0QRHTVLB1tQ=="
+  },
+  {
+    "config": {
+      "consumer_key": "consumer/雪",
+      "consumer_secret": "secret&雪",
+      "token": "token+value",
+      "token_secret": "token/secret",
+      "nonce": "nonce雪",
+      "timestamp": "1700000000",
+      "include_version": true,
+      "include_empty_params": true,
+      "algorithm": "RSA-SHA256",
+      "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCthxFfqAiE4V1z\n1YqKVw5rmsgdExWJ7D8NfiXZq91xpK/+qhYosrU1XRq1I5Bn0mi+xve5B26/d//w\n6Mz8wqAB4YNzrV9yBqJEnGHhH6rGJ5Hx0llJRhGRrMWgrB7v//vnqZYfvg84blhX\nxHBxcYY0aOfeT30tm7krlM/IEO4A6XfBuS2vt7sWx+TW9CCMD5rhw0lHVorDoSX7\n2mwJaTYA+nNWS9QQMWLxQyGrHg1HtGcaOZe6+V+tB1BJGU9wM0AtRCT2R41weKMb\nsue5T89RRaSRYI013WxowblLlFbRriMZmBnQGPbGhdblUC9I9+AiAOnE2l/tDCKH\nm6gbzQS5AgMBAAECggEABCAllHjAIBmkEUaSzURx2DLVPmS3YsCyRJG62GSexo6H\n7SXx0iyihIbmxUb3zlIZMaz1E4n20vhJRlrgkcNWTskj6Q6GigVYmwk9Rf8M3jpv\nXLiXrRdsgEJDbhUdhK75OBom8rD/92NfOBH4augMLOeQGK/a3ehZhAzdDkiBwhWA\n0awGhh2tBskQXehKKBub8NnHoVxoay33qV+V0GBAIRT+9LxWtttQ2d1Vy24ITa0a\nGO1hpnI5Cw2ispVDhpCvUu1W0gt5JOlLnaIAy1CvSGVzoY3PCERz35N7ljRVW78Q\nuT0/+AC5FK+EWioksF8+UbiOaZSwCRgVrMlYM4fj0QKBgQDq/SkztaaPhWhaSMrm\nhRpLfu1Ep1Iy8bv0jXUEbF7BRl/8IJxMVW6gSKKQLR6y5LwcBEUQPP1KSgswask4\nnICMonGmAU6vY4ocg68EOTZFQ2I/VAX98qkoUpUQLczBV/EhcJaBsSL6ScRwmOtE\nQMz3/M8y0Rtx+t+/o2n6NXsIqQKBgQC9CxKamROhvz039UuTTM2/MugDFQiMYa0x\nYA+7iTtqoaZ5TrvsKrnvqvVcsBNmgrIClWTWDk1U56X4MfKqrxtRK3XaBMyjvjNs\ntTMy01d8HdPyX1psFv1I03jEMfCmCURVQme78BqXReI7nLeVxzf1MUUpjKbR4vS0\nu+VyMnVVkQKBgAWRhDVue4jxH1zsVqqJwurBEjxLPr5oTgzogTpemww3b7TYzPte\nFuYDcp66Av04QGDllQFigJoPER7PmP8XblBm1QybAVNUp4QvdqlB9dBEXYKkqhOv\neWS0OEYO38hBHjytn1NpcCvALcCBTynp4zGJMxvAKsdTq5Ot+qfsNoMpAoGAPKH8\niZFndo17+SK35rrPku+k8rggUcZSYm/JHAFcCUtntajHJWxezrwqjlv7HPn2VlXM\nTcuwifbyiLScfJpFTLd/yTmY2Tv8CnXjwf1/JdP7UtW6jsig3GbXaTYLVXXLcP0n\ngGP2Y2aKtUwCpguLqxzubfEq4E7G5eEOKp58e8ECgYAkMOssdo/guS6i+JsvgWAU\ncKrHVkL2QhGK7rDc9hKkC32zEoGt3vLDAo1usrcm7xCtgDcbUlWyPskAWYovpSaz\nwgBfDc/ao0L3AU9wQkPs1nfbGuvaDxpP5oxWgjXXWxwW5zlYwV20RUPYqND89IBw\nGf32PrRSDMTeUdnmeelCJg==\n-----END PRIVATE KEY-----\n",
+      "include_body_hash": false
+    },
+    "url": "https://example.com:8443/resource?%E9%9B%AA=%26&z=last&%25=one&same=%C3%A9&same=z&empty=&plus=a+b",
+    "body": "same=%2B&%E9%9B%AA=%E2%98%83&empty=&form=yes",
+    "binary": false,
+    "expected": "qyJUvmdSSewSIFeNctIujWsFGXADrRg+nqG0LOAGTDU1aOkUijE3Uzk1JrMrGgNY9kCiM+ZCwTJGmYAYB+0/n96pVjsv72wwoyvGuxduea2RUGIft6jQ5dpVh7UWvX9XKSrgHWss9PqKWoEjf31iTCFtgYJad77OuW5dF4nmREnO2O4HtBUqZ0OsUaepqLjQHMr+m5Etk2wmEPXN26BYbhnGiHrkScxT4IhdGL2bhRAgu5840YVx1zzlaBEF6ESBrSQ11DazzVUSXJVR1edBMbVNvYmIwYz+eoyHndsGGcGe+qUmoz0z+Df0UVz4wsNY4a9ioG9SID5Arot8qhyddw=="
+  },
+  {
+    "config": {
+      "consumer_key": "consumer/雪",
+      "consumer_secret": "secret&雪",
+      "token": "token+value",
+      "token_secret": "token/secret",
+      "nonce": "nonce雪",
+      "timestamp": "1700000000",
+      "include_version": true,
+      "include_empty_params": true,
+      "algorithm": "RSA-SHA256",
+      "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCthxFfqAiE4V1z\n1YqKVw5rmsgdExWJ7D8NfiXZq91xpK/+qhYosrU1XRq1I5Bn0mi+xve5B26/d//w\n6Mz8wqAB4YNzrV9yBqJEnGHhH6rGJ5Hx0llJRhGRrMWgrB7v//vnqZYfvg84blhX\nxHBxcYY0aOfeT30tm7krlM/IEO4A6XfBuS2vt7sWx+TW9CCMD5rhw0lHVorDoSX7\n2mwJaTYA+nNWS9QQMWLxQyGrHg1HtGcaOZe6+V+tB1BJGU9wM0AtRCT2R41weKMb\nsue5T89RRaSRYI013WxowblLlFbRriMZmBnQGPbGhdblUC9I9+AiAOnE2l/tDCKH\nm6gbzQS5AgMBAAECggEABCAllHjAIBmkEUaSzURx2DLVPmS3YsCyRJG62GSexo6H\n7SXx0iyihIbmxUb3zlIZMaz1E4n20vhJRlrgkcNWTskj6Q6GigVYmwk9Rf8M3jpv\nXLiXrRdsgEJDbhUdhK75OBom8rD/92NfOBH4augMLOeQGK/a3ehZhAzdDkiBwhWA\n0awGhh2tBskQXehKKBub8NnHoVxoay33qV+V0GBAIRT+9LxWtttQ2d1Vy24ITa0a\nGO1hpnI5Cw2ispVDhpCvUu1W0gt5JOlLnaIAy1CvSGVzoY3PCERz35N7ljRVW78Q\nuT0/+AC5FK+EWioksF8+UbiOaZSwCRgVrMlYM4fj0QKBgQDq/SkztaaPhWhaSMrm\nhRpLfu1Ep1Iy8bv0jXUEbF7BRl/8IJxMVW6gSKKQLR6y5LwcBEUQPP1KSgswask4\nnICMonGmAU6vY4ocg68EOTZFQ2I/VAX98qkoUpUQLczBV/EhcJaBsSL6ScRwmOtE\nQMz3/M8y0Rtx+t+/o2n6NXsIqQKBgQC9CxKamROhvz039UuTTM2/MugDFQiMYa0x\nYA+7iTtqoaZ5TrvsKrnvqvVcsBNmgrIClWTWDk1U56X4MfKqrxtRK3XaBMyjvjNs\ntTMy01d8HdPyX1psFv1I03jEMfCmCURVQme78BqXReI7nLeVxzf1MUUpjKbR4vS0\nu+VyMnVVkQKBgAWRhDVue4jxH1zsVqqJwurBEjxLPr5oTgzogTpemww3b7TYzPte\nFuYDcp66Av04QGDllQFigJoPER7PmP8XblBm1QybAVNUp4QvdqlB9dBEXYKkqhOv\neWS0OEYO38hBHjytn1NpcCvALcCBTynp4zGJMxvAKsdTq5Ot+qfsNoMpAoGAPKH8\niZFndo17+SK35rrPku+k8rggUcZSYm/JHAFcCUtntajHJWxezrwqjlv7HPn2VlXM\nTcuwifbyiLScfJpFTLd/yTmY2Tv8CnXjwf1/JdP7UtW6jsig3GbXaTYLVXXLcP0n\ngGP2Y2aKtUwCpguLqxzubfEq4E7G5eEOKp58e8ECgYAkMOssdo/guS6i+JsvgWAU\ncKrHVkL2QhGK7rDc9hKkC32zEoGt3vLDAo1usrcm7xCtgDcbUlWyPskAWYovpSaz\nwgBfDc/ao0L3AU9wQkPs1nfbGuvaDxpP5oxWgjXXWxwW5zlYwV20RUPYqND89IBw\nGf32PrRSDMTeUdnmeelCJg==\n-----END PRIVATE KEY-----\n",
+      "include_body_hash": true
+    },
+    "url": "https://example.com:8443/resource?%E9%9B%AA=%26&z=last&%25=one&same=%C3%A9&same=z&empty=&plus=a+b",
+    "body": "AAH/QQ==",
+    "binary": true,
+    "expected": "TtwRp5iOQuG6rfMY4gFDXvZzSH5lpAUUMXUUoMeVkItuirCOBKxzfsWdPNZXPAt5JhOJEeNxkRH8BVccfKC/UhmQRSfaqnpnSHAG7HVGW0xVcElhnqpaylQq++inN4oPCnU/Yo8wofAFrQQ9411HPu2cpdjEBKT8n3zoFC4OijQLWGCkbznAn/s+mo9UTyZnGlL13lc2bx39mlEPKxWjvXnPQge/VEuNAJluzMFZ7bGNp57wAjjCIMZIDonbT42BfLERGjRP0gPSKlXrRHcU1o7oZpdzuvc55Zkfi4xU/I20iAwD9ejVgqSKg4wQJ4ATtj5MsIdYpXWmATM8S31FbQ=="
+  },
+  {
+    "config": {
+      "consumer_key": "consumer/雪",
+      "consumer_secret": "secret&雪",
+      "token": "token+value",
+      "token_secret": "token/secret",
+      "nonce": "nonce雪",
+      "timestamp": "1700000000",
+      "include_version": true,
+      "include_empty_params": true,
+      "algorithm": "RSA-SHA512",
+      "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCthxFfqAiE4V1z\n1YqKVw5rmsgdExWJ7D8NfiXZq91xpK/+qhYosrU1XRq1I5Bn0mi+xve5B26/d//w\n6Mz8wqAB4YNzrV9yBqJEnGHhH6rGJ5Hx0llJRhGRrMWgrB7v//vnqZYfvg84blhX\nxHBxcYY0aOfeT30tm7krlM/IEO4A6XfBuS2vt7sWx+TW9CCMD5rhw0lHVorDoSX7\n2mwJaTYA+nNWS9QQMWLxQyGrHg1HtGcaOZe6+V+tB1BJGU9wM0AtRCT2R41weKMb\nsue5T89RRaSRYI013WxowblLlFbRriMZmBnQGPbGhdblUC9I9+AiAOnE2l/tDCKH\nm6gbzQS5AgMBAAECggEABCAllHjAIBmkEUaSzURx2DLVPmS3YsCyRJG62GSexo6H\n7SXx0iyihIbmxUb3zlIZMaz1E4n20vhJRlrgkcNWTskj6Q6GigVYmwk9Rf8M3jpv\nXLiXrRdsgEJDbhUdhK75OBom8rD/92NfOBH4augMLOeQGK/a3ehZhAzdDkiBwhWA\n0awGhh2tBskQXehKKBub8NnHoVxoay33qV+V0GBAIRT+9LxWtttQ2d1Vy24ITa0a\nGO1hpnI5Cw2ispVDhpCvUu1W0gt5JOlLnaIAy1CvSGVzoY3PCERz35N7ljRVW78Q\nuT0/+AC5FK+EWioksF8+UbiOaZSwCRgVrMlYM4fj0QKBgQDq/SkztaaPhWhaSMrm\nhRpLfu1Ep1Iy8bv0jXUEbF7BRl/8IJxMVW6gSKKQLR6y5LwcBEUQPP1KSgswask4\nnICMonGmAU6vY4ocg68EOTZFQ2I/VAX98qkoUpUQLczBV/EhcJaBsSL6ScRwmOtE\nQMz3/M8y0Rtx+t+/o2n6NXsIqQKBgQC9CxKamROhvz039UuTTM2/MugDFQiMYa0x\nYA+7iTtqoaZ5TrvsKrnvqvVcsBNmgrIClWTWDk1U56X4MfKqrxtRK3XaBMyjvjNs\ntTMy01d8HdPyX1psFv1I03jEMfCmCURVQme78BqXReI7nLeVxzf1MUUpjKbR4vS0\nu+VyMnVVkQKBgAWRhDVue4jxH1zsVqqJwurBEjxLPr5oTgzogTpemww3b7TYzPte\nFuYDcp66Av04QGDllQFigJoPER7PmP8XblBm1QybAVNUp4QvdqlB9dBEXYKkqhOv\neWS0OEYO38hBHjytn1NpcCvALcCBTynp4zGJMxvAKsdTq5Ot+qfsNoMpAoGAPKH8\niZFndo17+SK35rrPku+k8rggUcZSYm/JHAFcCUtntajHJWxezrwqjlv7HPn2VlXM\nTcuwifbyiLScfJpFTLd/yTmY2Tv8CnXjwf1/JdP7UtW6jsig3GbXaTYLVXXLcP0n\ngGP2Y2aKtUwCpguLqxzubfEq4E7G5eEOKp58e8ECgYAkMOssdo/guS6i+JsvgWAU\ncKrHVkL2QhGK7rDc9hKkC32zEoGt3vLDAo1usrcm7xCtgDcbUlWyPskAWYovpSaz\nwgBfDc/ao0L3AU9wQkPs1nfbGuvaDxpP5oxWgjXXWxwW5zlYwV20RUPYqND89IBw\nGf32PrRSDMTeUdnmeelCJg==\n-----END PRIVATE KEY-----\n",
+      "include_body_hash": false
+    },
+    "url": "https://example.com:8443/resource?%E9%9B%AA=%26&z=last&%25=one&same=%C3%A9&same=z&empty=&plus=a+b",
+    "body": "same=%2B&%E9%9B%AA=%E2%98%83&empty=&form=yes",
+    "binary": false,
+    "expected": "eGOuLMuJJXiADs58zSyurv9PH7WyovedGKSrPD85o7G4IaMZdXCAj52zcf/iwpDZdPcHJejimYnZ0vJwOVM9PFDMhosTeTy1aQeWUqSqekIBO+jeZ344eVsghsjlsZOL0d2StXNVs6G7L2Pd5dPU+wBW62aHH/Lw+ggY5IbhdT7HNkOIx//yNjgzZXfiyMo4VlgIGQgU9jORyg7AQ9+EmDgTrZ3rSp2PcgdyW41TWqTnvrUmZIkexfK1siQX1MzE84jr88UwjCL6FmF1jFsMiNNScwDFiQn4b8eBV19dR80JrjMjIkyul26ZYiPYjIMGvimITPKK1MMWwf6m9N9P+Q=="
+  },
+  {
+    "config": {
+      "consumer_key": "consumer/雪",
+      "consumer_secret": "secret&雪",
+      "token": "token+value",
+      "token_secret": "token/secret",
+      "nonce": "nonce雪",
+      "timestamp": "1700000000",
+      "include_version": true,
+      "include_empty_params": true,
+      "algorithm": "RSA-SHA512",
+      "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCthxFfqAiE4V1z\n1YqKVw5rmsgdExWJ7D8NfiXZq91xpK/+qhYosrU1XRq1I5Bn0mi+xve5B26/d//w\n6Mz8wqAB4YNzrV9yBqJEnGHhH6rGJ5Hx0llJRhGRrMWgrB7v//vnqZYfvg84blhX\nxHBxcYY0aOfeT30tm7krlM/IEO4A6XfBuS2vt7sWx+TW9CCMD5rhw0lHVorDoSX7\n2mwJaTYA+nNWS9QQMWLxQyGrHg1HtGcaOZe6+V+tB1BJGU9wM0AtRCT2R41weKMb\nsue5T89RRaSRYI013WxowblLlFbRriMZmBnQGPbGhdblUC9I9+AiAOnE2l/tDCKH\nm6gbzQS5AgMBAAECggEABCAllHjAIBmkEUaSzURx2DLVPmS3YsCyRJG62GSexo6H\n7SXx0iyihIbmxUb3zlIZMaz1E4n20vhJRlrgkcNWTskj6Q6GigVYmwk9Rf8M3jpv\nXLiXrRdsgEJDbhUdhK75OBom8rD/92NfOBH4augMLOeQGK/a3ehZhAzdDkiBwhWA\n0awGhh2tBskQXehKKBub8NnHoVxoay33qV+V0GBAIRT+9LxWtttQ2d1Vy24ITa0a\nGO1hpnI5Cw2ispVDhpCvUu1W0gt5JOlLnaIAy1CvSGVzoY3PCERz35N7ljRVW78Q\nuT0/+AC5FK+EWioksF8+UbiOaZSwCRgVrMlYM4fj0QKBgQDq/SkztaaPhWhaSMrm\nhRpLfu1Ep1Iy8bv0jXUEbF7BRl/8IJxMVW6gSKKQLR6y5LwcBEUQPP1KSgswask4\nnICMonGmAU6vY4ocg68EOTZFQ2I/VAX98qkoUpUQLczBV/EhcJaBsSL6ScRwmOtE\nQMz3/M8y0Rtx+t+/o2n6NXsIqQKBgQC9CxKamROhvz039UuTTM2/MugDFQiMYa0x\nYA+7iTtqoaZ5TrvsKrnvqvVcsBNmgrIClWTWDk1U56X4MfKqrxtRK3XaBMyjvjNs\ntTMy01d8HdPyX1psFv1I03jEMfCmCURVQme78BqXReI7nLeVxzf1MUUpjKbR4vS0\nu+VyMnVVkQKBgAWRhDVue4jxH1zsVqqJwurBEjxLPr5oTgzogTpemww3b7TYzPte\nFuYDcp66Av04QGDllQFigJoPER7PmP8XblBm1QybAVNUp4QvdqlB9dBEXYKkqhOv\neWS0OEYO38hBHjytn1NpcCvALcCBTynp4zGJMxvAKsdTq5Ot+qfsNoMpAoGAPKH8\niZFndo17+SK35rrPku+k8rggUcZSYm/JHAFcCUtntajHJWxezrwqjlv7HPn2VlXM\nTcuwifbyiLScfJpFTLd/yTmY2Tv8CnXjwf1/JdP7UtW6jsig3GbXaTYLVXXLcP0n\ngGP2Y2aKtUwCpguLqxzubfEq4E7G5eEOKp58e8ECgYAkMOssdo/guS6i+JsvgWAU\ncKrHVkL2QhGK7rDc9hKkC32zEoGt3vLDAo1usrcm7xCtgDcbUlWyPskAWYovpSaz\nwgBfDc/ao0L3AU9wQkPs1nfbGuvaDxpP5oxWgjXXWxwW5zlYwV20RUPYqND89IBw\nGf32PrRSDMTeUdnmeelCJg==\n-----END PRIVATE KEY-----\n",
+      "include_body_hash": true
+    },
+    "url": "https://example.com:8443/resource?%E9%9B%AA=%26&z=last&%25=one&same=%C3%A9&same=z&empty=&plus=a+b",
+    "body": "AAH/QQ==",
+    "binary": true,
+    "expected": "cBAWgPaNaVPpJVC/izyHdtL5hWAJoL5OJo+iU+GwFHV/7Oiay+sZ1aawkPO6F8wlsXYwkBAkGHdFZuAo9Eb/tty2zqwQiQf7cCejKMyiXwzfWgcw2bRkxROdSDcGEgRIYFIl0Ld+YbMRTiU7HKfYZMdwXewRQQfX/9QP9MNovI2YoZ2dd146WtF0mlGKAr4VZuRADiHaCFkAKaW4v6iC+lBoZ3E7mbkiTBEbsZgUbZzD7ne2oZJ0c0PlgyDWRSt4zaLjGwmgB2ohKpqDxSDJNOXgXnmuhRQk5yk58kTQYCG/vnTZCzaHWC9sTIoV6GbjVnU0SzhEpsBF9JNyo3EYPQ=="
+  },
+  {
+    "config": {
+      "consumer_key": "consumer/雪",
+      "consumer_secret": "secret&雪",
+      "token": "token+value",
+      "token_secret": "token/secret",
+      "nonce": "nonce雪",
+      "timestamp": "1700000000",
+      "include_version": true,
+      "include_empty_params": true,
+      "algorithm": "PLAINTEXT",
+      "private_key": "",
+      "include_body_hash": false
+    },
+    "url": "https://example.com:8443/resource?%E9%9B%AA=%26&z=last&%25=one&same=%C3%A9&same=z&empty=&plus=a+b",
+    "body": "same=%2B&%E9%9B%AA=%E2%98%83&empty=&form=yes",
+    "binary": false,
+    "expected": "secret%26%E9%9B%AA&token%2Fsecret"
+  },
+  {
+    "config": {
+      "consumer_key": "consumer/雪",
+      "consumer_secret": "secret&雪",
+      "token": "token+value",
+      "token_secret": "token/secret",
+      "nonce": "nonce雪",
+      "timestamp": "1700000000",
+      "include_version": true,
+      "include_empty_params": true,
+      "algorithm": "PLAINTEXT",
+      "private_key": "",
+      "include_body_hash": true
+    },
+    "url": "https://example.com:8443/resource?%E9%9B%AA=%26&z=last&%25=one&same=%C3%A9&same=z&empty=&plus=a+b",
+    "body": "AAH/QQ==",
+    "binary": true,
+    "expected": "secret%26%E9%9B%AA&token%2Fsecret"
+  }
+]

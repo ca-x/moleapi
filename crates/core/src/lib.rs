@@ -1,3 +1,5 @@
+mod oauth1_auth;
+pub use oauth1_auth::*;
 mod cookies;
 pub use cookies::*;
 mod hawk_auth;

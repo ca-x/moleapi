@@ -55,13 +55,15 @@ export interface ApiKeyAuth {name:string;value:string;location:"header"|"query"}
 export interface JwtAuth {algorithm:string;key:string;key_base64:boolean;claims_source:string;kid:string;name:string;prefix:string;location:"header"|"query";add_time_claims:boolean;ttl_seconds:number}
 export interface AwsAuth {access_key:string;secret_key:string;session_token:string;region:string;service:string;location:"header"|"query";expires_seconds:number;unsigned_payload:boolean}
 export interface HawkAuth {id:string;key:string;algorithm:string;nonce:string;timestamp:string;ext:string;app:string;delegation:string;user:string;include_payload_hash:boolean}
+export interface OAuth1Auth {consumer_key:string;consumer_secret:string;token:string;token_secret:string;private_key:string;algorithm:string;location:"header"|"query"|"body"|"automatic";realm:string;nonce:string;timestamp:string;callback:string;verifier:string;include_version:boolean;include_body_hash:boolean;include_empty_params:boolean}
 export interface Auth {
+  oauth1?:OAuth1Auth;
   hawk?:HawkAuth;
   aws?:AwsAuth;
   oauth2?:OAuth2Auth;
   api_key?:ApiKeyAuth;
   jwt?:JwtAuth;
-  kind: "inherit" | "none" | "bearer" | "basic" | "apikey" | "jwt" | "digest" | "oauth2" | "aws" | "hawk";
+  kind: "inherit" | "none" | "bearer" | "basic" | "apikey" | "jwt" | "digest" | "oauth2" | "aws" | "hawk" | "oauth1";
   token: string;
   username: string;
   password: string;

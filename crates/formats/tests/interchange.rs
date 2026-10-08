@@ -1391,3 +1391,72 @@ fn inherited_hawk_source_templates_and_copies_are_private_and_postman_roundtrips
     assert_eq!(hawk.delegation, "delegate");
     assert!(hawk.include_payload_hash);
 }
+#[test]
+fn oauth1_parent_source_and_copies_are_private_with_explicit_postman_placement_mapping() {
+    let mut w = workspace(import("curl", "curl https://example.test").unwrap().data);
+    w.data.collections[0].auth=Some(serde_json::from_value(json!({"kind":"oauth1","token":"","username":"","password":"","oauth1":{"consumer_key":"private-consumer-id","consumer_secret":"{{oauth_secret}}","token":"private-token-id","token_secret":"private-token-secret","private_key":"private-inactive-pem","verifier":"private-oauth1-verifier","algorithm":"HMAC-SHA512","realm":"scope","include_body_hash":true,"include_empty_params":true}})).unwrap());
+    w.data.global_variables.push(serde_json::from_value(json!({"id":"v","key":"oauth_secret","value":"resolved-consumer-secret","enabled":true})).unwrap());
+    let r = &mut w.data.collections[0].requests[0];
+    r.auth.kind = "inherit".into();
+    r.body_kind = "text".into();
+    r.body="private-consumer-id resolved-consumer-secret private-token-id private-token-secret private-inactive-pem private-oauth1-verifier".into();
+    let safe = export(&w, "moleapi", false).unwrap().content;
+    for value in [
+        "private-consumer-id",
+        "resolved-consumer-secret",
+        "private-token-id",
+        "private-token-secret",
+        "private-inactive-pem",
+        "private-oauth1-verifier",
+    ] {
+        assert!(!safe.contains(value), "{safe}");
+    }
+    assert!(
+        export(&w, "moleapi", true)
+            .unwrap()
+            .content
+            .contains("private-inactive-pem")
+    );
+    for location in [
+        moleapi_core::OAuth1Location::Header,
+        moleapi_core::OAuth1Location::Automatic,
+    ] {
+        w.data.collections[0]
+            .auth
+            .as_mut()
+            .unwrap()
+            .oauth1
+            .as_mut()
+            .unwrap()
+            .location = location;
+        let postman = export(&w, "postman", true).unwrap().content;
+        let imported = import("postman", &postman).unwrap();
+        let collection = imported
+            .data
+            .collections
+            .iter()
+            .find(|c| !c.requests.is_empty())
+            .unwrap();
+        let effective = moleapi_core::inherited_authentication(
+            &imported.data,
+            Some(collection),
+            &collection.requests[0],
+            None,
+        )
+        .unwrap();
+        let c = effective.auth.oauth1.unwrap();
+        assert_eq!(c.consumer_secret, "{{oauth_secret}}");
+        assert_eq!(c.algorithm, "HMAC-SHA512");
+        assert_eq!(c.location, location);
+        assert!(c.include_body_hash && c.include_empty_params);
+    }
+    w.data.collections[0]
+        .auth
+        .as_mut()
+        .unwrap()
+        .oauth1
+        .as_mut()
+        .unwrap()
+        .location = moleapi_core::OAuth1Location::Query;
+    assert!(export(&w, "postman", true).is_err());
+}

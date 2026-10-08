@@ -3588,6 +3588,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "fmt-cmp"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "51f58afb8e10a573cb30dc65381cc266892c84215b17f6d29af59e11d70f383f"
+
+[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5550,11 +5556,14 @@ dependencies = [
  "futures-util",
  "hawk",
  "hex",
+ "hmac 0.12.1",
  "http 1.5.0",
  "jsonwebtoken",
  "mime",
+ "oauth1-request",
  "oauth2",
  "pem 4.0.0",
+ "percent-encoding 2.3.2",
  "prost",
  "prost-reflect",
  "prost-types",
@@ -5563,10 +5572,12 @@ dependencies = [
  "quick-xml 0.38.4",
  "reqwest 0.12.28",
  "roxmltree",
+ "rsa",
  "rumqttc",
  "rustls",
  "serde",
  "serde_json",
+ "sha1",
  "sha2 0.10.9",
  "tokio",
  "url",
@@ -6133,6 +6144,30 @@ dependencies = [
  "serde_json",
  "url",
  "yaml_serde",
+]
+
+[[package]]
+name = "oauth-credentials"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d6f9dee4cc95bd06fe0c1225a2b5680e0611627e1643ce78eb76daddd8dbccc"
+
+[[package]]
+name = "oauth1-request"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "498447ee9c67221e1a558d5d49f63594c6ccaa2cdd437abec55c92e8c61887bc"
+dependencies = [
+ "base64 0.22.1",
+ "cfg-if",
+ "digest 0.10.7",
+ "fmt-cmp",
+ "hmac 0.12.1",
+ "oauth-credentials",
+ "percent-encoding 2.3.2",
+ "rand 0.8.8",
+ "rsa",
+ "sha1",
 ]
 
 [[package]]

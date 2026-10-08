@@ -166,6 +166,34 @@ pub fn resolve_request(
     } else {
         None
     };
+    let dormant_oauth1 = if auth_kind != "oauth1" {
+        Some(value["auth"]["oauth1"].clone())
+    } else {
+        None
+    };
+    if dormant_oauth1.is_some() {
+        value["auth"]["oauth1"] = serde_json::Value::Null;
+    }
+    if auth_kind == "oauth1"
+        && let Some(c) = &request.auth.oauth1
+    {
+        if c.location != crate::OAuth1Location::Header {
+            value["auth"]["oauth1"]["realm"] = "".into();
+        }
+        let token = interpolate(&c.token, &vars)?;
+        value["auth"]["oauth1"]["token"] = token.clone().into();
+        if token.is_empty() {
+            value["auth"]["oauth1"]["token_secret"] = "".into();
+        }
+        let algorithm = interpolate(&c.algorithm, &vars)?;
+        value["auth"]["oauth1"]["algorithm"] = algorithm.clone().into();
+        if algorithm.starts_with("RSA-") {
+            value["auth"]["oauth1"]["consumer_secret"] = "".into();
+            value["auth"]["oauth1"]["token_secret"] = "".into();
+        } else {
+            value["auth"]["oauth1"]["private_key"] = "".into();
+        }
+    }
     let dormant_hawk = if auth_kind != "hawk" {
         Some(value["auth"]["hawk"].clone())
     } else {
@@ -249,6 +277,9 @@ pub fn resolve_request(
     };
     let mut budget = 20 * 1024 * 1024;
     replace(&mut value, &vars, &mut budget)?;
+    if let Some(config) = dormant_oauth1 {
+        value["auth"]["oauth1"] = config;
+    }
     if let Some(hawk) = dormant_hawk {
         value["auth"]["hawk"] = hawk;
     }

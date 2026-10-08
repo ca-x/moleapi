@@ -293,6 +293,7 @@ fn inherit_auth() -> moleapi_core::Auth {
         oauth2: None,
         aws: None,
         hawk: None,
+        oauth1: None,
     }
 }
 fn import_variables(value: &Value) -> Vec<moleapi_core::Pair> {
@@ -335,6 +336,53 @@ fn import_auth(
                     moleapi_core::AuthLocation::Header
                 },
             }));
+        }
+        "oauth1" => {
+            auth.kind = "oauth1".into();
+            let mut c = moleapi_core::OAuth1Auth {
+                consumer_key: auth_value(value, "oauth1", "consumerKey"),
+                consumer_secret: auth_value(value, "oauth1", "consumerSecret"),
+                token: auth_value(value, "oauth1", "token"),
+                token_secret: auth_value(value, "oauth1", "tokenSecret"),
+                private_key: auth_value(value, "oauth1", "privateKey"),
+                realm: auth_value(value, "oauth1", "realm"),
+                nonce: auth_value(value, "oauth1", "nonce"),
+                timestamp: auth_value(value, "oauth1", "timestamp"),
+                callback: auth_value(value, "oauth1", "callback"),
+                verifier: auth_value(value, "oauth1", "verifier"),
+                include_version: auth_value(value, "oauth1", "version") == "1.0",
+                include_body_hash: auth_value(value, "oauth1", "includeBodyHash") == "true",
+                include_empty_params: auth_value(value, "oauth1", "addEmptyParamsToSign") == "true",
+                location: if auth_value(value, "oauth1", "addParamsToHeader") == "true" {
+                    moleapi_core::OAuth1Location::Header
+                } else {
+                    moleapi_core::OAuth1Location::Automatic
+                },
+                ..Default::default()
+            };
+            let algorithm = auth_value(value, "oauth1", "signatureMethod");
+            if !algorithm.is_empty() {
+                c.algorithm = algorithm;
+            }
+            if auth_value(value, "oauth1", "disableHeaderEncoding") == "true" {
+                warnings.push(format!("{name}: OAuth1 disableHeaderEncoding is unsupported; authentication must be configured again"));
+                auth.kind = "none".into();
+            }
+            let version = auth_value(value, "oauth1", "version");
+            if [
+                "includeBodyHash",
+                "addEmptyParamsToSign",
+                "addParamsToHeader",
+                "disableHeaderEncoding",
+            ]
+            .iter()
+            .any(|field| auth_value(value, "oauth1", field).contains("{{"))
+                || !["", "1.0"].contains(&version.as_str())
+            {
+                warnings.push(format!("{name}: OAuth1 templated flags or non-1.0 version cannot be mapped; authentication must be configured again"));
+                auth.kind = "none".into();
+            }
+            auth.oauth1 = Some(Box::new(c));
         }
         "hawk" => {
             auth.kind = "hawk".into();
@@ -401,6 +449,45 @@ fn export_auth(auth: &moleapi_core::Auth) -> Result<Value> {
         "apikey" => {
             let key = auth.api_key.as_ref().context("API key settings missing")?;
             json!({"type":"apikey","apikey":[{"key":"key","value":key.name,"type":"string"},{"key":"value","value":key.value,"type":"string"},{"key":"in","value":if key.location==moleapi_core::AuthLocation::Query{"query"}else{"header"},"type":"string"}]})
+        }
+        "oauth1" => {
+            let c = auth.oauth1.as_ref().context("OAuth1 settings missing")?;
+            ensure!(
+                matches!(
+                    c.location,
+                    moleapi_core::OAuth1Location::Header | moleapi_core::OAuth1Location::Automatic
+                ),
+                "Postman OAuth1 only maps Header or automatic placement"
+            );
+            let fields = [
+                ("consumerKey", c.consumer_key.as_str()),
+                ("consumerSecret", c.consumer_secret.as_str()),
+                ("token", c.token.as_str()),
+                ("tokenSecret", c.token_secret.as_str()),
+                ("privateKey", c.private_key.as_str()),
+                ("signatureMethod", c.algorithm.as_str()),
+                ("realm", c.realm.as_str()),
+                ("nonce", c.nonce.as_str()),
+                ("timestamp", c.timestamp.as_str()),
+                ("callback", c.callback.as_str()),
+                ("verifier", c.verifier.as_str()),
+                ("version", if c.include_version { "1.0" } else { "" }),
+            ];
+            let mut rows: Vec<Value> = fields
+                .into_iter()
+                .map(|(key, value)| json!({"key":key,"value":value,"type":"string"}))
+                .collect();
+            for (key, value) in [
+                ("includeBodyHash", c.include_body_hash),
+                ("addEmptyParamsToSign", c.include_empty_params),
+                (
+                    "addParamsToHeader",
+                    c.location == moleapi_core::OAuth1Location::Header,
+                ),
+            ] {
+                rows.push(json!({"key":key,"value":value,"type":"boolean"}));
+            }
+            json!({"type":"oauth1","oauth1":rows})
         }
         "hawk" => {
             let hawk = auth.hawk.as_ref().context("Hawk settings missing")?;

@@ -260,6 +260,18 @@ pub(crate) fn request_values(
             }
         }
     }
+    if let Some(c) = &request.auth.oauth1 {
+        for value in [
+            &c.consumer_key,
+            &c.consumer_secret,
+            &c.token,
+            &c.token_secret,
+            &c.private_key,
+            &c.verifier,
+        ] {
+            capture(value);
+        }
+    }
     if let Some(hawk) = &request.auth.hawk {
         capture(&hawk.id);
         capture(&hawk.key);

@@ -113,7 +113,7 @@ async fn execute_inner(
     let mut private_auth_values = Vec::new();
     let mut digest_attempts = 0;
     let mut digest_allowed = r.auth.kind == "digest";
-    let mut signing_allowed = matches!(r.auth.kind.as_str(), "aws" | "hawk");
+    let mut signing_allowed = matches!(r.auth.kind.as_str(), "aws" | "hawk" | "oauth1");
     loop {
         let client = checked_client(&url, policy, r.verify_tls).await?;
         let mut builder = client
@@ -136,6 +136,13 @@ async fn execute_inner(
             request
                 .headers_mut()
                 .insert("cookie", HeaderValue::from_str(&value)?);
+        }
+        if signing_allowed && r.auth.kind == "oauth1" {
+            private_auth_values.extend(crate::sign_oauth1_request(
+                r.auth.oauth1.as_ref().context("OAuth1 settings missing")?,
+                &mut request,
+                std::time::SystemTime::now(),
+            )?);
         }
         if signing_allowed && r.auth.kind == "aws" {
             private_auth_values.extend(crate::sign_aws_request(
