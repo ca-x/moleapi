@@ -14,7 +14,7 @@ rust-version = "1.94"
 prost = "0.14"
 prost-reflect = { version = "0.16", features = ["serde"] }
 protox = "0.9"
-tonic = { version = "0.14", features = ["tls-native-roots"] }
+tonic = { version = "0.14", features = ["tls-native-roots", "tls-webpki-roots"] }
 tonic-reflection = "0.14"
 anyhow = "1"
 axum = "0.8"

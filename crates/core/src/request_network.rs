@@ -1,6 +1,8 @@
 //! Portable networking source and library-owned TLS/identity conversion.
+mod socket;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
+pub use socket::{NetworkStream, connect_request_socket};
 use std::{
     net::{IpAddr, SocketAddr},
     sync::Arc,

@@ -57,6 +57,7 @@ a2a-types = "=0.2.0"
 a2a-types-legacy = { package = "a2a-types", version = "=0.1.1" }
 
 [dev-dependencies]
+p12-keystore = "=0.3.2"
 tempfile = "3"
 rcgen = "0.14"
 tonic-prost = "0.14"

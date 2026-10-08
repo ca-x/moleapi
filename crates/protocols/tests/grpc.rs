@@ -1,5 +1,7 @@
 #[path = "support/grpc.rs"]
 mod fixture;
+#[path = "support/grpc_network.rs"]
+mod network_fixture;
 use moleapi_core::{
     Environment, NetworkPolicy, RequestSpec, Specification, grpc_method, protobuf_pool,
 };
@@ -358,4 +360,141 @@ async fn reflection_uses_shared_live_admission_and_releases_capacity_on_drop() {
             .reserve_reflection("owner", "w", &request, "safe".into())
             .is_ok()
     );
+}
+
+#[tokio::test]
+async fn grpc_network_custom_ca_dns_and_mutual_tls_use_pem_and_encrypted_pfx() {
+    use moleapi_core::{ClientIdentity, IdentityFormat};
+    let (url, network, pfx, server) = network_fixture::start_mutual_tls_network().await;
+    let mut r = request(&url, "Unary", "network-pem");
+    r.network = Some(Box::new(network));
+    moleapi_core::validate_request(&r, false).unwrap();
+    let manager = SessionManager::new();
+    let id = start(&manager, r.clone(), Arc::new(str::to_owned));
+    let events = terminal(&manager, &id).await;
+    assert_eq!(messages(&events)[0]["text"], "network-pem");
+    r.network.as_mut().unwrap().identity = ClientIdentity {
+        enabled: true,
+        format: IdentityFormat::Pkcs12,
+        pkcs12_base64: pfx,
+        password: "test-private-password".into(),
+        alias: "grpc-client".into(),
+        ..Default::default()
+    };
+    let id = start(&manager, r, Arc::new(str::to_owned));
+    let events = terminal(&manager, &id).await;
+    assert_eq!(messages(&events)[0]["text"], "network-pem");
+    server.abort();
+}
+#[tokio::test]
+async fn grpc_network_connect_proxy_retains_dns_target_and_http2_calls() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let (url, server) = fixture::start(false).await;
+    let target = url::Url::parse(&url).unwrap();
+    let port = target.port().unwrap();
+    let proxy = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let proxy_url = format!("http://{}", proxy.local_addr().unwrap());
+    let tunnel = tokio::spawn(async move {
+        let (mut socket, _) = proxy.accept().await.unwrap();
+        let mut header = Vec::new();
+        while !header.ends_with(b"\r\n\r\n") {
+            header.push(socket.read_u8().await.unwrap());
+            assert!(header.len() < 8192);
+        }
+        let header = String::from_utf8(header).unwrap();
+        assert!(header.starts_with(&format!("CONNECT 127.0.0.1:{port} HTTP/1.1")));
+        assert!(
+            header.to_ascii_lowercase().contains(
+                "proxy-authorization: basic dXNlcjpwYXNz"
+                    .to_ascii_lowercase()
+                    .as_str()
+            )
+        );
+        let mut target = tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .unwrap();
+        socket
+            .write_all(b"HTTP/1.1 200 Connection established\r\n\r\n")
+            .await
+            .unwrap();
+        let _ = tokio::io::copy_bidirectional(&mut socket, &mut target).await;
+    });
+    let mut r = request(
+        &format!("http://grpc-network.test:{port}"),
+        "Unary",
+        "through-proxy",
+    );
+    r.network = Some(Box::new(moleapi_core::RequestNetwork {
+        http_mode: moleapi_core::HttpMode::Auto,
+        proxy: moleapi_core::RequestProxy {
+            enabled: true,
+            url: proxy_url,
+            username: "user".into(),
+            password: "pass".into(),
+            ..Default::default()
+        },
+        dns: vec![moleapi_core::DnsOverride {
+            hostname: "grpc-network.test".into(),
+            addresses: vec!["127.0.0.1".into()],
+        }],
+        ..Default::default()
+    }));
+    let manager = SessionManager::new();
+    let id = start(&manager, r, Arc::new(str::to_owned));
+    let events = terminal(&manager, &id).await;
+    assert_eq!(messages(&events)[0]["text"], "through-proxy");
+    tunnel.abort();
+    server.abort();
+}
+#[tokio::test]
+async fn grpc_network_reflection_uses_dns_override_and_rejects_private_hosted_addresses() {
+    let (url, server) = fixture::start(false).await;
+    let port = url::Url::parse(&url).unwrap().port().unwrap();
+    let mut r = request(
+        &format!("http://grpc-network.test:{port}"),
+        "Unary",
+        "reflection",
+    );
+    r.network = Some(Box::new(moleapi_core::RequestNetwork {
+        http_mode: moleapi_core::HttpMode::Auto,
+        dns: vec![moleapi_core::DnsOverride {
+            hostname: "grpc-network.test".into(),
+            addresses: vec!["127.0.0.1".into()],
+        }],
+        ..Default::default()
+    }));
+    let reflected = moleapi_protocols::reflect(
+        &r,
+        NetworkPolicy {
+            allow_private_network: true,
+        },
+    )
+    .await
+    .unwrap();
+    assert!(
+        reflected
+            .schema
+            .unwrap()
+            .services
+            .iter()
+            .any(|s| s.name == "moleapi.fixture.EchoService")
+    );
+    assert!(
+        moleapi_protocols::reflect(
+            &r,
+            NetworkPolicy {
+                allow_private_network: false
+            }
+        )
+        .await
+        .is_err()
+    );
+    r.network.as_mut().unwrap().http_mode = moleapi_core::HttpMode::Http1;
+    assert!(
+        moleapi_core::validate_request(&r, false)
+            .unwrap_err()
+            .to_string()
+            .contains("HTTP/2")
+    );
+    server.abort();
 }

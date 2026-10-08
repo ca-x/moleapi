@@ -191,6 +191,8 @@ export default function RequestEditor({
                     }
                   : { kind: value },
       url: value === "data" ? "postgresql://localhost:5432/postgres" : url,
+      ...(request.network && (value === "grpc" || value === "websocket")
+        ? {network:{...request.network,http_mode:value === "grpc" ? "auto" : "http1"}} : {}),
       ...(value === "tcp" ? {auth:{...request.auth,kind:"none"},headers:request.headers.map(row=>({...row,enabled:false})),query:request.query.map(row=>({...row,enabled:false}))} : {}),
       ...(value === "soap"
         ? { method: "POST", body_kind: "text" }
@@ -480,7 +482,7 @@ export default function RequestEditor({
             </Tabs.Content>
             <Tabs.Content value="settings">
               <div className="form-panel">
-                <NetworkSettings key={`${bodyScope}/${request.id}`} value={request.network} change={network=>update({network})} disabled={busy||sending} ntlm={request.auth.kind==="ntlm"} websocket={request.protocol?.kind==="websocket"}/>
+                <NetworkSettings key={`${bodyScope}/${request.id}`} value={request.network} change={network=>update({network})} disabled={busy||sending} ntlm={request.auth.kind==="ntlm"} websocket={request.protocol?.kind==="websocket"} grpc={grpc}/>
                 {cookieWorkspace && <CookieManager key={bodyScope} workspace={cookieWorkspace} environment={workspaceData?.active_environment_id} url={request.url}/>}
                 <Field label={t("请求超时 (ms)")} hint={t("最大 120000ms。")}>
                   <TextField.Root

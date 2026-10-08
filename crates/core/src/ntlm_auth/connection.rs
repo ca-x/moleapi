@@ -3,10 +3,7 @@ use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
 use hyper_util::rt::TokioIo;
 use std::{sync::Arc, time::Duration};
-use tokio::io::{AsyncRead, AsyncWrite};
 use url::Url;
-pub(super) trait Stream: AsyncRead + AsyncWrite + Unpin + Send {}
-impl<T: AsyncRead + AsyncWrite + Unpin + Send> Stream for T {}
 pub(crate) struct Connection {
     sender: hyper::client::conn::http1::SendRequest<Full<Bytes>>,
     task: tokio::task::JoinHandle<()>,
@@ -35,42 +32,43 @@ impl Connection {
         let timeout = Duration::from_millis(network.connect_timeout_ms);
         let tcp = tokio::time::timeout(
             timeout,
-            super::network::connect(url, policy, verify_tls, network),
+            crate::connect_request_socket(url, policy, verify_tls, network),
         )
         .await
         .context("NTLM connection timed out")??;
-        let (stream, binding): (Box<dyn Stream>, Option<Vec<u8>>) = if url.scheme() == "https" {
-            let mut config = crate::request_network::tls_config(network, verify_tls)?;
-            config.alpn_protocols = vec![b"http/1.1".to_vec()];
-            let host = url
-                .host_str()
-                .context("NTLM host missing")?
-                .trim_matches(['[', ']'])
-                .to_owned();
-            let name =
-                rustls::pki_types::ServerName::try_from(host).context("Invalid NTLM TLS name")?;
-            let tls = tokio::time::timeout(
-                timeout,
-                tokio_rustls::TlsConnector::from(Arc::new(config)).connect(name, tcp),
-            )
-            .await
-            .context("NTLM TLS handshake timed out")?
-            .context("NTLM TLS handshake failed")?;
-            let binding = if channel_binding {
-                let certificate = tls
-                    .get_ref()
-                    .1
-                    .peer_certificates()
-                    .and_then(|certs| certs.first())
-                    .context("NTLM TLS peer certificate missing")?;
-                Some(certificate_binding(certificate.as_ref())?)
+        let (stream, binding): (Box<dyn crate::NetworkStream>, Option<Vec<u8>>) =
+            if url.scheme() == "https" {
+                let mut config = crate::request_network::tls_config(network, verify_tls)?;
+                config.alpn_protocols = vec![b"http/1.1".to_vec()];
+                let host = url
+                    .host_str()
+                    .context("NTLM host missing")?
+                    .trim_matches(['[', ']'])
+                    .to_owned();
+                let name = rustls::pki_types::ServerName::try_from(host)
+                    .context("Invalid NTLM TLS name")?;
+                let tls = tokio::time::timeout(
+                    timeout,
+                    tokio_rustls::TlsConnector::from(Arc::new(config)).connect(name, tcp),
+                )
+                .await
+                .context("NTLM TLS handshake timed out")?
+                .context("NTLM TLS handshake failed")?;
+                let binding = if channel_binding {
+                    let certificate = tls
+                        .get_ref()
+                        .1
+                        .peer_certificates()
+                        .and_then(|certs| certs.first())
+                        .context("NTLM TLS peer certificate missing")?;
+                    Some(certificate_binding(certificate.as_ref())?)
+                } else {
+                    None
+                };
+                (Box::new(tls), binding)
             } else {
-                None
+                (Box::new(tcp), None)
             };
-            (Box::new(tls), binding)
-        } else {
-            (Box::new(tcp), None)
-        };
         let (sender, connection) = hyper::client::conn::http1::Builder::new()
             .max_headers(128)
             .handshake(TokioIo::new(stream))

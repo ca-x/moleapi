@@ -1,5 +1,7 @@
-//! Library-owned CONNECT/SOCKS tunnels, retained for the whole NTLM exchange.
-use super::connection::Stream;
+//! Library-owned sockets and CONNECT/SOCKS tunnels shared by protocol SDKs.
+use tokio::io::{AsyncRead, AsyncWrite};
+pub trait NetworkStream: AsyncRead + AsyncWrite + Unpin + Send {}
+impl<T: AsyncRead + AsyncWrite + Unpin + Send> NetworkStream for T {}
 use anyhow::{Context, Result, ensure};
 use hyper_util::rt::TokioIo;
 use std::{
@@ -13,9 +15,9 @@ use url::Url;
 
 // A tunnel connector receives only the already checked proxy socket. It cannot
 // resolve/reconnect behind the destination policy or retry an NTLM exchange.
-struct OnceConnector(Option<Box<dyn Stream>>);
+struct OnceConnector(Option<Box<dyn NetworkStream>>);
 impl Service<http::Uri> for OnceConnector {
-    type Response = TokioIo<Box<dyn Stream>>;
+    type Response = TokioIo<Box<dyn NetworkStream>>;
     type Error = std::io::Error;
     type Future = Pin<Box<dyn Future<Output = std::io::Result<Self::Response>> + Send>>;
     fn poll_ready(&mut self, _: &mut TaskContext<'_>) -> Poll<std::io::Result<()>> {
@@ -30,12 +32,13 @@ impl Service<http::Uri> for OnceConnector {
         })
     }
 }
-pub(super) async fn connect(
+pub async fn connect_request_socket(
     url: &Url,
     policy: crate::NetworkPolicy,
     verify: bool,
     c: &crate::RequestNetwork,
-) -> Result<Box<dyn Stream>> {
+) -> Result<Box<dyn NetworkStream>> {
+    crate::validate_request_network(c, false)?;
     let selected_proxy = crate::request_network::proxy_for(c, url, policy)?;
     let overridden = crate::request_network::has_dns_override(c, url);
     let remote = selected_proxy
@@ -101,7 +104,7 @@ pub(super) async fn connect(
         };
         return Ok(Box::new(stream.into_inner()));
     }
-    let socket: Box<dyn Stream> = if proxy.scheme() == "https" {
+    let socket: Box<dyn NetworkStream> = if proxy.scheme() == "https" {
         let mut proxy_settings = c.clone();
         proxy_settings.identity.enabled = false;
         let mut tls = crate::request_network::tls_config(&proxy_settings, verify)?;
@@ -144,7 +147,7 @@ pub(super) async fn connect(
     let tunnel = connector
         .call(format!("http://{authority}/").parse()?)
         .await
-        .context("NTLM CONNECT tunnel failed")?;
+        .context("CONNECT tunnel failed")?;
     Ok(Box::new(TokioIo::new(tunnel)))
 }
 fn host_for(url: &Url) -> Result<&str> {

@@ -414,3 +414,17 @@ fn s3_query_presign_matches_independent_postman_aws4_vector() {
         "8e214675647ba615e4d898c3ccff63cfa2c4796d3eb35f52ca53f1cc0cee72d3"
     );
 }
+#[test]
+fn selecting_network_settings_does_not_allow_unsupported_live_request_signing() {
+    let mut r = request();
+    r.network = Some(Box::new(moleapi_core::RequestNetwork::default()));
+    for protocol in [Protocol::Sse, Protocol::Websocket] {
+        r.protocol = protocol;
+        assert!(
+            validate_request(&r, false)
+                .unwrap_err()
+                .to_string()
+                .contains("finite HTTP")
+        );
+    }
+}

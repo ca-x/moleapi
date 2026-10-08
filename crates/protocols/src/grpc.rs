@@ -58,6 +58,9 @@ pub(crate) async fn channel(request: &RequestSpec, policy: NetworkPolicy) -> Res
         "gRPC endpoint must be an origin without a path, query or fragment"
     );
 
+    if let Some(network) = request.network.as_deref() {
+        return configured_channel(request, policy, &url, network).await;
+    }
     let addresses = checked_destination(&url, policy).await?;
     let mut endpoint = Endpoint::from_shared(url.to_string())?
         .connect_timeout(Duration::from_millis(request.timeout_ms))
@@ -84,6 +87,67 @@ pub(crate) async fn channel(request: &RequestSpec, policy: NetworkPolicy) -> Res
                 tokio::net::TcpStream::connect(addresses.as_slice())
                     .await
                     .map(TokioIo::new)
+            }
+        }))
+        .await?)
+}
+async fn configured_channel(
+    request: &RequestSpec,
+    policy: NetworkPolicy,
+    url: &url::Url,
+    network: &moleapi_core::RequestNetwork,
+) -> Result<Channel> {
+    moleapi_core::validate_request_network(network, false)?;
+    ensure!(
+        network.http_mode != moleapi_core::HttpMode::Http1,
+        "gRPC requires HTTP/2 network mode"
+    );
+    let timeout = Duration::from_millis(network.connect_timeout_ms.min(request.timeout_ms));
+    let mut endpoint = Endpoint::from_shared(url.to_string())?
+        .connect_timeout(timeout)
+        .http2_adaptive_window(true)
+        .buffer_size(32);
+    if url.scheme() == "https" {
+        let mut tls = ClientTlsConfig::new().domain_name(
+            url.host_str()
+                .context("Missing gRPC host")?
+                .trim_matches(['[', ']']),
+        );
+        if network.built_in_roots {
+            tls = tls.with_webpki_roots();
+        }
+        if !network.ca_pem.is_empty() {
+            tls = tls.ca_certificate(tonic::transport::Certificate::from_pem(&network.ca_pem));
+        }
+        if network.identity.enabled {
+            let material = moleapi_core::identity_pem(&network.identity)?;
+            // Tonic/rustls parse and verify the actual certificate/key pair.
+            tls = tls.identity(tonic::transport::Identity::from_pem(&material, &material));
+        }
+        endpoint = if request.verify_tls {
+            endpoint.tls_config(tls)?
+        } else {
+            endpoint.tls_config_with_verifier(tls, Arc::new(UnverifiedCertificate))?
+        };
+    }
+    let destination = url.clone();
+    let network = network.clone();
+    let verify = request.verify_tls;
+    Ok(endpoint
+        .connect_with_connector(service_fn(move |_uri| {
+            let destination = destination.clone();
+            let network = network.clone();
+            async move {
+                tokio::time::timeout(
+                    timeout,
+                    moleapi_core::connect_request_socket(&destination, policy, verify, &network),
+                )
+                .await
+                .map_err(|_| {
+                    std::io::Error::new(std::io::ErrorKind::TimedOut, "gRPC socket timed out")
+                })?
+                .map(TokioIo::new)
+                .map_err(std::io::Error::other)
             }
         }))
         .await?)

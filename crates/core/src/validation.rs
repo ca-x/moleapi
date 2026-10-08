@@ -141,6 +141,7 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
                     | Protocol::Websocket
                     | Protocol::A2a { .. }
                     | Protocol::Mcp { .. }
+                    | Protocol::Grpc { .. }
             ),
             "Selected network settings require a supported HTTP transport"
         );
@@ -148,6 +149,12 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
             !matches!(&r.protocol, Protocol::Mcp{config} if config.transport != "http"),
             "Network settings require MCP HTTP transport"
         );
+        if r.protocol.is_grpc() {
+            ensure!(
+                c.http_mode != crate::HttpMode::Http1,
+                "gRPC requires HTTP/2 network mode"
+            );
+        }
         if r.protocol == Protocol::Websocket {
             ensure!(
                 c.http_mode == crate::HttpMode::Http1,
@@ -175,13 +182,7 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
         ensure!(
             matches!(
                 r.protocol,
-                Protocol::Http
-                    | Protocol::Soap { .. }
-                    | Protocol::Graphql { .. }
-                    | Protocol::Sse
-                    | Protocol::Websocket
-                    | Protocol::A2a { .. }
-                    | Protocol::Mcp { .. }
+                Protocol::Http | Protocol::Soap { .. } | Protocol::Graphql { .. }
             ),
             "Request signing requires a finite HTTP request"
         );

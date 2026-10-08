@@ -1243,5 +1243,6 @@
   "无法读取证书文件：检查编码及大小（PEM 128 KiB、私钥 64 KiB、PFX 192 KiB）。": "无法读取证书文件：检查编码及大小（PEM 128 KiB、私钥 64 KiB、PFX 192 KiB）。",
   "重置网络设置": "重置网络设置",
   "WebSocket 升级需要 HTTP/1.1。": "WebSocket 升级需要 HTTP/1.1。",
-  "适用于 HTTP、SOAP、SSE、WebSocket、GraphQL、A2A 和 MCP HTTP 请求。支持环境变量；停用后保留草稿。": "适用于 HTTP、SOAP、SSE、WebSocket、GraphQL、A2A 和 MCP HTTP 请求。支持环境变量；停用后保留草稿。"
+  "gRPC 使用 HTTP/2；TLS、DNS 和代理配置同样适用。": "gRPC 使用 HTTP/2；TLS、DNS 和代理配置同样适用。",
+  "适用于 HTTP、SOAP、SSE、WebSocket、GraphQL、gRPC、A2A 和 MCP HTTP 请求。支持环境变量；停用后保留草稿。": "适用于 HTTP、SOAP、SSE、WebSocket、GraphQL、gRPC、A2A 和 MCP HTTP 请求。支持环境变量；停用后保留草稿。"
 }

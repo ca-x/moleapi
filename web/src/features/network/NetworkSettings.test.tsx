@@ -25,3 +25,9 @@ it("discards late certificate selection after config changes or unmount",async()
  fireEvent.click(screen.getByRole("button",{name:"Select certificate file"}));view.unmount();
  await act(async()=>finish({name:"test.pem",base64:"dGVzdA==",mime:""}));expect(change).not.toHaveBeenCalled();
 });
+it("creates HTTP2 settings when editing a gRPC request with no existing network config",async()=>{
+ await setLanguage("en");const change=vi.fn();render(<Theme><NetworkSettings grpc change={change}/></Theme>);
+ fireEvent.change(screen.getByLabelText("Connect timeout (ms)"),{target:{value:"2000"}});
+ expect(change.mock.calls[0][0].http_mode).toBe("auto");expect(change.mock.calls[0][0].connect_timeout_ms).toBe(2000);
+ expect(screen.getByText("gRPC uses HTTP/2; TLS, DNS and proxy settings also apply.")).toBeTruthy();
+});

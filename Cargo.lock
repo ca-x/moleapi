@@ -6469,6 +6469,7 @@ dependencies = [
  "moleapi-core",
  "moleapi-data",
  "native-tls",
+ "p12-keystore",
  "process-wrap",
  "prost",
  "prost-reflect",
@@ -11748,6 +11749,7 @@ dependencies = [
  "tower-layer",
  "tower-service",
  "tracing",
+ "webpki-roots 1.0.9",
 ]
 
 [[package]]
