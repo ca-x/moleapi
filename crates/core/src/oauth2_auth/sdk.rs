@@ -47,6 +47,8 @@ pub async fn oauth2_acquire(
     policy: NetworkPolicy,
     verify_tls: bool,
 ) -> Result<BasicTokenResponse> {
+    let active = config.grant_configuration();
+    let config = &active;
     validate_oauth2(config, false, true)?;
     let client = token_client(config)?;
     let http = HttpClient {
@@ -86,6 +88,8 @@ pub async fn oauth2_refresh(
     policy: NetworkPolicy,
     verify_tls: bool,
 ) -> Result<BasicTokenResponse> {
+    let active = config.grant_configuration();
+    let config = &active;
     validate_oauth2(config, false, false)?;
     ensure!(
         !config.token_url.is_empty() && refresh.len() <= 65536 && !refresh.is_empty(),
@@ -116,6 +120,8 @@ pub struct OAuth2Authorization {
     pub verifier: Option<oauth2::PkceCodeVerifier>,
 }
 pub fn oauth2_authorize(config: &OAuth2Auth) -> Result<OAuth2Authorization> {
+    let active = config.grant_configuration();
+    let config = &active;
     validate_oauth2(config, false, true)?;
     ensure!(
         matches!(
@@ -158,6 +164,8 @@ pub async fn oauth2_exchange_code(
     policy: NetworkPolicy,
     verify_tls: bool,
 ) -> Result<BasicTokenResponse> {
+    let active = config.grant_configuration();
+    let config = &active;
     validate_oauth2(config, false, true)?;
     ensure!(
         config.grant == OAuth2Grant::AuthorizationCode && !code.is_empty() && code.len() <= 65536,
@@ -191,6 +199,8 @@ pub async fn oauth2_device_start(
     policy: NetworkPolicy,
     verify_tls: bool,
 ) -> Result<oauth2::StandardDeviceAuthorizationResponse> {
+    let active = config.grant_configuration();
+    let config = &active;
     validate_oauth2(config, false, true)?;
     ensure!(
         config.grant == OAuth2Grant::DeviceCode,
@@ -232,6 +242,8 @@ pub async fn oauth2_device_poll(
     verify_tls: bool,
     timeout: Duration,
 ) -> Result<BasicTokenResponse> {
+    let active = config.grant_configuration();
+    let config = &active;
     validate_oauth2(config, false, true)?;
     ensure!(
         config.grant == OAuth2Grant::DeviceCode,
@@ -260,6 +272,24 @@ pub async fn oauth2_introspect(
     policy: NetworkPolicy,
     verify_tls: bool,
 ) -> Result<oauth2::basic::BasicTokenIntrospectionResponse> {
+    let mut active = config.grant_configuration();
+    active.authorization_url.clear();
+    active.redirect_url.clear();
+    active.device_url.clear();
+    active.token_url.clear();
+    active.authorization_params.clear();
+    active.token_params.clear();
+    active.scopes.clear();
+    active.client_secret = config.client_secret.clone();
+    active.client_auth = config.client_auth;
+    active.token_headers = config
+        .token_headers
+        .iter()
+        .filter(|row| row.enabled)
+        .cloned()
+        .collect();
+    active.introspection_url = config.introspection_url.clone();
+    let config = &active;
     validate_oauth2(config, false, false)?;
     ensure!(
         !config.introspection_url.is_empty() && !access.is_empty() && access.len() <= 65536,
@@ -286,6 +316,24 @@ pub async fn oauth2_revoke(
     policy: NetworkPolicy,
     verify_tls: bool,
 ) -> Result<()> {
+    let mut active = config.grant_configuration();
+    active.authorization_url.clear();
+    active.redirect_url.clear();
+    active.device_url.clear();
+    active.token_url.clear();
+    active.authorization_params.clear();
+    active.token_params.clear();
+    active.scopes.clear();
+    active.client_secret = config.client_secret.clone();
+    active.client_auth = config.client_auth;
+    active.token_headers = config
+        .token_headers
+        .iter()
+        .filter(|row| row.enabled)
+        .cloned()
+        .collect();
+    active.revocation_url = config.revocation_url.clone();
+    let config = &active;
     validate_oauth2(config, false, false)?;
     ensure!(
         !config.revocation_url.is_empty() && !token.is_empty() && token.len() <= 65536,

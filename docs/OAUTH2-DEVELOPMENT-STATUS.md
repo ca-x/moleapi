@@ -18,4 +18,12 @@ At this checkpoint 302 Rust tests pass (20 external tests ignored), 173 frontend
 
 Agent-browser verified hosted browser authorization, automatic token selection, provider inspection and an actual authenticated HTTP request. English/light and Chinese/dark screenshots are included, with a separate Chinese390px overflow check. These web and loopback fixtures do not establish native Tauri opener/tray or signed installer behavior on every OS.
 
-Remaining OAuth work includes provider-specific source import/export mappings, active-field-only variable resolution, broader cross-database OAuth race coverage and native-platform OAuth/browser QA. Full SDK/server generation, other authentication providers and the broader protocol/testing/Mock/docs/collaboration/integration capability matrix remain separate work. See [the specification](specs/oauth2.md).
+Remaining OAuth work includes provider-specific source import/export mappings, broader cross-database OAuth race coverage and native-platform OAuth/browser QA. Full SDK/server generation, other authentication providers and the broader protocol/testing/Mock/docs/collaboration/integration capability matrix remain separate work. See [the specification](specs/oauth2.md).
+
+## Grant projection and token-profile compatibility
+
+Execution now resolves only fields used by the selected grant and enabled parameter/header rows. Original drafts remain in saved requests; unused endpoint/password/username references do not block unrelated grants. Explicit introspection/revocation resolves that operation's endpoint/client authentication/custom headers rather than every dormant management field. Token binding ignores irrelevant PKCE and implicit-client-auth settings while retaining meaningful grant/environment identity.
+
+This development change introduces token profile version2. Records created by earlier development builds without a version remain private/listable/revealable/deletable, but must be acquired or explicitly imported again before network execution/refresh/introspection/revocation. Existing workspaces and original configuration are preserved. Unknown/old hashes are not accepted as a migration shortcut. The public v0.1.0 preview did not include OAuth2 tokens.
+
+Necessary scoped verification:20core/server OAuth fixtures pass, including inactive unresolved fields, implicit management header/client-auth restoration and legacy-token rejection without network use followed by explicit reimport.12TokenManager tests and TypeScript checks pass. Previously passed unrelated full suites are not rerun for this change; the branch CI remains the complete regression gate.

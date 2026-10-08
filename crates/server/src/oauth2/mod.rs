@@ -32,6 +32,19 @@ async fn configuration(
     owner: &str,
     input: &GrantInput,
 ) -> Result<OAuth2Auth, ApiError> {
+    configuration_for(s, owner, input, None).await
+}
+#[derive(Clone, Copy)]
+enum ManagementEndpoint {
+    Introspection,
+    Revocation,
+}
+async fn configuration_for(
+    s: &AppState,
+    owner: &str,
+    input: &GrantInput,
+    endpoint: Option<ManagementEndpoint>,
+) -> Result<OAuth2Auth, ApiError> {
     let w = owned(s, owner, &input.workspace_id).await?;
     let collection = input
         .collection_id
@@ -49,12 +62,45 @@ async fn configuration(
         crate::execution::variables(s, &w, collection, environment, &[], &[], &input.locals)?;
     let effective = scopes.effective();
     let request:moleapi_core::RequestSpec=serde_json::from_value(serde_json::json!({"id":"oauth2-config","name":"OAuth2","method":"GET","url":"https://oauth2.invalid/","description":"","headers":[],"query":[],"body_kind":"none","body":"","auth":{"kind":"oauth2","token":"","username":"","password":"","oauth2":input.config},"timeout_ms":30000,"verify_tls":input.verify_tls,"follow_redirects":false,"assertions":[],"examples":[]})).map_err(|_|ApiError::bad("Invalid OAuth2 configuration"))?;
-    moleapi_core::resolve_request(&request, Some(&effective))
+    let mut config = moleapi_core::resolve_request(&request, Some(&effective))
         .map_err(|e| ApiError::bad(e.to_string()))?
         .auth
         .oauth2
         .map(|o| *o)
-        .ok_or_else(ApiError::internal)
+        .ok_or_else(ApiError::internal)?;
+    if let Some(endpoint) = endpoint {
+        let source = if matches!(endpoint, ManagementEndpoint::Introspection) {
+            &input.config.introspection_url
+        } else {
+            &input.config.revocation_url
+        };
+        let resolved = moleapi_core::resolve_value(source, &effective)
+            .map_err(|error| ApiError::bad(error.to_string()))?;
+        if matches!(endpoint, ManagementEndpoint::Introspection) {
+            config.introspection_url = resolved;
+        } else {
+            config.revocation_url = resolved;
+        }
+        config.client_auth = input.config.client_auth;
+        config.token_headers = input
+            .config
+            .token_headers
+            .iter()
+            .filter(|row| row.enabled)
+            .map(|row| {
+                let mut resolved = row.clone();
+                resolved.key = moleapi_core::resolve_value(&row.key, &effective)
+                    .map_err(|error| ApiError::bad(error.to_string()))?;
+                resolved.value = moleapi_core::resolve_value(&row.value, &effective)
+                    .map_err(|error| ApiError::bad(error.to_string()))?;
+                resolved.local_value = None;
+                Ok::<_, ApiError>(resolved)
+            })
+            .collect::<Result<_, _>>()?;
+        config.client_secret = moleapi_core::resolve_value(&input.config.client_secret, &effective)
+            .map_err(|error| ApiError::bad(error.to_string()))?;
+    }
+    Ok(config)
 }
 fn policy(s: &AppState) -> NetworkPolicy {
     NetworkPolicy {
@@ -295,6 +341,11 @@ pub(crate) async fn prepare(
         .filter(|id| !id.is_empty())
         .ok_or_else(|| ApiError::bad("Acquire and select an OAuth2 token before executing"))?;
     let (mut token, _) = vault::load(s, owner, workspace, id).await?;
+    if token.profile_version != vault::PROFILE_VERSION {
+        return Err(ApiError::bad(
+            "OAuth2 token profile needs migration; acquire or import a new token",
+        ));
+    }
     if token.revoked || token.profile != vault::profile(config)? {
         return Err(ApiError::bad(
             "OAuth2 token does not match the current environment/profile",

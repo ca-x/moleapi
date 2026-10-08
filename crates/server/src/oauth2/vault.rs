@@ -4,12 +4,18 @@ use moleapi_core::OAuth2Auth;
 use oauth2::{TokenResponse, basic::BasicTokenResponse};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, sea_query::Expr};
 use serde::{Deserialize, Serialize};
+pub(crate) const PROFILE_VERSION: u32 = 2;
+fn legacy_profile_version() -> u32 {
+    1
+}
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct Token {
     pub id: String,
     pub workspace_id: String,
     pub label: String,
     pub profile: String,
+    #[serde(default = "legacy_profile_version")]
+    pub profile_version: u32,
     pub client_id: String,
     pub issuer: String,
     pub response: BasicTokenResponse,
@@ -25,6 +31,7 @@ pub(crate) struct Lease {
 }
 #[derive(Clone, Serialize)]
 pub(crate) struct Metadata {
+    pub profile_version: u32,
     pub id: String,
     pub label: String,
     pub client_id: String,
@@ -40,6 +47,7 @@ pub(crate) struct Metadata {
 impl Token {
     pub fn metadata(&self) -> Metadata {
         Metadata {
+            profile_version: self.profile_version,
             id: self.id.clone(),
             label: self.label.clone(),
             client_id: self.client_id.clone(),
@@ -66,7 +74,7 @@ fn key(owner: &str, workspace: &str, id: &str) -> String {
 }
 pub(crate) fn profile(config: &OAuth2Auth) -> Result<String, ApiError> {
     use sha2::{Digest, Sha256};
-    let mut binding = config.clone();
+    let mut binding = config.grant_configuration();
     binding.token_id = None;
     binding.client_secret.clear();
     binding.password.clear();
@@ -126,6 +134,7 @@ pub(crate) async fn create(
         workspace_id: workspace.into(),
         label,
         profile: profile(config)?,
+        profile_version: PROFILE_VERSION,
         client_id: config.client_id.clone(),
         issuer: url::Url::parse(&config.token_url)
             .map(|u| u.origin().ascii_serialization())
@@ -228,6 +237,11 @@ pub(crate) async fn lease(
     config: &OAuth2Auth,
 ) -> Result<(Token, i64), ApiError> {
     let (mut token, revision) = load(s, owner, workspace, id).await?;
+    if token.profile_version != PROFILE_VERSION {
+        return Err(ApiError::bad(
+            "OAuth2 token profile needs migration; acquire or import a new token",
+        ));
+    }
     if token.revoked || token.profile != profile(config)? {
         return Err(ApiError::bad(
             "OAuth2 token does not match this authorization profile",

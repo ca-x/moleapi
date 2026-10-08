@@ -1123,5 +1123,6 @@
   "Hawk 附加数据": "Hawk extra data",
   "Hawk 应用 ID": "Hawk application ID",
   "Hawk 委托 ID": "Hawk delegation ID",
-  "应用与委托参与签名。启用请求体哈希时，按实际发送的内容和 MIME 类型计算。": "Application and delegation attributes are authenticated. Payload hashing uses the actual transmitted content and MIME type."
+  "应用与委托参与签名。启用请求体哈希时，按实际发送的内容和 MIME 类型计算。": "Application and delegation attributes are authenticated. Payload hashing uses the actual transmitted content and MIME type.",
+  "令牌来自旧配置版本，请重新获取或导入；工作区和原始配置已保留。": "This token uses an older profile version. Acquire or import it again; the workspace and original configuration are preserved."
 }

@@ -232,3 +232,41 @@ pub fn validate_oauth2(config: &OAuth2Auth, templates: bool, acquisition: bool) 
     }
     Ok(())
 }
+
+impl OAuth2Auth {
+    /// An execution projection; never replaces saved configuration or inactive drafts.
+    pub fn grant_configuration(&self) -> Self {
+        let mut config = self.clone();
+        config.revocation_url.clear();
+        config.introspection_url.clear();
+        if config.grant != OAuth2Grant::Password {
+            config.username.clear();
+            config.password.clear();
+        }
+        if !matches!(
+            config.grant,
+            OAuth2Grant::AuthorizationCode | OAuth2Grant::Implicit
+        ) {
+            config.authorization_url.clear();
+            config.redirect_url.clear();
+            config.authorization_params.clear();
+        }
+        if config.grant != OAuth2Grant::AuthorizationCode {
+            config.pkce = false;
+        }
+        if config.grant != OAuth2Grant::DeviceCode {
+            config.device_url.clear();
+        }
+        if config.grant == OAuth2Grant::Implicit {
+            config.client_auth = OAuth2ClientAuth::Basic;
+            config.client_secret.clear();
+            config.token_url.clear();
+            config.token_params.clear();
+            config.token_headers.clear();
+        }
+        config.authorization_params.retain(|row| row.enabled);
+        config.token_params.retain(|row| row.enabled);
+        config.token_headers.retain(|row| row.enabled);
+        config
+    }
+}

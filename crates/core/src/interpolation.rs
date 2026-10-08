@@ -182,6 +182,11 @@ pub fn resolve_request(
     if dormant_aws.is_some() {
         value["auth"]["aws"] = serde_json::Value::Null;
     }
+    if auth_kind == "oauth2"
+        && let Some(config) = &request.auth.oauth2
+    {
+        value["auth"]["oauth2"] = serde_json::to_value(config.grant_configuration())?;
+    }
     let dormant_oauth2 = if auth_kind != "oauth2" {
         Some(value["auth"]["oauth2"].clone())
     } else {

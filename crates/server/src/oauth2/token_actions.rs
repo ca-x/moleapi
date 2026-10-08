@@ -1,5 +1,5 @@
 //! Explicit, owner-bound management of provider credentials.
-use super::{GrantInput, configuration, policy, vault};
+use super::{GrantInput, ManagementEndpoint, configuration, configuration_for, policy, vault};
 use crate::{ApiError, AppState, auth::Identity, workspaces::owned};
 use axum::{
     Extension, Json,
@@ -32,8 +32,19 @@ pub(crate) async fn introspect(
     if input.workspace_id != workspace {
         return Err(ApiError::bad("OAuth2 workspace mismatch"));
     }
-    let config = configuration(&s, &owner.0, &input).await?;
+    let config = configuration_for(
+        &s,
+        &owner.0,
+        &input,
+        Some(ManagementEndpoint::Introspection),
+    )
+    .await?;
     let (token, revision) = vault::load(&s, &owner.0, &workspace, &id).await?;
+    if token.profile_version != vault::PROFILE_VERSION {
+        return Err(ApiError::bad(
+            "OAuth2 token profile needs migration; acquire or import a new token",
+        ));
+    }
     if token.revoked || token.profile != vault::profile(&config)? {
         return Err(ApiError::bad(
             "OAuth2 token does not match this authorization profile",
@@ -108,7 +119,13 @@ pub(crate) async fn revoke(
     if input.input.workspace_id != workspace {
         return Err(ApiError::bad("OAuth2 workspace mismatch"));
     }
-    let config = configuration(&s, &owner.0, &input.input).await?;
+    let config = configuration_for(
+        &s,
+        &owner.0,
+        &input.input,
+        Some(ManagementEndpoint::Revocation),
+    )
+    .await?;
     let _permit = s
         .oauth2_slots
         .clone()

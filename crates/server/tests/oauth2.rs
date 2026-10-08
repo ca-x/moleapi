@@ -1004,3 +1004,206 @@ async fn device_slow_down_and_expiry_follow_sdk_polling_rules() {
     assert_eq!(tokens.as_array().unwrap().len(), 1);
     server.abort();
 }
+
+#[tokio::test]
+async fn grant_projection_binds_tokens_without_resolving_unused_fields_or_unused_inspection_endpoint()
+ {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("active-projection.db"))
+        .await
+        .unwrap();
+    let provider=Router::new().route("/token",axum::routing::post(||async{axum::Json(json!({"access_token":"projection-access","token_type":"Bearer","expires_in":3600}))})).route("/resource",axum::routing::get(|headers:axum::http::HeaderMap|async move{assert_eq!(headers["authorization"],"Bearer projection-access");axum::Json(json!({"ok":true}))})).route("/inspect",axum::routing::post(||async{axum::Json(json!({"active":true}))}));
+    let (base, server) = serve(provider).await;
+    let config = json!({"grant":"client_credentials","token_url":format!("{base}/token"),"client_id":"client","authorization_url":"{{unused_authorization}}","redirect_url":"{{unused_redirect}}","device_url":"{{unused_device}}","username":"{{unused_username}}","password":"{{unused_password}}","revocation_url":"{{unused_revoke}}","introspection_url":"{{inspection_endpoint}}","token_params":[{"id":"disabled","key":"{{unused_key}}","value":"{{unused_value}}","enabled":false}]});
+    let mut data = example_data();
+    data["global_variables"] = json!([{"id":"inspection","key":"inspection_endpoint","value":format!("{base}/inspect"),"enabled":true}]);
+    data["collections"][0]["requests"][0]["url"] = json!(format!("{base}/resource"));
+    data["collections"][0]["requests"][0]["assertions"] = json!([]);
+    let (status, _) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"projection","name":"Projection","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let input = json!({"workspace_id":"projection","config":config});
+    let (status, token) = call(
+        &router,
+        "POST",
+        "/api/oauth2/tokens/acquire",
+        None,
+        Some(input.clone()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{token}");
+    let id = token["id"].as_str().unwrap();
+    let mut request = data["collections"][0]["requests"][0].clone();
+    request["auth"] =
+        json!({"kind":"oauth2","token":"","username":"","password":"","oauth2":config});
+    request["auth"]["oauth2"]["token_id"] = json!(id);
+    let (status, response) = call(
+        &router,
+        "POST",
+        "/api/execute",
+        None,
+        Some(json!({"workspace_id":"projection","request":request})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    let (status, inspection) = call(
+        &router,
+        "POST",
+        &format!("/api/workspaces/projection/oauth2/tokens/{id}/introspect"),
+        None,
+        Some(input),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{inspection}");
+    assert_eq!(inspection["active"], true);
+    server.abort();
+}
+
+#[tokio::test]
+async fn legacy_profile_versions_require_explicit_reauthorization_without_network_use() {
+    use sea_orm::{ConnectionTrait, Database, DbBackend, Statement};
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("legacy-profile.db");
+    let router = local(&path).await.unwrap();
+    call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"legacy","name":"Legacy","data":example_data()})),
+    )
+    .await;
+    let calls = Arc::new(AtomicUsize::new(0));
+    let seen = calls.clone();
+    let provider = Router::new().route(
+        "/resource",
+        axum::routing::get(move || {
+            let seen = seen.clone();
+            async move {
+                seen.fetch_add(1, Ordering::SeqCst);
+                axum::Json(json!({"ok":true}))
+            }
+        }),
+    );
+    let (base, server) = serve(provider).await;
+    let config = json!({"grant":"client_credentials","token_url":format!("{base}/token"),"client_id":"legacy-client"});
+    let input = json!({"workspace_id":"legacy","config":config,"token":{"access_token":"legacy-access","token_type":"Bearer"}});
+    let (status, token) = call(
+        &router,
+        "POST",
+        "/api/oauth2/tokens/import",
+        None,
+        Some(input.clone()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(token["profile_version"], 2);
+    let id = token["id"].as_str().unwrap();
+    let db = Database::connect(format!("sqlite://{}?mode=rwc", path.display()))
+        .await
+        .unwrap();
+    db.execute(Statement::from_sql_and_values(DbBackend::Sqlite,"UPDATE documents SET payload=json_remove(payload,'$.profile_version') WHERE kind='oauth2-token' AND json_extract(payload,'$.id')=?",[id.into()])).await.unwrap();
+    let mut request = example_data()["collections"][0]["requests"][0].clone();
+    request["url"] = json!(format!("{base}/resource"));
+    request["auth"] =
+        json!({"kind":"oauth2","token":"","username":"","password":"","oauth2":config});
+    request["auth"]["oauth2"]["token_id"] = json!(id);
+    let (status, error) = call(
+        &router,
+        "POST",
+        "/api/execute",
+        None,
+        Some(json!({"workspace_id":"legacy","request":request})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(error.to_string().contains("migration"));
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    let (_, tokens) = call(
+        &router,
+        "GET",
+        "/api/workspaces/legacy/oauth2/tokens",
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(tokens[0]["profile_version"], 1);
+    let (status, new) = call(
+        &router,
+        "POST",
+        "/api/oauth2/tokens/import",
+        None,
+        Some(input),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    request["auth"]["oauth2"]["token_id"] = new["id"].clone();
+    let (status, _) = call(
+        &router,
+        "POST",
+        "/api/execute",
+        None,
+        Some(json!({"workspace_id":"legacy","request":request})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    server.abort();
+}
+#[tokio::test]
+async fn implicit_token_management_restores_only_explicit_management_credentials_and_headers() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("implicit-management.db"))
+        .await
+        .unwrap();
+    let provider = Router::new().route(
+        "/inspect",
+        axum::routing::post(
+            |headers: axum::http::HeaderMap,
+             axum::extract::Form(form): axum::extract::Form<
+                std::collections::HashMap<String, String>,
+            >| async move {
+                assert_eq!(headers["x-tenant"], "resolved-tenant");
+                assert_eq!(form["client_secret"], "resolved-client-secret");
+                assert_eq!(form["client_id"], "implicit-client");
+                assert_eq!(form["token"], "implicit-managed-access");
+                axum::Json(json!({"active":true}))
+            },
+        ),
+    );
+    let (base, server) = serve(provider).await;
+    let mut data = example_data();
+    data["global_variables"] = json!([{"id":"secret","key":"client_secret","value":"resolved-client-secret","enabled":true},{"id":"tenant","key":"tenant","value":"resolved-tenant","enabled":true},{"id":"endpoint","key":"inspect","value":format!("{base}/inspect"),"enabled":true}]);
+    call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"implicit-managed","name":"Implicit","data":data})),
+    )
+    .await;
+    let config = json!({"grant":"implicit","client_id":"implicit-client","client_secret":"{{client_secret}}","client_auth":"body","authorization_url":"https://provider.example/authorize","redirect_url":"https://client.example/callback","token_url":"{{unused_token}}","introspection_url":"{{inspect}}","revocation_url":"{{unused_revoke}}","token_headers":[{"id":"tenant","key":"X-Tenant","value":"{{tenant}}","enabled":true},{"id":"disabled","key":"X-Disabled","value":"{{unused_disabled}}","enabled":false}]});
+    let(status,token)=call(&router,"POST","/api/oauth2/tokens/import",None,Some(json!({"workspace_id":"implicit-managed","config":config,"token":{"access_token":"implicit-managed-access","token_type":"Bearer"}}))).await;
+    assert_eq!(status, StatusCode::OK, "{token}");
+    let id = token["id"].as_str().unwrap();
+    let mut changed = config.clone();
+    changed["pkce"] = json!(false);
+    changed["client_auth"] = json!("body");
+    let (status, inspection) = call(
+        &router,
+        "POST",
+        &format!("/api/workspaces/implicit-managed/oauth2/tokens/{id}/introspect"),
+        None,
+        Some(json!({"workspace_id":"implicit-managed","config":changed})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{inspection}");
+    assert_eq!(inspection["active"], true);
+    server.abort();
+}

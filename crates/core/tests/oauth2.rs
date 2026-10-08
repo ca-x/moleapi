@@ -204,3 +204,62 @@ async fn provider_error_and_redirect_cannot_expose_or_forward_client_secrets() {
     );
     task.abort();
 }
+
+#[tokio::test]
+async fn unused_grant_fields_and_disabled_rows_do_not_require_environment_variables() {
+    let (base, seen, server) = server().await;
+    let mut config = config(&base);
+    config.grant = OAuth2Grant::ClientCredentials;
+    config.authorization_url = "{{unused_authorization}}".into();
+    config.redirect_url = "{{unused_redirect}}".into();
+    config.device_url = "{{unused_device}}".into();
+    config.revocation_url = "{{unused_revoke}}".into();
+    config.introspection_url = "{{unused_inspect}}".into();
+    config.username = "{{unused_username}}".into();
+    config.password = "{{unused_password}}".into();
+    let inactive = Pair {
+        id: "inactive".into(),
+        key: "{{unused_key}}".into(),
+        value: "{{unused_value}}".into(),
+        enabled: false,
+        secret: Some(true),
+        local_value: None,
+    };
+    config.token_params.push(inactive.clone());
+    config.authorization_params.push(inactive.clone());
+    config.token_headers.push(inactive);
+    let original = config.clone();
+    let request:RequestSpec=serde_json::from_value(json!({"id":"projection","name":"Projection","method":"GET","url":"https://example.test/","description":"","headers":[],"query":[],"body_kind":"none","body":"","auth":{"kind":"oauth2","token":"","username":"","password":"","oauth2":config},"timeout_ms":30000,"verify_tls":true,"follow_redirects":false,"assertions":[],"examples":[]})).unwrap();
+    let resolved = resolve_request(&request, None).unwrap();
+    let execution = resolved.auth.oauth2.as_ref().unwrap();
+    assert!(execution.username.is_empty());
+    assert!(execution.password.is_empty());
+    assert!(execution.authorization_url.is_empty());
+    assert!(execution.token_headers.is_empty());
+    assert_eq!(*request.auth.oauth2.as_ref().unwrap().as_ref(), original);
+    let response = oauth2_acquire(&original, LOCAL, true).await.unwrap();
+    assert_eq!(
+        response.access_token().secret(),
+        "issued-client_credentials"
+    );
+    assert_eq!(seen.lock().unwrap().len(), 1);
+    server.abort();
+}
+#[test]
+fn implicit_grant_ignores_token_and_client_secret_drafts_but_requires_authorization_variables() {
+    let mut config = OAuth2Auth {
+        grant: OAuth2Grant::Implicit,
+        authorization_url: "https://provider.example/authorize".into(),
+        redirect_url: "https://client.example/callback".into(),
+        client_id: "client".into(),
+        client_secret: "{{unused_client_secret}}".into(),
+        token_url: "{{unused_token}}".into(),
+        device_url: "{{unused_device}}".into(),
+        ..Default::default()
+    };
+    let authorized = oauth2_authorize(&config).unwrap();
+    assert!(authorized.url.contains("response_type=token"));
+    assert_eq!(config.client_secret, "{{unused_client_secret}}");
+    config.authorization_url = "{{required_authorization}}".into();
+    assert!(oauth2_authorize(&config).is_err());
+}

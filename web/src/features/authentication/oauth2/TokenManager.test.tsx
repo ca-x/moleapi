@@ -93,3 +93,6 @@ it("selects the token when polling completes an automatic browser callback",asyn
  const {select}=view({...oauth2Config(),token_id:null});fireEvent.click(screen.getByRole("button",{name:"Acquire token"}));
  await waitFor(()=>expect(select).toHaveBeenCalledWith(token.id),{timeout:3000});
 });
+it("explains legacy token profiles while preserving explicit reveal and reauthorization",async()=>{
+ vi.mocked(api).mockImplementation(async()=>[{...token,profile_version:1}] as never);view();await screen.findByText(/older profile version/);expect((screen.getByRole("button",{name:"Refresh token"}) as HTMLButtonElement).disabled).toBe(true);expect((screen.getByRole("button",{name:"Acquire token"}) as HTMLButtonElement).disabled).toBe(false);expect((screen.getByRole("button",{name:"Reveal token"}) as HTMLButtonElement).disabled).toBe(false);
+});
