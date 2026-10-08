@@ -94,9 +94,7 @@ pub(crate) fn send(session: &Arc<Session>, message: SendMessage) -> Result<()> {
     control.private |= private;
     Ok(())
 }
-trait Socket: AsyncRead + AsyncWrite + Unpin + Send {}
-impl<T: AsyncRead + AsyncWrite + Unpin + Send> Socket for T {}
-type Stream = Box<dyn Socket>;
+type Stream = Box<dyn moleapi_core::NetworkStream>;
 struct MeasuredIo {
     inner: Stream,
     session: Arc<Session>,
@@ -200,45 +198,62 @@ pub(crate) async fn run(
     let url = tcp_url(&request.url)?;
     let activity = Arc::new(Mutex::new(Instant::now()));
     let connect = async {
-        let addresses = checked_destination(&url, policy).await?;
-        let mut connected = None;
-        let mut last_error = None;
-        for address in addresses {
-            match TcpStream::connect(address).await {
-                Ok(stream) => {
-                    connected = Some(stream);
-                    break;
-                }
-                Err(error) => last_error = Some(error),
-            }
-        }
-        let stream = connected.ok_or_else(|| {
-            anyhow::Error::new(
-                last_error.unwrap_or_else(|| io::Error::other("No checked TCP addresses")),
+        let stream: Stream = if let Some(network) = request.network.as_deref() {
+            moleapi_core::connect_request_socket(
+                &url,
+                policy,
+                request.verify_tls,
+                network,
+                config.no_delay,
             )
-            .context("TCP connection failed")
-        })?;
-        stream.set_nodelay(config.no_delay)?;
+            .await?
+        } else {
+            let addresses = checked_destination(&url, policy).await?;
+            let mut connected = None;
+            let mut last_error = None;
+            for address in addresses {
+                match TcpStream::connect(address).await {
+                    Ok(stream) => {
+                        connected = Some(stream);
+                        break;
+                    }
+                    Err(error) => last_error = Some(error),
+                }
+            }
+            let stream = connected.ok_or_else(|| {
+                anyhow::Error::new(
+                    last_error.unwrap_or_else(|| io::Error::other("No checked TCP addresses")),
+                )
+                .context("TCP connection failed")
+            })?;
+            stream.set_nodelay(config.no_delay)?;
+            Box::new(stream) as Stream
+        };
         let stream = MeasuredIo {
-            inner: Box::new(stream),
+            inner: stream,
             session: session.clone(),
             activity: activity.clone(),
         };
         let stream: Stream = if url.scheme() == "tcps" {
-            let mut roots = rustls::RootCertStore::empty();
-            for certificate in rustls_native_certs::load_native_certs().certs {
-                let _ = roots.add(certificate);
-            }
-            let mut tls = rustls::ClientConfig::builder_with_provider(Arc::new(
-                rustls::crypto::ring::default_provider(),
-            ))
-            .with_safe_default_protocol_versions()?
-            .with_root_certificates(roots)
-            .with_no_client_auth();
-            if !request.verify_tls {
-                tls.dangerous()
-                    .set_certificate_verifier(Arc::new(crate::grpc::UnverifiedCertificate));
-            }
+            let tls = if let Some(network) = request.network.as_deref() {
+                moleapi_core::request_tls_config(network, request.verify_tls)?
+            } else {
+                let mut roots = rustls::RootCertStore::empty();
+                for certificate in rustls_native_certs::load_native_certs().certs {
+                    let _ = roots.add(certificate);
+                }
+                let mut tls = rustls::ClientConfig::builder_with_provider(Arc::new(
+                    rustls::crypto::ring::default_provider(),
+                ))
+                .with_safe_default_protocol_versions()?
+                .with_root_certificates(roots)
+                .with_no_client_auth();
+                if !request.verify_tls {
+                    tls.dangerous()
+                        .set_certificate_verifier(Arc::new(crate::grpc::UnverifiedCertificate));
+                }
+                tls
+            };
             let name = rustls::pki_types::ServerName::try_from(
                 url.host_str().unwrap().trim_matches(['[', ']']).to_owned(),
             )?;
@@ -252,7 +267,7 @@ pub(crate) async fn run(
         };
         Ok::<_, anyhow::Error>(stream)
     };
-    let stream = tokio::select! {biased;_=session.cancel.cancelled()=>return Ok("TCP closed while connecting".into()),value=tokio::time::timeout(Duration::from_millis(request.timeout_ms),connect)=>value.context("TCP connect timed out")??};
+    let stream = tokio::select! {biased;_=session.cancel.cancelled()=>return Ok("TCP closed while connecting".into()),value=tokio::time::timeout(Duration::from_millis(request.network.as_deref().map_or(request.timeout_ms, |c| c.connect_timeout_ms.min(request.timeout_ms))),connect)=>value.context("TCP connect timed out")??};
     *activity.lock().unwrap() = Instant::now();
     {
         session.record.lock().unwrap().summary.state = SessionState::Open;

@@ -32,7 +32,7 @@ impl Connection {
         let timeout = Duration::from_millis(network.connect_timeout_ms);
         let tcp = tokio::time::timeout(
             timeout,
-            crate::connect_request_socket(url, policy, verify_tls, network),
+            crate::connect_request_socket(url, policy, verify_tls, network, true),
         )
         .await
         .context("NTLM connection timed out")??;

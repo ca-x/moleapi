@@ -31,3 +31,10 @@ it("creates HTTP2 settings when editing a gRPC request with no existing network 
  expect(change.mock.calls[0][0].http_mode).toBe("auto");expect(change.mock.calls[0][0].connect_timeout_ms).toBe(2000);
  expect(screen.getByText("gRPC uses HTTP/2; TLS, DNS and proxy settings also apply.")).toBeTruthy();
 });
+it("hides HTTP version for raw TCP and preserves certificate source when changing connection settings",async()=>{
+ await setLanguage("en");const change=vi.fn();const c={...defaultNetwork(),http_mode:"auto" as const};c.identity.key_pem="{{tcp_key}}";
+ render(<Theme><NetworkSettings rawTcp value={c} change={change}/></Theme>);
+ expect(screen.queryByRole("combobox",{name:"HTTP version"})).toBeNull();
+ fireEvent.change(screen.getByLabelText("Connect timeout (ms)"),{target:{value:"2500"}});
+ expect(change.mock.calls[0][0]).toMatchObject({http_mode:"http1",connect_timeout_ms:2500,identity:{key_pem:"{{tcp_key}}"}});
+});

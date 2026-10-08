@@ -37,6 +37,7 @@ pub async fn connect_request_socket(
     policy: crate::NetworkPolicy,
     verify: bool,
     c: &crate::RequestNetwork,
+    no_delay: bool,
 ) -> Result<Box<dyn NetworkStream>> {
     crate::validate_request_network(c, false)?;
     let selected_proxy = crate::request_network::proxy_for(c, url, policy)?;
@@ -51,7 +52,7 @@ pub async fn connect_request_socket(
     };
     let Some(proxy) = selected_proxy else {
         let tcp = tokio::net::TcpStream::connect(addresses.as_slice()).await?;
-        tcp.set_nodelay(true)?;
+        tcp.set_nodelay(no_delay)?;
         return Ok(Box::new(tcp));
     };
     let port = proxy.port().unwrap_or(match proxy.scheme() {
@@ -68,7 +69,7 @@ pub async fn connect_request_socket(
         .collect::<Vec<_>>();
     ensure!(!proxy_addresses.is_empty(), "Proxy address missing");
     let tcp = tokio::net::TcpStream::connect(proxy_addresses.as_slice()).await?;
-    tcp.set_nodelay(true)?;
+    tcp.set_nodelay(no_delay)?;
     if proxy.scheme().starts_with("socks") {
         let target = if !overridden && matches!(proxy.scheme(), "socks4a" | "socks5h") {
             tokio_socks::TargetAddr::Domain(

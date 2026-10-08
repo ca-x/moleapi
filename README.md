@@ -33,7 +33,7 @@ These screenshots show the actual embedded self-hosted interface with synthetic 
 
 ![Request network settings with a real DNS override preserving Host](docs/images/network-en.png)
 
-HTTP/SOAP, SSE/WebSocket/GraphQL, gRPC, A2A and MCP HTTP requests support explicit HTTP/SOCKS proxies, bypass rules, custom CA roots, PEM/encrypted PFX client certificates, DNS overrides and HTTP/2. Network credentials are scrubbed from history/default exports; exact source backup requires including sensitive values. See [network support and current combinations](docs/specs/request-network.md).
+HTTP/SOAP, SSE/WebSocket/GraphQL, gRPC, TCP/TLS, A2A and MCP HTTP requests support explicit HTTP/SOCKS proxies, bypass rules, custom CA roots, PEM/encrypted PFX client certificates, DNS overrides and HTTP/2. Network credentials are scrubbed from history/default exports; exact source backup requires including sensitive values. See [network support and current combinations](docs/specs/request-network.md).
 
 ## Languages
 

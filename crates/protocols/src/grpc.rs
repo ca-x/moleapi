@@ -140,7 +140,13 @@ async fn configured_channel(
             async move {
                 tokio::time::timeout(
                     timeout,
-                    moleapi_core::connect_request_socket(&destination, policy, verify, &network),
+                    moleapi_core::connect_request_socket(
+                        &destination,
+                        policy,
+                        verify,
+                        &network,
+                        true,
+                    ),
                 )
                 .await
                 .map_err(|_| {

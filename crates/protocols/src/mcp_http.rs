@@ -46,7 +46,9 @@ impl CheckedHttp {
             self.network.as_deref(),
         )
         .await
-        .map_err(|_| failure("MCP network configuration or destination policy rejected"))?;
+        .map_err(|_| {
+            failure("MCP network configuration invalid, endpoint blocked or DNS failed")
+        })?;
         let defaults = moleapi_core::RequestNetwork::default();
         let network = self.network.as_deref().unwrap_or(&defaults);
         let mut headers = http::HeaderMap::new();

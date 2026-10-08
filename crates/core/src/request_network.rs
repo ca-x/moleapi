@@ -269,6 +269,10 @@ pub fn identity_pem(c: &ClientIdentity) -> Result<String> {
     )));
     Ok(output)
 }
+pub fn request_tls_config(c: &RequestNetwork, verify: bool) -> Result<rustls::ClientConfig> {
+    validate_request_network(c, false)?;
+    tls_config(c, verify)
+}
 pub(crate) fn tls_config(c: &RequestNetwork, verify: bool) -> Result<rustls::ClientConfig> {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let mut roots = rustls::RootCertStore::empty();

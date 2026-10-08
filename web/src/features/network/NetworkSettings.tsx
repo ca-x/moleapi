@@ -6,11 +6,11 @@ import {t,useLanguage} from "../../shared/i18n";
 import type {RequestNetwork} from "../../shared/types";
 import {pickBinaryFile} from "../../shared/pickBinaryFile";
 export const defaultNetwork=():RequestNetwork=>({http_mode:"http1",proxy:{enabled:false,url:"",username:"",password:"",bypass:""},built_in_roots:true,ca_pem:"",identity:{enabled:false,format:"pem",certificate_pem:"",key_pem:"",pkcs12_base64:"",password:"",alias:""},dns:[],connect_timeout_ms:15000});
-export default function NetworkSettings({value,change,disabled=false,ntlm=false,websocket=false,grpc=false}:{value?:RequestNetwork;change:(value:RequestNetwork|undefined)=>void;disabled?:boolean;ntlm?:boolean;websocket?:boolean;grpc?:boolean}){
+export default function NetworkSettings({value,change,disabled=false,ntlm=false,websocket=false,grpc=false,rawTcp=false}:{value?:RequestNetwork;change:(value:RequestNetwork|undefined)=>void;disabled?:boolean;ntlm?:boolean;websocket?:boolean;grpc?:boolean;rawTcp?:boolean}){
  useLanguage();const c=value??{...defaultNetwork(),http_mode:grpc?"auto" as const:"http1" as const};const [picking,setPicking]=useState(false);const [error,setError]=useState(false);
  const current=useRef({value,disabled});current.current={value,disabled};const mounted=useRef(true);const generation=useRef(0);
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;generation.current++;};},[]);
- const update=(patch:Partial<RequestNetwork>)=>change({...c,...patch});
+ const update=(patch:Partial<RequestNetwork>)=>change({...c,...patch,...(rawTcp?{http_mode:"http1" as const}:{})});
  async function pick(field:"ca_pem"|"certificate_pem"|"key_pem"|"pkcs12_base64"){
    const snapshot=JSON.stringify(value);const ticket=++generation.current;setPicking(true);setError(false);
    try {const file=await pickBinaryFile({extensions:field==="pkcs12_base64"?["p12","pfx"]:["pem","crt","cer","key"],accept:field==="pkcs12_base64"?".p12,.pfx":".pem,.crt,.cer,.key"});
@@ -25,8 +25,9 @@ export default function NetworkSettings({value,change,disabled=false,ntlm=false,
  const toggle=(label:string,checked:boolean,onChange:(value:boolean)=>void)=><label className="checkbox-label"><Checkbox disabled={disabled||picking} checked={checked} onCheckedChange={v=>onChange(v===true)}/>{label}</label>;
  const pem=(label:string,field:"ca_pem"|"certificate_pem"|"key_pem",text:string,onChange:(value:string)=>void)=><Flex direction="column" gap="2"><Field label={label}><TextArea disabled={disabled||picking} rows={3} autoComplete="off" value={text} maxLength={field==="key_pem"?65536:128*1024} onChange={e=>onChange(e.target.value)}/></Field><Button type="button" variant="soft" disabled={disabled||picking} onClick={()=>void pick(field)}>{t("选择证书文件")}</Button></Flex>;
  return <details><summary>{t("请求网络设置")}</summary><Flex direction="column" gap="3" mt="3">
- <Text size="1" color="gray">{t("适用于 HTTP、SOAP、SSE、WebSocket、GraphQL、gRPC、A2A 和 MCP HTTP 请求。支持环境变量；停用后保留草稿。")}</Text>
- <Field label={t("HTTP 版本")}><Choice disabled={disabled||ntlm||websocket} label={t("HTTP 版本")} value={c.http_mode} onChange={http_mode=>update({http_mode})} options={grpc?[{value:"auto",label:"HTTP/2"},{value:"http2_prior_knowledge",label:"HTTP/2 prior knowledge"}]:[{value:"http1",label:"HTTP/1.1"},{value:"auto",label:t("自动协商 HTTP/2")},{value:"http2_prior_knowledge",label:"HTTP/2 prior knowledge"}]}/></Field>
+ <Text size="1" color="gray">{t("适用于 HTTP、SOAP、SSE、WebSocket、GraphQL、gRPC、TCP、A2A 和 MCP HTTP 请求。支持环境变量；停用后保留草稿。")}</Text>
+ {!rawTcp&&<Field label={t("HTTP 版本")}><Choice disabled={disabled||ntlm||websocket} label={t("HTTP 版本")} value={c.http_mode} onChange={http_mode=>update({http_mode})} options={grpc?[{value:"auto",label:"HTTP/2"},{value:"http2_prior_knowledge",label:"HTTP/2 prior knowledge"}]:[{value:"http1",label:"HTTP/1.1"},{value:"auto",label:t("自动协商 HTTP/2")},{value:"http2_prior_knowledge",label:"HTTP/2 prior knowledge"}]}/></Field>}
+ {rawTcp&&<Text size="1" color="gray">{t("TCP 使用原始套接字；tcps:// 支持 CA 和客户端证书。")}</Text>}
  {grpc&&<Text size="1" color="gray">{t("gRPC 使用 HTTP/2；TLS、DNS 和代理配置同样适用。")}</Text>}
  {websocket&&<Text size="1" color="gray">{t("WebSocket 升级需要 HTTP/1.1。")}</Text>}
  {ntlm&&<Text size="1" color="gray">{t("NTLM 需要 HTTP/1.1。")}</Text>}

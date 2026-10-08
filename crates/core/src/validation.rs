@@ -142,6 +142,7 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
                     | Protocol::A2a { .. }
                     | Protocol::Mcp { .. }
                     | Protocol::Grpc { .. }
+                    | Protocol::Tcp { .. }
             ),
             "Selected network settings require a supported HTTP transport"
         );
@@ -149,6 +150,12 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
             !matches!(&r.protocol, Protocol::Mcp{config} if config.transport != "http"),
             "Network settings require MCP HTTP transport"
         );
+        if r.protocol.is_tcp() {
+            ensure!(
+                c.http_mode == crate::HttpMode::Http1,
+                "HTTP version selection does not apply to raw TCP"
+            );
+        }
         if r.protocol.is_grpc() {
             ensure!(
                 c.http_mode != crate::HttpMode::Http1,
