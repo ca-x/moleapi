@@ -211,6 +211,7 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
                     || r.auth.ntlm.is_some()
                     || r.auth.edgegrid.is_some()
                     || r.auth.asap.is_some()
+                    || r.network.is_some()
             });
     let mut result = source.clone();
     if auth_private {
@@ -281,6 +282,24 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
         }
         for request in &mut collection.requests {
             redact_auth(&mut request.auth, &privacy);
+            if let Some(c) = &mut request.network {
+                c.proxy.username.clear();
+                c.proxy.password.clear();
+                c.identity.certificate_pem.clear();
+                c.identity.key_pem.clear();
+                c.identity.pkcs12_base64.clear();
+                c.identity.password.clear();
+                c.identity.alias.clear();
+                c.proxy.url = privacy.screen_bounded(&c.proxy.url, 8192);
+                c.proxy.bypass = privacy.screen_bounded(&c.proxy.bypass, 8192);
+                c.ca_pem = privacy.screen_bounded(&c.ca_pem, 128 * 1024);
+                for entry in &mut c.dns {
+                    entry.hostname = privacy.screen_bounded(&entry.hostname, 253);
+                    for address in &mut entry.addresses {
+                        *address = privacy.screen_bounded(address, 128);
+                    }
+                }
+            }
             if auth_private {
                 let screened_url = tcp_privacy.screen_generation_text(&request.url);
                 request.url = if screened_url != request.url {
@@ -1062,6 +1081,11 @@ impl ExportPrivacy {
         }
         for collection in &workspace.data.collections {
             for request in &collection.requests {
+                let network_sources: Vec<String> = request
+                    .network
+                    .iter()
+                    .flat_map(|c| moleapi_core::network_private_sources(c))
+                    .collect();
                 let oauth1_sources: Vec<String> = request
                     .auth
                     .oauth1
@@ -1080,6 +1104,7 @@ impl ExportPrivacy {
                     .as_ref()
                     .map(|key| key.value.as_str())
                     .into_iter()
+                    .chain(network_sources.iter().map(String::as_str))
                     .chain(asap_sources.iter().map(String::as_str))
                     .chain(request.auth.asap.iter().map(|c| c.private_key.as_str()))
                     .chain(request.auth.edgegrid.iter().flat_map(|c| {
@@ -1153,6 +1178,26 @@ impl ExportPrivacy {
                                     let mut resolved = (**c).clone();
                                     resolved.private_key = value.clone();
                                     secrets.extend(moleapi_core::asap_private_sources(&resolved));
+                                }
+                                if let Some(c) = &request.network {
+                                    let mut resolved = (**c).clone();
+                                    for field in [
+                                        &mut resolved.proxy.username,
+                                        &mut resolved.proxy.password,
+                                        &mut resolved.identity.certificate_pem,
+                                        &mut resolved.identity.key_pem,
+                                        &mut resolved.identity.pkcs12_base64,
+                                        &mut resolved.identity.password,
+                                        &mut resolved.identity.alias,
+                                    ] {
+                                        if let Ok(v) =
+                                            moleapi_core::resolve_value(field, &scopes.effective())
+                                        {
+                                            *field = v;
+                                        }
+                                    }
+                                    secrets
+                                        .extend(moleapi_core::network_private_sources(&resolved));
                                 }
                                 secrets.insert(value);
                             }

@@ -129,6 +129,22 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
         ) || (templates && r.body_kind.contains("{{")),
         "Unsupported body kind"
     );
+    if let Some(c) = &r.network {
+        crate::validate_request_network(c, templates)?;
+        ensure!(
+            matches!(
+                r.protocol,
+                Protocol::Http | Protocol::Soap { .. } | Protocol::Graphql { .. }
+            ),
+            "Selected network settings require a finite HTTP transport"
+        );
+        if r.auth.kind == "ntlm" {
+            ensure!(
+                c.http_mode == crate::HttpMode::Http1,
+                "NTLM requires HTTP/1.1 network mode"
+            );
+        }
+    }
     crate::validate_authentication(&r.auth, templates)?;
     if !matches!(r.auth.kind.as_str(), "none" | "inherit")
         && !(templates && r.auth.kind.contains("{{"))

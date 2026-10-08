@@ -214,3 +214,55 @@ async fn timeouts_and_cancellation_close_the_owned_socket_and_malformed_type2_ne
     assert!(execute(&r, None, LOCAL).await.is_err());
     server.abort();
 }
+
+#[tokio::test]
+async fn ntlm_connect_proxy_keeps_one_authenticated_socket_and_proxy_credentials_private() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let fixture = serve_ntlm(false).await;
+    let target = url::Url::parse(&fixture.url).unwrap();
+    let target_address = format!("127.0.0.1:{}", target.port().unwrap());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let proxy_url = format!("http://{}", listener.local_addr().unwrap());
+    let proxy = tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let mut header = Vec::new();
+        while !header.ends_with(b"\r\n\r\n") {
+            header.push(socket.read_u8().await.unwrap());
+            assert!(header.len() < 8192);
+        }
+        let header = String::from_utf8(header).unwrap();
+        assert!(header.starts_with(&format!("CONNECT {target_address} HTTP/1.1")));
+        assert!(
+            header.to_ascii_lowercase().contains(
+                "proxy-authorization: basic dXNlcjpwYXNz"
+                    .to_ascii_lowercase()
+                    .as_str()
+            )
+        );
+        let mut target = tokio::net::TcpStream::connect(target_address)
+            .await
+            .unwrap();
+        socket
+            .write_all(b"HTTP/1.1 200 Connection established\r\n\r\n")
+            .await
+            .unwrap();
+        let _ = tokio::io::copy_bidirectional(&mut socket, &mut target).await;
+    });
+    let mut r = request(format!("{}/proxy", fixture.url));
+    r.network = Some(Box::new(RequestNetwork {
+        proxy: RequestProxy {
+            enabled: true,
+            url: proxy_url,
+            username: "user".into(),
+            password: "pass".into(),
+            ..Default::default()
+        },
+        ..Default::default()
+    }));
+    let result = execute(&r, None, LOCAL).await.unwrap();
+    assert_eq!(result.status, 200, "{}", result.body);
+    assert_eq!(fixture.connections.load(Ordering::SeqCst), 1);
+    assert_eq!(fixture.rounds.load(Ordering::SeqCst), 3);
+    fixture.task.abort();
+    proxy.abort();
+}

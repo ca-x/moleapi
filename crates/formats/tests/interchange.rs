@@ -1676,3 +1676,53 @@ fn asap_runtime_overlay_keeps_attribute_and_other_auth_schema_rules_strict() {
     bad["auth"]["type"] = json!("unknown-helper");
     assert!(import("postman", &bad.to_string()).is_err());
 }
+#[test]
+fn network_source_backup_is_exact_and_default_export_screens_scoped_and_copied_credentials() {
+    let keys: Value =
+        serde_json::from_str(include_str!("../../core/tests/fixtures/asap/keys.json")).unwrap();
+    let mut w = workspace(import("curl", "curl https://example.com").unwrap().data);
+    w.data.global_variables.push(
+        serde_json::from_value(
+            json!({"id":"k","key":"network_key","value":keys["RSA"]["pkcs8"],"enabled":true}),
+        )
+        .unwrap(),
+    );
+    let r = &mut w.data.collections[0].requests[0];
+    r.network = Some(Box::new(moleapi_core::RequestNetwork {
+        identity: moleapi_core::ClientIdentity {
+            enabled: false,
+            key_pem: "{{network_key}}".into(),
+            password: "pfx-private".into(),
+            pkcs12_base64: "cGZ4LWJ5dGVz".into(),
+            ..Default::default()
+        },
+        proxy: moleapi_core::RequestProxy {
+            enabled: false,
+            password: "proxy-private".into(),
+            username: "proxy-user".into(),
+            ..Default::default()
+        },
+        ..Default::default()
+    }));
+    r.description = keys["RSA"]["der_base64"].as_str().unwrap().into();
+    r.body_kind = "text".into();
+    r.body = "proxy-private".into();
+    let safe = export(&w, "moleapi", false).unwrap().content;
+    for secret in [
+        "proxy-private",
+        "proxy-user",
+        "pfx-private",
+        "cGZ4LWJ5dGVz",
+        keys["RSA"]["der_base64"].as_str().unwrap(),
+    ] {
+        assert!(!safe.contains(secret), "leaked {secret}");
+    }
+    let backup = export(&w, "moleapi", true).unwrap();
+    let restored = import("moleapi", &backup.content).unwrap();
+    assert_eq!(
+        restored.data.collections[0].requests[0].network,
+        w.data.collections[0].requests[0].network
+    );
+    assert!(export(&w, "postman", true).is_err());
+    assert!(export(&w, "openapi", true).is_err());
+}

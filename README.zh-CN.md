@@ -31,6 +31,10 @@ MoleAPI 使用 Rust/Axum/SeaORM、React/Radix UI/CodeMirror 和 Tauri。默认 S
 
 ![通过独立 JOSE 验证的 ASAP ES512 认证](docs/images/asap-zh-CN.png)
 
+![真实 DNS 覆盖保留 Host 的请求网络设置](docs/images/network-zh-CN.png)
+
+HTTP/SOAP/有限 GraphQL 请求支持显式 HTTP/SOCKS 代理、绕过规则、自定义 CA、PEM/加密 PFX 客户端证书、DNS 覆盖和 HTTP/2。网络凭据会从历史与默认导出中脱敏；精确保留源配置需要显式包含敏感信息。参见[网络支持与当前组合限制](docs/specs/request-network.md)。
+
 ## 语言
 
 软件提供简体中文和英文界面，在登录页或工作台设置中切换并记忆选择。请求名称、变量、规范原文、脚本、实际服务响应和生成代码属于用户数据，保持原文。原生托盘菜单跟随界面语言；系统原生对话框按操作系统能力显示。新增语言使用嵌入式国际化目录。

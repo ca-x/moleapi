@@ -125,13 +125,22 @@ async fn execute_inner(
             if ntlm_connection.is_none() {
                 let binding = r.auth.ntlm.as_deref().is_none_or(|c| c.channel_binding);
                 ntlm_connection = Some(
-                    crate::ntlm_auth::Connection::connect(&url, policy, r.verify_tls, binding)
-                        .await?,
+                    crate::ntlm_auth::Connection::connect(
+                        &url,
+                        policy,
+                        r.verify_tls,
+                        binding,
+                        r.network.as_deref(),
+                    )
+                    .await?,
                 );
             }
             None
         } else {
-            Some(checked_client(&url, policy, r.verify_tls).await?)
+            Some(
+                crate::checked_request_client(&url, policy, r.verify_tls, r.network.as_deref())
+                    .await?,
+            )
         };
         let mut request = reqwest::Request::new(method.clone(), url.clone());
         *request.headers_mut() = headers.clone();

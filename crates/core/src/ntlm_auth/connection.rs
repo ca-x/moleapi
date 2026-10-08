@@ -5,7 +5,7 @@ use hyper_util::rt::TokioIo;
 use std::{sync::Arc, time::Duration};
 use tokio::io::{AsyncRead, AsyncWrite};
 use url::Url;
-trait Stream: AsyncRead + AsyncWrite + Unpin + Send {}
+pub(super) trait Stream: AsyncRead + AsyncWrite + Unpin + Send {}
 impl<T: AsyncRead + AsyncWrite + Unpin + Send> Stream for T {}
 pub(crate) struct Connection {
     sender: hyper::client::conn::http1::SendRequest<Full<Bytes>>,
@@ -23,30 +23,25 @@ impl Connection {
         policy: crate::NetworkPolicy,
         verify_tls: bool,
         channel_binding: bool,
+        network: Option<&crate::RequestNetwork>,
     ) -> Result<Self> {
-        let addresses = crate::checked_destination(url, policy).await?;
+        let defaults = crate::RequestNetwork::default();
+        let network = network.unwrap_or(&defaults);
+        crate::validate_request_network(network, false)?;
+        ensure!(
+            network.http_mode == crate::HttpMode::Http1,
+            "NTLM requires HTTP1"
+        );
+        let timeout = Duration::from_millis(network.connect_timeout_ms);
         let tcp = tokio::time::timeout(
-            Duration::from_secs(15),
-            tokio::net::TcpStream::connect(addresses.as_slice()),
+            timeout,
+            super::network::connect(url, policy, verify_tls, network),
         )
         .await
-        .context("NTLM connection timed out")?
-        .context("NTLM connection failed")?;
-        tcp.set_nodelay(true)?;
+        .context("NTLM connection timed out")??;
         let (stream, binding): (Box<dyn Stream>, Option<Vec<u8>>) = if url.scheme() == "https" {
-            let provider = Arc::new(rustls::crypto::ring::default_provider());
-            let roots =
-                rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-            let mut config = rustls::ClientConfig::builder_with_provider(provider)
-                .with_safe_default_protocol_versions()?
-                .with_root_certificates(roots)
-                .with_no_client_auth();
+            let mut config = crate::request_network::tls_config(network, verify_tls)?;
             config.alpn_protocols = vec![b"http/1.1".to_vec()];
-            if !verify_tls {
-                config
-                    .dangerous()
-                    .set_certificate_verifier(Arc::new(crate::UnverifiedCertificate));
-            }
             let host = url
                 .host_str()
                 .context("NTLM host missing")?
@@ -54,10 +49,13 @@ impl Connection {
                 .to_owned();
             let name =
                 rustls::pki_types::ServerName::try_from(host).context("Invalid NTLM TLS name")?;
-            let tls = tokio_rustls::TlsConnector::from(Arc::new(config))
-                .connect(name, tcp)
-                .await
-                .context("NTLM TLS handshake failed")?;
+            let tls = tokio::time::timeout(
+                timeout,
+                tokio_rustls::TlsConnector::from(Arc::new(config)).connect(name, tcp),
+            )
+            .await
+            .context("NTLM TLS handshake timed out")?
+            .context("NTLM TLS handshake failed")?;
             let binding = if channel_binding {
                 let certificate = tls
                     .get_ref()

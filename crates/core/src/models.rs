@@ -183,6 +183,8 @@ impl Protocol {
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct RequestSpec {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network: Option<Box<crate::RequestNetwork>>,
     #[serde(default)]
     pub protocol: Protocol,
     #[serde(default)]

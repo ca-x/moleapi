@@ -107,6 +107,18 @@ pub fn export(workspace: &Workspace, format: &str, include_secrets: bool) -> Res
     for request in workspace.data.collections.iter().flat_map(|c| &c.requests) {
         moleapi_core::validate_authentication(&request.auth, true)?;
     }
+    if matches!(format, "postman" | "openapi")
+        && workspace
+            .data
+            .collections
+            .iter()
+            .flat_map(|c| &c.requests)
+            .any(|r| r.network.is_some())
+    {
+        bail!(
+            "Network settings cannot be preserved by this export format; use MoleAPI source export"
+        );
+    }
     let unsupported = workspace
         .data
         .collections

@@ -31,6 +31,10 @@ These screenshots show the actual embedded self-hosted interface with synthetic 
 
 ![ASAP ES512 authentication verified by independent JOSE](docs/images/asap-en.png)
 
+![Request network settings with a real DNS override preserving Host](docs/images/network-en.png)
+
+Finite HTTP/SOAP/GraphQL requests support explicit HTTP/SOCKS proxies, bypass rules, custom CA roots, PEM/encrypted PFX client certificates, DNS overrides and HTTP/2. Network credentials are scrubbed from history/default exports; exact source backup requires including sensitive values. See [network support and current combinations](docs/specs/request-network.md).
+
 ## Languages
 
 Simplified Chinese and English UI can be selected on the sign-in screen or in workbench settings; the preference is remembered. Request names, variables, original specifications, scripts, real service responses, and generated code remain unchanged user data. Native tray menus follow the application language; native system dialogs depend on the operating system. Additional languages use embedded localization catalogs.

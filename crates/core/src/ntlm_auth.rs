@@ -1,4 +1,5 @@
 //! NTLMv2 comes from the SSPI SDK; HTTP connection affinity belongs to Hyper.
+mod network;
 use anyhow::{Context, Result, ensure};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Serialize};

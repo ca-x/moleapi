@@ -89,6 +89,15 @@ export interface Example {
   headers: Pair[];
   body: string;
 }
+export interface RequestNetwork {
+  http_mode: "http1" | "auto" | "http2_prior_knowledge";
+  proxy: {enabled:boolean;url:string;username:string;password:string;bypass:string};
+  built_in_roots:boolean;
+  ca_pem:string;
+  identity:{enabled:boolean;format:"pem"|"pkcs12";certificate_pem:string;key_pem:string;pkcs12_base64:string;password:string;alias:string};
+  dns:{hostname:string;addresses:string[]}[];
+  connect_timeout_ms:number;
+}
 export interface RequestSpec {
   protocol?: ProtocolConfig;
   id: string;
@@ -104,6 +113,7 @@ export interface RequestSpec {
   timeout_ms: number;
   follow_redirects: boolean;
   verify_tls: boolean;
+  network?: RequestNetwork;
   assertions: Assertion[];
   examples: Example[];
   specification_id?: string | null;

@@ -95,6 +95,26 @@ pub fn resolve_request(
         })
         .unwrap_or_default();
     let mut value = serde_json::to_value(request)?;
+    if let Some(c) = &request.network {
+        if !c.proxy.enabled {
+            value["network"]["proxy"] = serde_json::json!({"enabled":false});
+        }
+        if !c.identity.enabled {
+            value["network"]["identity"] = serde_json::json!({"enabled":false});
+        } else {
+            match c.identity.format {
+                crate::IdentityFormat::Pem => {
+                    value["network"]["identity"]["pkcs12_base64"] = "".into();
+                    value["network"]["identity"]["password"] = "".into();
+                    value["network"]["identity"]["alias"] = "".into();
+                }
+                crate::IdentityFormat::Pkcs12 => {
+                    value["network"]["identity"]["certificate_pem"] = "".into();
+                    value["network"]["identity"]["key_pem"] = "".into();
+                }
+            }
+        }
+    }
     // JavaScript is source code, not an interpolated request field.
     value["pre_request_script"] = "".into();
     value["post_response_script"] = "".into();

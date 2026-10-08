@@ -243,6 +243,28 @@ pub(crate) fn request_values(
             }
         }
     }
+    if let Some(c) = &request.network {
+        for value in moleapi_core::network_private_sources(c) {
+            capture(&value);
+        }
+        let mut resolved = (**c).clone();
+        for field in [
+            &mut resolved.proxy.username,
+            &mut resolved.proxy.password,
+            &mut resolved.identity.certificate_pem,
+            &mut resolved.identity.key_pem,
+            &mut resolved.identity.pkcs12_base64,
+            &mut resolved.identity.password,
+            &mut resolved.identity.alias,
+        ] {
+            if let Ok(value) = moleapi_core::resolve_value(field, &environment) {
+                *field = value;
+            }
+        }
+        for value in moleapi_core::network_private_sources(&resolved) {
+            capture(&value);
+        }
+    }
     if let Some(key) = &request.auth.api_key {
         capture(&key.value);
     }
@@ -419,6 +441,40 @@ mod tests {
             !history
                 .to_string()
                 .contains(&STANDARD.encode("decoded-private-signing-key"))
+        );
+    }
+    #[test]
+    fn network_private_fields_and_resolved_pem_are_scrubbed_from_history() {
+        let keys: serde_json::Value =
+            serde_json::from_str(include_str!("../../core/tests/fixtures/asap/keys.json")).unwrap();
+        let request: moleapi_core::RequestSpec = serde_json::from_value(serde_json::json!({
+            "id":"network", "name":"network", "method":"GET", "url":"https://example.test",
+            "auth":{"kind":"none", "username":"", "password":"", "token":""},
+            "query":[], "headers":[], "body":"", "body_kind":"none", "description":"",
+            "timeout_ms":3000,"verify_tls":true,"follow_redirects":true,"assertions":[],"examples":[],
+            "network":{"proxy":{"username":"proxy-user","password":"{{proxy_password}}"},"identity":{"key_pem":"{{key}}"}}
+        })).unwrap();
+        let mut scopes = moleapi_core::VariableScopes::default();
+        scopes
+            .environment
+            .insert("key".into(), keys["RSA"]["pkcs8"].as_str().unwrap().into());
+        scopes
+            .environment
+            .insert("proxy_password".into(), "proxy-private".into());
+        request_values(&request, &mut scopes).unwrap();
+        let redactor = Redactor::new(&scopes.private_values).unwrap();
+        let mut history = serde_json::json!({"body":keys["RSA"]["der_base64"],"proxy":"proxy-private","basic":STANDARD.encode("proxy-user:proxy-private")});
+        redactor.scrub(&mut history);
+        assert!(
+            !history
+                .to_string()
+                .contains(keys["RSA"]["der_base64"].as_str().unwrap())
+        );
+        assert!(!history.to_string().contains("proxy-private"));
+        assert!(
+            !history
+                .to_string()
+                .contains(&STANDARD.encode("proxy-user:proxy-private"))
         );
     }
     #[test]

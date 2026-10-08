@@ -28,7 +28,7 @@ async-graphql-parser = "=7.2.1"
 cynic = "=3.14.0"
 cynic-introspection = { version = "=3.14.0", path = "vendor/cynic-introspection" }
 graphql-ws-client = { version = "=0.13.0", path = "vendor/graphql-ws-client", default-features = false }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream", "multipart", "gzip", "brotli", "deflate"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream", "multipart", "http2", "socks", "gzip", "brotli", "deflate"] }
 
 # DataFusion debug symbols multiply across test binaries and exceed ordinary CI
 # runner memory/disk. Keep validation builds small; release optimization is unchanged.
