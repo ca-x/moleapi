@@ -102,7 +102,7 @@ async fn execute_inner(
     let mut private_auth_values = Vec::new();
     let mut digest_attempts = 0;
     let mut digest_allowed = r.auth.kind == "digest";
-    let mut aws_allowed = r.auth.kind == "aws";
+    let mut signing_allowed = matches!(r.auth.kind.as_str(), "aws" | "hawk");
     loop {
         let client = checked_client(&url, policy, r.verify_tls).await?;
         let mut builder = client
@@ -112,9 +112,16 @@ async fn execute_inner(
             builder = builder.body(b.clone());
         }
         let mut request = builder.build()?;
-        if aws_allowed {
+        if signing_allowed && r.auth.kind == "aws" {
             private_auth_values.extend(crate::sign_aws_request(
                 r.auth.aws.as_ref().context("AWS settings missing")?,
+                &mut request,
+                std::time::SystemTime::now(),
+            )?);
+        }
+        if signing_allowed && r.auth.kind == "hawk" {
+            private_auth_values.extend(crate::sign_hawk_request(
+                r.auth.hawk.as_ref().context("Hawk settings missing")?,
                 &mut request,
                 std::time::SystemTime::now(),
             )?);
@@ -209,7 +216,7 @@ async fn execute_inner(
                     next.query_pairs_mut().extend_pairs(filtered);
                 }
                 digest_allowed = false;
-                aws_allowed = false;
+                signing_allowed = false;
             } else if r.auth.kind == "digest" {
                 headers.remove("authorization");
                 digest_attempts = 0;

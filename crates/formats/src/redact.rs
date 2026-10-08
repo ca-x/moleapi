@@ -20,6 +20,23 @@ fn redact_auth(auth: &mut moleapi_core::Auth, privacy: &ExportPrivacy) {
             jwt.name = "Authorization".into();
         }
     }
+    if let Some(hawk) = &mut auth.hawk {
+        hawk.id.clear();
+        hawk.key.clear();
+        for (value, limit) in [
+            (&mut hawk.ext, 4096),
+            (&mut hawk.app, 1024),
+            (&mut hawk.delegation, 1024),
+            (&mut hawk.user, 4096),
+            (&mut hawk.nonce, 1024),
+            (&mut hawk.timestamp, 128),
+        ] {
+            *value = privacy.screen_bounded(value, limit);
+        }
+        if privacy.screen_bounded(&hawk.algorithm, 128) != hawk.algorithm {
+            hawk.algorithm = "{{redacted_hawk_algorithm}}".into();
+        }
+    }
     if let Some(aws) = &mut auth.aws {
         aws.access_key.clear();
         aws.secret_key.clear();
@@ -96,6 +113,7 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
                     || r.auth.jwt.is_some()
                     || r.auth.oauth2.is_some()
                     || r.auth.aws.is_some()
+                    || r.auth.hawk.is_some()
             });
     let mut result = source.clone();
     if auth_private {
@@ -772,6 +790,11 @@ impl ExportPrivacy {
                     .chain(auth.jwt.as_ref().map(|jwt| jwt.key.as_str()))
                     .chain(auth.oauth2.as_ref().map(|o| o.client_secret.as_str()))
                     .chain(auth.oauth2.as_ref().map(|o| o.password.as_str()))
+                    .chain(
+                        auth.hawk
+                            .iter()
+                            .flat_map(|hawk| [hawk.id.as_str(), hawk.key.as_str()]),
+                    )
                     .chain(auth.aws.iter().flat_map(|aws| {
                         [
                             aws.access_key.as_str(),
@@ -845,6 +868,10 @@ impl ExportPrivacy {
                     .flat_map(|c| c.requests.iter().map(|r| &r.auth)),
             )
         {
+            if let Some(hawk) = &auth.hawk {
+                secrets.insert(hawk.id.clone());
+                secrets.insert(hawk.key.clone());
+            }
             if let Some(aws) = &auth.aws {
                 secrets.insert(aws.access_key.clone());
                 secrets.insert(aws.secret_key.clone());
@@ -895,6 +922,13 @@ impl ExportPrivacy {
                             .map(|o| o.client_secret.as_str()),
                     )
                     .chain(request.auth.oauth2.as_ref().map(|o| o.password.as_str()))
+                    .chain(
+                        request
+                            .auth
+                            .hawk
+                            .iter()
+                            .flat_map(|hawk| [hawk.id.as_str(), hawk.key.as_str()]),
+                    )
                     .chain(request.auth.aws.iter().flat_map(|aws| {
                         [
                             aws.access_key.as_str(),

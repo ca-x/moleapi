@@ -8,7 +8,7 @@ version = "0.11.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fe438c63458706e03479442743baae6c88256498e6431708f6dfc520a26515d3"
 dependencies = [
- "lazy_static",
+ "lazy_static 1.5.1",
  "regex",
 ]
 
@@ -948,7 +948,7 @@ dependencies = [
  "hmac 0.13.0",
  "http 0.2.12",
  "http 1.5.0",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "sha2 0.11.0",
  "time",
  "tracing",
@@ -980,7 +980,7 @@ dependencies = [
  "http 1.5.0",
  "http-body 1.1.0",
  "http-body-util",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "pin-project-lite",
  "pin-utils",
  "tracing",
@@ -1059,7 +1059,7 @@ dependencies = [
  "memchr",
  "mime",
  "multer",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "pin-project-lite",
  "serde_core",
  "serde_json",
@@ -1745,7 +1745,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "libc",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "pin-project",
  "serde",
  "serde_json",
@@ -2372,7 +2372,7 @@ dependencies = [
  "itertools 0.15.0",
  "log",
  "object_store",
- "percent-encoding",
+ "percent-encoding 2.3.2",
 ]
 
 [[package]]
@@ -3629,7 +3629,7 @@ version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
- "percent-encoding",
+ "percent-encoding 2.3.2",
 ]
 
 [[package]]
@@ -3638,7 +3638,7 @@ version = "0.15.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e076045bb43dac435333ed5f04caf35c7463631d0dae2deb2638d94dd0a5b872"
 dependencies = [
- "lazy_static",
+ "lazy_static 1.5.1",
  "num",
 ]
 
@@ -4170,6 +4170,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "hawk"
+version = "5.0.1"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "log",
+ "media-type-impl-utils",
+ "once_cell",
+ "quoted-string",
+ "ring",
+ "thiserror 1.0.69",
+ "url",
+]
+
+[[package]]
 name = "heck"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4405,7 +4420,7 @@ dependencies = [
  "hyper",
  "ipnet",
  "libc",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "pin-project-lite",
  "socket2",
  "system-configuration",
@@ -4883,7 +4898,7 @@ dependencies = [
  "num-cmp",
  "num-traits",
  "once_cell",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "referencing 0.33.0",
  "regex",
  "regex-syntax",
@@ -4910,7 +4925,7 @@ dependencies = [
  "jsonschema-value",
  "num-cmp",
  "num-traits",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "referencing 0.58.5",
  "regex",
  "serde",
@@ -4996,6 +5011,12 @@ checksum = "b5baa5e9ff84f1aefd264e6869907646538a52147a755d494517a8007fb48733"
 dependencies = [
  "rustversion",
 ]
+
+[[package]]
+name = "lazy_static"
+version = "0.2.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76f033c7ad61445c5b347c7382dd1237847eb1bce590fe50365dcb33d546be73"
 
 [[package]]
 name = "lazy_static"
@@ -5219,7 +5240,7 @@ checksum = "59f80069600c0d66734f5ff52cc42f2dabd6b29d205f333d61fd7832e9e9963f"
 dependencies = [
  "beef",
  "fnv",
- "lazy_static",
+ "lazy_static 1.5.1",
  "proc-macro2",
  "quote",
  "regex-syntax",
@@ -5234,7 +5255,7 @@ checksum = "192a3a2b90b0c05b27a0b2c43eecdb7c415e29243acc3f89cc8247a5b693045c"
 dependencies = [
  "beef",
  "fnv",
- "lazy_static",
+ "lazy_static 1.5.1",
  "proc-macro2",
  "quote",
  "regex-syntax",
@@ -5297,6 +5318,15 @@ name = "lru-slab"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4050469837a6ff301cd14c1f8f24f88549e6d548f24f64e2148eb0f72cebc51f"
+
+[[package]]
+name = "lut"
+version = "0.1.0-unstable"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a04dbc086dbfbcb928e7a583f4f9fea096f9e4180c1764e86c28808759d3501c"
+dependencies = [
+ "lazy_static 0.2.11",
+]
 
 [[package]]
 name = "lz4_flex"
@@ -5362,6 +5392,17 @@ checksum = "69b6441f590336821bb897fb28fc622898ccceb1d6cea3fde5ea86b090c4de98"
 dependencies = [
  "cfg-if",
  "digest 0.11.3",
+]
+
+[[package]]
+name = "media-type-impl-utils"
+version = "0.3.1-unstable"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18beb4ed98794e02f45cf88441bab046bdcceb4f55bbafa029b00fcc51cce62f"
+dependencies = [
+ "lut",
+ "percent-encoding 1.0.1",
+ "quoted-string",
 ]
 
 [[package]]
@@ -5476,6 +5517,7 @@ dependencies = [
  "cynic-parser",
  "digest_auth",
  "futures-util",
+ "hawk",
  "hex",
  "http 1.5.0",
  "jsonwebtoken",
@@ -5516,7 +5558,7 @@ dependencies = [
  "hex",
  "moleapi-core",
  "mysql_async",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "rustls",
  "rustls-native-certs",
  "serde",
@@ -5565,7 +5607,7 @@ dependencies = [
  "moleapi-core",
  "oas3",
  "openapiv3",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "serde",
  "serde_json",
  "serde_yaml_ng",
@@ -5649,7 +5691,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "moleapi-core",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "rquickjs",
  "serde",
  "serde_json",
@@ -5677,6 +5719,7 @@ dependencies = [
  "chrono",
  "clap",
  "futures-util",
+ "hawk",
  "hex",
  "http-body-util",
  "hyper-util",
@@ -5688,7 +5731,7 @@ dependencies = [
  "moleapi-protocols",
  "moleapi-script-runtime",
  "oauth2",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "prost",
  "prost-types",
  "rand 0.8.8",
@@ -5780,7 +5823,7 @@ dependencies = [
  "keyed_priority_queue",
  "lru",
  "mysql_common",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "rand 0.10.3",
  "rustls",
  "serde",
@@ -5948,7 +5991,7 @@ version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e661dda6640fad38e827a6d4a310ff4763082116fe217f279885c97f511bb0b7"
 dependencies = [
- "lazy_static",
+ "lazy_static 1.5.1",
  "libm",
  "num-integer",
  "num-iter",
@@ -6310,7 +6353,7 @@ dependencies = [
  "humantime",
  "itertools 0.14.0",
  "parking_lot",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "thiserror 2.0.21",
  "tokio",
  "tracing",
@@ -6678,6 +6721,12 @@ checksum = "88b39c9bfcfc231068454382784bb460aae594343fb030d46e9f50a645418412"
 dependencies = [
  "base64ct",
 ]
+
+[[package]]
+name = "percent-encoding"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "31010dd2e1ac33d5b46a5b413495239882813e0369f8ed8a5e266f173602f831"
 
 [[package]]
 name = "percent-encoding"
@@ -7373,6 +7422,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "quoted-string"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a206a30ce37189d1340e7da2ee0b4d65e342590af676541c23a4f3959ba272e"
+
+[[package]]
 name = "r-efi"
 version = "5.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7567,7 +7622,7 @@ dependencies = [
  "fluent-uri 0.3.2",
  "once_cell",
  "parking_lot",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "serde_json",
 ]
 
@@ -7584,7 +7639,7 @@ dependencies = [
  "itoa",
  "micromap",
  "parking_lot",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "serde_json",
 ]
 
@@ -7651,7 +7706,7 @@ dependencies = [
  "mime",
  "mime_guess",
  "native-tls",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "pin-project-lite",
  "quinn",
  "rustls",
@@ -7694,7 +7749,7 @@ dependencies = [
  "hyper-util",
  "js-sys",
  "log",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "pin-project-lite",
  "rustls",
  "rustls-pki-types",
@@ -8748,7 +8803,7 @@ version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
 dependencies = [
- "lazy_static",
+ "lazy_static 1.5.1",
 ]
 
 [[package]]
@@ -9020,7 +9075,7 @@ dependencies = [
  "log",
  "memchr",
  "once_cell",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "rust_decimal",
  "rustls",
  "serde",
@@ -9105,7 +9160,7 @@ dependencies = [
  "md-5 0.10.6",
  "memchr",
  "once_cell",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "rand 0.8.8",
  "rsa",
  "rust_decimal",
@@ -9181,7 +9236,7 @@ dependencies = [
  "futures-util",
  "libsqlite3-sys",
  "log",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "serde",
  "serde_urlencoded",
  "sqlx-core",
@@ -9474,7 +9529,7 @@ dependencies = [
  "objc2-foundation",
  "objc2-ui-kit",
  "parking_lot",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "raw-window-handle",
  "tao-macros",
  "unicode-segmentation",
@@ -9529,7 +9584,7 @@ dependencies = [
  "objc2-foundation",
  "objc2-ui-kit",
  "objc2-web-kit",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "plist",
  "raw-window-handle",
  "reqwest 0.13.5",
@@ -9660,7 +9715,7 @@ dependencies = [
  "glob",
  "log",
  "objc2-foundation",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "schemars 0.8.22",
  "serde",
  "serde_json",
@@ -9749,7 +9804,7 @@ dependencies = [
  "objc2",
  "objc2-app-kit",
  "once_cell",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "raw-window-handle",
  "softbuffer",
  "tao",
@@ -10014,7 +10069,7 @@ dependencies = [
  "futures-util",
  "log",
  "parking_lot",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "phf 0.13.1",
  "pin-project-lite",
  "postgres-protocol",
@@ -10217,7 +10272,7 @@ dependencies = [
  "hyper",
  "hyper-timeout",
  "hyper-util",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "pin-project",
  "rustls-native-certs",
  "socket2",
@@ -10616,7 +10671,7 @@ checksum = "ff67a8a4397373c3ef660812acab3268222035010ab8680ec4215f38ba3d0eed"
 dependencies = [
  "form_urlencoded",
  "idna",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "serde",
  "serde_derive",
 ]
@@ -11567,7 +11622,7 @@ dependencies = [
  "objc2-ui-kit",
  "objc2-web-kit",
  "once_cell",
- "percent-encoding",
+ "percent-encoding 2.3.2",
  "raw-window-handle",
  "sha2 0.10.9",
  "soup3",
@@ -11653,7 +11708,7 @@ dependencies = [
  "asn1-rs",
  "data-encoding",
  "der-parser",
- "lazy_static",
+ "lazy_static 1.5.1",
  "nom",
  "oid-registry",
  "ring",

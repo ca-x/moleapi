@@ -1111,5 +1111,17 @@
   "AWS 预签名有效秒数": "AWS presign expiry in seconds",
   "使用 UNSIGNED-PAYLOAD": "Use UNSIGNED-PAYLOAD",
   "根据实际发送的请求生成签名。凭据可引用环境变量；S3 自动使用专用路径和校验设置。": "Sign the actual outgoing request. Credentials support environment references; S3 uses its dedicated path and checksum settings.",
-  "S3 预签名自动使用 UNSIGNED-PAYLOAD。": "S3 presigning automatically uses UNSIGNED-PAYLOAD."
+  "S3 预签名自动使用 UNSIGNED-PAYLOAD。": "S3 presigning automatically uses UNSIGNED-PAYLOAD.",
+  "Hawk 凭据 ID": "Hawk credential ID",
+  "Hawk 密钥": "Hawk key",
+  "Hawk 算法": "Hawk algorithm",
+  "签名包含实际请求体哈希": "Include the actual payload hash",
+  "Hawk 高级参数": "Advanced Hawk parameters",
+  "留空时自动生成随机值，可引用环境变量。": "Leave empty for a random value; environment references are supported.",
+  "Hawk 时间戳（Unix 秒）": "Hawk timestamp (Unix seconds)",
+  "留空时使用发送时间，可引用环境变量。": "Leave empty to use the send time; environment references are supported.",
+  "Hawk 附加数据": "Hawk extra data",
+  "Hawk 应用 ID": "Hawk application ID",
+  "Hawk 委托 ID": "Hawk delegation ID",
+  "应用与委托参与签名。启用请求体哈希时，按实际发送的内容和 MIME 类型计算。": "Application and delegation attributes are authenticated. Payload hashing uses the actual transmitted content and MIME type."
 }

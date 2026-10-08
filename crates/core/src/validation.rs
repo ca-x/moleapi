@@ -136,18 +136,18 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
     {
         bail!("STDIO auth must use explicit process configuration, not HTTP auth");
     }
-    if r.auth.kind == "aws" {
+    if matches!(r.auth.kind.as_str(), "aws" | "hawk") {
         ensure!(
             matches!(
                 r.protocol,
                 Protocol::Http | Protocol::Soap { .. } | Protocol::Graphql { .. }
             ),
-            "AWS signing requires a finite HTTP request"
+            "Request signing requires a finite HTTP request"
         );
         if r.protocol.is_graphql() && !templates {
             ensure!(
                 !crate::graphql_is_subscription(r)?,
-                "AWS signing does not support GraphQL subscriptions"
+                "Request signing does not support GraphQL subscriptions"
             );
         }
     }

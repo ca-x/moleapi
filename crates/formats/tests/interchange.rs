@@ -1346,3 +1346,48 @@ fn aws_parent_environment_secrets_are_private_and_header_auth_roundtrips() {
         moleapi_core::AuthLocation::Query;
     assert!(export(&w, "postman", true).is_err());
 }
+
+#[test]
+fn inherited_hawk_source_templates_and_copies_are_private_and_postman_roundtrips() {
+    let mut w = workspace(import("curl", "curl https://example.test").unwrap().data);
+    w.data.collections[0].auth=Some(serde_json::from_value(json!({"kind":"hawk","token":"","username":"","password":"","hawk":{"id":"{{hawk_id}}","key":"{{hawk_key}}","algorithm":"sha256","app":"application","delegation":"delegate","include_payload_hash":true}})).unwrap());
+    for (key, value) in [
+        ("hawk_id", "private-hawk-id"),
+        ("hawk_key", "private-hawk-key"),
+    ] {
+        w.data.global_variables.push(
+            serde_json::from_value(json!({"id":key,"key":key,"value":value,"enabled":true}))
+                .unwrap(),
+        );
+    }
+    let request = &mut w.data.collections[0].requests[0];
+    request.auth.kind = "inherit".into();
+    request.body_kind = "text".into();
+    request.body = "private-hawk-id private-hawk-key".into();
+    let safe = export(&w, "moleapi", false).unwrap().content;
+    assert!(!safe.contains("private-hawk-id"));
+    assert!(!safe.contains("private-hawk-key"));
+    let full = export(&w, "moleapi", true).unwrap().content;
+    assert!(full.contains("private-hawk-key"));
+    let postman = export(&w, "postman", true).unwrap().content;
+    let imported = import("postman", &postman).unwrap();
+    let collection = imported
+        .data
+        .collections
+        .iter()
+        .find(|collection| !collection.requests.is_empty())
+        .unwrap();
+    let effective = moleapi_core::inherited_authentication(
+        &imported.data,
+        Some(collection),
+        &collection.requests[0],
+        None,
+    )
+    .unwrap();
+    assert_eq!(effective.auth.kind, "hawk");
+    let hawk = effective.auth.hawk.unwrap();
+    assert_eq!(hawk.key, "{{hawk_key}}");
+    assert_eq!(hawk.app, "application");
+    assert_eq!(hawk.delegation, "delegate");
+    assert!(hawk.include_payload_hash);
+}

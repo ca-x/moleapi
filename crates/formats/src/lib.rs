@@ -94,7 +94,8 @@ pub fn export(workspace: &Workspace, format: &str, include_secrets: bool) -> Res
             .any(|r| {
                 matches!(r.auth.kind.as_str(), "jwt" | "digest" | "oauth2")
                     || r.auth.kind.contains("{{")
-                    || format == "openapi" && matches!(r.auth.kind.as_str(), "apikey" | "aws")
+                    || format == "openapi"
+                        && matches!(r.auth.kind.as_str(), "apikey" | "aws" | "hawk")
             })
     {
         bail!(

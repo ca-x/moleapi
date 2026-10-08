@@ -166,6 +166,14 @@ pub fn resolve_request(
     } else {
         None
     };
+    let dormant_hawk = if auth_kind != "hawk" {
+        Some(value["auth"]["hawk"].clone())
+    } else {
+        None
+    };
+    if dormant_hawk.is_some() {
+        value["auth"]["hawk"] = serde_json::Value::Null;
+    }
     let dormant_aws = if auth_kind != "aws" {
         Some(value["auth"]["aws"].clone())
     } else {
@@ -236,6 +244,9 @@ pub fn resolve_request(
     };
     let mut budget = 20 * 1024 * 1024;
     replace(&mut value, &vars, &mut budget)?;
+    if let Some(hawk) = dormant_hawk {
+        value["auth"]["hawk"] = hawk;
+    }
     if let Some(aws) = dormant_aws {
         value["auth"]["aws"] = aws;
     }

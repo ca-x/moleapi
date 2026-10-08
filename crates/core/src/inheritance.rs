@@ -111,6 +111,7 @@ pub fn inherited_authentication(
             jwt: None,
             oauth2: None,
             aws: None,
+            hawk: None,
         },
         source: AuthenticationSource::Default,
     })

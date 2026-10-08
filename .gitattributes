@@ -4,3 +4,6 @@ web/patches/*.patch -whitespace
 
 # This embedded, hashed upstream bundle must retain canonical bytes on Windows.
 vendor/snippet-engine/engine.js text eol=lf
+
+# Official HTTP golden vectors retain their empty header/body separator.
+crates/core/tests/fixtures/aws/get-vanilla-*.txt text eol=lf whitespace=-blank-at-eof

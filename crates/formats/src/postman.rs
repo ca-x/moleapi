@@ -292,6 +292,7 @@ fn inherit_auth() -> moleapi_core::Auth {
         jwt: None,
         oauth2: None,
         aws: None,
+        hawk: None,
     }
 }
 fn import_variables(value: &Value) -> Vec<moleapi_core::Pair> {
@@ -334,6 +335,26 @@ fn import_auth(
                     moleapi_core::AuthLocation::Header
                 },
             }));
+        }
+        "hawk" => {
+            auth.kind = "hawk".into();
+            let mut hawk = moleapi_core::HawkAuth {
+                id: auth_value(value, "hawk", "authId"),
+                key: auth_value(value, "hawk", "authKey"),
+                nonce: auth_value(value, "hawk", "nonce"),
+                timestamp: auth_value(value, "hawk", "timestamp"),
+                ext: auth_value(value, "hawk", "extraData"),
+                app: auth_value(value, "hawk", "app"),
+                delegation: auth_value(value, "hawk", "delegation"),
+                user: auth_value(value, "hawk", "user"),
+                include_payload_hash: auth_value(value, "hawk", "includePayloadHash") == "true",
+                ..Default::default()
+            };
+            let algorithm = auth_value(value, "hawk", "algorithm");
+            if !algorithm.is_empty() {
+                hawk.algorithm = algorithm;
+            }
+            auth.hawk = Some(Box::new(hawk));
         }
         "awsv4" => {
             auth.kind = "aws".into();
@@ -380,6 +401,15 @@ fn export_auth(auth: &moleapi_core::Auth) -> Result<Value> {
         "apikey" => {
             let key = auth.api_key.as_ref().context("API key settings missing")?;
             json!({"type":"apikey","apikey":[{"key":"key","value":key.name,"type":"string"},{"key":"value","value":key.value,"type":"string"},{"key":"in","value":if key.location==moleapi_core::AuthLocation::Query{"query"}else{"header"},"type":"string"}]})
+        }
+        "hawk" => {
+            let hawk = auth.hawk.as_ref().context("Hawk settings missing")?;
+            ensure!(
+                ["sha1", "sha256"].contains(&hawk.algorithm.to_ascii_lowercase().as_str())
+                    || hawk.algorithm.contains("{{"),
+                "Hawk algorithm requires native MoleAPI export"
+            );
+            json!({"type":"hawk","hawk":[{"key":"authId","value":hawk.id,"type":"string"},{"key":"authKey","value":hawk.key,"type":"string"},{"key":"algorithm","value":hawk.algorithm,"type":"string"},{"key":"nonce","value":hawk.nonce,"type":"string"},{"key":"timestamp","value":hawk.timestamp,"type":"string"},{"key":"extraData","value":hawk.ext,"type":"string"},{"key":"app","value":hawk.app,"type":"string"},{"key":"delegation","value":hawk.delegation,"type":"string"},{"key":"user","value":hawk.user,"type":"string"},{"key":"includePayloadHash","value":hawk.include_payload_hash,"type":"boolean"}]})
         }
         "aws" => {
             let aws = auth.aws.as_ref().context("AWS settings missing")?;

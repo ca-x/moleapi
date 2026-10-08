@@ -1,3 +1,5 @@
+mod hawk_auth;
+pub use hawk_auth::*;
 mod aws_auth;
 pub use aws_auth::*;
 mod oauth2_auth;
