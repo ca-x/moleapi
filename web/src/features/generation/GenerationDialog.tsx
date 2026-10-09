@@ -30,9 +30,13 @@ export default function GenerationDialog({open,onOpenChange}:{open:boolean;onOpe
     api<SnippetCatalog>("/api/generation/snippets/catalog").then(value=>{if(current)setCatalog(value);}).catch(()=>{if(current)setError({identity:latest.current.identity,message:message("无法读取生成器列表，请关闭后重试。")});});
     return()=>{current=false;};
   },[open,owner]);
-  const selected=catalog?.targets.find(value=>value.target===target),snippet=result?.identity===identity?result.snippet:null,busy=pending===identity;
+  const binary=state.request?.body_kind==="binary";
+  const targets=catalog?.targets.map(row=>({...row,clients:row.clients.filter(client=>!binary||client.binary_file)})).filter(row=>row.clients.length)??[];
+  const selected=targets.find(value=>value.target===target),snippet=result?.identity===identity?result.snippet:null,busy=pending===identity;
+  const available=!!selected?.clients.some(value=>value.client===client);
+  useEffect(()=>{if(catalog&&!available){const row=targets[0];if(row){setTarget(row.target);setClient(row.clients[0].client);}}},[catalog,binary,target,client]);
   async function generate() {
-    if(busy||!state.request||!state.draft)return;
+    if(busy||!available||!state.request||!state.draft)return;
     const origin=identity,snapshot=latest.current.state;
     const current=()=>mounted.current&&latest.current.identity===origin;
     setPending(origin);setError(null);setResult(null);
@@ -49,14 +53,15 @@ export default function GenerationDialog({open,onOpenChange}:{open:boolean;onOpe
   return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Content maxWidth="min(920px, calc(100vw - 32px))" className="generation-dialog">
     <Dialog.Title>{t("生成请求代码")}</Dialog.Title><Dialog.Description>{t("将当前保存的 HTTP 请求转换为所选语言的请求代码，支持预览、复制和下载。默认隐藏凭据。")}</Dialog.Description>
     <Flex gap="3" wrap="wrap" align="end" my="4">
-      <Field label={t("语言")}><Choice label={t("代码语言")} value={target} disabled={!catalog||busy} options={catalog?.targets.map(value=>({value:value.target,label:value.title}))||[]} onChange={value=>{setTarget(value);setClient(catalog?.targets.find(item=>item.target===value)?.clients[0]?.client||"");}}/></Field>
+      <Field label={t("语言")}><Choice label={t("代码语言")} value={target} disabled={!catalog||busy} options={targets.map(value=>({value:value.target,label:value.title}))} onChange={value=>{setTarget(value);setClient(targets.find(item=>item.target===value)?.clients[0]?.client||"");}}/></Field>
       <Field label={t("HTTP 库")}><Choice label={t("代码 HTTP 库")} value={client} disabled={!selected||busy} options={selected?.clients.map(value=>({value:value.client,label:value.title}))||[]} onChange={setClient}/></Field>
-      <Button disabled={!catalog||busy} loading={busy} onClick={()=>void generate()}><Code2 size={15}/>{t("生成")}</Button>
+      <Button disabled={!catalog||!available||busy} loading={busy} onClick={()=>void generate()}><Code2 size={15}/>{t("生成")}</Button>
     </Flex>
     <Text as="label" size="2"><Flex gap="2" align="center"><Checkbox checked={include} disabled={busy} onCheckedChange={value=>setInclude(value===true)}/>{t("包含保存的凭据（复制和下载会包含私密值）")}</Flex></Text>
     {error?.identity===identity&&<Callout.Root color="red" role="alert" my="3"><Callout.Text>{translateCopy(error.message)}</Callout.Text></Callout.Root>}
     <Text as="p" size="1" color="gray">{catalog?.engine||t("正在读取生成器…")} {t("· 使用上游生成器；各语言的编译与运行验证进度见覆盖清单。")}</Text>
     {selected&&<Text as="p" size="1" color="gray">{t("语言与 HTTP 库按 Apifox／Postman 官方请求代码列表提供；库依赖需要在目标项目中安装。")}</Text>}
+    {binary&&<Text as="p" size="1" color="gray">{t("当前显示可读取原始文件字节的适配器；其他正文类型仍可选择完整语言与库列表。")}</Text>}
     {(["js","node"].includes(target)&&["native","request","unirest"].includes(client))&&<Text as="p" size="1">{t("此选项生成 Node.js CommonJS 代码；Request、Unirest 和 follow-redirects 等依赖按生成的 require 安装。")}</Text>}
     {target==="postman-cli"&&<Text as="p" size="1">{t("此选项生成 Postman CLI 命令，需要目标环境安装该 CLI；生成过程不会执行命令。")}</Text>}
     {busy&&<Text as="p" role="status">{t("正在生成请求示例…")}</Text>}

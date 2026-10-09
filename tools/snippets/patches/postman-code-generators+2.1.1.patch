@@ -105,3 +105,17 @@ diff --git a/node_modules/postman-code-generators/codegens/nodejs-unirest/lib/pa
      }
      else {
        bodyString += indentString +
+diff --git a/node_modules/postman-code-generators/codegens/csharp-httpclient/lib/parseRequest.js b/node_modules/postman-code-generators/codegens/csharp-httpclient/lib/parseRequest.js
+--- a/node_modules/postman-code-generators/codegens/csharp-httpclient/lib/parseRequest.js
++++ b/node_modules/postman-code-generators/codegens/csharp-httpclient/lib/parseRequest.js
+@@ -161,6 +161,10 @@
+           .appendLine('request.Content = new StreamContent(File.OpenRead("' +
+             `${sanitize(requestBody[requestBody.mode].src || '"<File path>"')}"));`);
+         builder.addUsing('System.IO');
++        if (contentType) {
++          builder.addUsing('System.Net.Http.Headers');
++          builder.appendLine(`request.Content.Headers.ContentType = new MediaTypeHeaderValue(${JSON.stringify(contentType)});`);
++        }
+         break;
+       default:
+     }

@@ -23,6 +23,14 @@ beforeEach(()=>{
   vi.mocked(useWorkbench).mockImplementation(()=>state);
 });
 afterEach(cleanup);
+it("offers binary-capable libraries and excludes file-placeholder adapters for raw file bodies",async()=>{
+ state.request={...state.request!,body_kind:"binary",body:JSON.stringify({file_name:"upload.bin",mime:"application/octet-stream",base64:"AP+AClg="})};
+ const choices={...catalog,targets:[{target:"shell",title:"Shell",clients:[{client:"curl",title:"cURL",binary_file:true},{client:"missing",title:"Placeholder library",binary_file:false}]},{target:"java",title:"Java",clients:[{client:"unsupported",title:"Placeholder reader",binary_file:false}]}]};
+ vi.mocked(api).mockImplementation(path=>Promise.resolve(path.endsWith("catalog")?choices:snippet));
+ render(<GenerationDialog open onOpenChange={vi.fn()}/>);await screen.findByText("当前显示可读取原始文件字节的适配器；其他正文类型仍可选择完整语言与库列表。");
+ expect(screen.queryByRole("option",{name:"Java"})).toBeNull();expect(screen.queryByRole("option",{name:"Placeholder library"})).toBeNull();expect(screen.getByRole("option",{name:"cURL"})).toBeTruthy();
+ fireEvent.click(screen.getByRole("button",{name:"生成"}));await waitFor(()=>expect(api).toHaveBeenCalledWith("/api/generation/snippets","POST",expect.objectContaining({target:"shell",client:"curl"})));
+});
 it.each([["go","native","go"],["csharp","httpclient","cs"],["shell","curl_windows","cmd"],["node","native","cjs"]])("downloads %s request code with its source extension and rejects a later owner boundary",async(target,client,extension)=>{
   const targets={...catalog,targets:[...catalog.targets.filter(row=>row.target!==target),{target,title:target,clients:[{client,title:client}]}]};
   const result={...snippet,target,client,code:`generated-${target}`};

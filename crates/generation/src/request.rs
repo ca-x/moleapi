@@ -212,15 +212,48 @@ pub fn generate_request(
                 .collect::<Vec<_>>();
             json!({"mimeType":"multipart/form-data","params":params})
         }
+        "binary" => {
+            let file: moleapi_core::BinaryBody = serde_json::from_str(&request.body)?;
+            let mime = if let Some(value) = headers
+                .iter()
+                .find(|header| {
+                    header["name"]
+                        .as_str()
+                        .is_some_and(|name| name.eq_ignore_ascii_case("content-type"))
+                })
+                .and_then(|header| header["value"].as_str())
+            {
+                value.to_string()
+            } else if file.mime.is_empty() {
+                "application/octet-stream".into()
+            } else {
+                file.mime
+            };
+            let name = if file.file_name.is_empty() {
+                "{{FILE_NAME}}".into()
+            } else {
+                file.file_name
+            };
+            json!({"mimeType":mime,"fileName":name})
+        }
         _ => anyhow::bail!("This body mode is not supported by request snippets"),
     };
+    if request.body_kind == "binary"
+        && !headers.iter().any(|header| {
+            header["name"]
+                .as_str()
+                .is_some_and(|name| name.eq_ignore_ascii_case("content-type"))
+        })
+    {
+        headers.push(json!({"name":"Content-Type","value":post_data["mimeType"]}));
+    }
     let har = json!({"method":request.method,"url":url,"httpVersion":"HTTP/1.1","headers":headers,"queryString":[],"cookies":[],"postData":post_data});
     let code = generate_har(target, client, &har)?;
     let mut warnings = vec![
         "生成静态请求示例；不执行脚本、不解析环境变量、不附加浏览器私有覆盖。请检查占位符。".into(),
         "各语言的超时、TLS、重定向策略由其 HTTP 库决定；此轮示例尚不映射这些设置。".into(),
     ];
-    if request.body_kind == "multipart" {
+    if matches!(request.body_kind.as_str(), "multipart" | "binary") {
         warnings.push("文件上传代码引用文件名，不嵌入保存的文件字节。运行代码前请在目标环境准备对应文件，并检查库的 MIME 类型和文件名处理。".into());
     }
     Ok(Snippet {
@@ -236,6 +269,36 @@ pub fn generate_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn raw_binary_catalog_generates_file_readers_without_embedding_saved_bytes() {
+        let body =
+            json!({"file_name":"upload.bin","mime":"application/octet-stream","base64":"AP+AClg="})
+                .to_string();
+        let w = workspace("binary", &body);
+        let mut count = 0;
+        for target in crate::catalog().unwrap() {
+            for client in target
+                .clients
+                .into_iter()
+                .filter(|client| client.binary_file)
+            {
+                let code = generate_request(&w, "r", &target.target, &client.client, false)
+                    .unwrap()
+                    .code;
+                assert!(
+                    code.contains("upload.bin")
+                        && !code.contains("AP+AClg=")
+                        && !code.contains("<file contents here>"),
+                    "{}/{}: {code}",
+                    target.target,
+                    client.client
+                );
+                count += 1;
+            }
+        }
+        assert_eq!(count, 12);
+        assert_eq!(w.data.collections[0].requests[0].body, body);
+    }
     #[test]
     fn multipart_catalog_uses_mature_emitters_for_every_selected_library() {
         let body=json!({"parts":[{"id":"label","name":"label","value":{"kind":"text","text":"fixture","mime":""}},{"id":"upload","name":"upload","value":{"kind":"file","file":{"file_name":"upload.bin","mime":"application/octet-stream","base64":null}}}]}).to_string();

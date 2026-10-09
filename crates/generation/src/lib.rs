@@ -15,6 +15,8 @@ const BUNDLE: &str = include_str!("../../../vendor/snippet-engine/engine.js");
 pub struct Client {
     pub client: String,
     pub title: String,
+    #[serde(default)]
+    pub binary_file: bool,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Target {

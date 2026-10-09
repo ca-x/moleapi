@@ -8,7 +8,20 @@ diff --git a/node_modules/@scalar/snippetz/dist/plugins/node/fetch/fetch.js b/no
  /**
   * node/fetch
   */
-@@ -64,10 +64,10 @@
+@@ -48,7 +48,11 @@
+         if (normalizedRequest.postData) {
+             const { mimeType, text, params } = normalizedRequest.postData;
+             let hasFsImport = false;
+-            if (mimeType === 'application/json' && text) {
++            if (normalizedRequest.postData.fileName !== undefined) {
++                prefix = "import fs from 'node:fs'\n\n";
++                options.body = new Raw(`fs.readFileSync('${escapeJsString(normalizedRequest.postData.fileName)}')`);
++            }
++            else if (mimeType === 'application/json' && text) {
+                 try {
+                     options.body = new Raw(`JSON.stringify(${objectToString(JSON.parse(text))})`);
+                 }
+@@ -64,10 +68,10 @@
                              prefix = `import fs from 'node:fs'\n\n${prefix}`;
                              hasFsImport = true;
                          }
@@ -21,3 +34,55 @@ diff --git a/node_modules/@scalar/snippetz/dist/plugins/node/fetch/fetch.js b/no
                      }
                  });
                  prefix += '\n';
+diff --git a/node_modules/@scalar/snippetz/dist/plugins/go/native/native.js b/node_modules/@scalar/snippetz/dist/plugins/go/native/native.js
+--- a/node_modules/@scalar/snippetz/dist/plugins/go/native/native.js
++++ b/node_modules/@scalar/snippetz/dist/plugins/go/native/native.js
+@@ -35,6 +35,10 @@
+             requestBody: 'nil',
+             needsMultipartContentTypeHeader: false,
+         };
++    }
++    if (postData.fileName !== undefined) {
++        imports.add('os');
++        return {imports, setupLines:[`payload, err := os.Open(${goString(postData.fileName)})`, 'if err != nil { fmt.Println(err); return }', 'defer payload.Close()'], requestBody:'payload', needsMultipartContentTypeHeader:false};
+     }
+     if (postData.mimeType === 'application/x-www-form-urlencoded' && postData.params?.length) {
+         imports.add('neturl "net/url"');
+diff --git a/node_modules/@scalar/snippetz/dist/plugins/python/requestsLike.js b/node_modules/@scalar/snippetz/dist/plugins/python/requestsLike.js
+--- a/node_modules/@scalar/snippetz/dist/plugins/python/requestsLike.js
++++ b/node_modules/@scalar/snippetz/dist/plugins/python/requestsLike.js
+@@ -58,7 +58,8 @@
+     // Handle request body
+     if (normalizedRequest.postData) {
+         const { mimeType, text, params } = normalizedRequest.postData;
+-        if (mimeType === 'application/json' && text) {
++        if (normalizedRequest.postData.fileName !== undefined) { options.data = normalizedRequest.postData.fileName; }
++        else if (mimeType === 'application/json' && text) {
+             try {
+                 options.json = JSON.parse(text);
+             }
+@@ -137,6 +138,9 @@
+             const jsonString = formatPythonValue(value);
+             formattedParams.push(`${key}=${jsonString}`);
+         }
++        else if (key === 'data' && normalizedRequest.postData?.fileName !== undefined) {
++            formattedParams.push(`${key}=open(${JSON.stringify(normalizedRequest.postData.fileName)}, "rb")`);
++        }
+         else if (key === 'data' && normalizedRequest.postData?.mimeType === 'application/octet-stream') {
+             // Special handling for binary data
+             formattedParams.push(`${key}=b"${value}"`);
+diff --git a/node_modules/@scalar/snippetz/dist/plugins/csharp/restsharp/restsharp.js b/node_modules/@scalar/snippetz/dist/plugins/csharp/restsharp/restsharp.js
+--- a/node_modules/@scalar/snippetz/dist/plugins/csharp/restsharp/restsharp.js
++++ b/node_modules/@scalar/snippetz/dist/plugins/csharp/restsharp/restsharp.js
+@@ -89,7 +89,10 @@
+             // Compare against the essence so parameterized values (e.g. a `boundary` or
+             // `charset`) still match the form, multipart, and octet-stream branches.
+             const essence = mimeType ? parseMimeType(mimeType).essence : undefined;
+-            if (isJsonMediaType(mimeType)) {
++            if (normalizedRequest.postData.fileName !== undefined) {
++                lines.push(`request.AddBody(File.ReadAllBytes("${escapeCSharpString(normalizedRequest.postData.fileName)}"), "${escapeCSharpString(mimeType ?? 'application/octet-stream')}");`);
++            }
++            else if (isJsonMediaType(mimeType)) {
+                 if (text) {
+                     let body = text;
+                     try {

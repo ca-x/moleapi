@@ -11,6 +11,13 @@ fn main() -> Result<()> {
         json!({"id":"w","name":"Fixture","revision":1,"updated_at":"now","data":{"schema_version":1,"collections":[{"id":"c","name":"Fixture","description":"","requests":[{"id":"r","name":"Fixture","method":"POST","url":format!("{url}/echo?existing=one"),"description":"","query":[{"id":"q","key":"q","value":"space & +","enabled":true}],"headers":[{"id":"h","key":"X-Test","value":"moleapi-fixture","enabled":true},{"id":"auth","key":"Authorization","value":"Bearer ignored-manual-token","enabled":true},{"id":"host","key":"Host","value":"wrong.invalid","enabled":true}],"body_kind":"json","body":"{\"message\":\"鼹鼠 \\\"quotes\\\" & +\"}","auth":{"kind":"bearer","token":"fixture-token","username":"","password":""},"timeout_ms":1000,"follow_redirects":false,"verify_tls":true,"assertions":[],"examples":[]}]}],"environments":[],"active_environment_id":null}}),
     )?;
     let mode = args.next();
+    if mode.as_deref() == Some("binary") {
+        let request = &mut workspace.data.collections[0].requests[0];
+        request.body_kind = "binary".into();
+        request.body =
+            json!({"file_name":"upload.bin","mime":"application/octet-stream","base64":"AP+AClg="})
+                .to_string();
+    }
     if mode.as_deref() == Some("multipart") {
         let request = &mut workspace.data.collections[0].requests[0];
         request.body_kind = "multipart".into();
@@ -32,6 +39,18 @@ fn main() -> Result<()> {
             ("r", "httr", "httr.R"),
             ("r", "rcurl", "rcurl.R"),
             ("shell", "curl_windows", "curl.cmd"),
+        ]
+    } else if mode.as_deref() == Some("binary") {
+        vec![
+            ("node", "fetch", "node.mjs"),
+            ("go", "native", "main.go"),
+            ("shell", "curl", "curl.sh"),
+            ("shell", "wget", "wget.sh"),
+            ("python", "requests", "python.py"),
+            ("csharp", "httpclient", "httpclient.cs"),
+            ("csharp", "restsharp", "restsharp.cs"),
+            ("rust", "reqwest", "rust.rs"),
+            ("kotlin", "okhttp", "kotlin.kt"),
         ]
     } else if mode.as_deref() == Some("multipart") {
         vec![

@@ -1,4 +1,4 @@
-"""Run only trusted generated multipart fixtures, including binary file bytes.
+"""Run only trusted generated multipart/raw binary fixtures with original file bytes.
 Requires Node/Python requests/Go/cURL/.NET10 and cached RestSharp114 packages.
 Pass --node-modules and --dotnet as explicit absolute development tool paths.
 """
@@ -20,9 +20,10 @@ ROOT=Path(__file__).resolve().parents[2]
 parser=argparse.ArgumentParser()
 parser.add_argument('--node-modules',required=True,type=Path)
 parser.add_argument('--dotnet',required=True,type=Path)
-parser.add_argument('--clients',default='node,native,request,unirest,go,curl,python,httpclient,restsharp')
+parser.add_argument('--clients')
+parser.add_argument('--mode',choices=['multipart','binary'],default='multipart')
 args=parser.parse_args()
-clients=set(args.clients.split(','))
+clients=set((args.clients or ('node,go,curl,wget,python,httpclient,restsharp,rust' if args.mode=='binary' else 'node,native,request,unirest,go,curl,python,httpclient,restsharp')).split(','))
 for path in [args.node_modules,args.dotnet]:
     if not path.is_absolute() or not path.exists():parser.error('select existing absolute tool paths')
 records=queue.Queue()
@@ -35,6 +36,11 @@ def check(name):
     headers=record['headers']
     assert headers['authorization']=='Bearer fixture-token' and headers['x-test']=='moleapi-fixture',headers
     assert urllib.parse.parse_qs(urllib.parse.urlsplit(record['path']).query)=={'existing':['one'],'q':['space & +']},record['path']
+    if args.mode=='binary':
+        assert headers['content-type']=='application/octet-stream',headers
+        assert base64.b64decode(record['body'])==bytes([0,255,128,10,88]),(name,record['body'])
+        print(f'PASS {name}: real raw binary POST/auth/query/MIME/byte-exact file body')
+        return
     message=BytesParser(policy=default).parsebytes(('Content-Type: '+headers['content-type']+'\r\nMIME-Version: 1.0\r\n\r\n').encode()+base64.b64decode(record['body']))
     assert message.is_multipart(),message
     parts=list(message.iter_parts())
@@ -55,12 +61,13 @@ with tempfile.TemporaryDirectory(prefix='moleapi-multipart-runtime-') as tempora
         def receive():
             for line in server.stdout:records.put(json.loads(line))
         threading.Thread(target=receive,daemon=True).start()
-        run(['cargo','run','-p','moleapi-generation','--example','fixture_snippets','--locked','--',str(output),f'http://127.0.0.1:{port}','multipart'],ROOT)
+        run(['cargo','run','-p','moleapi-generation','--example','fixture_snippets','--locked','--',str(output),f'http://127.0.0.1:{port}',args.mode],ROOT)
         (output/'upload.bin').write_bytes(bytes([0,255,128,10,88]))
         for client,name in [('node','node.mjs'),('native','native.cjs'),('request','request.cjs'),('unirest','unirest.cjs')]:
             if client in clients:run(['node',name],output,{**os.environ,'NODE_PATH':str(args.node_modules)});check(name)
         if 'go' in clients:run(['go','run','main.go'],output);check('Go')
         if 'curl' in clients:run(['sh','curl.sh'],output);check('cURL')
+        if 'wget' in clients:run(['sh','wget.sh'],output);check('Wget')
         if 'python' in clients:
             (output/'python.py').write_text('import requests\n'+(output/'python.py').read_text())
             run([sys.executable,'python.py'],output);check('Python Requests')
@@ -72,6 +79,10 @@ with tempfile.TemporaryDirectory(prefix='moleapi-multipart-runtime-') as tempora
             imports='using System.Net.Http.Headers;\n'+('using RestSharp;\n' if name=='restsharp' else '')
             (project/'Program.cs').write_text(imports+(output/(name+'.cs')).read_text())
             run([str(args.dotnet),'run','--project','fixture.csproj','--verbosity','quiet'],project,{**os.environ,'DOTNET_NOLOGO':'1','DOTNET_SKIP_FIRST_TIME_EXPERIENCE':'1','DOTNET_CLI_TELEMETRY_OPTOUT':'1'});check('C#/'+name)
+        if 'rust' in clients:
+            project=output/'rust';(project/'src').mkdir(parents=True);shutil.copy(output/'upload.bin',project/'upload.bin');shutil.copy(output/'rust.rs',project/'src/main.rs')
+            (project/'Cargo.toml').write_text('[package]\nname="moleapi_binary_fixture"\nversion="0.1.0"\nedition="2024"\n[dependencies]\nreqwest={version="0.13",default-features=false,features=["rustls"]}\ntokio={version="1",features=["macros","rt-multi-thread"]}\n')
+            run(['cargo','run','--quiet'],project,{**os.environ,'CARGO_TARGET_DIR':'/tmp/moleapi-binary-fixture-target'});check('Rust reqwest')
         assert records.empty()
     finally:
         server.terminate();server.wait(timeout=10)
