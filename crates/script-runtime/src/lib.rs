@@ -26,6 +26,8 @@ struct Input<'a> {
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ScriptOutput {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub condition_result: Option<bool>,
     #[serde(default)]
     pub control: moleapi_core::ExecutionControl,
     pub request: RequestSpec,
@@ -117,6 +119,21 @@ pub fn run(
     response: Option<&Response>,
     scopes: &VariableScopes,
 ) -> Result<ScriptOutput> {
+    run_with_condition(scripts, request, response, scopes, None)
+}
+pub(crate) fn run_with_condition(
+    scripts: &[String],
+    request: &RequestSpec,
+    response: Option<&Response>,
+    scopes: &VariableScopes,
+    condition: Option<&str>,
+) -> Result<ScriptOutput> {
+    if let Some(expression) = condition {
+        ensure!(
+            !expression.trim().is_empty() && expression.len() <= 4096,
+            "Invalid scenario condition"
+        );
+    }
     for script in scripts {
         moleapi_core::validate_script(script)?;
     }
@@ -282,6 +299,19 @@ pub fn run(
             ] {
                 ctx.globals().remove(name)?;
             }
+            let condition_result =
+                if let Some(expression) = condition {
+                    let value = evaluate(&format!("({expression}\n)"))?;
+                    ensure!(
+                        !promise_seen.get(),
+                        "Asynchronous scenario conditions are unsupported"
+                    );
+                    Some(value.as_bool().ok_or_else(|| {
+                        anyhow::anyhow!("Scenario condition must return a boolean")
+                    })?)
+                } else {
+                    None
+                };
             for script in scripts.iter().filter(|s| !s.trim().is_empty()) {
                 let result = match evaluate(script) {
                     Ok(result) => result,
@@ -305,6 +335,7 @@ pub fn run(
             );
             let mut output: ScriptOutput =
                 serde_json::from_str(&output).context("Invalid JavaScript output")?;
+            output.condition_result = condition_result;
             ensure!(
                 output.logs.len() <= 200
                     && output.tests.len() <= 200

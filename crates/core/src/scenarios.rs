@@ -24,6 +24,23 @@ pub struct ScenarioStep {
     pub group: String,
     #[serde(default = "enabled")]
     pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub condition: Option<String>,
+    #[serde(default = "once")]
+    pub repeat: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on_true: Option<ScenarioTarget>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on_false: Option<ScenarioTarget>,
+}
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ScenarioTarget {
+    Step { step_id: String },
+    Stop,
+}
+fn once() -> usize {
+    1
 }
 fn enabled() -> bool {
     true
@@ -70,6 +87,29 @@ pub fn validate_scenarios(data: &WorkspaceData) -> Result<()> {
                 step.name.len() <= 256 && step.group.len() <= 256,
                 "Invalid scenario step label or group"
             );
+            ensure!(
+                (1..=1000).contains(&step.repeat),
+                "Scenario repeat must be 1 to 1000"
+            );
+            if let Some(condition) = &step.condition {
+                ensure!(
+                    !condition.trim().is_empty() && condition.len() <= 4096,
+                    "Invalid scenario condition"
+                );
+            }
+            for target in [&step.on_true, &step.on_false].into_iter().flatten() {
+                if let ScenarioTarget::Step { step_id } = target {
+                    let selected = scenario
+                        .steps
+                        .iter()
+                        .find(|candidate| candidate.id == *step_id)
+                        .ok_or_else(|| anyhow::anyhow!("Scenario branch step does not exist"))?;
+                    ensure!(
+                        !step.enabled || selected.enabled,
+                        "Enabled scenario branch targets a disabled step"
+                    );
+                }
+            }
             ensure!(
                 requests.contains(&step.request_id),
                 "Scenario request does not exist in selected subtree"

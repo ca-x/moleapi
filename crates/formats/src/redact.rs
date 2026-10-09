@@ -224,6 +224,26 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
         for step in &mut scenario.steps {
             step.name = data_privacy.screen_bounded(&step.name, 256);
             step.group = data_privacy.screen_bounded(&step.group, 256);
+            if let Some(condition) = &step.condition {
+                let safe = data_privacy.screen_bounded(condition, 4096);
+                if safe != *condition {
+                    step.condition = None;
+                    step.enabled = false;
+                }
+            }
+        }
+        let disabled = scenario
+            .steps
+            .iter()
+            .filter(|step| !step.enabled)
+            .map(|step| step.id.clone())
+            .collect::<std::collections::BTreeSet<_>>();
+        for step in &mut scenario.steps {
+            for target in [&mut step.on_true, &mut step.on_false] {
+                if target.as_ref().is_some_and(|target| matches!(target, moleapi_core::ScenarioTarget::Step {step_id} if disabled.contains(step_id))) {
+                    *target = Some(moleapi_core::ScenarioTarget::Stop);
+                }
+            }
         }
     }
     for dataset in &mut result.data.datasets {

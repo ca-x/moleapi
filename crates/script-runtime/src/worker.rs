@@ -20,6 +20,8 @@ pub const MAX_WORKER_INPUT: usize = 24 * 1024 * 1024;
 pub const MAX_WORKER_OUTPUT: usize = 32 * 1024 * 1024;
 #[derive(Serialize, Deserialize)]
 struct WorkerInput {
+    #[serde(default)]
+    condition: Option<String>,
     scripts: Vec<String>,
     request: RequestSpec,
     response: Option<Response>,
@@ -56,11 +58,12 @@ pub fn dispatch_worker() -> anyhow::Result<bool> {
     );
     let mut input: WorkerInput = serde_json::from_slice(&bytes)?;
     input.scopes.private_values = input.private_values;
-    let output = match crate::run(
+    let output = match crate::run_with_condition(
         &input.scripts,
         &input.request,
         input.response.as_ref(),
         &input.scopes,
+        input.condition.as_deref(),
     ) {
         Ok(output) => WorkerOutput::Success {
             output: Box::new(output),
@@ -88,6 +91,33 @@ pub async fn run_worker(
     response: Option<&Response>,
     scopes: &VariableScopes,
 ) -> Result<ScriptOutput, ScriptFailure> {
+    run_worker_input(executable, scripts, request, response, scopes, None).await
+}
+pub async fn condition_worker(
+    executable: &Path,
+    expression: &str,
+    request: &RequestSpec,
+    response: Option<&Response>,
+    scopes: &VariableScopes,
+) -> Result<ScriptOutput, ScriptFailure> {
+    run_worker_input(
+        executable,
+        vec![],
+        request,
+        response,
+        scopes,
+        Some(expression.into()),
+    )
+    .await
+}
+async fn run_worker_input(
+    executable: &Path,
+    scripts: Vec<String>,
+    request: &RequestSpec,
+    response: Option<&Response>,
+    scopes: &VariableScopes,
+    condition: Option<String>,
+) -> Result<ScriptOutput, ScriptFailure> {
     let deadline = tokio::time::Instant::now() + WORKER_DEADLINE;
     if !executable.is_absolute() {
         return Err(failure(
@@ -97,6 +127,7 @@ pub async fn run_worker(
         ));
     }
     let payload = serde_json::to_vec(&WorkerInput {
+        condition,
         scripts,
         request: request.clone(),
         response: response.cloned(),

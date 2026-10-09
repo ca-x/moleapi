@@ -147,7 +147,8 @@ export interface Specification {
   source: string;
   dialect: string;
 }
-export interface ScenarioStep {id:string;request_id:string;name:string;group:string;enabled:boolean}
+export type ScenarioTarget={action:"step";step_id:string}|{action:"stop"};
+export interface ScenarioStep {id:string;request_id:string;name:string;group:string;enabled:boolean;condition?:string;repeat?:number;on_true?:ScenarioTarget;on_false?:ScenarioTarget}
 export interface Scenario {id:string;name:string;description:string;collection_id:string;steps:ScenarioStep[]}
 export interface WorkspaceData {
   scenarios?:Scenario[];
@@ -242,11 +243,13 @@ export interface RunResult {
   executed_steps?:number;
   iteration_count?:number;
   completed_iterations?:number;
-  iterations?:{iteration:number;passed:number;failed:number;elapsed_ms:number;script_stopped?:boolean}[];
+  iterations?:{iteration:number;passed:number;failed:number;elapsed_ms:number;script_stopped?:boolean;scenario_stopped?:boolean}[];
   cancelled?:boolean;
   stopped_reason?:string|null;
   omitted_responses?:number;
   results: {
+    condition_skipped?:boolean;
+    step_repeat_index?:number;
     step_id?:string;
     step_name?:string;
     step_group?:string;

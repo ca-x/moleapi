@@ -1460,5 +1460,16 @@
   "保存场景到工作区": "Save scenario to workspace",
   "场景保存失败，请检查名称、请求引用、步骤数量或工作区版本冲突。未保存的编辑已保留。": "Scenario save failed. Check its name, request references, step count or workspace revision conflict. Unsaved edits are retained.",
   "运行场景": "Run scenario",
-  "集合原始顺序": "Original collection order"
+  "集合原始顺序": "Original collection order",
+  "执行条件（JavaScript 布尔表达式）": "Execution condition (JavaScript boolean expression)",
+  "条件在请求脚本之前读取变量、数据和前一次响应。条件内的修改不会应用；空条件总是成立。": "Conditions read variables, data and the previous response before request scripts. Their changes are discarded; an empty condition is always true.",
+  "下一启用步骤": "Next enabled step",
+  "结束本轮场景": "End this scenario iteration",
+  "重复次数": "Repeat count",
+  "条件成立后": "When condition is true",
+  "条件不成立后": "When condition is false",
+  "删除或禁用目标步骤会将指向它的分支改为结束本轮。脚本跳转优先于场景重复和分支设置。": "Deleting or disabling a target ends branches pointing to it. Script jumps take precedence over scenario repeats and branches.",
+  "请求因场景条件不成立而跳过。": "Request skipped because the scenario condition is false.",
+  "场景条件执行失败，请检查布尔结果和执行限制。": "Scenario condition failed. Check its boolean result and execution limits.",
+  "场景分支已结束本轮。": "Scenario branch ended this iteration."
 }

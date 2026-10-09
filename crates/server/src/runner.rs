@@ -1,3 +1,4 @@
+mod scenario_control;
 use crate::execution::{environment, perform, variables};
 use crate::{ApiError, AppState, auth::Identity, workspaces::owned};
 use axum::{
@@ -178,9 +179,16 @@ pub async fn run(
             })
             .collect::<Vec<_>>()
     };
-    if plan.len().saturating_mul(count) > 1000 {
+    if plan
+        .iter()
+        .map(|(_, _, step)| step.map_or(1, |step| step.repeat))
+        .sum::<usize>()
+        .saturating_mul(count)
+        > 1000
+    {
         return Err(ApiError::bad("Run exceeds 1000 request executions"));
     }
+    let scenario_steps = plan.iter().map(|(_, _, step)| *step).collect::<Vec<_>>();
     let mut scopes = variables(
         &s,
         &w,
@@ -237,6 +245,7 @@ pub async fn run(
     'iterations: for index in 0..count {
         let iteration_start = std::time::Instant::now();
         let mut script_stopped = false;
+        let mut scenario_stopped = false;
         let (before_passed, before_failed) = (passed, failed);
         let pairs = iteration_pairs(&c, dataset.as_ref().map(|dataset| &dataset.rows[index]))?;
         let iteration_base = variables(&s, &w, Some(collection), e, &pairs, &c.variables, &[])?;
@@ -262,12 +271,16 @@ pub async fn run(
             .validate()
             .map_err(|error| ApiError::bad(error.to_string()))?;
         let mut cursor = 0usize;
+        let mut repeat_index = 0usize;
+        let mut previous_response = None;
         'steps: while cursor < plan.len() {
             if executed >= 1000 {
                 stopped = Some("step_limit");
                 break 'iterations;
             }
             let (selected, request, step) = plan[cursor];
+            let mut condition_passed = true;
+            let mut condition_failed = false;
             let base = variables(&s, &w, Some(selected), e, &pairs, &c.variables, &[])?;
             scopes.private_values.extend(base.private_values);
             scopes.collection.clear();
@@ -312,25 +325,54 @@ pub async fn run(
                 }
                 drop(admission);
                 let before = scopes.collection.clone();
-                let result = tokio::select! {biased;_=lease.cancel.cancelled()=>{stopped=Some("cancelled");break 'iterations;},_=tokio::time::sleep_until(deadline)=>{stopped=Some("deadline");break 'iterations;},result=perform(&s,&owner.0,&w,request,Some(selected),&mut scopes)=>result};
-                let mut item = match result {
-                    Ok(response) => {
-                        if response.skipped {
-                            skipped += 1;
-                        } else if response.tests.iter().all(|test| test.passed) {
-                            passed += 1;
-                        } else {
-                            failed += 1;
-                        }
-                        json!({"request_id":request.id,"request_name":request.name,"collection_id":selected.id,"iteration":index,"status":response.status,"elapsed_ms":response.elapsed_ms,"response":response})
+                scopes.execution = moleapi_core::ExecutionControl::default();
+                if let Some(expression) = step.and_then(|step| step.condition.as_deref()) {
+                    let evaluation = tokio::select! {biased;_=lease.cancel.cancelled()=>{stopped=Some("cancelled");break 'iterations;},_=tokio::time::sleep_until(deadline)=>{stopped=Some("deadline");break 'iterations;},result=scenario_control::condition(&s,expression,request,previous_response.as_ref(),&mut scopes)=>result};
+                    match evaluation {
+                        Ok(value) => condition_passed = value,
+                        Err(()) => condition_failed = true,
                     }
-                    Err(error) => {
-                        failed += 1;
-                        json!({"request_id":request.id,"request_name":request.name,"collection_id":selected.id,"iteration":index,"error":error.message})
+                }
+                let mut item = if condition_failed {
+                    failed += 1;
+                    json!({"request_id":request.id,"request_name":request.name,"collection_id":selected.id,"iteration":index,"error":"Scenario condition failed; check its boolean result and execution limits"})
+                } else if !condition_passed {
+                    skipped += 1;
+                    json!({"request_id":request.id,"request_name":request.name,"collection_id":selected.id,"iteration":index,"condition_skipped":true})
+                } else {
+                    // A condition worker may have yielded while the owner or workspace changed.
+                    if step.and_then(|step| step.condition.as_ref()).is_some() {
+                        let admission = gate.lock().await;
+                        if *admission != epoch || owned(&s, &owner.0, &id).await.is_err() {
+                            stopped = Some("owner_changed");
+                            break 'iterations;
+                        }
+                    }
+                    let result = tokio::select! {biased;_=lease.cancel.cancelled()=>{stopped=Some("cancelled");break 'iterations;},_=tokio::time::sleep_until(deadline)=>{stopped=Some("deadline");break 'iterations;},result=perform(&s,&owner.0,&w,request,Some(selected),&mut scopes)=>result};
+                    match result {
+                        Ok(response) => {
+                            if response.skipped {
+                                skipped += 1;
+                            } else {
+                                previous_response = Some(response.clone());
+                                if response.tests.iter().all(|test| test.passed) {
+                                    passed += 1;
+                                } else {
+                                    failed += 1;
+                                }
+                            }
+                            json!({"request_id":request.id,"request_name":request.name,"collection_id":selected.id,"iteration":index,"status":response.status,"elapsed_ms":response.elapsed_ms,"response":response})
+                        }
+                        Err(error) => {
+                            previous_response = None;
+                            failed += 1;
+                            json!({"request_id":request.id,"request_name":request.name,"collection_id":selected.id,"iteration":index,"error":error.message})
+                        }
                     }
                 };
                 if let Some(step) = step {
                     item["step_id"] = step.id.clone().into();
+                    item["step_repeat_index"] = repeat_index.into();
                     let privacy = crate::privacy::Redactor::new(&scopes.private_values)
                         .map_err(|_| ApiError::internal())?;
                     item["step_name"] = step.name.clone().into();
@@ -350,6 +392,10 @@ pub async fn run(
                     .map_err(|_| ApiError::internal())?
                     .len();
                 results.push(item);
+                if condition_failed {
+                    stopped = Some("condition_error");
+                    break 'iterations;
+                }
                 for key in before
                     .keys()
                     .chain(scopes.collection.keys())
@@ -373,13 +419,43 @@ pub async fn run(
                     break 'iterations;
                 }
             }
+            if !condition_passed {
+                scenario_stopped = matches!(
+                    step.and_then(|step| step.on_false.as_ref()),
+                    Some(moleapi_core::ScenarioTarget::Stop)
+                );
+                repeat_index = 0;
+                cursor = scenario_control::next(
+                    step.and_then(|step| step.on_false.as_ref()),
+                    cursor,
+                    &scenario_steps,
+                )?;
+                continue 'steps;
+            }
             cursor = match &scopes.execution.next_request {
-                None => cursor + 1,
+                None => {
+                    if step.is_some_and(|step| repeat_index + 1 < step.repeat) {
+                        repeat_index += 1;
+                        cursor
+                    } else {
+                        scenario_stopped = matches!(
+                            step.and_then(|step| step.on_true.as_ref()),
+                            Some(moleapi_core::ScenarioTarget::Stop)
+                        );
+                        repeat_index = 0;
+                        scenario_control::next(
+                            step.and_then(|step| step.on_true.as_ref()),
+                            cursor,
+                            &scenario_steps,
+                        )?
+                    }
+                }
                 Some(moleapi_core::NextRequest::Stop) => {
                     script_stopped = true;
                     break 'steps;
                 }
                 Some(moleapi_core::NextRequest::Request { target }) => {
+                    repeat_index = 0;
                     let by_id = plan
                         .iter()
                         .enumerate()
@@ -407,7 +483,7 @@ pub async fn run(
                 }
             };
         }
-        summaries.push(json!({"iteration":index,"passed":passed-before_passed,"failed":failed-before_failed,"elapsed_ms":iteration_start.elapsed().as_millis()as u64,"script_stopped":script_stopped}));
+        summaries.push(json!({"iteration":index,"passed":passed-before_passed,"failed":failed-before_failed,"elapsed_ms":iteration_start.elapsed().as_millis()as u64,"script_stopped":script_stopped,"scenario_stopped":scenario_stopped}));
     }
     let mut report = json!({"results":results,"iterations":summaries,"iteration_count":count,"completed_iterations":summaries.len(),"passed":passed,"failed":failed,"elapsed_ms":start.elapsed().as_millis()as u64,"cancelled":matches!(stopped,Some("cancelled"|"owner_changed")),"stopped_reason":stopped,"omitted_responses":omitted,"job_id":job_id,"executed_steps":executed,"skipped":skipped});
     if let Some(scenario) = scenario {
