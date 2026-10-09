@@ -1983,3 +1983,59 @@ pub(super) fn validate_generation_options(
     );
     Ok(())
 }
+
+pub(super) fn generation_protobuf_specification(
+    source: &Workspace,
+    id: &str,
+    include_secrets: bool,
+) -> anyhow::Result<moleapi_core::Specification> {
+    let spec = source
+        .data
+        .specifications
+        .iter()
+        .find(|s| s.id == id && s.kind == "protobuf")
+        .ok_or_else(|| anyhow::anyhow!("Protobuf specification not found"))?;
+    if include_secrets {
+        return Ok(spec.clone());
+    }
+    let privacy = ExportPrivacy::from_workspace(source, true);
+    anyhow::ensure!(!privacy.withhold, "Protobuf privacy budget exceeded");
+    let mut value: moleapi_core::ProtobufSource = serde_json::from_str(&spec.source)?;
+    match &mut value {
+        moleapi_core::ProtobufSource::Proto { files, .. } => {
+            for file in files {
+                file.content = privacy.screen_generation_text(&file.content);
+            }
+        }
+        moleapi_core::ProtobufSource::Descriptor {
+            descriptor_set_base64,
+        } => {
+            use base64::Engine;
+            let bytes =
+                base64::engine::general_purpose::STANDARD.decode(&*descriptor_set_base64)?;
+            let text = String::from_utf8_lossy(&bytes);
+            anyhow::ensure!(
+                privacy.screen_text(&text) == text,
+                "Opaque descriptor includes private values; generation withheld"
+            );
+        }
+    }
+    let mut result = spec.clone();
+    result.source = serde_json::to_string(&value)?;
+    Ok(result)
+}
+
+pub(super) fn validate_protobuf_generation_options(
+    source: &Workspace,
+    options: &Value,
+) -> anyhow::Result<()> {
+    let privacy = ExportPrivacy::from_workspace(source, true);
+    anyhow::ensure!(!privacy.withhold, "Protobuf privacy budget exceeded");
+    let text = serde_json::to_string(options)?;
+    let safe: Value = serde_json::from_str(&privacy.screen_generation_json(&text))?;
+    anyhow::ensure!(
+        safe == *options,
+        "Protobuf naming options contain private values; generation withheld"
+    );
+    Ok(())
+}

@@ -1,6 +1,7 @@
 //! Mature SDK/server emitters produce isolated, bounded artifacts.
 mod artifact;
 mod native;
+mod protobuf;
 mod regeneration;
 pub use regeneration::*;
 mod runtime;
@@ -75,6 +76,19 @@ pub fn project_catalog() -> Result<Vec<ProjectTarget>> {
             validation: "implementation-awaiting-cli-fixtures".into(),
             options: BTreeMap::from([
                 ("packageName".into(), Value::String("moleapi_cli".into())),
+                ("packageVersion".into(), Value::String("0.1.0".into())),
+            ]),
+        },
+    );
+    targets.insert(
+        2,
+        ProjectTarget {
+            id: "rust-tonic".into(),
+            kind: "protobuf".into(),
+            upstream_stability: "stable".into(),
+            validation: "awaiting-protobuf-fixtures".into(),
+            options: BTreeMap::from([
+                ("packageName".into(), Value::String("moleapi_grpc".into())),
                 ("packageVersion".into(), Value::String("0.1.0".into())),
             ]),
         },

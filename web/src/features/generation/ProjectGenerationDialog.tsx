@@ -12,14 +12,14 @@ import type {ProjectArtifact,ProjectCatalog} from "./projectTypes";
 import {decodeProjectBytes,saveProjectFile} from "./saveProjectFile";
 const optionLabels:Record<string,()=>string>={packageName:()=>t("包名"),packageVersion:()=>t("包版本"),apiPackage:()=>t("API 包名"),modelPackage:()=>t("模型包名"),invokerPackage:()=>t("调用器包名"),artifactId:()=>t("项目标识"),artifactVersion:()=>t("项目版本"),library:()=>t("HTTP 库 / 运行时"),namespace:()=>t("命名空间"),npmName:()=>t("npm 包名"),npmVersion:()=>t("npm 包版本"),groupId:()=>t("组织标识"),interface:()=>t("Rust 调用风格")};
 export default function ProjectGenerationDialog({open,specificationId,onOpenChange}:{open:boolean;specificationId:string;onOpenChange:(open:boolean)=>void}){
- useLanguage();const state=useWorkbench();const spec=state.draft?.data.specifications?.find(s=>s.id===specificationId&&s.kind==="openapi");
+ useLanguage();const state=useWorkbench();const spec=state.draft?.data.specifications?.find(s=>s.id===specificationId&&["openapi","protobuf"].includes(s.kind));
  const [compare,setCompare]=useState(false);
- const [catalog,setCatalog]=useState<ProjectCatalog|null>(null),[kind,setKind]=useState("client"),[target,setTarget]=useState("rust-progenitor"),[options,setOptions]=useState<Record<string,string>>({}),[include,setInclude]=useState(false);
+ const [catalog,setCatalog]=useState<ProjectCatalog|null>(null),[kind,setKind]=useState(spec?.kind==="protobuf"?"protobuf":"client"),[target,setTarget]=useState(spec?.kind==="protobuf"?"rust-tonic":"rust-progenitor"),[options,setOptions]=useState<Record<string,string>>({}),[include,setInclude]=useState(false);
  const [result,setResult]=useState<{identity:string;artifact:ProjectArtifact}|null>(null),[pending,setPending]=useState<string|null>(null),[error,setError]=useState<LocalizedCopy|null>(null),[path,setPath]=useState("");
  const owner=JSON.stringify([state.authenticated,state.accountId,state.draft?.id]);const boundary=JSON.stringify([owner,open]);const epoch=useRef({boundary,count:0});if(epoch.current.boundary!==boundary){epoch.current={boundary,count:epoch.current.count+1};}
  const identity=stableStringify([epoch.current.count,owner,open,spec,target,options,include]);const latest=useRef({identity,state});latest.current={identity,state};const mounted=useRef(true);const job=useRef<string|null>(null);
  const selected=catalog?.targets.find(t=>t.id===target);const artifact=result?.identity===identity?result.artifact:null;const busy=!!pending;const file=artifact?.files.find(f=>f.path===path)??artifact?.files[0];
- const javaMissing=!["rust-progenitor","rust-progenitor-cli"].includes(target)&&!catalog?.java_available;
+ const javaMissing=!["rust-progenitor","rust-progenitor-cli","rust-tonic"].includes(target)&&!catalog?.java_available;
  const native31=["rust-progenitor","rust-progenitor-cli"].includes(target)&&spec?.dialect?.startsWith("3.1");
  function stop(){const previous=job.current;job.current=null;if(previous)void api("/api/generation/projects/cancel","POST",{job_id:previous}).catch(()=>{});setPending(null);}
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;const previous=job.current;if(previous)void api("/api/generation/projects/cancel","POST",{job_id:previous}).catch(()=>{});};},[]);
@@ -44,7 +44,7 @@ export default function ProjectGenerationDialog({open,specificationId,onOpenChan
  return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Content maxWidth="1100px"><Dialog.Title><Flex gap="2" align="center"><Code2 size={20}/>{t("生成 SDK / 服务端项目")}</Flex></Dialog.Title><Dialog.Description>{t("基于原始 OpenAPI 定义生成独立项目，不覆盖已有代码，也不执行或发布生成结果。")}</Dialog.Description>
  <Flex direction="column" gap="3" mt="3">
  <Text size="2">{spec?.name??t("OpenAPI 定义已不可用")}</Text>
- <Flex gap="3" wrap="wrap"><Field label={t("项目类型")}><Choice label={t("项目类型")} value={kind} disabled={busy} options={[{value:"client",label:t("客户端 SDK")},{value:"server",label:t("服务端框架")},{value:"cli",label:t("API 命令行工具")}]} onChange={kind=>{setKind(kind);const next=catalog?.targets.find(t=>t.kind===kind);if(next)choose(next.id);}}/></Field>
+ <Flex gap="3" wrap="wrap"><Field label={t("项目类型")}><Choice label={t("项目类型")} value={kind} disabled={busy} options={spec?.kind==="protobuf"?[{value:"protobuf",label:t("Protobuf / gRPC 客户端及服务端")}]:[{value:"client",label:t("客户端 SDK")},{value:"server",label:t("服务端框架")},{value:"cli",label:t("API 命令行工具")}]} onChange={kind=>{setKind(kind);const next=catalog?.targets.find(t=>t.kind===kind);if(next)choose(next.id);}}/></Field>
  <Field label={t("项目生成器")}><Choice label={t("项目生成器")} value={target} disabled={busy||!catalog} options={(catalog?.targets??[]).filter(t=>t.kind===kind).map(t=>({value:t.id,label:`${t.id}${t.upstream_stability!=="stable"?` (${t.upstream_stability})`:""}`}))} onChange={choose}/></Field></Flex>
  {native31&&<Callout.Root><Callout.Text>{t("原生 Rust 生成器支持 OpenAPI 3.0；3.1 请使用其他生成器。")}</Callout.Text></Callout.Root>}
  {javaMissing&&<Callout.Root><Callout.Text>{t("此生成器需要部署方配置 Java 17+。原生 Rust SDK 不需要 Java。")}</Callout.Text></Callout.Root>}

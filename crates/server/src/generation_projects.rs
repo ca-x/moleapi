@@ -93,19 +93,36 @@ pub(crate) async fn generate(
     let gate = s.protocol_admission.owner(&owner.0)?;
     let generation = *gate.lock().await;
     let w = owned(&s, &owner.0, &c.workspace_id).await?;
-    if !c.include_secrets {
-        moleapi_formats::validate_generation_options(
+    let document = if c.target == "rust-tonic" {
+        if !c.include_secrets {
+            moleapi_formats::validate_protobuf_generation_options(
+                &w,
+                &serde_json::to_value(&c.options).map_err(|_| ApiError::internal())?,
+            )
+            .map_err(|e| ApiError::bad(e.to_string()))?;
+        }
+        let spec = moleapi_formats::generation_protobuf_specification(
             &w,
             &c.specification_id,
-            &serde_json::to_value(&c.options).map_err(|_| ApiError::internal())?,
+            c.include_secrets,
         )
         .map_err(|e| ApiError::bad(e.to_string()))?;
-    }
-    let specification =
-        moleapi_formats::generation_specification(&w, &c.specification_id, c.include_secrets)
+        serde_json::from_str(&spec.source).map_err(|_| ApiError::bad("Invalid protobuf source"))?
+    } else {
+        if !c.include_secrets {
+            moleapi_formats::validate_generation_options(
+                &w,
+                &c.specification_id,
+                &serde_json::to_value(&c.options).map_err(|_| ApiError::internal())?,
+            )
             .map_err(|e| ApiError::bad(e.to_string()))?;
-    let document = moleapi_generation::project::parse_project_specification(&specification.source)
-        .map_err(|e| ApiError::bad(e.to_string()))?;
+        }
+        let specification =
+            moleapi_formats::generation_specification(&w, &c.specification_id, c.include_secrets)
+                .map_err(|e| ApiError::bad(e.to_string()))?;
+        moleapi_generation::project::parse_project_specification(&specification.source)
+            .map_err(|e| ApiError::bad(e.to_string()))?
+    };
     let slot = s
         .project_slots
         .clone()

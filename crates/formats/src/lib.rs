@@ -310,3 +310,18 @@ pub fn validate_generation_options(
 ) -> Result<()> {
     redact::validate_generation_options(workspace, id, options)
 }
+
+pub fn generation_protobuf_specification(
+    workspace: &Workspace,
+    id: &str,
+    include_secrets: bool,
+) -> Result<moleapi_core::Specification> {
+    redact::generation_protobuf_specification(workspace, id, include_secrets)
+}
+
+pub fn validate_protobuf_generation_options(
+    workspace: &Workspace,
+    options: &serde_json::Value,
+) -> Result<()> {
+    redact::validate_protobuf_generation_options(workspace, options)
+}

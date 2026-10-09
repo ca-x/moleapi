@@ -87,3 +87,37 @@ async fn regeneration_route_preserves_authored_changes_and_rejects_corrupted_inp
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
+#[tokio::test]
+async fn native_protobuf_project_route_generates_shared_client_server_artifact_from_saved_bundle() {
+    let temp = tempfile::tempdir().unwrap();
+    let router = moleapi_server::local_with_worker(
+        &temp.path().join("proto-project.db"),
+        std::path::Path::new(env!("CARGO_BIN_EXE_moleapi-server")),
+    )
+    .await
+    .unwrap();
+    let source=json!({"kind":"proto","files":[{"path":"fixture.proto","content":"syntax=\"proto3\"; package fixture; message Echo {string text=1;} service EchoService {rpc Call(Echo) returns(Echo);}"}],"entry_files":["fixture.proto"]}).to_string();
+    let mut data = example_data();
+    data["specifications"] = json!([{"id":"proto","name":"Proto project","kind":"protobuf","dialect":"proto3","source":source}]);
+    let (status, _) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"proto","name":"Proto generation","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (status,result)=call(&router,"POST","/api/generation/projects",None,Some(json!({"workspace_id":"proto","specification_id":"proto","job_id":"proto-native","target":"rust-tonic"}))).await;
+    assert_eq!(status, StatusCode::OK, "{result}");
+    assert_eq!(result["engine"], "tonic-prost-build@0.14.6");
+    assert!(
+        result["files"].as_array().unwrap().iter().any(|f| f["path"]
+            .as_str()
+            .unwrap()
+            .ends_with("fixture.rs")
+            && f["content"].as_str().unwrap().contains("EchoServiceClient"))
+    );
+    let (_, saved) = call(&router, "GET", "/api/workspaces/proto", None, None).await;
+    assert_eq!(saved["data"]["specifications"][0]["source"], source);
+}

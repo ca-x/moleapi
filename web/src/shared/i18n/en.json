@@ -1308,5 +1308,6 @@
   "已合并": "Merged",
   "合并冲突": "Merge conflict",
   "已解决冲突": "Resolved conflict",
-  "已删除": "Deleted"
+  "已删除": "Deleted",
+  "Protobuf / gRPC 客户端及服务端": "Protobuf / gRPC client and server"
 }

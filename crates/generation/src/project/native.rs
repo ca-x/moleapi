@@ -38,6 +38,9 @@ pub fn dispatch_project_worker(limit: impl FnOnce() -> Result<()>) -> Result<boo
     Ok(true)
 }
 fn native_project(input: &ProjectInput) -> Result<ProjectArtifact> {
+    if input.target == "rust-tonic" {
+        return super::protobuf::native_protobuf(input);
+    }
     validate_project_specification(&input.specification)?;
     validate_options(input)?;
     ensure!(

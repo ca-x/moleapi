@@ -33,11 +33,13 @@ impl ProjectRuntime {
         input: ProjectInput,
         cancel: CancellationToken,
     ) -> Result<ProjectArtifact> {
-        validate_project_specification(&input.specification)?;
+        if input.target != "rust-tonic" {
+            validate_project_specification(&input.specification)?;
+        }
         validate_options(&input)?;
         if matches!(
             input.target.as_str(),
-            "rust-progenitor" | "rust-progenitor-cli"
+            "rust-progenitor" | "rust-progenitor-cli" | "rust-tonic"
         ) {
             return self.native(input, cancel).await;
         }

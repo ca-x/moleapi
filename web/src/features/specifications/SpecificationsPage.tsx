@@ -27,7 +27,7 @@ export default function SpecificationsPage() {
           <Card key={spec.id}>
             <Flex justify="between" align="center">
               <Heading size="3">{spec.name}</Heading>
-              {spec.kind==="openapi"&&<Button variant="soft" onClick={()=>setProjectSpec(spec.id)}>{t("生成 SDK / 服务端项目")}</Button>}
+              {["openapi","protobuf"].includes(spec.kind)&&<Button variant="soft" onClick={()=>setProjectSpec(spec.id)}>{t("生成 SDK / 服务端项目")}</Button>}
               <Badge color="gray">
                 {spec.kind} {spec.dialect}
               </Badge>

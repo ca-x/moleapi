@@ -6,6 +6,9 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+tonic-prost-build = "=0.14.6"
+prost = "0.14"
+prost-types = "0.14"
 diffy = {version="=0.5.2",features=["std"]}
 progenitor = {version="=0.15.0",default-features=false}
 openapiv3 = "2"
