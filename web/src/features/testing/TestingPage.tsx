@@ -7,10 +7,12 @@ import {useWorkbench} from "../workbench/context";
 import RunnerDataset,{runnerOptions,type RunnerConfig} from "./RunnerDataset";
 import SavedDatasets from "./SavedDatasets";
 import SavedScenarios from "./SavedScenarios";
+import SchedulesPanel from "../monitoring/SchedulesPanel";
 import SavedReports from "./SavedReports";
 export default function TestingPage(){
  useLanguage();const state=useWorkbench();const {draft,runCollection,setRunCollection,runResult,runnerBusy,run,stopRunner}=state;
  const scope=JSON.stringify([state.accountId,draft?.id]);
+ const [scheduleReport,setScheduleReport]=useState<{scope:string;id:string;ticket:number}|null>(null);
  const [source,setSource]=useState<{scope:string;value:RunnerConfig}|null>(null),[invalid,setInvalid]=useState(false);
  const [previewBusy,setPreviewBusy]=useState<{scope:string;busy:boolean}|null>(null);
  const dataBusy=previewBusy?.scope===scope&&previewBusy.busy;
@@ -33,7 +35,8 @@ export default function TestingPage(){
  {savedId&&!saved?.source&&<Text>{t("数据源缺失，请重新导入。")}</Text>}
  <SavedDatasets key={scope+draft.revision} scope={scope+draft.revision} disabled={runnerBusy}/>
  {invalid&&<Callout.Root color="red"><Callout.Text role="alert">{t("测试数据无效，请检查格式、迭代次数和大小限制。")}</Callout.Text></Callout.Root>}
- <SavedReports key={"reports:"+scope} disabled={runnerBusy}/>
+ <SchedulesPanel key={"schedules:"+scope} onReport={id=>setScheduleReport({scope,id,ticket:(scheduleReport?.ticket??0)+1})}/>
+ <SavedReports key={"reports:"+scope} disabled={runnerBusy} externalSelection={scheduleReport?.scope===scope?scheduleReport:undefined}/>
  {runResult?.report_save_error&&<Callout.Root color="orange"><Callout.Text>{t("即时结果已保留，但报告未能保存。请检查存储或工作区状态。")}</Callout.Text></Callout.Root>}
  {runResult?.report_id&&<Text size="1" color="gray">{t("已保存脱敏报告")} · {runResult.report_id}</Text>}
  {runResult&&<><Flex gap="4" align="center"><Badge color="green">{t("通过")} {runResult.passed}</Badge><Badge color="red">{t("失败")} {runResult.failed}</Badge><Text size="2" color="gray">{runResult.elapsed_ms} ms</Text>{!!runResult.skipped&&<Badge color="gray">{t("跳过")} {runResult.skipped}</Badge>}</Flex>

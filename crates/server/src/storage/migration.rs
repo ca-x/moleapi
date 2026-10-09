@@ -5,7 +5,7 @@ pub struct Migrator;
 #[async_trait::async_trait]
 impl MigratorTrait for Migrator {
     fn migrations() -> Vec<Box<dyn MigrationTrait>> {
-        vec![Box::new(Initial)]
+        vec![Box::new(Initial), Box::new(ScheduledDueIndex)]
     }
 }
 #[derive(DeriveMigrationName)]
@@ -93,5 +93,37 @@ impl MigrationTrait for Initial {
                 .await?;
         }
         Ok(())
+    }
+}
+
+struct ScheduledDueIndex;
+impl MigrationName for ScheduledDueIndex {
+    fn name(&self) -> &str {
+        "m20261010_schedule_due_index"
+    }
+}
+#[async_trait::async_trait]
+impl MigrationTrait for ScheduledDueIndex {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_index(
+                Index::create()
+                    .name("documents_kind_due")
+                    .table(Alias::new("documents"))
+                    .col(Alias::new("kind"))
+                    .col(Alias::new("revision"))
+                    .to_owned(),
+            )
+            .await
+    }
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_index(
+                Index::drop()
+                    .name("documents_kind_due")
+                    .table(Alias::new("documents"))
+                    .to_owned(),
+            )
+            .await
     }
 }

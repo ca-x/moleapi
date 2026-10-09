@@ -9,7 +9,7 @@ import {useWorkbench} from "../workbench/context";
 import ReportResponse from "./ReportResponse";
 import {saveProjectFile} from "../generation/saveProjectFile";
 import type {ExportResult,RunReportPage,SavedRunReport} from "../../shared/types";
-export default function SavedReports({disabled}:{disabled:boolean}){
+export default function SavedReports({disabled,externalSelection}:{disabled:boolean;externalSelection?:{id:string;ticket:number}}){
  const state=useWorkbench(),{language}=useLanguage(),client=useQueryClient();
  const [responsePosition,setResponsePosition]=useState<number|null>(null);
  const workspaceId=state.draft?.id??"",accountId=state.accountId,scope=JSON.stringify([accountId,workspaceId]);
@@ -17,6 +17,7 @@ export default function SavedReports({disabled}:{disabled:boolean}){
  const identity=JSON.stringify([scope,selected,language]);const latest=useRef(identity);latest.current=identity;const mounted=useRef(true);useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
  const list=useQuery({queryKey:["run-reports",accountId,workspaceId,cursor],queryFn:()=>api<RunReportPage>(`/api/workspaces/${workspaceId}/reports?limit=20${cursor?`&cursor=${encodeURIComponent(cursor)}`:""}`),enabled:!!workspaceId&&state.authenticated});
  const detail=useQuery({queryKey:["run-report",accountId,workspaceId,selected],queryFn:()=>api<SavedRunReport>(`/api/workspaces/${workspaceId}/reports/${selected}`),enabled:!!selected&&!!workspaceId&&state.authenticated});
+ useEffect(()=>{if(externalSelection){setSelected(externalSelection.id);setPage(0);setFilter("all");setResponsePosition(null);}},[externalSelection?.ticket]);
  const current=(origin=identity)=>mounted.current&&latest.current===origin;
  async function remove(reportId?:string){if(!current())return;const origin=identity;setPending(true);setError("");try{await api(`/api/workspaces/${workspaceId}/reports${reportId?`/${reportId}`:""}`,"DELETE");if(!current(origin))return;setSelected("");setCursor("");await client.invalidateQueries({queryKey:["run-reports",accountId,workspaceId]});}catch(error){if(current(origin))setError(liveError(error));}finally{if(mounted.current)setPending(false);}}
  function clear(){state.setGuard({title:message("清空保存的测试报告"),description:message("删除此工作区保存的报告，不影响接口、变量或请求历史。"),action:()=>remove()});}

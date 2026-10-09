@@ -17,6 +17,7 @@ mod protocol_admission;
 mod protocols;
 mod run_reports;
 mod runner;
+mod scheduling;
 mod soap;
 mod storage;
 mod sync;
@@ -199,6 +200,7 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         a2a_sources: Arc::new(a2a::Sources::default()),
         webhooks: Arc::new(webhooks::Hub::default()),
     };
+    let schedule_lifetime = scheduling::start(state.clone());
     let protected = Router::new()
         .route("/oauth1/flows", post(oauth1::flows::begin))
         .route("/oauth1/flows/{id}", get(oauth1::flows::status))
@@ -276,6 +278,30 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         .route(
             "/workspaces/{workspace}/reports/{report}/steps/{position}/response",
             get(run_reports::response),
+        )
+        .route(
+            "/workspaces/{workspace}/schedules",
+            get(scheduling::list).post(scheduling::create),
+        )
+        .route(
+            "/workspaces/{workspace}/schedules/preview",
+            post(scheduling::preview),
+        )
+        .route(
+            "/workspaces/{workspace}/schedules/{schedule}",
+            axum::routing::put(scheduling::update).delete(scheduling::remove),
+        )
+        .route(
+            "/workspaces/{workspace}/schedules/{schedule}/run",
+            post(scheduling::queue),
+        )
+        .route(
+            "/workspaces/{workspace}/schedules/{schedule}/cancel",
+            post(scheduling::cancel),
+        )
+        .route(
+            "/workspaces/{workspace}/schedules/{schedule}/runs",
+            get(scheduling::history),
         )
         .route("/workspaces/{id}/run", post(runner::run))
         .route("/workspaces/{id}/run/cancel", post(runner::cancel))
@@ -401,7 +427,7 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
     };
     #[cfg(not(feature = "web"))]
     let router = router.fallback(|| async { ApiError::not_found() });
-    Ok(router)
+    Ok(router.layer(axum::Extension(schedule_lifetime)))
 }
 #[cfg(feature = "web")]
 #[derive(rust_embed::RustEmbed)]

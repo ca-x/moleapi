@@ -11,6 +11,8 @@ default = ["web"]
 web = ["dep:rust-embed", "dep:mime_guess"]
 
 [dependencies]
+croner = "=4.0.1"
+chrono-tz = "=0.10.4"
 oauth2 = {version="=5.0.0",default-features=false}
 moleapi-generation = { path = "../generation" }
 tokio-util = { version = "0.7", features = ["rt"] }
