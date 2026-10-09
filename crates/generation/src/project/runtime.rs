@@ -35,7 +35,10 @@ impl ProjectRuntime {
     ) -> Result<ProjectArtifact> {
         validate_project_specification(&input.specification)?;
         validate_options(&input)?;
-        if input.target == "rust-progenitor" {
+        if matches!(
+            input.target.as_str(),
+            "rust-progenitor" | "rust-progenitor-cli"
+        ) {
             return self.native(input, cancel).await;
         }
         self.jvm(input, cancel).await
@@ -197,5 +200,62 @@ impl ProjectRuntime {
             &format!("openapi-generator@{JAR_VERSION}"),
             collect(&output)?,
         )
+    }
+}
+
+impl ProjectRuntime {
+    /// Diff computation is isolated from HTTP/native hosts just like native generation.
+    pub async fn regenerate(
+        &self,
+        input: RegenerationInput,
+        cancel: CancellationToken,
+    ) -> Result<RegenerationResult> {
+        let bytes = serde_json::to_vec(&input)?;
+        ensure!(
+            bytes.len() <= IPC_LIMIT,
+            "Regeneration worker input exceeds limit"
+        );
+        let mut child = Command::new(&self.worker)
+            .arg(DIFF_WORKER_ARG)
+            .env_clear()
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .kill_on_drop(true)
+            .spawn()?;
+        let run = async {
+            let mut stdin = child.stdin.take().context("Regeneration stdin missing")?;
+            stdin.write_all(&bytes).await?;
+            stdin.shutdown().await?;
+            drop(stdin);
+            let mut output = Vec::new();
+            child
+                .stdout
+                .take()
+                .context("Regeneration stdout missing")?
+                .take((IPC_LIMIT + 1) as u64)
+                .read_to_end(&mut output)
+                .await?;
+            ensure!(
+                output.len() <= IPC_LIMIT,
+                "Regeneration output exceeds limit"
+            );
+            ensure!(
+                child.wait().await?.success(),
+                "Regeneration worker failed or exceeded limits"
+            );
+            let value: Value = serde_json::from_slice(&output)?;
+            ensure!(
+                value.get("error").is_none(),
+                "Regeneration failed; check file hashes and limits"
+            );
+            serde_json::from_value(value["result"].clone()).map_err(Into::into)
+        };
+        let result = tokio::select! {biased;_=cancel.cancelled()=>Err(anyhow::anyhow!("Regeneration cancelled")),value=tokio::time::timeout(Duration::from_secs(20),run)=>value.unwrap_or_else(|_|Err(anyhow::anyhow!("Regeneration timed out")))};
+        if result.is_err() {
+            let _ = child.kill().await;
+            let _ = child.wait().await;
+        }
+        result
     }
 }

@@ -294,6 +294,10 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         )
         .route("/generation/projects", post(generation_projects::generate))
         .route(
+            "/generation/projects/regenerate",
+            post(generation_projects::regenerate),
+        )
+        .route(
             "/generation/projects/cancel",
             post(generation_projects::cancel),
         )

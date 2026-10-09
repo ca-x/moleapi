@@ -1,3 +1,4 @@
+import RegenerationDialog from "./RegenerationDialog";
 import {useEffect,useRef,useState} from "react";
 import stableStringify from "fast-json-stable-stringify";
 import {Button,Callout,Checkbox,Dialog,Flex,Text,TextField,ScrollArea} from "@radix-ui/themes";
@@ -12,13 +13,14 @@ import {decodeProjectBytes,saveProjectFile} from "./saveProjectFile";
 const optionLabels:Record<string,()=>string>={packageName:()=>t("包名"),packageVersion:()=>t("包版本"),apiPackage:()=>t("API 包名"),modelPackage:()=>t("模型包名"),invokerPackage:()=>t("调用器包名"),artifactId:()=>t("项目标识"),artifactVersion:()=>t("项目版本"),library:()=>t("HTTP 库 / 运行时"),namespace:()=>t("命名空间"),npmName:()=>t("npm 包名"),npmVersion:()=>t("npm 包版本"),groupId:()=>t("组织标识"),interface:()=>t("Rust 调用风格")};
 export default function ProjectGenerationDialog({open,specificationId,onOpenChange}:{open:boolean;specificationId:string;onOpenChange:(open:boolean)=>void}){
  useLanguage();const state=useWorkbench();const spec=state.draft?.data.specifications?.find(s=>s.id===specificationId&&s.kind==="openapi");
+ const [compare,setCompare]=useState(false);
  const [catalog,setCatalog]=useState<ProjectCatalog|null>(null),[kind,setKind]=useState("client"),[target,setTarget]=useState("rust-progenitor"),[options,setOptions]=useState<Record<string,string>>({}),[include,setInclude]=useState(false);
  const [result,setResult]=useState<{identity:string;artifact:ProjectArtifact}|null>(null),[pending,setPending]=useState<string|null>(null),[error,setError]=useState<LocalizedCopy|null>(null),[path,setPath]=useState("");
  const owner=JSON.stringify([state.authenticated,state.accountId,state.draft?.id]);const boundary=JSON.stringify([owner,open]);const epoch=useRef({boundary,count:0});if(epoch.current.boundary!==boundary){epoch.current={boundary,count:epoch.current.count+1};}
  const identity=stableStringify([epoch.current.count,owner,open,spec,target,options,include]);const latest=useRef({identity,state});latest.current={identity,state};const mounted=useRef(true);const job=useRef<string|null>(null);
  const selected=catalog?.targets.find(t=>t.id===target);const artifact=result?.identity===identity?result.artifact:null;const busy=!!pending;const file=artifact?.files.find(f=>f.path===path)??artifact?.files[0];
- const javaMissing=target!=="rust-progenitor"&&!catalog?.java_available;
- const native31=target==="rust-progenitor"&&spec?.dialect?.startsWith("3.1");
+ const javaMissing=!["rust-progenitor","rust-progenitor-cli"].includes(target)&&!catalog?.java_available;
+ const native31=["rust-progenitor","rust-progenitor-cli"].includes(target)&&spec?.dialect?.startsWith("3.1");
  function stop(){const previous=job.current;job.current=null;if(previous)void api("/api/generation/projects/cancel","POST",{job_id:previous}).catch(()=>{});setPending(null);}
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;const previous=job.current;if(previous)void api("/api/generation/projects/cancel","POST",{job_id:previous}).catch(()=>{});};},[]);
  useEffect(()=>{setInclude(false);setResult(null);setPending(null);setError(null);setOptions({});return()=>{const previous=job.current;job.current=null;if(previous)void api("/api/generation/projects/cancel","POST",{job_id:previous}).catch(()=>{});};},[boundary,specificationId]);
@@ -34,6 +36,7 @@ export default function ProjectGenerationDialog({open,specificationId,onOpenChan
   }catch{if(current())setError(message("项目生成失败，请检查规范、生成器选项和运行时依赖。"));}
   finally{if(job.current===ticket){job.current=null;if(mounted.current)setPending(null);}}
  }
+ async function saveSnapshot(){if(!artifact)return;const origin=identity;await saveProjectFile(`${target}-snapshot.json`,new TextEncoder().encode(JSON.stringify(artifact,null,2)),()=>mounted.current&&latest.current.identity===origin);}
  async function download(all:boolean){if(!artifact)return;const origin=identity;const current=()=>mounted.current&&latest.current.identity===origin;
   try{if(all)await saveProjectFile(`${target}-project.zip`,decodeProjectBytes("base64",artifact.archive_base64),current);else if(file)await saveProjectFile(file.path.split("/").pop()!,decodeProjectBytes(file.encoding,file.content),current);}catch{if(current())setError(message("无法保存生成文件。"));}
  }
@@ -41,7 +44,7 @@ export default function ProjectGenerationDialog({open,specificationId,onOpenChan
  return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Content maxWidth="1100px"><Dialog.Title><Flex gap="2" align="center"><Code2 size={20}/>{t("生成 SDK / 服务端项目")}</Flex></Dialog.Title><Dialog.Description>{t("基于原始 OpenAPI 定义生成独立项目，不覆盖已有代码，也不执行或发布生成结果。")}</Dialog.Description>
  <Flex direction="column" gap="3" mt="3">
  <Text size="2">{spec?.name??t("OpenAPI 定义已不可用")}</Text>
- <Flex gap="3" wrap="wrap"><Field label={t("项目类型")}><Choice label={t("项目类型")} value={kind} disabled={busy} options={[{value:"client",label:t("客户端 SDK")},{value:"server",label:t("服务端框架")}]} onChange={kind=>{setKind(kind);const next=catalog?.targets.find(t=>t.kind===kind);if(next)choose(next.id);}}/></Field>
+ <Flex gap="3" wrap="wrap"><Field label={t("项目类型")}><Choice label={t("项目类型")} value={kind} disabled={busy} options={[{value:"client",label:t("客户端 SDK")},{value:"server",label:t("服务端框架")},{value:"cli",label:t("API 命令行工具")}]} onChange={kind=>{setKind(kind);const next=catalog?.targets.find(t=>t.kind===kind);if(next)choose(next.id);}}/></Field>
  <Field label={t("项目生成器")}><Choice label={t("项目生成器")} value={target} disabled={busy||!catalog} options={(catalog?.targets??[]).filter(t=>t.kind===kind).map(t=>({value:t.id,label:`${t.id}${t.upstream_stability!=="stable"?` (${t.upstream_stability})`:""}`}))} onChange={choose}/></Field></Flex>
  {native31&&<Callout.Root><Callout.Text>{t("原生 Rust 生成器支持 OpenAPI 3.0；3.1 请使用其他生成器。")}</Callout.Text></Callout.Root>}
  {javaMissing&&<Callout.Root><Callout.Text>{t("此生成器需要部署方配置 Java 17+。原生 Rust SDK 不需要 Java。")}</Callout.Text></Callout.Root>}
@@ -51,6 +54,8 @@ export default function ProjectGenerationDialog({open,specificationId,onOpenChan
  <Flex gap="2"><Button disabled={busy||!catalog||!spec||javaMissing||native31} onClick={()=>void generate()}>{t("生成项目")}</Button>{busy&&<Button variant="soft" onClick={stop}><Square size={15}/>{t("停止生成")}</Button>}<Button variant="soft" disabled={!artifact} onClick={()=>void download(true)}><Download size={15}/>{t("下载项目 ZIP")}</Button></Flex>
  {busy&&<Text role="status" size="2">{t("正在生成项目…")}</Text>}{error&&<Callout.Root color="red"><Callout.Text role="alert">{translateCopy(error)}</Callout.Text></Callout.Root>}
  {artifact&&<><Text size="1" color="gray">{artifact.engine} · {artifact.files.length} {t("个文件")} · SHA256 {artifact.source_sha256.slice(0,12)}</Text><div className="project-artifact-grid"><ScrollArea className="project-artifact-files"><Flex direction="column" gap="1">{artifact.files.map(f=><Button key={f.path} variant={file?.path===f.path?"soft":"ghost"} onClick={()=>setPath(f.path)} style={{justifyContent:"flex-start",whiteSpace:"normal",height:"auto",textAlign:"left",overflowWrap:"anywhere"}}>{f.path}</Button>)}</Flex></ScrollArea><Flex direction="column" gap="2" style={{minWidth:0,flex:1}}><Flex gap="2" wrap="wrap"><Text size="1" style={{overflowWrap:"anywhere"}}>{file?.path}</Text><Button variant="ghost" disabled={file?.encoding!=="utf8"} onClick={()=>void copy()}><Copy size={14}/>{t("复制")}</Button><Button variant="ghost" onClick={()=>void download(false)}>{t("下载文件")}</Button></Flex>{file?.encoding==="utf8"?<Editor value={file.content} readOnly dark={state.dark} height="40vh" jsonMode={file.path.endsWith(".json")}/>:<Text>{t("二进制文件可下载查看。")}</Text>}</Flex></div></>}
+ <Flex gap="2" wrap="wrap"><Button variant="soft" disabled={!artifact||busy} onClick={()=>void saveSnapshot()}>{t("保存生成快照 JSON")}</Button><Button variant="soft" disabled={!artifact||busy} onClick={()=>setCompare(true)}>{t("再生成差异与合并")}</Button></Flex>
  <Flex justify="end"><Dialog.Close><Button variant="soft">{t("关闭")}</Button></Dialog.Close></Flex>
+ {artifact&&compare&&<RegenerationDialog next={artifact} open={compare} onOpenChange={setCompare}/>}
  </Flex></Dialog.Content></Dialog.Root>;
 }

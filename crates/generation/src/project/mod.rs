@@ -1,6 +1,8 @@
 //! Mature SDK/server emitters produce isolated, bounded artifacts.
 mod artifact;
 mod native;
+mod regeneration;
+pub use regeneration::*;
 mod runtime;
 mod source;
 use anyhow::{Result, ensure};
@@ -61,6 +63,19 @@ pub fn project_catalog() -> Result<Vec<ProjectTarget>> {
                 ("packageName".into(), Value::String("moleapi_sdk".into())),
                 ("packageVersion".into(), Value::String("0.1.0".into())),
                 ("interface".into(), Value::String("positional".into())),
+            ]),
+        },
+    );
+    targets.insert(
+        1,
+        ProjectTarget {
+            id: "rust-progenitor-cli".into(),
+            kind: "cli".into(),
+            upstream_stability: "stable".into(),
+            validation: "implementation-awaiting-cli-fixtures".into(),
+            options: BTreeMap::from([
+                ("packageName".into(), Value::String("moleapi_cli".into())),
+                ("packageVersion".into(), Value::String("0.1.0".into())),
             ]),
         },
     );

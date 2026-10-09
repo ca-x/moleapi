@@ -8,7 +8,7 @@ pub const WORKER_ARG: &str = "--moleapi-project-worker";
 /// Runs before application initialization; the caller installs a native heap cap.
 pub fn dispatch_project_worker(limit: impl FnOnce() -> Result<()>) -> Result<bool> {
     if std::env::args_os().nth(1).as_deref() != Some(OsStr::new(WORKER_ARG)) {
-        return Ok(false);
+        return super::regeneration::dispatch_diff_worker(limit);
     }
     limit()?;
     let mut bytes = Vec::new();
@@ -41,7 +41,10 @@ fn native_project(input: &ProjectInput) -> Result<ProjectArtifact> {
     validate_project_specification(&input.specification)?;
     validate_options(input)?;
     ensure!(
-        input.target == "rust-progenitor",
+        matches!(
+            input.target.as_str(),
+            "rust-progenitor" | "rust-progenitor-cli"
+        ),
         "Unsupported native generator"
     );
     ensure!(
@@ -77,7 +80,13 @@ fn native_project(input: &ProjectInput) -> Result<ProjectArtifact> {
         "Progenitor supports OpenAPI3.0; select an OpenAPI Generator target for3.1"
     );
     let spec: openapiv3::OpenAPI = serde_json::from_value(input.specification.clone())?;
+    let is_cli = input.target == "rust-progenitor-cli";
     let mut settings = progenitor::GenerationSettings::default();
+    if is_cli {
+        settings
+            .with_interface(progenitor::InterfaceStyle::Builder)
+            .with_derive("schemars::JsonSchema");
+    }
     if let Some(style) = input.options.get("interface") {
         settings.with_interface(match style.as_str() {
             Some("builder") => progenitor::InterfaceStyle::Builder,
@@ -88,11 +97,33 @@ fn native_project(input: &ProjectInput) -> Result<ProjectArtifact> {
     let mut generator = progenitor::Generator::new(&settings);
     let tokens = generator.generate_tokens(&spec)?;
     let syntax: syn::File = syn::parse2(tokens)?;
-    let code = prettyplease::unparse(&syntax);
-    let manifest = format!(
+    let mut code = prettyplease::unparse(&syntax);
+    let mut manifest = format!(
         "[package]\nname = {package:?}\nversion = {version:?}\nedition = \"2021\"\n\n[dependencies]\nprogenitor-client = \"=0.15.0\"\nreqwest = {{ version=\"0.13\",default-features=false,features=[\"rustls\",\"json\",\"query\",\"stream\"] }}\nserde = {{version=\"1\",features=[\"derive\"]}}\nserde_json = \"1\"\nfutures = \"0.3\"\nchrono = {{version=\"0.4\",features=[\"serde\"]}}\nuuid = {{version=\"1\",features=[\"serde\",\"v4\"]}}\nbase64 = \"0.22\"\nrand = \"0.9\"\n"
     );
-    let files=BTreeMap::from([("Cargo.toml".into(),manifest.into_bytes()),("src/lib.rs".into(),code.into_bytes()),("openapi.json".into(),serde_json::to_vec_pretty(&input.specification)?),("README.md".into(),b"Generated with Progenitor 0.15.0. Configure Client with an explicit service base URL. Generated output is separate from your authored files; regenerate into a new directory and inspect diffs.\n".to_vec())]);
+    let mut files=BTreeMap::from([("Cargo.toml".into(),manifest.clone().into_bytes()),("src/lib.rs".into(),code.clone().into_bytes()),("openapi.json".into(),serde_json::to_vec_pretty(&input.specification)?),("README.md".into(),b"Generated with Progenitor 0.15.0. Configure Client with an explicit service base URL. Generated output is separate from your authored files; regenerate into a new directory and inspect diffs.\n".to_vec())]);
+    if is_cli {
+        let mut cli_generator = progenitor::Generator::new(&settings);
+        let cli_tokens = cli_generator.cli(&spec, "crate")?;
+        let cli_file: syn::File = syn::parse2(cli_tokens)?;
+        let cli_source = prettyplease::unparse(&cli_file);
+        ensure!(
+            !cli_source.contains("todo!()"),
+            "Native CLI generator does not yet support raw/upgrade responses; use a different CLI target"
+        );
+        code.push_str("\npub mod cli;\n");
+        files.insert("src/lib.rs".into(), code.into_bytes());
+        files.insert("src/cli.rs".into(), cli_source.into_bytes());
+        files.insert(
+            "src/main.rs".into(),
+            include_str!("cli_main.rs.txt")
+                .replace("__SDK_CRATE__", &package.replace('-', "_"))
+                .into_bytes(),
+        );
+        manifest.push_str("anyhow = \"1\"\nclap = {version=\"4\",features=[\"env\"]}\nschemars = {version=\"0.8\",features=[\"chrono\",\"uuid1\"]}\ntokio = {version=\"1\",features=[\"macros\",\"rt-multi-thread\"]}\n");
+        files.insert("Cargo.toml".into(), manifest.into_bytes());
+        files.insert("README.md".into(),b"Generated CLI uses Progenitor's clap operation parser and typed SDK. Build with cargo build. Set MOLEAPI_API_URL or --base-url and choose an operation with --help. Optional MOLEAPI_API_TOKEN supplies a Bearer token; no credentials are baked into generated code. JSON results go to stdout, errors exit nonzero.\n".to_vec());
+    }
     artifact(
         input,
         "progenitor@0.15.0",

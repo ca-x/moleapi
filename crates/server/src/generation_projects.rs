@@ -159,3 +159,60 @@ pub(crate) async fn cancel(
     token.cancel();
     Ok(Json(json!({"cancelled":true})))
 }
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Regenerate {
+    workspace_id: String,
+    job_id: String,
+    previous: Vec<moleapi_generation::project::ProjectFile>,
+    working: Vec<moleapi_generation::project::WorkingFile>,
+    next: Vec<moleapi_generation::project::ProjectFile>,
+    #[serde(default)]
+    resolutions: std::collections::BTreeMap<String, String>,
+}
+pub(crate) async fn regenerate(
+    State(s): State<AppState>,
+    Extension(owner): Extension<Identity>,
+    Json(c): Json<Regenerate>,
+) -> Result<Json<moleapi_generation::project::RegenerationResult>, ApiError> {
+    if c.workspace_id.len() > 128 {
+        return Err(ApiError::bad("Invalid regeneration workspace identifier"));
+    }
+    let gate = s.protocol_admission.owner(&owner.0)?;
+    let generation = *gate.lock().await;
+    owned(&s, &owner.0, &c.workspace_id).await?;
+    let slot = s
+        .project_slots
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| ApiError::bad("Project generation capacity reached"))?;
+    let lease = s.project_jobs.start(&owner.0, &c.workspace_id, &c.job_id)?;
+    let admission = gate.lock().await;
+    if *admission != generation {
+        return Err(ApiError::bad("Regeneration owner changed"));
+    }
+    owned(&s, &owner.0, &c.workspace_id).await?;
+    drop(admission);
+    let result = s
+        .project_runtime
+        .regenerate(
+            moleapi_generation::project::RegenerationInput {
+                previous: c.previous,
+                working: c.working,
+                next: c.next,
+                resolutions: c.resolutions,
+            },
+            lease.cancel.clone(),
+        )
+        .await
+        .map_err(|e| ApiError::bad(e.to_string()))?;
+    let admission = gate.lock().await;
+    if *admission != generation || lease.cancel.is_cancelled() {
+        return Err(ApiError::bad("Regeneration owner changed or cancelled"));
+    }
+    owned(&s, &owner.0, &c.workspace_id).await?;
+    drop(admission);
+    drop(slot);
+    Ok(Json(result))
+}

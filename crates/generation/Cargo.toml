@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+diffy = {version="=0.5.2",features=["std"]}
 progenitor = {version="=0.15.0",default-features=false}
 openapiv3 = "2"
 oas3 = "0.22"

@@ -1,0 +1,37 @@
+use __SDK_CRATE__::{Client, Error, ResponseValue};
+use __SDK_CRATE__::cli::{Cli, CliConfig, CliCommand};
+struct Output;
+impl CliConfig for Output {
+    fn success_item<T>(&self, value: &ResponseValue<T>) where T: schemars::JsonSchema + serde::Serialize + std::fmt::Debug {
+        println!("{}", serde_json::to_string(&**value).expect("Serialize typed response"));
+    }
+    fn success_no_item(&self, _: &ResponseValue<()>) {}
+    fn error<T>(&self, _: &Error<T>) where T: schemars::JsonSchema + serde::Serialize + std::fmt::Debug {}
+    fn list_start<T>(&self) where T: schemars::JsonSchema + serde::Serialize + std::fmt::Debug {}
+    fn list_item<T>(&self, value: &T) where T: schemars::JsonSchema + serde::Serialize + std::fmt::Debug {
+        println!("{}", serde_json::to_string(value).expect("Serialize typed item"));
+    }
+    fn list_end_success<T>(&self) where T: schemars::JsonSchema + serde::Serialize + std::fmt::Debug {}
+    fn list_end_error<T>(&self, _: &Error<T>) where T: schemars::JsonSchema + serde::Serialize + std::fmt::Debug {}
+}
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let mut command = clap::Command::new(env!("CARGO_PKG_NAME"))
+        .subcommand_required(true).arg_required_else_help(true)
+        .arg(clap::Arg::new("base-url").long("base-url").env("MOLEAPI_API_URL").hide_env_values(true).required(true))
+        .arg(clap::Arg::new("token").long("token").env("MOLEAPI_API_TOKEN").hide_env_values(true));
+    for operation in CliCommand::iter() {
+        command = command.subcommand(Cli::<Output>::get_command(operation).name(operation.operation_id()));
+    }
+    let matches = command.get_matches();
+    let (name, args) = matches.subcommand().expect("Required operation");
+    let operation = CliCommand::iter().find(|operation| operation.operation_id() == name).expect("Known generated operation");
+    let mut headers = reqwest::header::HeaderMap::new();
+    if let Some(token) = matches.get_one::<String>("token") {
+        let mut header = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}"))?;
+        header.set_sensitive(true); headers.insert(reqwest::header::AUTHORIZATION, header);
+    }
+    let http = reqwest::Client::builder().default_headers(headers).build()?;
+    let client = Client::new_with_client(matches.get_one::<String>("base-url").expect("Required URL"), http);
+    Cli::new(client, Output).execute(operation, args).await
+}
