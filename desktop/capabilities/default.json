@@ -18,6 +18,7 @@
     "fs:allow-read",
     "fs:allow-close",
     "fs:allow-write-text-file",
+    "fs:allow-write-file",
     "dialog:allow-message",
     "core:window:allow-destroy",
     {

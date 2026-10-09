@@ -41,6 +41,10 @@ OpenAPI 项目生成使用原生 Progenitor Rust 客户端引擎，以及固定�
 
 再生成可以读取旧生成 ZIP 或快照，以及当前编辑目录／ZIP；保留用户文件，比较删除项，选择冲突处理后下载新的合并 ZIP，不覆盖原文件。
 
+![OpenAPI 目录／ZIP 源包与入口选择](docs/images/codegen-source-bundle-zh-CN.png)
+
+单个 HTTP 接口还可以生成 Go net/http、C# HttpClient／RestSharp 等请求代码，支持预览、复制和源文件下载。C# 两种适配器已有真实编译／调用证据；参见[语言覆盖与依赖要求](docs/SNIPPET-COVERAGE.md)。
+
 HTTP/SOAP、SSE/WebSocket/GraphQL、gRPC、TCP/TLS、MQTT、Socket.IO、A2A 和 MCP HTTP 请求支持显式 HTTP/SOCKS 代理、绕过规则、自定义 CA、PEM/加密 PFX 客户端证书、DNS 覆盖和 HTTP/2。网络凭据会从历史与默认导出中脱敏；精确保留源配置需要显式包含敏感信息。参见[网络支持与当前组合限制](docs/specs/request-network.md)。
 
 ## 语言

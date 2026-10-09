@@ -93,6 +93,19 @@ pub(crate) async fn generate(
     let gate = s.protocol_admission.owner(&owner.0)?;
     let generation = *gate.lock().await;
     let w = owned(&s, &owner.0, &c.workspace_id).await?;
+    let slot = s
+        .project_slots
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| ApiError::bad("Project generation capacity reached"))?;
+    let lease = s.project_jobs.start(&owner.0, &w.id, &c.job_id)?;
+    // Revalidate owner/workspace admission after the cancellation lease exists.
+    let admission = gate.lock().await;
+    if *admission != generation {
+        return Err(ApiError::bad("Generation owner changed"));
+    }
+    owned(&s, &owner.0, &w.id).await?;
+    drop(admission);
     let document = if moleapi_generation::project::is_protobuf_target(&c.target) {
         if !c.include_secrets {
             moleapi_formats::validate_protobuf_generation_options(
@@ -109,33 +122,72 @@ pub(crate) async fn generate(
         .map_err(|e| ApiError::bad(e.to_string()))?;
         serde_json::from_str(&spec.source).map_err(|_| ApiError::bad("Invalid protobuf source"))?
     } else {
+        const PRIVACY_DOCUMENTS: &str = "x-moleapi-source-bundle-privacy-documents";
+        let selected = w
+            .data
+            .specifications
+            .iter()
+            .find(|spec| spec.id == c.specification_id && spec.kind == "openapi")
+            .ok_or_else(|| ApiError::bad("OpenAPI specification not found"))?;
+        let bundle = moleapi_generation::project::parse_openapi_source_bundle(&selected.source)
+            .map_err(|error| ApiError::bad(error.to_string()))?;
+        let bundled = bundle.is_some();
+        let mut projection = w.clone();
+        if let Some(bundle) = bundle {
+            let result = s
+                .project_runtime
+                .bundle_openapi(bundle, lease.cancel.clone())
+                .await
+                .map_err(|error| ApiError::bad(error.to_string()))?;
+            let admission = gate.lock().await;
+            if *admission != generation || lease.cancel.is_cancelled() {
+                return Err(ApiError::bad("Generation owner changed or cancelled"));
+            }
+            owned(&s, &owner.0, &w.id).await?;
+            drop(admission);
+            let mut document = result.specification;
+            if document.get(PRIVACY_DOCUMENTS).is_some() {
+                return Err(ApiError::bad("Reserved source-bundle privacy field"));
+            }
+            document[PRIVACY_DOCUMENTS] =
+                serde_json::to_value(result.documents).map_err(|_| ApiError::internal())?;
+            let spec = projection
+                .data
+                .specifications
+                .iter_mut()
+                .find(|spec| spec.id == c.specification_id)
+                .unwrap();
+            spec.source = serde_json::to_string(&document).map_err(|_| ApiError::internal())?;
+        }
         if !c.include_secrets {
             moleapi_formats::validate_generation_options(
-                &w,
+                &projection,
                 &c.specification_id,
                 &serde_json::to_value(&c.options).map_err(|_| ApiError::internal())?,
             )
             .map_err(|e| ApiError::bad(e.to_string()))?;
         }
-        let specification =
-            moleapi_formats::generation_specification(&w, &c.specification_id, c.include_secrets)
-                .map_err(|e| ApiError::bad(e.to_string()))?;
-        moleapi_generation::project::parse_project_specification(&specification.source)
-            .map_err(|e| ApiError::bad(e.to_string()))?
+        let specification = moleapi_formats::generation_specification(
+            &projection,
+            &c.specification_id,
+            c.include_secrets,
+        )
+        .map_err(|e| ApiError::bad(e.to_string()))?;
+        if bundled {
+            let mut value: Value = serde_json::from_str(&specification.source)
+                .map_err(|_| ApiError::bad("Invalid bundled OpenAPI projection"))?;
+            value
+                .as_object_mut()
+                .ok_or_else(|| ApiError::bad("Invalid bundled OpenAPI object"))?
+                .remove(PRIVACY_DOCUMENTS);
+            moleapi_generation::project::validate_project_specification(&value)
+                .map_err(|error| ApiError::bad(error.to_string()))?;
+            value
+        } else {
+            moleapi_generation::project::parse_project_specification(&specification.source)
+                .map_err(|e| ApiError::bad(e.to_string()))?
+        }
     };
-    let slot = s
-        .project_slots
-        .clone()
-        .try_acquire_owned()
-        .map_err(|_| ApiError::bad("Project generation capacity reached"))?;
-    let lease = s.project_jobs.start(&owner.0, &w.id, &c.job_id)?;
-    // Revalidate owner/workspace admission after the cancellation lease exists.
-    let admission = gate.lock().await;
-    if *admission != generation {
-        return Err(ApiError::bad("Generation owner changed"));
-    }
-    owned(&s, &owner.0, &w.id).await?;
-    drop(admission);
     let result = s
         .project_runtime
         .generate(

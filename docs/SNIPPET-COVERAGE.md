@@ -5,7 +5,7 @@ This is usable request-example generation, separate from typed OpenAPI SDK/serve
 | Language family | Libraries exposed by upstream | Actual compile/run evidence |
 | --- | --- | --- |
 | C | libcurl | libcurl POST fixture |
-| C# | httpclient, restsharp | Engine smoke only |
+| C# | httpclient, restsharp | HttpClient and RestSharp114.0.0 POST fixtures compiled with .NET10.0.401/C#11; upstream snippets unchanged inside namespace/project wrappers |
 | Clojure | clj_http | Engine smoke only |
 | Dart | http | Engine smoke only |
 | F# | httpclient | Engine smoke only |
@@ -46,3 +46,8 @@ Generation does not execute or publish output. Dialog owner/content/target/crede
 `cargo test -p moleapi-generation --locked` exercises all42 upstream adapters plus privacy/representability regressions. `cargo test -p moleapi-server --test generation --no-default-features --locked` exercises owner/default/private/native routes. `npm --prefix web test -- --run src/features/generation/GenerationDialog.test.tsx` exercises save order, late owner responses and stable content identity.
 
 `python3 tools/snippets/verify-fixture.py` uses only trusted synthetic requests, starts a local fixture, generates through the actual saved-request adapter, compiles/runs seven representative programs and checks real POST/auth/header/query/Unicode JSON. It needs Node/Python/Go/C+libcurl/Rust and cached Rust dependencies. No Docker is used. Generator sources/licenses/reproducible locked build are documented in vendor/snippet-engine/README.md. Fresh independent review is in tasks/implementation/snippets-review.md; broader generation/feature work remains active.
+
+
+C# validation used the actual saved-request adapter and also the owned saved-request HTTP API. Both emitted variants preserved method, selected Bearer replacing manual Authorization, custom headers, query encoding and Unicode/quoted JSON in real requests. The HttpClient snippet needs System.Net.Http/System.Net.Http.Headers; RestSharp needs its NuGet package/namespace. JSON raw string literals require C#11+. These are snippets for an async method or a compatible top-level-await project, not standalone project archives. Reproduce only these variants with `CARGO_TARGET_DIR=/path/to/cache python3 tools/snippets/verify-csharp.py --dotnet /absolute/path/to/dotnet`; .NET SDK/NuGet restore or cache is a validation prerequisite, not a MoleAPI runtime dependency.
+
+Downloads now use language source extensions (including .go/.cs/.sh) and the shared browser/native file saver. Native dialog selection uses per-file write permission; owner/content/open checks prevent stale writes after the picker resolves. Static warnings and C# dependency hints have English/Chinese UI translations. Timeout/TLS/redirect/body-mode limits above remain real gaps; successful fixtures do not imply every target/library or option has been validated.

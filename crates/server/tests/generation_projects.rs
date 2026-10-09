@@ -1,6 +1,86 @@
 mod common;
 use common::*;
 #[tokio::test]
+async fn source_bundle_generation_uses_capped_worker_and_screens_referenced_and_unused_documents() {
+    let temp = tempfile::tempdir().unwrap();
+    let router = local(&temp.path().join("source-bundle.db")).await.unwrap();
+    let root = json!({"openapi":"3.0.3","info":{"title":"Source bundle","version":"1"},"components":{"schemas":{"Health":{"$ref":"models/health.json"}}},"paths":{"/health":{"get":{"operationId":"health","responses":{"200":{"description":"Healthy","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Health"}}}}}}}}});
+    let model = json!({"type":"object","properties":{"password":{"type":"string","format":"password","example":"referenced_bundle_secret"},"ok":{"type":"boolean"}}});
+    let unused = json!({"type":"string","format":"password","example":"unused_bundle_secret"});
+    let source = json!({"format":"moleapi-openapi-source-v1","entry_file":"api.json","files":[{"path":"api.json","content":root.to_string()},{"path":"models/health.json","content":model.to_string()},{"path":"unused.json","content":unused.to_string()}]}).to_string();
+    let mut data = example_data();
+    data["specifications"] = json!([{"id":"bundle","name":"Source bundle","kind":"openapi","dialect":"3.0.3","source":source}]);
+    let (status, _) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"bundle","name":"Source bundle","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let input = json!({"workspace_id":"bundle","specification_id":"bundle","job_id":"bundle-safe","target":"rust-progenitor"});
+    let (status, safe) = call(
+        &router,
+        "POST",
+        "/api/generation/projects",
+        None,
+        Some(input.clone()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{safe}");
+    assert!(!safe.to_string().contains("referenced_bundle_secret"));
+    assert!(!safe.to_string().contains("unused_bundle_secret"));
+    assert!(
+        !safe
+            .to_string()
+            .contains("x-moleapi-source-bundle-privacy-documents")
+    );
+    assert!(safe["files"].as_array().unwrap().iter().any(|file| {
+        file["path"] == "src/lib.rs"
+            && file["content"]
+                .as_str()
+                .unwrap()
+                .contains("pub async fn health")
+    }));
+    let mut options = input.clone();
+    options["job_id"] = "bundle-private-option".into();
+    options["options"] = json!({"packageName":"unused_bundle_secret"});
+    let (status, _) = call(
+        &router,
+        "POST",
+        "/api/generation/projects",
+        None,
+        Some(options),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let mut explicit = input;
+    explicit["job_id"] = "bundle-explicit".into();
+    explicit["include_secrets"] = true.into();
+    let (status, included) = call(
+        &router,
+        "POST",
+        "/api/generation/projects",
+        None,
+        Some(explicit),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{included}");
+    assert!(included.to_string().contains("referenced_bundle_secret"));
+    let (_, stored) = call(&router, "GET", "/api/workspaces/bundle", None, None).await;
+    assert_eq!(stored["data"]["specifications"][0]["source"], source);
+    let workspace: moleapi_core::Workspace = serde_json::from_value(stored).unwrap();
+    let export = moleapi_formats::export(&workspace, "moleapi", false).unwrap();
+    assert!(!export.content.contains("referenced_bundle_secret"));
+    assert!(
+        moleapi_formats::export(&workspace, "moleapi", true)
+            .unwrap()
+            .content
+            .contains("unused_bundle_secret")
+    );
+}
+#[tokio::test]
 async fn native_project_api_uses_original_owned_definition_and_excludes_credential_examples() {
     let temp = tempfile::tempdir().unwrap();
     let router = moleapi_server::local_with_worker(

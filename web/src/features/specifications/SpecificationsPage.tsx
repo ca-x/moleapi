@@ -1,5 +1,6 @@
 import {lazy,Suspense,useState} from "react";
 const ProjectGenerationDialog=lazy(()=>import("../generation/ProjectGenerationDialog"));
+const OpenapiSourceBundleDialog=lazy(()=>import("../generation/OpenapiSourceBundleDialog"));
 import { t, useLanguage } from "../../shared/i18n";
 import { Badge, Button, Card, Flex, Heading, Text } from "@radix-ui/themes";
 import { Upload } from "lucide-react";
@@ -10,6 +11,7 @@ export default function SpecificationsPage() {
   useLanguage();
   const state = useWorkbench();
   const [projectSpec,setProjectSpec]=useState<string|null>(null);
+  const [bundleOpen,setBundleOpen]=useState(false);
   const { dark, draft, openModal } = state;
   if (!draft) return null;
   return (
@@ -19,8 +21,8 @@ export default function SpecificationsPage() {
           <Heading size="5">{t("API 规范")}</Heading>
           <Text size="2" color="gray"> {t("保留原始规范，与导入的可执行请求关联。")} </Text>
         </div>
-        <Button onClick={() => openModal("import")}>
-          <Upload size={16} /> {t("导入规范")} </Button>
+        <Flex gap="2" wrap="wrap"><Button highContrast variant="soft" onClick={()=>setBundleOpen(true)}>{t("导入 OpenAPI 源包")}</Button><Button onClick={() => openModal("import")}>
+          <Upload size={16} /> {t("导入规范")} </Button></Flex>
       </div>
       {draft.data.specifications?.length ? (
         draft.data.specifications.map((spec) => (
@@ -39,6 +41,7 @@ export default function SpecificationsPage() {
         <Text color="gray"> {t("导入 OpenAPI JSON/YAML 后，原始规范将在此保留。")} </Text>
       )}
       {projectSpec&&<Suspense fallback={<Text role="status">{t("正在读取生成器…")}</Text>}><ProjectGenerationDialog open specificationId={projectSpec} onOpenChange={open=>{if(!open)setProjectSpec(null);}}/></Suspense>}
+      {bundleOpen&&<Suspense fallback={<Text role="status">{t("正在读取生成器…")}</Text>}><OpenapiSourceBundleDialog key={JSON.stringify([state.accountId,state.authenticated,draft.id])} open onOpenChange={setBundleOpen}/></Suspense>}
     </div>
   );
 }

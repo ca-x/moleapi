@@ -1249,6 +1249,6 @@ kbd {
 .project-artifact-grid { display:grid; grid-template-columns:minmax(160px,240px) minmax(0,1fr); gap:12px; min-width:0; }
 .project-artifact-files { max-height:45vh; }
 @media (max-width:700px) { .project-artifact-grid {grid-template-columns:minmax(0,1fr);} .project-artifact-files {max-height:18vh;} }
-.project-regeneration-dialog { width:min(1000px,calc(100vw - 32px)); min-width:0; }
-.project-regeneration-dialog .code-editor { min-width:0; max-width:100%; }
-.project-regeneration-dialog .cm-gutterElement { color:var(--gray-11); }
+.project-regeneration-dialog,.openapi-source-bundle-dialog { width:min(1000px,calc(100vw - 32px)); min-width:0; }
+.project-regeneration-dialog .code-editor,.openapi-source-bundle-dialog .code-editor { min-width:0; max-width:100%; }
+.project-regeneration-dialog .cm-gutterElement,.openapi-source-bundle-dialog .cm-gutterElement { color:var(--gray-11); }

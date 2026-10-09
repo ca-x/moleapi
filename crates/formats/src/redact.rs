@@ -598,6 +598,12 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
     }
     for specification in &mut result.data.specifications {
         if let Ok(mut value) = serde_yaml_ng::from_str::<Value>(&specification.source) {
+            if specification.kind == "openapi" && value["format"] == "moleapi-openapi-source-v1" {
+                // File content is opaque YAML/JSON text here; safe projection runs in the
+                // capped project worker. Exact source export requires include_secrets.
+                specification.source.clear();
+                continue;
+            }
             if specification.kind == "wsdl"
                 && let Some(files) = value.get_mut("files").and_then(Value::as_array_mut)
             {
@@ -1839,14 +1845,22 @@ pub(super) fn generation_specification(
     let mut value: Value = serde_yaml_ng::from_str(&specification.source)
         .map_err(|_| anyhow::anyhow!("Invalid canonical specification"))?;
     let mut candidates = std::collections::BTreeSet::new();
-    let credential_names: std::collections::BTreeSet<String> = value
-        .pointer("/components/securitySchemes")
-        .and_then(Value::as_object)
-        .into_iter()
-        .flat_map(|schemes| schemes.values())
-        .filter(|scheme| scheme["type"] == "apiKey")
-        .filter_map(|scheme| scheme["name"].as_str().map(|s| s.to_ascii_lowercase()))
-        .collect();
+    let mut credential_names = std::collections::BTreeSet::<String>::new();
+    let mut pending = vec![&value];
+    while let Some(node) = pending.pop() {
+        match node {
+            Value::Object(object) => {
+                if object.get("type").and_then(Value::as_str) == Some("apiKey")
+                    && let Some(name) = object.get("name").and_then(Value::as_str)
+                {
+                    credential_names.insert(name.to_ascii_lowercase());
+                }
+                pending.extend(object.values());
+            }
+            Value::Array(array) => pending.extend(array),
+            _ => {}
+        }
+    }
     fn leaves(value: &Value, output: &mut std::collections::BTreeSet<String>) {
         match value {
             Value::String(s) => {

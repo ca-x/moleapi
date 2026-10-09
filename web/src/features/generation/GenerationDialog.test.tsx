@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { api, saveFile } from "../../shared/api";
+import { api } from "../../shared/api";
 import { newRequest } from "../../shared/model";
 import { useWorkbench } from "../workbench/context";
 import GenerationDialog from "./GenerationDialog";
-vi.mock("../../shared/api",()=>({api:vi.fn(),saveFile:vi.fn()}));
+vi.mock("../../shared/api",()=>({api:vi.fn()}));
+vi.mock("./saveProjectFile",()=>({saveProjectFile:vi.fn()}));
+import {saveProjectFile} from "./saveProjectFile";
 vi.mock("../workbench/context",()=>({useWorkbench:vi.fn()}));
 vi.mock("../../shared/ui",()=>({
   Editor:({value,label}:{value:string;label:string})=><textarea aria-label={label} readOnly value={value}/>,
@@ -16,11 +18,24 @@ const catalog={engine:"Scalar",targets:[{target:"shell",title:"Shell",clients:[{
 const snippet={engine:"Scalar",target:"shell",client:"curl",code:"safe-code",warnings:[],include_secrets:false};
 let state:ReturnType<typeof useWorkbench>;
 beforeEach(()=>{
-  vi.mocked(api).mockReset();vi.mocked(saveFile).mockReset();
+  vi.mocked(api).mockReset();vi.mocked(saveProjectFile).mockReset();
   state={request:{...newRequest(),id:"r"},dark:false,authenticated:true,accountId:"owner",draft:{id:"w"},dirty:true,save:vi.fn().mockResolvedValue(true)} as unknown as ReturnType<typeof useWorkbench>;
   vi.mocked(useWorkbench).mockImplementation(()=>state);
 });
 afterEach(cleanup);
+it.each([["go","native","go"],["csharp","httpclient","cs"]])("downloads %s request code with its source extension and rejects a later owner boundary",async(target,client,extension)=>{
+  const targets={...catalog,targets:[...catalog.targets,{target,title:target,clients:[{client,title:client}]}]};
+  const result={...snippet,target,client,code:`generated-${target}`};
+  vi.mocked(api).mockImplementation(path=>Promise.resolve(path.endsWith("catalog")?targets:result));
+  const view=render(<GenerationDialog open onOpenChange={vi.fn()}/>);
+  await waitFor(()=>expect((screen.getByRole("button",{name:"生成"}) as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.change(screen.getByLabelText("代码语言"),{target:{value:target}});
+  await act(async()=>{fireEvent.click(screen.getByRole("button",{name:"生成"}));});
+  await act(async()=>{fireEvent.click(screen.getByRole("button",{name:"下载代码"}));});
+  expect(saveProjectFile).toHaveBeenCalledWith(`request-${target}-${client}.${extension}`,new TextEncoder().encode(`generated-${target}`),expect.any(Function));
+  const guard=vi.mocked(saveProjectFile).mock.calls[0][2];expect(guard()).toBe(true);
+  state.accountId="another-owner";view.rerender(<GenerationDialog open onOpenChange={vi.fn()}/>);expect(guard()).toBe(false);
+});
 it("saves the draft before generating and exports only the selected result",async()=>{
   vi.mocked(api).mockImplementation(path=>Promise.resolve(path.endsWith("catalog")?catalog:snippet));
   render(<GenerationDialog open onOpenChange={vi.fn()}/>);
@@ -32,7 +47,7 @@ it("saves the draft before generating and exports only the selected result",asyn
   expect(api).toHaveBeenCalledWith("/api/generation/snippets","POST",expect.objectContaining({workspace_id:"w",request_id:"r",include_secrets:false}));
   expect(screen.getByRole("textbox",{name:"生成的请求代码"})).toHaveProperty("value","safe-code");
   await act(async()=>{fireEvent.click(screen.getByRole("button",{name:"下载代码"}));});
-  expect(saveFile).toHaveBeenCalledWith(expect.objectContaining({content:"safe-code",filename:"request-shell-curl.txt"}));
+  expect(saveProjectFile).toHaveBeenCalledWith("request-shell-curl.sh",new TextEncoder().encode("safe-code"),expect.any(Function));
   fireEvent.click(screen.getByRole("checkbox"));
   expect(screen.queryByRole("textbox",{name:"生成的请求代码"})).toBeNull();
 });

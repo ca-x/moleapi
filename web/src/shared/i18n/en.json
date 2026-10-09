@@ -1331,5 +1331,22 @@
   "无法导入项目，请检查 ZIP 或快照、原始校验和、文件类型与大小限制。": "Unable to import the project. Check the ZIP or snapshot, original hashes, file types and size limits.",
   "选择已记录，可继续处理其他冲突；点击比较并合并后应用全部选择。": "Choice recorded. Continue resolving other conflicts, then compare and merge to apply all choices.",
   "快照 JSON": "Snapshot JSON",
-  "项目目录": "Project directory"
+  "项目目录": "Project directory",
+  "OpenAPI 多文件定义": "Multi-file OpenAPI definition",
+  "OpenAPI 多文件源包": "Multi-file OpenAPI source bundle",
+  "读取目录或 ZIP 中的 JSON、YAML 和 schema 文件，选择入口定义。保留原始源文件，在生成项目时解析引用。": "Read JSON, YAML and schema files from a directory or ZIP and select the entry definition. Keep original files; resolve references during project generation.",
+  "读取源文件目录": "Load source directory",
+  "读取源文件 ZIP": "Load source ZIP",
+  "最多 64 个源文件，源包总计 1 MiB。只解析提供的文件，不读取外部文件或联网；部分高级引用语义尚待补齐。": "Up to 64 source files and 1 MiB per bundle. Resolve only supplied files, without external file reads or network access. Some advanced reference semantics remain incomplete.",
+  "无法读取或保存源包，请检查 UTF8、文件路径、大小和入口的 OpenAPI 版本。": "Unable to read or save the bundle. Check UTF8, paths, size and the entry OpenAPI version.",
+  "已读取 {{count}} 个源文件。": "Loaded {{count}} source files.",
+  "OpenAPI 入口文件": "OpenAPI entry file",
+  "预览源文件": "Source file preview",
+  "保存多文件定义": "Save multi-file definition",
+  "导入 OpenAPI 源包": "Import OpenAPI source bundle",
+  "将当前保存的 HTTP 请求转换为所选语言的请求代码，支持预览、复制和下载。默认隐藏凭据。": "Generate request code for the saved HTTP endpoint in your selected language. Preview, copy or download; credentials are hidden by default.",
+  "RestSharp 示例需要对应 NuGet 包和 RestSharp 命名空间；JSON 原始字符串需要 C# 11 或更新版本。放入异步方法或支持顶层 await 的项目中使用。": "RestSharp snippets need its NuGet package and the RestSharp namespace. JSON raw strings require C# 11 or newer. Use an async method or a project supporting top-level await.",
+  "HttpClient 示例需要 System.Net.Http 和 System.Net.Http.Headers 命名空间；JSON 原始字符串需要 C# 11 或更新版本。放入异步方法或支持顶层 await 的项目中使用。": "HttpClient snippets need the System.Net.Http and System.Net.Http.Headers namespaces. JSON raw strings require C# 11 or newer. Use an async method or a project supporting top-level await.",
+  "生成静态请求示例；不执行脚本、不解析环境变量、不附加浏览器私有覆盖。请检查占位符。": "Generates a static request example without running scripts, resolving environment variables or attaching private browser overrides. Review placeholders.",
+  "各语言的超时、TLS、重定向策略由其 HTTP 库决定；此轮示例尚不映射这些设置。": "Timeout, TLS and redirect behavior depends on the target HTTP library; snippets do not yet map these settings."
 }

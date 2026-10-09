@@ -232,6 +232,13 @@ impl ProjectRuntime {
     ) -> Result<ImportedProject> {
         self.file_worker(input, cancel).await
     }
+    pub async fn bundle_openapi(
+        &self,
+        input: OpenapiSourceBundle,
+        cancel: CancellationToken,
+    ) -> Result<BundledOpenapi> {
+        self.file_worker(input, cancel).await
+    }
     async fn file_worker<I: Serialize, O: serde::de::DeserializeOwned>(
         &self,
         input: I,

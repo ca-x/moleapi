@@ -41,6 +41,10 @@ OpenAPI project generation uses a native Progenitor Rust client engine and a pin
 
 Regeneration imports previous generated ZIPs or snapshots and current edited directories/ZIPs. It preserves authored files, compares deletions and lets you resolve conflicts before exporting a new merged ZIP. Original files are never overwritten.
 
+![OpenAPI directory/ZIP source bundle with entry selection](docs/images/codegen-source-bundle-en.png)
+
+Single HTTP endpoints can also generate Go net/http and C# HttpClient/RestSharp request snippets, with preview, copy and source-file download. Both C# variants have real compile/call evidence; see [language coverage and requirements](docs/SNIPPET-COVERAGE.md).
+
 HTTP/SOAP, SSE/WebSocket/GraphQL, gRPC, TCP/TLS, MQTT, Socket.IO, A2A and MCP HTTP requests support explicit HTTP/SOCKS proxies, bypass rules, custom CA roots, PEM/encrypted PFX client certificates, DNS overrides and HTTP/2. Network credentials are scrubbed from history/default exports; exact source backup requires including sensitive values. See [network support and current combinations](docs/specs/request-network.md).
 
 ## Languages

@@ -31,9 +31,9 @@ pub fn validate_project_specification(value: &Value) -> Result<()> {
         spec.validate_version()
             .map_err(|_| anyhow::anyhow!("Invalid OpenAPI3.1 version"))?;
     }
-    let mut pending = vec![(value, 0usize)];
+    let mut pending = vec![(value, 0usize, false, false)];
     let mut count = 0usize;
-    while let Some((node, depth)) = pending.pop() {
+    while let Some((node, depth, dictionary, literal)) = pending.pop() {
         count += 1;
         ensure!(
             count <= 50000 && depth <= 64,
@@ -41,20 +41,63 @@ pub fn validate_project_specification(value: &Value) -> Result<()> {
         );
         match node {
             Value::Object(items) => {
-                for (key, value) in items {
-                    if matches!(
-                        key.as_str(),
-                        "$ref" | "$dynamicRef" | "$recursiveRef" | "operationRef"
-                    ) {
+                if !dictionary
+                    && !literal
+                    && let Some(mapping) = items
+                        .get("discriminator")
+                        .and_then(|value| value.get("mapping"))
+                        .and_then(Value::as_object)
+                {
+                    for target in mapping.values() {
+                        let reference = target.as_str().context("Invalid discriminator mapping")?;
+                        let named = value
+                            .pointer("/components/schemas")
+                            .and_then(Value::as_object)
+                            .is_some_and(|schemas| schemas.contains_key(reference));
                         ensure!(
-                            value.as_str().is_some_and(|v| v.starts_with("#/")),
-                            "External or unresolved generation references require an explicit source bundle"
+                            named
+                                || reference.starts_with("#/")
+                                    && value.pointer(&reference[1..]).is_some(),
+                            "External or unresolved discriminator mappings require an explicit source bundle"
                         );
                     }
-                    pending.push((value, depth + 1));
+                }
+                for (key, child) in items {
+                    if !dictionary
+                        && !literal
+                        && matches!(
+                            key.as_str(),
+                            "$ref" | "$dynamicRef" | "$recursiveRef" | "operationRef"
+                        )
+                    {
+                        ensure!(
+                            child.as_str().is_some_and(|v| v.starts_with("#/")),
+                            "External or unresolved generation references require an explicit source bundle"
+                        );
+                        if key == "operationRef" {
+                            let reference = child.as_str().unwrap();
+                            ensure!(
+                                value
+                                    .pointer(&reference[1..])
+                                    .and_then(|target| target.get("responses"))
+                                    .is_some_and(Value::is_object),
+                                "Operation reference target is missing or is not an operation"
+                            );
+                        }
+                    }
+                    let data =
+                        literal || super::reference_policy::literal_member(key, child, dictionary);
+                    pending.push((
+                        child,
+                        depth + 1,
+                        !dictionary && super::reference_policy::dictionary_member(key),
+                        data,
+                    ));
                 }
             }
-            Value::Array(items) => pending.extend(items.iter().map(|v| (v, depth + 1))),
+            Value::Array(items) => {
+                pending.extend(items.iter().map(|v| (v, depth + 1, false, literal)))
+            }
             _ => {}
         }
     }
