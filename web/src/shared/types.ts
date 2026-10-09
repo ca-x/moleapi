@@ -99,6 +99,7 @@ export interface RequestNetwork {
   connect_timeout_ms:number;
 }
 export interface RequestSpec {
+  extractions?:Extraction[];
   protocol?: ProtocolConfig;
   id: string;
   name: string;
@@ -121,6 +122,7 @@ export interface RequestSpec {
   pre_request_script?: string;
   post_response_script?: string;
 }
+export interface Extraction {id:string;name:string;kind:"body"|"header"|"json"|"jsonpath"|"xpath"|"regex";target:string;scope:"temporary"|"environment"|"collection"|"project";key:string;enabled:boolean;required:boolean}
 export interface Collection {
   variables_enabled?:boolean | null;
   parent_id?: string | null;

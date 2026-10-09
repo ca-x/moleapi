@@ -247,6 +247,48 @@ pub(crate) async fn perform(
         .validate()
         .map_err(|e| ApiError::bad(e.to_string()))?;
     response.tests.extend(tests);
+    if resolved.extractions.iter().any(|rule| rule.enabled) {
+        let results =
+            moleapi_core::extraction_worker(&s.script_worker, &resolved.extractions, &response)
+                .await;
+        for result in results {
+            let applied = if let Some(update) = result.update {
+                if let Some(value) = &update.value {
+                    scopes.private_values.insert(value.clone());
+                }
+                if update.scope == "environment" && scopes.environment_id.is_none() {
+                    Err("Selected environment is required for this extraction".to_string())
+                } else {
+                    scopes
+                        .apply(std::slice::from_ref(&update))
+                        .map_err(|_| "Extracted variables exceed execution limits".to_string())
+                        .map(|_| {
+                            updates.push(update);
+                        })
+                }
+            } else {
+                Err(result
+                    .error
+                    .unwrap_or_else(|| "Extraction value is missing".into()))
+            };
+            if let Err(message) = applied {
+                if result.required {
+                    response.tests.push(TestResult {
+                        id: format!("extraction-{}", result.id),
+                        name: result.name,
+                        passed: false,
+                        actual: message,
+                        expected: "Required response value is extracted".into(),
+                    });
+                } else {
+                    logs.push(ScriptLog {
+                        level: "warn".into(),
+                        message,
+                    });
+                }
+            }
+        }
+    }
     if post.iter().any(|s| !s.trim().is_empty()) {
         match script_phase(s, post, &resolved, Some(&response), scopes).await {
             Ok(mut output) => {

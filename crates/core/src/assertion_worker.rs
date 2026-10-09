@@ -19,6 +19,13 @@ const OUTPUT: usize = 4 * 1024 * 1024;
 struct Work {
     checks: Vec<Assertion>,
     response: Response,
+    #[serde(default)]
+    extractions: Vec<crate::Extraction>,
+}
+#[derive(Serialize, Deserialize)]
+struct Evaluation {
+    tests: Vec<TestResult>,
+    extractions: Vec<crate::ExtractionResult>,
 }
 pub fn dispatch_assertion_worker(limit: impl FnOnce() -> Result<()>) -> Result<bool> {
     if std::env::args_os().nth(1).as_deref() != Some(OsStr::new(ARG)) {
@@ -36,7 +43,11 @@ pub fn dispatch_assertion_worker(limit: impl FnOnce() -> Result<()>) -> Result<b
     );
     let work: Work = serde_json::from_slice(&input)?;
     ensure!(work.checks.len() <= 100, "Assertion count limit exceeded");
-    let result = crate::assertions::assertions(&work.checks, &work.response);
+    crate::validate_extractions(&work.extractions)?;
+    let result = Evaluation {
+        tests: crate::assertions::assertions(&work.checks, &work.response),
+        extractions: crate::extractions::evaluate_extractions(&work.extractions, &work.response),
+    };
     let output = serde_json::to_vec(&result)?;
     ensure!(
         output.len() <= OUTPUT,
@@ -50,7 +61,9 @@ pub async fn assertion_worker(
     checks: &[Assertion],
     response: &Response,
 ) -> Vec<TestResult> {
-    let result = run(worker, checks, response).await;
+    let result = run(worker, checks, &[], response)
+        .await
+        .map(|result| result.tests);
     result.unwrap_or_else(|_| {
         checks
             .iter()
@@ -72,7 +85,34 @@ pub async fn assertion_worker(
             .collect()
     })
 }
-async fn run(worker: &Path, checks: &[Assertion], response: &Response) -> Result<Vec<TestResult>> {
+pub async fn extraction_worker(
+    worker: &Path,
+    rules: &[crate::Extraction],
+    response: &Response,
+) -> Vec<crate::ExtractionResult> {
+    run(worker, &[], rules, response)
+        .await
+        .map(|result| result.extractions)
+        .unwrap_or_else(|_| {
+            rules
+                .iter()
+                .filter(|rule| rule.enabled)
+                .map(|rule| crate::ExtractionResult {
+                    id: rule.id.clone(),
+                    name: rule.name.clone(),
+                    required: rule.required,
+                    update: None,
+                    error: Some("extraction worker failed or exceeded resource limits".into()),
+                })
+                .collect()
+        })
+}
+async fn run(
+    worker: &Path,
+    checks: &[Assertion],
+    rules: &[crate::Extraction],
+    response: &Response,
+) -> Result<Evaluation> {
     ensure!(
         worker.is_absolute() && worker.is_file(),
         "Assertion worker requires an explicit application executable"
@@ -80,15 +120,17 @@ async fn run(worker: &Path, checks: &[Assertion], response: &Response) -> Result
     ensure!(checks.len() <= 100, "Assertion count limit exceeded");
     let mut projected = response.clone();
     projected.body_base64 = response.body_base64.as_ref().map(|_| String::new());
-    if checks
-        .iter()
-        .all(|check| matches!(check.kind.as_str(), "status" | "duration" | "header"))
+    if rules.is_empty()
+        && checks
+            .iter()
+            .all(|check| matches!(check.kind.as_str(), "status" | "duration" | "header"))
     {
         projected.body.clear();
     }
     let bytes = serde_json::to_vec(&Work {
         checks: checks.to_vec(),
         response: projected,
+        extractions: rules.to_vec(),
     })?;
     ensure!(
         bytes.len() <= INPUT,
@@ -102,37 +144,57 @@ async fn run(worker: &Path, checks: &[Assertion], response: &Response) -> Result
         .stderr(Stdio::null())
         .kill_on_drop(true)
         .spawn()?;
-    let job = async {
-        let mut stdin = child
-            .stdin
-            .take()
-            .context("Assertion worker stdin missing")?;
-        stdin.write_all(&bytes).await?;
-        stdin.shutdown().await?;
-        drop(stdin);
-        let mut output = Vec::new();
-        child
-            .stdout
-            .take()
-            .context("Assertion worker stdout missing")?
-            .take((OUTPUT + 1) as u64)
-            .read_to_end(&mut output)
-            .await?;
-        ensure!(
-            output.len() <= OUTPUT && child.wait().await?.success(),
-            "Assertion worker failed"
-        );
-        let result: Vec<TestResult> = serde_json::from_slice(&output)?;
-        ensure!(
-            result.len() == checks.len()
-                && result
-                    .iter()
-                    .zip(checks)
-                    .all(|(test, check)| test.id == check.id),
-            "Invalid assertion worker reply"
-        );
-        Ok(result)
-    };
+    let job =
+        async {
+            let mut stdin = child
+                .stdin
+                .take()
+                .context("Assertion worker stdin missing")?;
+            stdin.write_all(&bytes).await?;
+            stdin.shutdown().await?;
+            drop(stdin);
+            let mut output = Vec::new();
+            child
+                .stdout
+                .take()
+                .context("Assertion worker stdout missing")?
+                .take((OUTPUT + 1) as u64)
+                .read_to_end(&mut output)
+                .await?;
+            ensure!(
+                output.len() <= OUTPUT && child.wait().await?.success(),
+                "Assertion worker failed"
+            );
+            let result: Evaluation = serde_json::from_slice(&output)?;
+            let active = rules.iter().filter(|rule| rule.enabled).collect::<Vec<_>>();
+            ensure!(
+                result.extractions.len() == active.len()
+                    && result
+                        .extractions
+                        .iter()
+                        .zip(active)
+                        .all(|(result, rule)| result.id == rule.id
+                            && result.required == rule.required
+                            && result.update.as_ref().is_none_or(|update| update.scope
+                                == rule.scope
+                                && update.key == rule.key
+                                && update
+                                    .value
+                                    .as_ref()
+                                    .is_some_and(|value| value.len() <= 64 * 1024))),
+                "Invalid extraction worker reply"
+            );
+            ensure!(
+                result.tests.len() == checks.len()
+                    && result
+                        .tests
+                        .iter()
+                        .zip(checks)
+                        .all(|(test, check)| test.id == check.id),
+                "Invalid assertion worker reply"
+            );
+            Ok(result)
+        };
     let result = tokio::time::timeout(std::time::Duration::from_secs(2), job)
         .await
         .unwrap_or_else(|_| Err(anyhow::anyhow!("Assertion worker timed out")));

@@ -302,6 +302,21 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
             variable.local_value = None;
         }
         for request in &mut collection.requests {
+            for rule in &mut request.extractions {
+                rule.name = data_privacy.screen_bounded(&rule.name, 256);
+                let target = data_privacy.screen_bounded(&rule.target, 4096);
+                let key = data_privacy.screen_bounded(&rule.key, 1024);
+                if target != rule.target || key != rule.key {
+                    rule.enabled = false;
+                }
+                rule.target = target;
+                rule.key = if key.is_empty() {
+                    "[REDACTED]".into()
+                } else {
+                    key
+                };
+            }
+
             redact_auth(&mut request.auth, &privacy);
             if let Some(c) = &mut request.network {
                 c.proxy.username.clear();

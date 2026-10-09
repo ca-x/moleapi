@@ -76,7 +76,7 @@ pub fn assertions(checks: &[Assertion], response: &Response) -> Vec<TestResult> 
         .collect()
 }
 
-fn structured_budget(value: &serde_json::Value) -> Result<(), &'static str> {
+pub(crate) fn structured_budget(value: &serde_json::Value) -> Result<(), &'static str> {
     let mut pending = vec![(value, 0usize)];
     let mut nodes = 0;
     while let Some((value, depth)) = pending.pop() {

@@ -9,6 +9,7 @@ import RequestAuthEditor from "../authentication/RequestAuthEditor";
 import RequestScripts from "../scripts/RequestScripts";
 import ExamplesEditor from "./ExamplesEditor";
 import AssertionsEditor from "../testing/AssertionsEditor";
+import ExtractionsEditor from "../testing/ExtractionsEditor";
 import { ResponsePane } from "./ResponsePane";
 import { useState, useEffect, lazy, Suspense } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
@@ -460,6 +461,7 @@ export default function RequestEditor({
             </Tabs.Content>
             <Tabs.Content value="assertions">
               <AssertionsEditor request={request} update={update} dark={dark} />
+              <ExtractionsEditor request={request} update={update}/>
             </Tabs.Content>
             <Tabs.Content value="docs">
               <div className="documentation-editor">

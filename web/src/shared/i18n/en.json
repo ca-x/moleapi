@@ -1425,5 +1425,21 @@
   "JSON Schema 校验": "Validate JSON Schema",
   "正则表达式": "Regular expression",
   "响应 Header 名称": "Response header name",
-  "断言 JSON Schema": "Assertion JSON Schema"
+  "断言 JSON Schema": "Assertion JSON Schema",
+  "响应提取与变量设置": "Response extraction and variable updates",
+  "提取在后置脚本之前执行，更新本次运行和本地变量覆盖，不自动修改共享工作区。环境变量写入当前选定环境。": "Extraction runs before post-response scripts, updating this execution and local overrides without automatically changing the shared workspace. Environment values use the selected environment.",
+  "启用提取": "Enable extraction",
+  "提取名称": "Extraction name",
+  "提取来源": "Extraction source",
+  "正则捕获": "Regex capture",
+  "完整响应正文": "Complete response body",
+  "提取路径 / 表达式": "Extraction path / expression",
+  "目标变量范围": "Destination variable scope",
+  "临时变量": "Temporary variables",
+  "目标变量名称": "Destination variable name",
+  "必须提取成功": "Extraction required",
+  "删除提取规则": "Delete extraction rule",
+  "提取响应值": "Extract response value",
+  "添加响应提取": "Add response extraction",
+  "项目变量": "Project variables"
 }

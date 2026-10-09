@@ -51,9 +51,7 @@ OpenAPI Generator targets also accept custom Mustache templates and static asset
 
 ![OpenAPI directory/ZIP source bundle with entry selection](docs/images/codegen-source-bundle-en.png)
 
-Single HTTP endpoints can also generate Go net/http and C# HttpClient/RestSharp request snippets, with preview, copy and source-file download. Both C# variants have real compile/call evidence; see [language coverage and requirements](docs/SNIPPET-COVERAGE.md).
-
-Interface request-code languages and libraries follow the current Apifox/Postman lists, with23 language families and55 adapters. See the [exact language/library catalog](docs/REQUEST-CODE-PARITY.md).
+Single HTTP endpoints offer the Apifox/Postman request-code catalog:23 language/tool families and55 library adapters, with preview, copy and source download. Families include C, C#, Clojure, Dart, F#, Go, HTTP, Java, JavaScript, Julia, Kotlin, Node.js, Objective-C, OCaml, PHP, PowerShell, Python, R, Ruby, Rust, Shell, Swift and Postman CLI. Choose libraries such as HttpClient/RestSharp, Fetch/Axios, Requests/HTTPX and OkHttp/Unirest independently. See the [complete language/library catalog](docs/REQUEST-CODE-PARITY.md) and [body support, dependencies and runtime evidence](docs/SNIPPET-COVERAGE.md). Raw file bodies show only adapters that can read file bytes.
 
 Data model generation covers Apifox's19 language families using embedded Quicktype for18 languages and OpenAPI Generator for MySQL/PostgreSQL table definitions. Choose all or one component and its serialization/style options, then preview/copy/download or regenerate. See [actual model runtime evidence and remaining limits](docs/MODEL-GENERATION-COVERAGE.md).
 
@@ -118,3 +116,5 @@ GitHub Actions checks source and real database cases, and builds platform server
 - [Configuration options](docs/CONFIGURATION-OPTIONS.md), [UI research](docs/UI-RESEARCH.md), [research notes](docs/RESEARCH-NOTES.md)
 
 The transparent mole logo was supplied by the project owner. Competitor names and original materials belong to their respective owners and are retained as research references; the application does not use competitor brand assets.
+
+Response extraction rules support JSON Pointer, JSONPath, XPath, regex, headers and full bodies, targeting the selected development environment, collection, project or temporary variables. They run before post scripts and supply subsequent collection requests; shared workspace values are not automatically overwritten. See [extraction coverage and limits](docs/RESPONSE-EXTRACTION-COVERAGE.md).

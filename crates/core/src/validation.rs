@@ -3,6 +3,7 @@ use anyhow::{Context, Result, bail, ensure};
 use reqwest::header::{HeaderName, HeaderValue};
 use std::collections::HashSet;
 pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
+    crate::validate_extractions(&r.extractions)?;
     crate::validate_a2a(r, templates)?;
     crate::validate_mcp(r, templates)?;
     validate_soap(r, templates)?;

@@ -183,6 +183,8 @@ impl Protocol {
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct RequestSpec {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub extractions: Vec<crate::Extraction>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub network: Option<Box<crate::RequestNetwork>>,
     #[serde(default)]

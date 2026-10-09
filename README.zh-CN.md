@@ -49,9 +49,7 @@ OpenAPI 项目生成使用原生 Progenitor Rust 客户端引擎，以及固定�
 
 ![OpenAPI 目录／ZIP 源包与入口选择](docs/images/codegen-source-bundle-zh-CN.png)
 
-单个 HTTP 接口还可以生成 Go net/http、C# HttpClient／RestSharp 等请求代码，支持预览、复制和源文件下载。C# 两种适配器已有真实编译／调用证据；参见[语言覆盖与依赖要求](docs/SNIPPET-COVERAGE.md)。
-
-接口请求代码的语言和 HTTP 库按当前 Apifox／Postman 列表提供，包含23类语言和55种库适配器。参见[完整语言／库目录](docs/REQUEST-CODE-PARITY.md)。
+单个 HTTP 接口可生成与 Apifox／Postman 请求代码目录对应的23类语言／工具、55种库适配器，支持预览、复制和源文件下载：C、C#、Clojure、Dart、F#、Go、HTTP、Java、JavaScript、Julia、Kotlin、Node.js、Objective-C、OCaml、PHP、PowerShell、Python、R、Ruby、Rust、Shell、Swift 和 Postman CLI。可分别选择 HttpClient／RestSharp、Fetch／Axios、Requests／HTTPX、OkHttp／Unirest 等库。参见[完整语言／库目录](docs/REQUEST-CODE-PARITY.md)和[正文类型、依赖与运行证据](docs/SNIPPET-COVERAGE.md)。原始文件正文仅显示支持文件字节读取的适配器。
 
 数据模型生成覆盖 Apifox 的19类语言：18种语言复用嵌入式 Quicktype，MySQL／PostgreSQL 建表语句复用 OpenAPI Generator。可选全部或单个模型、调整序列化与代码风格，再预览、复制、下载或再生成。参见[模型运行证据与剩余限制](docs/MODEL-GENERATION-COVERAGE.md)。
 
@@ -118,3 +116,5 @@ GitHub Actions 检查源代码与真实数据库用例，构建多平台服务�
 - [配置选项](docs/CONFIGURATION-OPTIONS.md)、[UI 调研](docs/UI-RESEARCH.md)、[调研记录](docs/RESEARCH-NOTES.md)
 
 透明鼹鼠 Logo 由项目发起者提供。竞品名称及原始资料归各自权利人所有，仅作为功能调研来源；软件不使用竞品品牌资产。
+
+响应提取规则支持 JSON Pointer、JSONPath、XPath、正则、响应头和完整正文，写入当前选定开发环境、集合、项目或临时变量。规则在后置脚本前执行，后续集合请求可读取结果；共享工作区不会自动被覆盖。参见[响应提取范围与限制](docs/RESPONSE-EXTRACTION-COVERAGE.md)。
