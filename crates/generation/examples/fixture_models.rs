@@ -26,6 +26,7 @@ async fn main() -> Result<()> {
                     target: target.id.clone(),
                     options: BTreeMap::new(),
                     include_secrets: false,
+                    templates: None,
                 },
                 CancellationToken::new(),
             )

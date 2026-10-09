@@ -13,6 +13,7 @@ mod reference_policy;
 mod runtime;
 mod source;
 mod source_bundle;
+mod templates;
 use anyhow::{Result, ensure};
 pub use artifact::*;
 pub use native::dispatch_project_worker;
@@ -22,6 +23,7 @@ use serde_json::Value;
 pub use source::*;
 pub use source_bundle::*;
 use std::collections::BTreeMap;
+pub use templates::{TemplateBundle, TemplateFile, supports_templates};
 pub const SPEC_LIMIT: usize = 1024 * 1024;
 pub const FILE_LIMIT: usize = 4 * 1024 * 1024;
 pub const PROJECT_LIMIT: usize = 8 * 1024 * 1024;
@@ -38,6 +40,8 @@ pub struct ProjectInput {
     pub options: BTreeMap<String, Value>,
     #[serde(default)]
     pub include_secrets: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub templates: Option<TemplateBundle>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ProjectTarget {
@@ -139,6 +143,7 @@ pub fn project_catalog() -> Result<Vec<ProjectTarget>> {
     Ok(targets)
 }
 pub(crate) fn validate_options(input: &ProjectInput) -> Result<()> {
+    templates::validate(input)?;
     if input.target.starts_with("model-") {
         return models::validate(input);
     }

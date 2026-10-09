@@ -1,0 +1,8 @@
+*.swp
+*.dylib
+*.dSYM
+bin/
+target/
+lib/
+.rust/
+Cargo.lock

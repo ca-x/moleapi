@@ -74,6 +74,8 @@ pub(crate) struct Generate {
     options: std::collections::BTreeMap<String, Value>,
     #[serde(default)]
     include_secrets: bool,
+    #[serde(default)]
+    templates: Option<moleapi_generation::project::TemplateBundle>,
 }
 pub(crate) async fn catalog(State(s): State<AppState>) -> Result<Json<Value>, ApiError> {
     Ok(Json(
@@ -85,6 +87,16 @@ pub(crate) async fn generate(
     Extension(owner): Extension<Identity>,
     Json(c): Json<Generate>,
 ) -> Result<Json<moleapi_generation::project::ProjectArtifact>, ApiError> {
+    if let Some(templates) = &c.templates {
+        if !moleapi_generation::project::supports_templates(&c.target) {
+            return Err(ApiError::bad(
+                "This generator does not expose Mustache templates",
+            ));
+        }
+        templates
+            .validate()
+            .map_err(|error| ApiError::bad(error.to_string()))?;
+    }
     if c.workspace_id.len() > 128 || c.specification_id.len() > 128 {
         return Err(ApiError::bad(
             "Invalid specification generation identifiers",
@@ -110,7 +122,7 @@ pub(crate) async fn generate(
         if !c.include_secrets {
             moleapi_formats::validate_protobuf_generation_options(
                 &w,
-                &serde_json::to_value(&c.options).map_err(|_| ApiError::internal())?,
+                &json!({"options":c.options,"templates":c.templates}),
             )
             .map_err(|e| ApiError::bad(e.to_string()))?;
         }
@@ -163,7 +175,7 @@ pub(crate) async fn generate(
             moleapi_formats::validate_generation_options(
                 &projection,
                 &c.specification_id,
-                &serde_json::to_value(&c.options).map_err(|_| ApiError::internal())?,
+                &json!({"options":c.options,"templates":c.templates}),
             )
             .map_err(|e| ApiError::bad(e.to_string()))?;
         }
@@ -196,6 +208,7 @@ pub(crate) async fn generate(
                 target: c.target,
                 options: c.options,
                 include_secrets: c.include_secrets,
+                templates: c.templates,
             },
             lease.cancel.clone(),
         )

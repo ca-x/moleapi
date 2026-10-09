@@ -148,6 +148,7 @@ mod tests {
             target: "rust-progenitor".into(),
             options: BTreeMap::new(),
             include_secrets: false,
+            templates: None,
             specification: serde_json::json!({"openapi":"3.0.3","info":{"title":"Fixture","version":"1"},"paths":{"/health":{"get":{"operationId":"health","responses":{"200":{"description":"OK","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Health"}}}}}}}},"components":{"schemas":{"Health":{"type":"object","required":["ok"],"properties":{"ok":{"type":"boolean"}}}}}}),
         };
         let result = native_project(&input).unwrap();
@@ -167,6 +168,7 @@ mod tests {
             target: "rust-progenitor-cli".into(),
             options: BTreeMap::new(),
             include_secrets: false,
+            templates: None,
             specification: serde_json::json!({
                 "openapi":"3.0.3", "info":{"title":"Binary fixture","version":"1"},
                 "paths":{

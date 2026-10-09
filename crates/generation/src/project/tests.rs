@@ -7,6 +7,7 @@ fn artifact_zip_records_checksums_and_preserves_executable_permissions() {
         target: "test".into(),
         options: BTreeMap::new(),
         include_secrets: false,
+        templates: None,
     };
     let files = BTreeMap::from([(
         "run.sh".into(),
@@ -58,6 +59,7 @@ fn target_options_do_not_allow_paths_or_unsupported_properties() {
         target: "rust-progenitor".into(),
         options: BTreeMap::from([("packageName".into(), Value::String("../outside".into()))]),
         include_secrets: false,
+        templates: None,
     };
     assert!(validate_options(&input).is_err());
     input.options = BTreeMap::from([("templateDir".into(), Value::String("outside".into()))]);

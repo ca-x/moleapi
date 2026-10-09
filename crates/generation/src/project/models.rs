@@ -116,6 +116,7 @@ mod tests {
             target: target.into(),
             options: BTreeMap::new(),
             include_secrets: false,
+            templates: None,
             specification: serde_json::json!({"openapi":"3.0.3","info":{"title":"Models","version":"1"},"paths":{},"components":{"schemas":{"Pet":{"type":"object","required":["id","status"],"properties":{"id":{"type":"integer"},"status":{"type":"string","enum":["ready","done"]},"note":{"type":"string","nullable":true},"friend":{"$ref":"#/components/schemas/Pet"}}}}}}),
         }
     }

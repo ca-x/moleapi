@@ -51,6 +51,8 @@ OpenAPI 项目生成使用原生 Progenitor Rust 客户端引擎，以及固定�
 
 ![数据模型生成与 C# 预览](docs/images/codegen-models-zh-CN.png)
 
+OpenAPI Generator 目标支持显式导入自定义 Mustache 模板目录、ZIP 或生成快照，可预览、编辑及恢复上游模板；导出项目保留模板原文和校验和。参见[模板功能证据与剩余限制](docs/TEMPLATE-GENERATION-COVERAGE.md)。
+
 HTTP/SOAP、SSE/WebSocket/GraphQL、gRPC、TCP/TLS、MQTT、Socket.IO、A2A 和 MCP HTTP 请求支持显式 HTTP/SOCKS 代理、绕过规则、自定义 CA、PEM/加密 PFX 客户端证书、DNS 覆盖和 HTTP/2。网络凭据会从历史与默认导出中脱敏；精确保留源配置需要显式包含敏感信息。参见[网络支持与当前组合限制](docs/specs/request-network.md)。
 
 ## 语言

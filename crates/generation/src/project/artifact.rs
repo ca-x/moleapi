@@ -52,8 +52,21 @@ impl From<Vec<u8>> for EmittedFile {
 pub(crate) fn artifact(
     input: &ProjectInput,
     engine: &str,
-    files: BTreeMap<String, EmittedFile>,
+    mut files: BTreeMap<String, EmittedFile>,
 ) -> Result<ProjectArtifact> {
+    let templates_sha256 = if let Some(templates) = &input.templates {
+        templates.validate()?;
+        ensure!(
+            !files.contains_key("moleapi-templates.json"),
+            "Generator attempted to overwrite template source manifest"
+        );
+        let source = serde_json::to_vec(templates)?;
+        let hash = format!("{:x}", Sha256::digest(&source));
+        files.insert("moleapi-templates.json".into(), source.into());
+        Some(hash)
+    } else {
+        None
+    };
     ensure!(
         !files.is_empty() && files.len() < 2048,
         "Generated file count exceeds limit"
@@ -97,7 +110,7 @@ pub(crate) fn artifact(
         });
     }
     let manifest = serde_json::to_vec_pretty(
-        &serde_json::json!({"format":"moleapi-generation-v1","engine":engine,"target":input.target,"source_sha256":format!("{:x}",Sha256::digest(serde_json::to_vec(&input.specification)?)),"options":input.options,"include_secrets":input.include_secrets,"files":result.iter().map(|f|serde_json::json!({"path":f.path,"sha256":f.sha256,"bytes":f.bytes,"executable":f.executable})).collect::<Vec<_>>()}),
+        &serde_json::json!({"format":"moleapi-generation-v1","engine":engine,"target":input.target,"source_sha256":format!("{:x}",Sha256::digest(serde_json::to_vec(&input.specification)?)),"options":input.options,"templates_sha256":templates_sha256,"include_secrets":input.include_secrets,"files":result.iter().map(|f|serde_json::json!({"path":f.path,"sha256":f.sha256,"bytes":f.bytes,"executable":f.executable})).collect::<Vec<_>>()}),
     )?;
     ensure!(
         manifest.len() <= 512 * 1024,

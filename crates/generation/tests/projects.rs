@@ -4,6 +4,40 @@ use std::{collections::BTreeMap, path::PathBuf};
 use tokio_util::sync::CancellationToken;
 #[tokio::test]
 #[ignore = "requires explicitly configured Java17+ test runtime"]
+async fn explicit_templates_override_upstream_rendering_and_preserve_repeatable_source() {
+    let java = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_JAVA").expect("explicit Java executable"),
+    );
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), Some(java)).unwrap();
+    let templates = TemplateBundle {format:"moleapi-codegen-templates-v1".into(),files:vec![TemplateFile {path:"models.mustache".into(),content:"{{#models}}{{#model}}export interface {{classname}} { readonly templateMarker: string; }\n{{/model}}{{/models}}".into()}]};
+    let result=runtime.generate(ProjectInput {specification:json!({"openapi":"3.0.3","info":{"title":"Template fixture","version":"1"},"paths":{},"components":{"schemas":{"Pet":{"type":"object","properties":{"id":{"type":"integer"}}}}}}),target:"typescript-fetch".into(),options:BTreeMap::new(),include_secrets:false,templates:Some(templates.clone())},CancellationToken::new()).await.unwrap();
+    assert!(result.files.iter().any(|file| {
+        file.path.ends_with("Pet.ts")
+            && file
+                .content
+                .contains("export interface Pet { readonly templateMarker: string; }")
+    }));
+    let source = result
+        .files
+        .iter()
+        .find(|file| file.path == "moleapi-templates.json")
+        .unwrap();
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&source.content).unwrap(),
+        serde_json::to_value(templates).unwrap()
+    );
+    let manifest = result
+        .files
+        .iter()
+        .find(|file| file.path == "moleapi-generation.json")
+        .unwrap();
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&manifest.content).unwrap()["templates_sha256"],
+        source.sha256
+    );
+}
+#[tokio::test]
+#[ignore = "requires explicitly configured Java17+ test runtime"]
 async fn pinned_multi_language_engine_produces_sdk_and_server_project_artifacts() {
     let java = PathBuf::from(
         std::env::var_os("MOLEAPI_CODEGEN_TEST_JAVA").expect("explicit Java executable"),
@@ -36,6 +70,7 @@ async fn pinned_multi_language_engine_produces_sdk_and_server_project_artifacts(
                     target: target.into(),
                     options: BTreeMap::new(),
                     include_secrets: false,
+                    templates: None,
                 },
                 CancellationToken::new(),
             )
@@ -105,6 +140,7 @@ async fn explicit_generator_process_is_killed_and_reaped_on_cancel_without_silen
         specification: json!({"openapi":"3.0.3","info":{"title":"Cancel","version":"1"},"paths":{}}),
         options: BTreeMap::new(),
         include_secrets: false,
+        templates: None,
     };
     let task = tokio::spawn(async move { runtime.generate(input, signal).await });
     tokio::time::timeout(std::time::Duration::from_secs(3), async {
@@ -151,6 +187,7 @@ async fn official_protoc_generates_all_builtin_language_messages_from_checked_de
                     specification: spec.clone(),
                     options: BTreeMap::new(),
                     include_secrets: false,
+                    templates: None,
                 },
                 CancellationToken::new(),
             )
@@ -192,6 +229,7 @@ async fn integrated_official_python_compiler_emits_message_and_grpc_service_code
                 specification: spec,
                 options: BTreeMap::new(),
                 include_secrets: false,
+                templates: None,
             },
             CancellationToken::new(),
         )
@@ -244,6 +282,7 @@ async fn protoc_plugin_process_group_is_terminated_and_reaped_on_cancellation() 
         specification: json!({"kind":"proto","files":[{"path":"a.proto","content":"syntax=\"proto3\"; message A {}"}],"entry_files":["a.proto"]}),
         options: BTreeMap::new(),
         include_secrets: false,
+        templates: None,
     };
     let task = tokio::spawn(async move { runtime.generate(input, signal).await });
     tokio::time::timeout(std::time::Duration::from_secs(3), async {

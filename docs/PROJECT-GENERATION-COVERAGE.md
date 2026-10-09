@@ -4,6 +4,8 @@ Project generation is implemented separately from request snippets. It uses Prog
 
 Data models have a separate category covering Apifox's19 language families with pinned Quicktype26.0.0 (18 targets) and MySQL/PostgreSQL DDL. See [MODEL-GENERATION-COVERAGE.md](MODEL-GENERATION-COVERAGE.md) for the exact selection list and compile/runtime evidence; model generation does not complete SDK/server/custom-template coverage.
 
+Explicit Mustache overrides now reuse the embedded OpenAPI Generator and mature Rust Mustache parser. Directory/ZIP/JSON/snapshot import, template editing, owner/privacy fences and preserved source/checksums are implemented. See [TEMPLATE-GENERATION-COVERAGE.md](TEMPLATE-GENERATION-COVERAGE.md); additional supporting-file mappings and broader template/target compatibility remain open.
+
 | Target | Current evidence | Limits |
 | --- | --- | --- |
 | rust-progenitor | Generated3.0 reference/nullable model SDK compiled; async client called a real HTTP fixture; owned API/default private-example screening preserved original source | Native engine supports3.0; broader union/auth/file fixtures and generated CLI remain required |

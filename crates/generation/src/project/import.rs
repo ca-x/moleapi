@@ -354,6 +354,7 @@ mod tests {
                 specification: serde_json::json!({}),
                 options: BTreeMap::new(),
                 include_secrets: false,
+                templates: None,
             },
             "fixture",
             BTreeMap::from([

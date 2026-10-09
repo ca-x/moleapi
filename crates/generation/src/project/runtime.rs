@@ -140,6 +140,10 @@ impl ProjectRuntime {
         let spec = directory.path().join("openapi.json");
         let config = directory.path().join("config.json");
         let output = directory.path().join("output");
+        let template_directory = directory.path().join("templates");
+        if let Some(templates) = &input.templates {
+            templates.write(&template_directory)?;
+        }
         std::fs::write(&jar, JAR)?;
         std::fs::write(&spec, serde_json::to_vec(&input.specification)?)?;
         ensure!(
@@ -179,6 +183,9 @@ impl ProjectRuntime {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .kill_on_drop(true);
+        if input.templates.is_some() {
+            command.arg("--template-dir").arg(&template_directory);
+        }
         #[cfg(windows)]
         if let Some(root) = std::env::var_os("SYSTEMROOT") {
             command.env("SYSTEMROOT", root);

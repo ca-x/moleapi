@@ -96,6 +96,7 @@ mod tests {
             target: "rust-tonic".into(),
             options: BTreeMap::new(),
             include_secrets: false,
+            templates: None,
             specification: serde_json::json!({"kind":"proto","files":[{"path":"types.proto","content":"syntax=\"proto3\"; package fixture; message Request {string text=1;}"},{"path":"service.proto","content":"syntax=\"proto3\"; package fixture; import \"types.proto\"; service Echo {rpc Call(Request) returns(Request);}"}],"entry_files":["service.proto"]}),
         }
     }

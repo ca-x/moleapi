@@ -1356,5 +1356,15 @@
   "数据模型 / SQL 建表语句": "Data models / SQL table definitions",
   "模型名称": "Model name",
   "留空或 * 生成全部 components.schemas；填写名称只生成该模型及引用的类型。": "Leave blank or use * for all components.schemas. Enter a name to generate that model and its referenced types.",
-  "模型代码风格与序列化选项": "Model code style and serialization options"
+  "模型代码风格与序列化选项": "Model code style and serialization options",
+  "自定义 Mustache 模板": "Custom Mustache templates",
+  "显式覆盖上游 .mustache 文件；目录或 ZIP 内路径应相对模板根目录。最多 128 个文件，每个 64 KiB，合计 512 KiB。": "Override upstream .mustache files explicitly. Directory and ZIP paths must be relative to the template root. Up to 128 files, 64 KiB each, 512 KiB total.",
+  "读取模板 JSON / 生成快照": "Load template JSON / generation snapshot",
+  "模板目录": "Template directory",
+  "模板 ZIP / 生成项目 ZIP": "Template ZIP / generated project ZIP",
+  "恢复上游模板": "Restore upstream templates",
+  "取消模板导入": "Cancel template import",
+  "正在读取模板…": "Reading templates…",
+  "模板导入失败，请检查文件格式、路径、UTF-8 编码和大小限制。": "Template import failed. Check the file format, paths, UTF-8 encoding and size limits.",
+  "模板文件": "Template file"
 }
