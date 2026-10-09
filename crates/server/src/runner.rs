@@ -12,6 +12,8 @@ use std::collections::BTreeMap;
 #[serde(deny_unknown_fields)]
 pub struct Run {
     collection_id: String,
+    #[serde(default)]
+    scenario_id: Option<String>,
     environment_id: Option<String>,
     #[serde(default)]
     variables: Vec<moleapi_core::Pair>,
@@ -143,22 +145,42 @@ pub async fn run(
     }
     let subtree = moleapi_core::collection_subtree(&w.data, collection)
         .map_err(|error| ApiError::bad(error.to_string()))?;
-    let steps = subtree
-        .iter()
-        .map(|collection| collection.requests.len())
-        .sum::<usize>();
-    if steps.saturating_mul(count) > 1000 {
+    let scenario = c
+        .scenario_id
+        .as_ref()
+        .map(|id| {
+            w.data
+                .scenarios
+                .iter()
+                .find(|scenario| scenario.id == *id)
+                .ok_or_else(ApiError::not_found)
+        })
+        .transpose()?;
+    if scenario.is_some_and(|scenario| scenario.collection_id != c.collection_id) {
+        return Err(ApiError::bad(
+            "Scenario root does not match selected collection",
+        ));
+    }
+    let plan = if let Some(scenario) = scenario {
+        moleapi_core::scenario_plan(&w.data, scenario)
+            .map_err(|error| ApiError::bad(error.to_string()))?
+            .into_iter()
+            .map(|(collection, request, step)| (collection, request, Some(step)))
+            .collect::<Vec<_>>()
+    } else {
+        subtree
+            .iter()
+            .flat_map(|collection| {
+                collection
+                    .requests
+                    .iter()
+                    .map(move |request| (*collection, request, None))
+            })
+            .collect::<Vec<_>>()
+    };
+    if plan.len().saturating_mul(count) > 1000 {
         return Err(ApiError::bad("Run exceeds 1000 request executions"));
     }
-    let plan = subtree
-        .iter()
-        .flat_map(|collection| {
-            collection
-                .requests
-                .iter()
-                .map(move |request| (*collection, request))
-        })
-        .collect::<Vec<_>>();
     let mut scopes = variables(
         &s,
         &w,
@@ -245,7 +267,7 @@ pub async fn run(
                 stopped = Some("step_limit");
                 break 'iterations;
             }
-            let (selected, request) = plan[cursor];
+            let (selected, request, step) = plan[cursor];
             let base = variables(&s, &w, Some(selected), e, &pairs, &c.variables, &[])?;
             scopes.private_values.extend(base.private_values);
             scopes.collection.clear();
@@ -307,6 +329,15 @@ pub async fn run(
                         json!({"request_id":request.id,"request_name":request.name,"collection_id":selected.id,"iteration":index,"error":error.message})
                     }
                 };
+                if let Some(step) = step {
+                    item["step_id"] = step.id.clone().into();
+                    let privacy = crate::privacy::Redactor::new(&scopes.private_values)
+                        .map_err(|_| ApiError::internal())?;
+                    item["step_name"] = step.name.clone().into();
+                    item["step_group"] = step.group.clone().into();
+                    privacy.scrub(&mut item["step_name"]);
+                    privacy.scrub(&mut item["step_group"]);
+                }
                 let size = serde_json::to_vec(&item)
                     .map_err(|_| ApiError::internal())?
                     .len();
@@ -349,32 +380,39 @@ pub async fn run(
                     break 'steps;
                 }
                 Some(moleapi_core::NextRequest::Request { target }) => {
-                    if let Some(index) = plan.iter().position(|(_, request)| request.id == *target)
-                    {
-                        index
-                    } else {
-                        let matches = plan
-                            .iter()
+                    let by_id = plan
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, (_, request, _))| request.id == *target)
+                        .map(|(index, _)| index)
+                        .collect::<Vec<_>>();
+                    let matches = if by_id.is_empty() {
+                        plan.iter()
                             .enumerate()
-                            .filter(|(_, (_, request))| request.name == *target)
+                            .filter(|(_, (_, request, _))| request.name == *target)
                             .map(|(index, _)| index)
-                            .collect::<Vec<_>>();
-                        if matches.len() != 1 {
-                            stopped = Some(if matches.is_empty() {
-                                "next_request_missing"
-                            } else {
-                                "next_request_ambiguous"
-                            });
-                            break 'iterations;
-                        }
-                        matches[0]
+                            .collect::<Vec<_>>()
+                    } else {
+                        by_id
+                    };
+                    if matches.len() != 1 {
+                        stopped = Some(if matches.is_empty() {
+                            "next_request_missing"
+                        } else {
+                            "next_request_ambiguous"
+                        });
+                        break 'iterations;
                     }
+                    matches[0]
                 }
             };
         }
         summaries.push(json!({"iteration":index,"passed":passed-before_passed,"failed":failed-before_failed,"elapsed_ms":iteration_start.elapsed().as_millis()as u64,"script_stopped":script_stopped}));
     }
     let mut report = json!({"results":results,"iterations":summaries,"iteration_count":count,"completed_iterations":summaries.len(),"passed":passed,"failed":failed,"elapsed_ms":start.elapsed().as_millis()as u64,"cancelled":matches!(stopped,Some("cancelled"|"owner_changed")),"stopped_reason":stopped,"omitted_responses":omitted,"job_id":job_id,"executed_steps":executed,"skipped":skipped});
+    if let Some(scenario) = scenario {
+        report["scenario_id"] = scenario.id.clone().into();
+    }
     if serde_json::to_vec(&report)
         .map_err(|_| ApiError::internal())?
         .len()

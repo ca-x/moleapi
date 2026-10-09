@@ -446,6 +446,7 @@ pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
             }
         }
     }
+    crate::validate_scenarios(data)?;
     for e in &data.environments {
         validate_variables(&e.variables)?;
         ensure!(

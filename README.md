@@ -118,3 +118,5 @@ GitHub Actions checks source and real database cases, and builds platform server
 The transparent mole logo was supplied by the project owner. Competitor names and original materials belong to their respective owners and are retained as research references; the application does not use competitor brand assets.
 
 Response extraction rules support JSON Pointer, JSONPath, XPath, regex, headers and full bodies, targeting the selected development environment, collection, project or temporary variables. They run before post scripts and supply subsequent collection requests; shared workspace values are not automatically overwritten. See [extraction coverage and limits](docs/RESPONSE-EXTRACTION-COVERAGE.md).
+
+Saved test scenarios reference original interfaces with custom step order, groups, enable flags and repeated requests. Run them with the selected environment and existing dataset/iteration options; create/edit/reorder/save them on the testing page. See [scenario behavior and remaining scope](docs/SCENARIO-COVERAGE.md).

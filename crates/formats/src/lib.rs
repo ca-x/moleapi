@@ -271,6 +271,7 @@ pub(crate) fn data(
 ) -> WorkspaceData {
     let environment_id = uid();
     WorkspaceData {
+        scenarios: vec![],
         datasets: vec![],
         auth: None,
         global_variables: vec![],

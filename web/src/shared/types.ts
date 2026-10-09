@@ -147,7 +147,10 @@ export interface Specification {
   source: string;
   dialect: string;
 }
+export interface ScenarioStep {id:string;request_id:string;name:string;group:string;enabled:boolean}
+export interface Scenario {id:string;name:string;description:string;collection_id:string;steps:ScenarioStep[]}
 export interface WorkspaceData {
+  scenarios?:Scenario[];
   datasets?:SavedDataset[];
   auth?: Auth | null;
   global_variables?: Pair[];
@@ -234,6 +237,7 @@ export interface SyncResult {
   message: string;
 }
 export interface RunResult {
+  scenario_id?:string;
   skipped?:number;
   executed_steps?:number;
   iteration_count?:number;
@@ -243,6 +247,9 @@ export interface RunResult {
   stopped_reason?:string|null;
   omitted_responses?:number;
   results: {
+    step_id?:string;
+    step_name?:string;
+    step_group?:string;
     request_id: string;
     request_name: string;
     collection_id?:string;
@@ -257,7 +264,7 @@ export interface RunResult {
   failed: number;
   elapsed_ms: number;
 }
-export interface RunOptions {iterations?:number;dataset?:{format:"csv"|"json";source:string};dataset_id?:string}
+export interface RunOptions {scenario_id?:string;iterations?:number;dataset?:{format:"csv"|"json";source:string};dataset_id?:string}
 export interface ImportResult {
   name: string;
   data: WorkspaceData;

@@ -215,6 +215,17 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
                     || r.network.is_some()
             });
     let mut result = source.clone();
+    for scenario in &mut result.data.scenarios {
+        scenario.name = data_privacy.screen_bounded(&scenario.name, 256);
+        if scenario.name.trim().is_empty() {
+            scenario.name = "[REDACTED]".into();
+        }
+        scenario.description = data_privacy.screen_bounded(&scenario.description, 4096);
+        for step in &mut scenario.steps {
+            step.name = data_privacy.screen_bounded(&step.name, 256);
+            step.group = data_privacy.screen_bounded(&step.group, 256);
+        }
+    }
     for dataset in &mut result.data.datasets {
         dataset.name = data_privacy.screen_bounded(&dataset.name, 256);
         if dataset.name.is_empty() {
