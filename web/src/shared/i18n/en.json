@@ -1245,5 +1245,6 @@
   "WebSocket 升级需要 HTTP/1.1。": "WebSocket upgrade requires HTTP/1.1.",
   "gRPC 使用 HTTP/2；TLS、DNS 和代理配置同样适用。": "gRPC uses HTTP/2; TLS, DNS and proxy settings also apply.",
   "TCP 使用原始套接字；tcps:// 支持 CA 和客户端证书。": "TCP uses raw sockets; tcps:// supports CA and client certificates.",
-  "适用于 HTTP、SOAP、SSE、WebSocket、GraphQL、gRPC、TCP、A2A 和 MCP HTTP 请求。支持环境变量；停用后保留草稿。": "For HTTP, SOAP, SSE, WebSocket, GraphQL, gRPC, TCP, A2A and MCP HTTP requests. Variables are supported; disabling preserves drafts."
+  "适用于 HTTP、SOAP、SSE、WebSocket、GraphQL、gRPC、TCP、MQTT、Socket.IO、A2A 和 MCP HTTP 请求。支持环境变量；停用后保留草稿。": "For HTTP, SOAP, SSE, WebSocket, GraphQL, gRPC, TCP, MQTT, Socket.IO, A2A and MCP HTTP requests. Variables are supported; disabling preserves drafts.",
+  "MQTT 的 TCP/TLS 和 WebSocket 传输共用网络设置，WebSocket 升级使用 HTTP/1.1。": "MQTT TCP/TLS and WebSocket transports share network settings; WebSocket upgrades use HTTP/1.1."
 }

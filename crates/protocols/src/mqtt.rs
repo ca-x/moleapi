@@ -208,8 +208,17 @@ fn publish_properties(m: &MqttMessage) -> Result<v5::PublishProperties> {
         subscription_identifiers: vec![],
     })
 }
-fn transport(url: &url::Url, verify: bool) -> Result<Transport> {
+fn transport(
+    url: &url::Url,
+    verify: bool,
+    network: Option<&moleapi_core::RequestNetwork>,
+) -> Result<Transport> {
     let tls = || -> Result<TlsConfiguration> {
+        if let Some(network) = network {
+            return Ok(TlsConfiguration::Rustls(Arc::new(
+                moleapi_core::request_tls_config(network, verify)?,
+            )));
+        }
         let mut roots = rustls::RootCertStore::empty();
         for cert in rustls_native_certs::load_native_certs().certs {
             let _ = roots.add(cert);
@@ -267,7 +276,7 @@ impl Sdk {
             c.client_id.clone()
         };
         let port = url.port_or_known_default().unwrap();
-        let transport = transport(&url, r.verify_tls)?;
+        let transport = transport(&url, r.verify_tls, r.network.as_deref())?;
         if c.version == "5" {
             let mut o = rumqttc::v5::MqttOptions::new(id, host, port);
             o.set_clean_start(c.clean_start)
@@ -347,11 +356,15 @@ impl Sdk {
         addresses: Vec<SocketAddr>,
         timeout: u64,
         budget: Arc<rumqttc::TrafficBudget>,
+        connector: Option<rumqttc::SocketConnector>,
     ) {
         let mut n = NetworkOptions::new();
         n.set_traffic_budget(budget)
             .set_pinned_addresses(addresses)
             .set_connection_timeout(timeout.div_ceil(1000));
+        if let Some(connector) = connector {
+            n.set_socket_connector(connector);
+        }
         match self {
             Self::V3(_, e) => {
                 e.set_network_options(n);
@@ -1020,11 +1033,43 @@ pub(crate) async fn run(
         subscriptions: VecDeque::new(),
     };
     let mut attempts = 0u8;
+    let connect_timeout = request.network.as_deref().map_or(request.timeout_ms, |c| {
+        c.connect_timeout_ms.min(request.timeout_ms)
+    });
+    let connector: Option<rumqttc::SocketConnector> = request.network.clone().map(|network| {
+        let endpoint = url.clone();
+        let verify = request.verify_tls;
+        Arc::new(move || {
+            let endpoint = endpoint.clone();
+            let network = network.clone();
+            Box::pin(async move {
+                let socket = tokio::time::timeout(
+                    Duration::from_millis(connect_timeout),
+                    moleapi_core::connect_request_socket(&endpoint, policy, verify, &network, true),
+                )
+                .await
+                .map_err(|_| {
+                    std::io::Error::new(std::io::ErrorKind::TimedOut, "MQTT socket timed out")
+                })?
+                .map_err(std::io::Error::other)?;
+                Ok(Box::new(socket) as Box<dyn rumqttc::AsyncReadWrite>)
+            }) as rumqttc::SocketFuture
+        }) as rumqttc::SocketConnector
+    });
     let mut connecting = true;
     loop {
         if connecting {
-            let destinations = tokio::select! {biased;_ = session.cancel.cancelled()=>return Ok("MQTT closed before connecting".into()), result=tokio::time::timeout(Duration::from_millis(request.timeout_ms),moleapi_core::checked_destination(&url,policy))=>result.context("MQTT DNS timed out")??};
-            sdk.pin(destinations, request.timeout_ms, budget.clone());
+            let destinations = if connector.is_some() {
+                Vec::new()
+            } else {
+                tokio::select! {biased;_ = session.cancel.cancelled()=>return Ok("MQTT closed before connecting".into()), result=tokio::time::timeout(Duration::from_millis(request.timeout_ms),moleapi_core::checked_destination(&url,policy))=>result.context("MQTT DNS timed out")??}
+            };
+            sdk.pin(
+                destinations,
+                connect_timeout,
+                budget.clone(),
+                connector.clone(),
+            );
         }
         while !connecting && !runtime.subscriptions.is_empty() {
             if sdk
@@ -1037,7 +1082,7 @@ pub(crate) async fn run(
         }
         let poll = async {
             if connecting {
-                tokio::time::timeout(Duration::from_millis(request.timeout_ms), sdk.poll())
+                tokio::time::timeout(Duration::from_millis(connect_timeout), sdk.poll())
                     .await
                     .context("MQTT connection timed out")?
             } else {

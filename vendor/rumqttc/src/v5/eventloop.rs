@@ -317,7 +317,9 @@ async fn network_connect(options: &MqttOptions) -> Result<Network, ConnectionErr
         _ => options.broker_address(),
     };
 
-    let tcp_stream: Box<dyn AsyncReadWrite> = {
+    let tcp_stream: Box<dyn AsyncReadWrite> = if let Some(connector) = options.network_options().socket_connector.clone() {
+        connector().await?
+    } else {
         #[cfg(feature = "proxy")]
         match options.proxy() {
             Some(proxy) => {

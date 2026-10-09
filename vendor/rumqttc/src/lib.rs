@@ -391,9 +391,14 @@ impl From<TlsConnector> for TlsConfiguration {
     }
 }
 
+/// Injected IO only; the SDK retains TLS/WebSocket/MQTT framing and state.
+pub use framed::AsyncReadWrite;
+pub type SocketFuture = std::pin::Pin<Box<dyn std::future::Future<Output=std::io::Result<Box<dyn AsyncReadWrite>>> + Send>>;
+pub type SocketConnector = std::sync::Arc<dyn Fn() -> SocketFuture + Send + Sync>;
 /// Provides a way to configure low level network connection configurations
 #[derive(Clone, Default)]
 pub struct NetworkOptions {
+    socket_connector: Option<SocketConnector>,
     /// Prevalidated destinations. When set, DNS is never queried by the SDK.
     pinned_addresses: Option<Vec<std::net::SocketAddr>>,
     traffic_budget: Option<std::sync::Arc<TrafficBudget>>,
@@ -408,6 +413,7 @@ pub struct NetworkOptions {
 impl NetworkOptions {
     pub fn new() -> Self {
         NetworkOptions {
+            socket_connector: None,
             pinned_addresses: None,
             traffic_budget: None,
             tcp_send_buffer_size: None,
@@ -419,6 +425,7 @@ impl NetworkOptions {
         }
     }
 
+    pub fn set_socket_connector(&mut self, connector: SocketConnector) -> &mut Self { self.socket_connector = Some(connector); self }
     pub fn set_traffic_budget(&mut self, budget: std::sync::Arc<TrafficBudget>) -> &mut Self { self.traffic_budget = Some(budget); self }
 
     /// Pin all connections while preserving the original TLS and WebSocket hostname.

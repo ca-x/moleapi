@@ -1,3 +1,4 @@
+import NetworkSettings from "../network/NetworkSettings";
 import { t, useLanguage, message } from "../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -286,6 +287,7 @@ export default function MqttWorkbench() {
           />
         </Tabs.Content>
         <Tabs.Content value="settings">
+          <NetworkSettings key={identity} mqtt value={state.request?.network} change={network=>state.updateRequest({network})} disabled={active||busy}/>
           <MqttConnection
             value={config}
             onChange={(value) => update(value)}

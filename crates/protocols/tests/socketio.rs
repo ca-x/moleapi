@@ -653,3 +653,209 @@ async fn official_socketio4_ordinary_error_open_close_event_listeners_and_emits(
     }
     manager.remove("owner", &id).await.unwrap();
 }
+#[tokio::test]
+#[ignore = "official Socket.IO TLS fixture requires node and npm ci"]
+async fn socketio_network_ca_dns_and_pem_pfx_mutual_tls_preserve_original_sni() {
+    use rcgen::{BasicConstraints, CertificateParams, ExtendedKeyUsagePurpose, IsCa, KeyPair};
+    use tokio::io::{AsyncBufReadExt, BufReader};
+    let mut params = CertificateParams::new(vec!["Socket.IO Test CA".into()]).unwrap();
+    params
+        .distinguished_name
+        .push(rcgen::DnType::CommonName, "Socket.IO network CA");
+    params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+    let ca_key = KeyPair::generate().unwrap();
+    let ca = params.self_signed(&ca_key).unwrap();
+    let issuer = rcgen::Issuer::from_params(&params, &ca_key);
+    let mut params = CertificateParams::new(vec!["socketio-network.test".into()]).unwrap();
+    params
+        .distinguished_name
+        .push(rcgen::DnType::CommonName, "socketio-network.test");
+    params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
+    let server_key = KeyPair::generate().unwrap();
+    let cert = params.signed_by(&server_key, &issuer).unwrap();
+    let mut params = CertificateParams::new(vec!["client.test".into()]).unwrap();
+    params
+        .distinguished_name
+        .push(rcgen::DnType::CommonName, "socketio-client");
+    params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ClientAuth];
+    let client_key = KeyPair::generate().unwrap();
+    let client_cert = params.signed_by(&client_key, &issuer).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let cert_path = dir.path().join("cert.pem");
+    let key_path = dir.path().join("key.pem");
+    let ca_path = dir.path().join("ca.pem");
+    std::fs::write(&cert_path, cert.pem()).unwrap();
+    std::fs::write(&key_path, server_key.serialize_pem()).unwrap();
+    std::fs::write(&ca_path, ca.pem()).unwrap();
+    let mut server = tokio::process::Command::new("node")
+        .arg(format!(
+            "{}/tests/fixtures/socketio/server.cjs",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .env("TLS_CERT", cert_path)
+        .env("TLS_KEY", key_path)
+        .env("TLS_CA", ca_path)
+        .env("TLS_REQUIRE_CLIENT", "1")
+        .env("TLS_HOST", "socketio-network.test")
+        .env("PORT", "0")
+        .stdout(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let mut lines = BufReader::new(server.stdout.take().unwrap()).lines();
+    let ready = tokio::time::timeout(Duration::from_secs(5), lines.next_line())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let port = ready.strip_prefix("ready:").unwrap();
+    let mut r = request(&format!("wss://socketio-network.test:{port}"));
+    r.network = Some(Box::new(moleapi_core::RequestNetwork {
+        built_in_roots: false,
+        ca_pem: ca.pem(),
+        dns: vec![moleapi_core::DnsOverride {
+            hostname: "socketio-network.test".into(),
+            addresses: vec!["127.0.0.1".into()],
+        }],
+        identity: moleapi_core::ClientIdentity {
+            enabled: true,
+            certificate_pem: client_cert.pem(),
+            key_pem: client_key.serialize_pem(),
+            ..Default::default()
+        },
+        ..Default::default()
+    }));
+    let mut store = p12_keystore::KeyStore::new();
+    store.add_entry(
+        "socketio-client",
+        p12_keystore::KeyStoreEntry::PrivateKeyChain(p12_keystore::PrivateKeyChain::new(
+            &[1u8, 2, 3][..],
+            p12_keystore::PrivateKey::from_der(&client_key.serialize_der()).unwrap(),
+            [p12_keystore::Certificate::from_der(client_cert.der()).unwrap()],
+        )),
+    );
+    use base64::Engine;
+    let pfx = base64::engine::general_purpose::STANDARD
+        .encode(store.writer("socketio-private").write().unwrap());
+    for pfx_mode in [false, true] {
+        if pfx_mode {
+            r.network.as_mut().unwrap().identity = moleapi_core::ClientIdentity {
+                enabled: true,
+                format: moleapi_core::IdentityFormat::Pkcs12,
+                pkcs12_base64: pfx.clone(),
+                password: "socketio-private".into(),
+                alias: "socketio-client".into(),
+                ..Default::default()
+            };
+        }
+        let manager = SessionManager::new();
+        let id = start(&manager, r.clone(), true);
+        state(&manager, &id, SessionState::Open).await;
+        manager
+            .send(
+                "owner",
+                &id,
+                emit(
+                    "echo",
+                    r#"["network-ok",42]"#,
+                    &[],
+                    Some("network-ack"),
+                    1000,
+                ),
+            )
+            .unwrap();
+        let received = event(
+            &manager,
+            &id,
+            |e| matches!(e,EventMessage::SocketioEvent {event,..} if event=="echo"),
+        )
+        .await;
+        let EventMessage::SocketioEvent { arguments, .. } = received else {
+            unreachable!()
+        };
+        assert_eq!(
+            arguments,
+            json!(["network-ok", 42]).as_array().unwrap().clone()
+        );
+        manager.close("owner", &id).await.unwrap();
+    }
+    server.kill().await.unwrap();
+    server.wait().await.unwrap();
+}
+#[tokio::test]
+#[ignore = "official Socket.IO 4 fixture"]
+async fn socketio_network_connect_proxy_preserves_host_and_isolates_proxy_credentials() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let endpoint = url::Url::parse(&fixture()).unwrap();
+    let port = endpoint.port().unwrap();
+    let proxy = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let proxy_url = format!("http://{}", proxy.local_addr().unwrap());
+    let tunnel = tokio::spawn(async move {
+        let (mut socket, _) = proxy.accept().await.unwrap();
+        let mut header = Vec::new();
+        while !header.ends_with(b"\r\n\r\n") {
+            header.push(socket.read_u8().await.unwrap());
+            assert!(header.len() < 8192);
+        }
+        let header = String::from_utf8(header).unwrap();
+        assert!(header.starts_with(&format!("CONNECT 127.0.0.1:{port} HTTP/1.1")));
+        assert!(
+            header.to_ascii_lowercase().contains(
+                "proxy-authorization: basic dXNlcjpwYXNz"
+                    .to_ascii_lowercase()
+                    .as_str()
+            )
+        );
+        let mut target = tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .unwrap();
+        socket
+            .write_all(b"HTTP/1.1 200 Connection established\r\n\r\n")
+            .await
+            .unwrap();
+        let _ = tokio::io::copy_bidirectional(&mut socket, &mut target).await;
+    });
+    let mut r = request(&format!("ws://socketio-network.test:{port}"));
+    let moleapi_core::Protocol::Socketio { listeners, .. } = &mut r.protocol else {
+        unreachable!()
+    };
+    listeners.push("network-info".into());
+    r.network = Some(Box::new(moleapi_core::RequestNetwork {
+        proxy: moleapi_core::RequestProxy {
+            enabled: true,
+            url: proxy_url,
+            username: "user".into(),
+            password: "pass".into(),
+            ..Default::default()
+        },
+        dns: vec![moleapi_core::DnsOverride {
+            hostname: "socketio-network.test".into(),
+            addresses: vec!["127.0.0.1".into()],
+        }],
+        ..Default::default()
+    }));
+    let manager = SessionManager::new();
+    let id = start(&manager, r.clone(), true);
+    state(&manager, &id, SessionState::Open).await;
+    manager
+        .send("owner", &id, emit("network-info", "[]", &[], None, 1000))
+        .unwrap();
+    let e = event(
+        &manager,
+        &id,
+        |e| matches!(e,EventMessage::SocketioEvent {event,..} if event=="network-info"),
+    )
+    .await;
+    let EventMessage::SocketioEvent { arguments, .. } = e else {
+        unreachable!()
+    };
+    assert_eq!(
+        arguments[0]["host"],
+        format!("socketio-network.test:{port}")
+    );
+    assert!(arguments[0]["proxyAuthorization"].is_null());
+    manager.close("owner", &id).await.unwrap();
+    tunnel.abort();
+    let denied = start(&manager, r, false);
+    state(&manager, &denied, SessionState::Error).await;
+}

@@ -49,12 +49,10 @@ impl WebsocketTransport {
     }
 
     /// Use an externally connected websocket without DNS, proxies, or reconnects.
-    pub(crate) async fn from_stream(
-        base_url: Url,
-        stream: tokio_tungstenite::WebSocketStream<
-            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
-        >,
-    ) -> Self {
+    pub(crate) async fn from_stream<S>(base_url: Url, stream:S) -> Self
+    where S: futures_util::Sink<tokio_tungstenite::tungstenite::Message,Error=tokio_tungstenite::tungstenite::Error>
+        + futures_util::Stream<Item=std::result::Result<tokio_tungstenite::tungstenite::Message,tokio_tungstenite::tungstenite::Error>>
+        + Send + Unpin + 'static {
         let (sender, receiver) = stream.split();
         Self {
             inner: AsyncWebsocketGeneralTransport::new(sender, receiver)

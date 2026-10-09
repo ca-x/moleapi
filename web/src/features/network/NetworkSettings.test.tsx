@@ -38,3 +38,10 @@ it("hides HTTP version for raw TCP and preserves certificate source when changin
  fireEvent.change(screen.getByLabelText("Connect timeout (ms)"),{target:{value:"2500"}});
  expect(change.mock.calls[0][0]).toMatchObject({http_mode:"http1",connect_timeout_ms:2500,identity:{key_pem:"{{tcp_key}}"}});
 });
+it("MQTT settings retain identity drafts and hide unsupported HTTP2 selection",async()=>{
+ await setLanguage("en");const change=vi.fn();const c={...defaultNetwork(),http_mode:"auto" as const};c.identity.pkcs12_base64="{{mqtt_pfx}}";
+ render(<Theme><NetworkSettings mqtt value={c} change={change}/></Theme>);
+ expect(screen.queryByRole("combobox",{name:"HTTP version"})).toBeNull();
+ fireEvent.change(screen.getByLabelText("Connect timeout (ms)"),{target:{value:"1500"}});
+ expect(change.mock.calls[0][0]).toMatchObject({http_mode:"http1",identity:{pkcs12_base64:"{{mqtt_pfx}}"}});
+});

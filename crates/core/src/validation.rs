@@ -143,6 +143,8 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
                     | Protocol::Mcp { .. }
                     | Protocol::Grpc { .. }
                     | Protocol::Tcp { .. }
+                    | Protocol::Mqtt { .. }
+                    | Protocol::Socketio { .. }
             ),
             "Selected network settings require a supported HTTP transport"
         );
@@ -150,6 +152,18 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
             !matches!(&r.protocol, Protocol::Mcp{config} if config.transport != "http"),
             "Network settings require MCP HTTP transport"
         );
+        if r.protocol.is_socketio() {
+            ensure!(
+                c.http_mode == crate::HttpMode::Http1,
+                "Socket.IO WebSocket transport requires HTTP/1.1 network mode"
+            );
+        }
+        if r.protocol.is_mqtt() {
+            ensure!(
+                c.http_mode == crate::HttpMode::Http1,
+                "MQTT WebSocket transport requires HTTP/1.1 network mode"
+            );
+        }
         if r.protocol.is_tcp() {
             ensure!(
                 c.http_mode == crate::HttpMode::Http1,

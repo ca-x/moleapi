@@ -1,7 +1,7 @@
 const http = require('node:http');
 const { Server } = require('socket.io');
 const fs = require('node:fs');
-const server = process.env.TLS_CERT ? require('node:https').createServer({ cert: fs.readFileSync(process.env.TLS_CERT), key: fs.readFileSync(process.env.TLS_KEY) }) : http.createServer();
+const server = process.env.TLS_CERT ? require('node:https').createServer({ cert: fs.readFileSync(process.env.TLS_CERT), key: fs.readFileSync(process.env.TLS_KEY), ca: process.env.TLS_CA ? fs.readFileSync(process.env.TLS_CA) : undefined, requestCert: process.env.TLS_REQUIRE_CLIENT === "1", rejectUnauthorized: process.env.TLS_REQUIRE_CLIENT === "1" }) : http.createServer();
 const io = new Server(server, { path: '/custom/socket.io/', transports: ['websocket'], pingInterval: 200, pingTimeout: 1000, maxHttpBufferSize: 1024 * 1024 });
 io.of('/fixture').use((socket, next) => {
   if (process.env.TLS_HOST && socket.request.socket.servername !== process.env.TLS_HOST) return next(new Error('Original TLS hostname required'));
@@ -17,6 +17,7 @@ io.of('/fixture').use((socket, next) => {
       if (ack) ack(...args);
     });
   }
+  socket.on('network-info', () => socket.emit('network-info', {host: socket.handshake.headers.host, proxyAuthorization: socket.handshake.headers['proxy-authorization'] ?? null, tlsAuthorized: socket.request.socket.authorized ?? null}));
   socket.on('scope-check', value => socket.emit('echo', { scope_correct: value === 'script-selected', auth_correct: socket.handshake.auth.token === 'fixture-token' }));
   socket.on('ack-error', (_value, ack) => ack({ error: 'application-error', code: 42 }));
   socket.on('ack-timeout', () => {});

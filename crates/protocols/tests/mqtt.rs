@@ -755,3 +755,253 @@ async fn v5_actual_acl_publish_rejection_has_broker_reason_not_successful_delive
     event(&m,&id,after,|e,_|matches!(e,EventMessage::MqttStatus{operation,status,..} if operation=="publish"&&status=="acknowledged")).await;
     m.close_owner("owner").await;
 }
+#[tokio::test]
+#[ignore = "requires isolated Mosquitto 2.x broker binary"]
+async fn mqtt_network_proxy_dns_and_qos_both_versions_use_checked_socket_injection() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let broker = Broker::new(false, false);
+    let port = broker.port;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let proxy_url = format!("http://{}", listener.local_addr().unwrap());
+    let proxy = tokio::spawn(async move {
+        for _ in 0..2 {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            tokio::spawn(async move {
+                let mut header = Vec::new();
+                while !header.ends_with(b"\r\n\r\n") {
+                    header.push(socket.read_u8().await.unwrap());
+                    assert!(header.len() < 8192);
+                }
+                let header = String::from_utf8(header).unwrap();
+                assert!(header.starts_with(&format!("CONNECT 127.0.0.1:{port} HTTP/1.1")));
+                assert!(
+                    header.to_ascii_lowercase().contains(
+                        "proxy-authorization: basic dXNlcjpwYXNz"
+                            .to_ascii_lowercase()
+                            .as_str()
+                    )
+                );
+                let mut target = tokio::net::TcpStream::connect(("127.0.0.1", port))
+                    .await
+                    .unwrap();
+                socket
+                    .write_all(b"HTTP/1.1 200 Connection established\r\n\r\n")
+                    .await
+                    .unwrap();
+                let _ = tokio::io::copy_bidirectional(&mut socket, &mut target).await;
+            });
+        }
+    });
+    for version in ["3.1.1", "5"] {
+        let mut r = request(&format!("mqtt://mqtt-network.test:{port}"), version);
+        r.network = Some(Box::new(moleapi_core::RequestNetwork {
+            proxy: moleapi_core::RequestProxy {
+                enabled: true,
+                url: proxy_url.clone(),
+                username: "user".into(),
+                password: "pass".into(),
+                ..Default::default()
+            },
+            dns: vec![moleapi_core::DnsOverride {
+                hostname: "mqtt-network.test".into(),
+                addresses: vec!["127.0.0.1".into()],
+            }],
+            ..Default::default()
+        }));
+        let m = SessionManager::new();
+        let id = start(&m, r.clone(), true);
+        state(&m, &id, SessionState::Open).await;
+        sub(&m, &id, "network/echo").await;
+        m.send(
+            "owner",
+            &id,
+            SendMessage::MqttPublish {
+                message: message("network/echo", "network-ok", 2, false),
+            },
+        )
+        .unwrap();
+        event(&m, &id, 0, |e, d| {
+            d == "incoming"
+                && matches!(e,EventMessage::MqttMessage {topic,..} if topic=="network/echo")
+        })
+        .await;
+        m.close("owner", &id).await.unwrap();
+        let denied = start(&m, r, false);
+        state(&m, &denied, SessionState::Error).await;
+        assert!(
+            m.summary("owner", &denied)
+                .unwrap()
+                .reason
+                .unwrap()
+                .contains("private-network")
+        );
+    }
+    proxy.await.unwrap();
+}
+#[tokio::test]
+#[ignore = "requires isolated Mosquitto 2.x broker binary"]
+async fn mqtt_network_custom_ca_preserves_original_tls_name_both_versions() {
+    let broker = Broker::new(true, false);
+    let ca = std::fs::read_to_string(broker.directory.path().join("cert.pem")).unwrap();
+    for version in ["3.1.1", "5"] {
+        let mut r = request(&broker.url(true), version);
+        r.network = Some(Box::new(moleapi_core::RequestNetwork {
+            built_in_roots: false,
+            ca_pem: ca.clone(),
+            dns: vec![moleapi_core::DnsOverride {
+                hostname: "localhost".into(),
+                addresses: vec!["127.0.0.1".into()],
+            }],
+            ..Default::default()
+        }));
+        let m = SessionManager::new();
+        let id = start(&m, r, true);
+        state(&m, &id, SessionState::Open).await;
+        m.close("owner", &id).await.unwrap();
+    }
+}
+#[tokio::test]
+#[ignore = "requires isolated Mosquitto 2.x broker binary"]
+async fn mqtt_network_mutual_tls_pem_and_pfx_are_verified_by_mature_broker() {
+    use rcgen::{BasicConstraints, CertificateParams, ExtendedKeyUsagePurpose, IsCa, KeyPair};
+    let mut broker = Broker::new(true, false);
+    broker.stop();
+    let mut params = CertificateParams::new(vec!["MQTT Test CA".into()]).unwrap();
+    params
+        .distinguished_name
+        .push(rcgen::DnType::CommonName, "MQTT network CA");
+    params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+    let ca_key = KeyPair::generate().unwrap();
+    let ca = params.self_signed(&ca_key).unwrap();
+    let issuer = rcgen::Issuer::from_params(&params, &ca_key);
+    let mut params = CertificateParams::new(vec!["localhost".into()]).unwrap();
+    params
+        .distinguished_name
+        .push(rcgen::DnType::CommonName, "localhost");
+    params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
+    let server_key = KeyPair::generate().unwrap();
+    let cert = params.signed_by(&server_key, &issuer).unwrap();
+    let mut params = CertificateParams::new(vec!["client.test".into()]).unwrap();
+    params
+        .distinguished_name
+        .push(rcgen::DnType::CommonName, "mqtt-client");
+    params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ClientAuth];
+    let client_key = KeyPair::generate().unwrap();
+    let client_cert = params.signed_by(&client_key, &issuer).unwrap();
+    std::fs::write(broker.directory.path().join("cert.pem"), cert.pem()).unwrap();
+    std::fs::write(
+        broker.directory.path().join("key.pem"),
+        server_key.serialize_pem(),
+    )
+    .unwrap();
+    std::fs::write(broker.directory.path().join("ca.pem"), ca.pem()).unwrap();
+    let config_path = broker.directory.path().join("broker.conf");
+    let mut text = std::fs::read_to_string(&config_path).unwrap();
+    text += &format!(
+        "cafile {}\nrequire_certificate true\n",
+        broker.directory.path().join("ca.pem").display()
+    );
+    std::fs::write(config_path, text).unwrap();
+    broker.restart();
+    let mut store = p12_keystore::KeyStore::new();
+    store.add_entry(
+        "mqtt-client",
+        p12_keystore::KeyStoreEntry::PrivateKeyChain(p12_keystore::PrivateKeyChain::new(
+            &[1u8, 2, 3][..],
+            p12_keystore::PrivateKey::from_der(&client_key.serialize_der()).unwrap(),
+            [p12_keystore::Certificate::from_der(client_cert.der()).unwrap()],
+        )),
+    );
+    let pfx = STANDARD.encode(store.writer("mqtt-private").write().unwrap());
+    for version in ["3.1.1", "5"] {
+        let mut r = request(&broker.url(true), version);
+        r.network = Some(Box::new(moleapi_core::RequestNetwork {
+            built_in_roots: false,
+            ca_pem: ca.pem(),
+            identity: if version == "5" {
+                moleapi_core::ClientIdentity {
+                    enabled: true,
+                    format: moleapi_core::IdentityFormat::Pkcs12,
+                    pkcs12_base64: pfx.clone(),
+                    password: "mqtt-private".into(),
+                    alias: "mqtt-client".into(),
+                    ..Default::default()
+                }
+            } else {
+                moleapi_core::ClientIdentity {
+                    enabled: true,
+                    certificate_pem: client_cert.pem(),
+                    key_pem: client_key.serialize_pem(),
+                    ..Default::default()
+                }
+            },
+            ..Default::default()
+        }));
+        let m = SessionManager::new();
+        let id = start(&m, r, true);
+        state(&m, &id, SessionState::Open).await;
+        m.close("owner", &id).await.unwrap();
+    }
+}
+#[tokio::test]
+#[ignore = "requires isolated Mosquitto 2.x broker binary"]
+async fn mqtt_network_dns_factory_reconnects_and_restores_subscriptions() {
+    let mut broker = Broker::new(false, false);
+    let m = SessionManager::new();
+    let mut r = request(&format!("mqtt://mqtt-reconnect.test:{}", broker.port), "5");
+    r.network = Some(Box::new(moleapi_core::RequestNetwork {
+        dns: vec![moleapi_core::DnsOverride {
+            hostname: "mqtt-reconnect.test".into(),
+            addresses: vec!["127.0.0.1".into()],
+        }],
+        ..Default::default()
+    }));
+    config(&mut r).reconnect.enabled = true;
+    config(&mut r).reconnect.max_attempts = 5;
+    config(&mut r).reconnect.delay_ms = 100;
+    let id = start(&m, r, true);
+    state(&m, &id, SessionState::Open).await;
+    sub(&m, &id, "network/reconnect").await;
+    broker.stop();
+    event(&m,&id,0,|e,_|matches!(e,EventMessage::MqttStatus {operation,status,..} if operation=="reconnect"&&status=="waiting")).await;
+    broker.restart();
+    state(&m, &id, SessionState::Open).await;
+    event(&m,&id,0,|e,_|matches!(e,EventMessage::MqttStatus {operation,status,..} if operation=="subscribe"&&status=="acknowledged")).await;
+    let after = m.events("owner", &id, 0).unwrap().next_cursor;
+    publish(
+        &m,
+        &id,
+        message("network/reconnect", "restored-network", 1, false),
+    );
+    event(&m,&id,after,|e,d|d=="incoming"&&matches!(e,EventMessage::MqttMessage {payload_text:Some(text),..} if text=="restored-network")).await;
+    m.close("owner", &id).await.unwrap();
+}
+#[tokio::test]
+#[ignore = "requires isolated Mosquitto 2.x broker with WebSocket support"]
+async fn mqtt_network_wss_uses_dns_custom_ca_and_sdk_upgrade_both_versions() {
+    let broker = Broker::new_transport(true, false, true);
+    let ca = std::fs::read_to_string(broker.directory.path().join("cert.pem")).unwrap();
+    for version in ["3.1.1", "5"] {
+        let mut r = request(
+            &format!("wss://localhost:{}/mqtt?network=enabled", broker.port),
+            version,
+        );
+        r.network = Some(Box::new(moleapi_core::RequestNetwork {
+            built_in_roots: false,
+            ca_pem: ca.clone(),
+            dns: vec![moleapi_core::DnsOverride {
+                hostname: "localhost".into(),
+                addresses: vec!["127.0.0.1".into()],
+            }],
+            ..Default::default()
+        }));
+        let m = SessionManager::new();
+        let id = start(&m, r, true);
+        state(&m, &id, SessionState::Open).await;
+        sub(&m, &id, "network/wss").await;
+        let after = m.events("owner", &id, 0).unwrap().next_cursor;
+        publish(&m, &id, message("network/wss", "wss-network-ok", 1, false));
+        event(&m,&id,after,|e,d|d=="incoming"&&matches!(e,EventMessage::MqttMessage {payload_text:Some(text),..} if text=="wss-network-ok")).await;
+        m.close("owner", &id).await.unwrap();
+    }
+}

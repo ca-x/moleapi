@@ -5,15 +5,14 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use bytes::Bytes;
 use futures_util::{
     ready,
-    stream::{SplitSink, SplitStream},
-    FutureExt, SinkExt, Stream, StreamExt,
+    FutureExt, Sink, SinkExt, Stream, StreamExt,
 };
-use tokio::{net::TcpStream, sync::Mutex};
-use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
+use tokio::sync::Mutex;
+use std::pin::Pin;
 use tungstenite::Message;
 
-type AsyncWebsocketSender = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
-type AsyncWebsocketReceiver = SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>;
+type AsyncWebsocketSender = Pin<Box<dyn Sink<Message, Error=tungstenite::Error> + Send>>;
+type AsyncWebsocketReceiver = Pin<Box<dyn Stream<Item=std::result::Result<Message,tungstenite::Error>> + Send>>;
 
 /// A general purpose asynchronous websocket transport type. Holds
 /// the sender and receiver stream of a websocket connection
@@ -28,15 +27,14 @@ pub(crate) struct AsyncWebsocketGeneralTransport {
 }
 
 impl AsyncWebsocketGeneralTransport {
-    pub(crate) async fn new(
-        sender: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
-        receiver: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
-    ) -> Self {
+    pub(crate) async fn new<S,R>(sender: S, receiver: R) -> Self
+    where S: Sink<Message,Error=tungstenite::Error> + Send + 'static,
+          R: Stream<Item=std::result::Result<Message,tungstenite::Error>> + Send + 'static {
         AsyncWebsocketGeneralTransport {
-            sender: Arc::new(Mutex::new(sender)),
+            sender: Arc::new(Mutex::new(Box::pin(sender))),
             received: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
             received_limit: None,
-            receiver: Arc::new(Mutex::new(receiver)),
+            receiver: Arc::new(Mutex::new(Box::pin(receiver))),
         }
     }
 

@@ -11,7 +11,7 @@ use rust_socketio::{
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use tokio_tungstenite::{
-    Connector, client_async_tls_with_config,
+    Connector, client_async_tls_with_config, client_async_with_config,
     tungstenite::{client::IntoClientRequest, protocol::WebSocketConfig},
 };
 
@@ -351,12 +351,11 @@ pub(crate) async fn run(
         .query_pairs_mut()
         .append_pair("EIO", "4")
         .append_pair("transport", "websocket");
-    let deadline = tokio::time::Instant::now() + Duration::from_millis(request.timeout_ms);
+    let deadline = tokio::time::Instant::now()
+        + Duration::from_millis(request.network.as_deref().map_or(request.timeout_ms, |c| {
+            c.connect_timeout_ms.min(request.timeout_ms)
+        }));
     let connect = async {
-        let addresses = checked_destination(&url, policy).await?;
-        let tcp = tokio::net::TcpStream::connect(addresses.as_slice())
-            .await
-            .context("Socket.IO pinned connection failed")?;
         let mut handshake_request = wire_url.as_str().into_client_request()?;
         handshake_request
             .headers_mut()
@@ -368,18 +367,51 @@ pub(crate) async fn run(
             write_buffer_size: 0,
             ..Default::default()
         };
-        let tls = native_tls::TlsConnector::builder()
-            .danger_accept_invalid_certs(!request.verify_tls)
-            .danger_accept_invalid_hostnames(!request.verify_tls)
-            .build()?;
-        // Original URL controls Host and SNI; the stream uses only policy-checked pinned addresses.
-        let (stream, response) = client_async_tls_with_config(
-            handshake_request,
-            tcp,
-            Some(config),
-            Some(Connector::NativeTls(tls)),
-        )
-        .await?;
+        let (stream, response) = if let Some(network) = request.network.as_deref() {
+            let socket = moleapi_core::connect_request_socket(
+                &url,
+                policy,
+                request.verify_tls,
+                network,
+                true,
+            )
+            .await?;
+            let socket: Box<dyn moleapi_core::NetworkStream> = if url.scheme() == "wss" {
+                let mut tls = moleapi_core::request_tls_config(network, request.verify_tls)?;
+                tls.alpn_protocols = vec![b"http/1.1".to_vec()];
+                let name = rustls::pki_types::ServerName::try_from(
+                    url.host_str().unwrap().trim_matches(['[', ']']).to_owned(),
+                )?;
+                Box::new(
+                    tokio_rustls::TlsConnector::from(Arc::new(tls))
+                        .connect(name, socket)
+                        .await?,
+                )
+            } else {
+                socket
+            };
+            let (stream, response) =
+                client_async_with_config(handshake_request, socket, Some(config)).await?;
+            (futures_util::future::Either::Left(stream), response)
+        } else {
+            let addresses = checked_destination(&url, policy).await?;
+            let tcp = tokio::net::TcpStream::connect(addresses.as_slice())
+                .await
+                .context("Socket.IO pinned connection failed")?;
+            let tls = native_tls::TlsConnector::builder()
+                .danger_accept_invalid_certs(!request.verify_tls)
+                .danger_accept_invalid_hostnames(!request.verify_tls)
+                .build()?;
+            // Original URL controls Host and SNI; the stream uses only policy-checked pinned addresses.
+            let (stream, response) = client_async_tls_with_config(
+                handshake_request,
+                tcp,
+                Some(config),
+                Some(Connector::NativeTls(tls)),
+            )
+            .await?;
+            (futures_util::future::Either::Right(stream), response)
+        };
         let handshake = Handshake {
             status: response.status().as_u16(),
             headers: response

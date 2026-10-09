@@ -205,12 +205,10 @@ impl ClientBuilder {
     }
 
     /// Build using an externally checked, connected WebSocket. No resolver or fallback is used.
-    pub async fn build_websocket_on(
-        mut self,
-        stream: tokio_tungstenite::WebSocketStream<
-            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
-        >,
-    ) -> Result<Client> {
+    pub async fn build_websocket_on<S>(mut self, stream: S) -> Result<Client>
+    where S: futures_util::Sink<tokio_tungstenite::tungstenite::Message,Error=tokio_tungstenite::tungstenite::Error>
+        + futures_util::Stream<Item=std::result::Result<tokio_tungstenite::tungstenite::Message,tokio_tungstenite::tungstenite::Error>>
+        + Send + Unpin + 'static {
         let mut transport = WebsocketTransport::from_stream(self.url.clone(), stream).await;
         self.handshake_with_transport(&mut transport).await?;
         Ok(Client::new(InnerSocket::new(
