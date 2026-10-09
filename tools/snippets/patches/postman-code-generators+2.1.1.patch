@@ -1,0 +1,19 @@
+diff --git a/node_modules/postman-code-generators/codegens/nodejs-native/lib/request.js b/node_modules/postman-code-generators/codegens/nodejs-native/lib/request.js
+--- a/node_modules/postman-code-generators/codegens/nodejs-native/lib/request.js
++++ b/node_modules/postman-code-generators/codegens/nodejs-native/lib/request.js
+@@ -1,5 +1,6 @@
+ const _ = require('./lodash'),
+   { Url } = require('postman-collection/lib/collection/url'),
++  urlEncoder = require('postman-url-encoder'),
+   sanitizeOptions = require('./util').sanitizeOptions,
+   sanitize = require('./util').sanitize,
+   addFormParam = require('./util').addFormParam,
+@@ -152,7 +153,7 @@
+   if (url.port) {
+     optionsArray.push(`${indentString}'port': ${url.port}`);
+   }
+-  optionsArray.push(`${indentString}'path': '${sanitize(path)}${sanitize(encodeURI(query))}'`);
++  optionsArray.push(`${indentString}'path': '${sanitize(urlEncoder.toNodeUrl(request.url.toString()).path)}'`);
+   optionsArray.push(parseRequest.parseHeader(request, indentString));
+   if (options.followRedirect) {
+     optionsArray.push(indentString + '\'maxRedirects\': 20');

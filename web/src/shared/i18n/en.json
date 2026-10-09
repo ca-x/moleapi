@@ -1348,5 +1348,8 @@
   "RestSharp 示例需要对应 NuGet 包和 RestSharp 命名空间；JSON 原始字符串需要 C# 11 或更新版本。放入异步方法或支持顶层 await 的项目中使用。": "RestSharp snippets need its NuGet package and the RestSharp namespace. JSON raw strings require C# 11 or newer. Use an async method or a project supporting top-level await.",
   "HttpClient 示例需要 System.Net.Http 和 System.Net.Http.Headers 命名空间；JSON 原始字符串需要 C# 11 或更新版本。放入异步方法或支持顶层 await 的项目中使用。": "HttpClient snippets need the System.Net.Http and System.Net.Http.Headers namespaces. JSON raw strings require C# 11 or newer. Use an async method or a project supporting top-level await.",
   "生成静态请求示例；不执行脚本、不解析环境变量、不附加浏览器私有覆盖。请检查占位符。": "Generates a static request example without running scripts, resolving environment variables or attaching private browser overrides. Review placeholders.",
-  "各语言的超时、TLS、重定向策略由其 HTTP 库决定；此轮示例尚不映射这些设置。": "Timeout, TLS and redirect behavior depends on the target HTTP library; snippets do not yet map these settings."
+  "各语言的超时、TLS、重定向策略由其 HTTP 库决定；此轮示例尚不映射这些设置。": "Timeout, TLS and redirect behavior depends on the target HTTP library; snippets do not yet map these settings.",
+  "语言与 HTTP 库按 Apifox／Postman 官方请求代码列表提供；库依赖需要在目标项目中安装。": "Languages and HTTP libraries follow the official Apifox/Postman request-code lists. Install library dependencies in the target project.",
+  "此选项生成 Node.js CommonJS 代码；Request、Unirest 和 follow-redirects 等依赖按生成的 require 安装。": "This option generates Node.js CommonJS code. Install dependencies such as Request, Unirest and follow-redirects as indicated by require statements.",
+  "此选项生成 Postman CLI 命令，需要目标环境安装该 CLI；生成过程不会执行命令。": "This option generates Postman CLI commands and requires that CLI in the target environment. Generation does not execute commands."
 }

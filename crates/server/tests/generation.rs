@@ -99,7 +99,7 @@ async fn generation_is_owned_private_by_default_and_preserves_explicit_originals
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(catalog["targets"].as_array().unwrap().len(), 22);
+    assert_eq!(catalog["targets"].as_array().unwrap().len(), 23);
 }
 #[tokio::test]
 async fn local_native_router_generation_rejects_missing_requests_and_invalid_targets() {

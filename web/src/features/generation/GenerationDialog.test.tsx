@@ -23,8 +23,8 @@ beforeEach(()=>{
   vi.mocked(useWorkbench).mockImplementation(()=>state);
 });
 afterEach(cleanup);
-it.each([["go","native","go"],["csharp","httpclient","cs"]])("downloads %s request code with its source extension and rejects a later owner boundary",async(target,client,extension)=>{
-  const targets={...catalog,targets:[...catalog.targets,{target,title:target,clients:[{client,title:client}]}]};
+it.each([["go","native","go"],["csharp","httpclient","cs"],["shell","curl_windows","cmd"],["node","native","cjs"]])("downloads %s request code with its source extension and rejects a later owner boundary",async(target,client,extension)=>{
+  const targets={...catalog,targets:[...catalog.targets.filter(row=>row.target!==target),{target,title:target,clients:[{client,title:client}]}]};
   const result={...snippet,target,client,code:`generated-${target}`};
   vi.mocked(api).mockImplementation(path=>Promise.resolve(path.endsWith("catalog")?targets:result));
   const view=render(<GenerationDialog open onOpenChange={vi.fn()}/>);

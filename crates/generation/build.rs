@@ -54,4 +54,12 @@ fn main() {
         metadata["version"], "0.10.5",
         "Engine version must match Rust metadata"
     );
+    assert_eq!(
+        metadata["supplemental_engine"], "postman-code-generators@2.1.1",
+        "Supplemental emitter must match the pinned runtime"
+    );
+    assert_eq!(
+        metadata["collection_sdk"], "postman-collection@5.3.1",
+        "Collection adapter must match the pinned runtime"
+    );
 }
