@@ -6,6 +6,11 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+jsonschema = {version="=0.58.5",default-features=false}
+jsonpath-rust = "=1.0.11"
+sxd-document = "=0.3.2"
+sxd-xpath = "=0.4.2"
+fancy-regex = "=0.19.2"
 csv = "=1.4.0"
 no-proxy = {version="=0.3.7",default-features=false}
 p12-keystore = "=0.3.2"

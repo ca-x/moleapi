@@ -224,8 +224,10 @@ pub(crate) async fn perform(
     let resolved = moleapi_core::prepare_authentication(&resolved)
         .map_err(|e| ApiError::bad(e.to_string()))?;
     crate::privacy::request_values(&resolved, scopes)?;
+    let mut network_request = resolved.clone();
+    network_request.assertions.clear();
     let mut response = moleapi_core::execute_with_cookies(
-        &resolved,
+        &network_request,
         None,
         moleapi_core::NetworkPolicy {
             allow_private_network: s.local || s.config.allow_private_network,
@@ -234,6 +236,10 @@ pub(crate) async fn perform(
     )
     .await
     .map_err(|e| ApiError::bad(e.to_string()))?;
+    if !resolved.assertions.is_empty() {
+        response.tests =
+            moleapi_core::assertion_worker(&s.script_worker, &resolved.assertions, &response).await;
+    }
     scopes
         .private_values
         .extend(response.private_auth_values.iter().cloned());

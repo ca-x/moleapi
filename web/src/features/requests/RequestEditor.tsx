@@ -459,7 +459,7 @@ export default function RequestEditor({
               {request.auth.kind==="inherit" && workspaceData && <Text size="1" color="gray">{t("继承来源：{{value0}}",{value0:(()=>{const source=inheritedAuthSource(workspaceData,request);return source.scope==="collection"?source.name:source.scope==="workspace"?t("工作区鉴权"):source.scope==="dynamic"?t("执行时解析环境变量后确定"):"No Auth";})()})}</Text>}
             </Tabs.Content>
             <Tabs.Content value="assertions">
-              <AssertionsEditor request={request} update={update} />
+              <AssertionsEditor request={request} update={update} dark={dark} />
             </Tabs.Content>
             <Tabs.Content value="docs">
               <div className="documentation-editor">

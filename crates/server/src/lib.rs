@@ -31,6 +31,9 @@ use axum::{
     routing::{get, post},
 };
 pub fn dispatch_script_worker() -> anyhow::Result<bool> {
+    if moleapi_core::dispatch_assertion_worker(moleapi_data::limit_headless_worker_heap)? {
+        return Ok(true);
+    }
     if moleapi_generation::project::dispatch_project_worker(
         moleapi_data::limit_headless_worker_heap,
     )? || moleapi_script_runtime::dispatch_worker()?

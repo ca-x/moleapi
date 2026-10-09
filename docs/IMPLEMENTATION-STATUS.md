@@ -241,3 +241,7 @@ Saved workspace datasets now use additive document fields with explicit names/so
 ## Script-directed request flow
 
 pm.execution.setNextRequest resolves exact IDs/unique names inside the selected subtree; null ends the current iteration while subsequent iterations continue. Pre-request skip short-circuits phases/network/post/history with an explicit skipped result, and live pre-skip blocks connection creation. Typed controls remain ephemeral. Cursor execution preserves collection overlays/dataset metadata and consumes the1000-step quota even when skipped. Actual jump/loop/null/skip/missing/ambiguous/quota/live cases, existing runner regressions and scoped UI/source checks passed; see SCRIPT-FLOW-COVERAGE.md. Visual scenario graphs, parallel/conditional blocks, schedules and full release requirements remain open.
+
+## Structured response assertions
+
+Header/regex/JSONPath/XPath/JSON Schema checks now reuse mature Rust evaluators in the shared finite HTTP/collection pipeline. Hosted/native work is isolated in a capped2s application child; external schema resources and XML DTDs are disabled, advanced regex features retain bounded support, and failures cannot pass checks. The editor provides query/pattern/schema controls. Actual structured/network/worker-timeout/diagnostic-limit and scoped frontend/source cases passed; see ADVANCED-ASSERTION-COVERAGE.md. Automatic API schema selection, event-protocol assertions, broader scenario modules and final release requirements remain unfinished.

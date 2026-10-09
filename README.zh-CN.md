@@ -11,6 +11,8 @@ MoleAPI 使用 Rust/Axum/SeaORM、React/Radix UI/CodeMirror 和 Tauri。默认 S
 
 集合脚本可通过 pm.execution 控制跳转、循环、结束本轮或跳过请求。参见[流程行为与限制](docs/SCRIPT-FLOW-COVERAGE.md)。
 
+响应检查支持 Header／正则／JSONPath／XPath／JSON Schema 断言，复用成熟 Rust 库。参见[断言能力与限制](docs/ADVANCED-ASSERTION-COVERAGE.md)。
+
 ## 软件截图
 
 截图来自实际运行的自托管界面，使用合成测试数据；与桌面端共用前端，截图不代表托盘或安装包已通过实机验证。

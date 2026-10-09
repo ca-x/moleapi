@@ -296,7 +296,12 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
         }
     }
     let mut assertion_ids = HashSet::new();
+    ensure!(r.assertions.len() <= 100, "Request exceeds 100 assertions");
     for a in &r.assertions {
+        ensure!(
+            a.id.len() <= 128 && a.name.len() <= 256,
+            "Assertion ID/name exceeds size limits"
+        );
         ensure!(
             !a.id.is_empty() && assertion_ids.insert(&a.id),
             "Assertion IDs must be unique and nonempty"
@@ -305,6 +310,16 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
             continue;
         }
         match a.kind.as_str() {
+            "header" | "regex" | "jsonpath" | "xpath" | "schema" => {
+                ensure!(
+                    a.target.len() <= 4096 && a.expected.len() <= 64 * 1024,
+                    "Advanced assertion definition exceeds size limits"
+                );
+                if !templates && matches!(a.kind.as_str(), "schema" | "jsonpath") {
+                    serde_json::from_str::<serde_json::Value>(&a.expected)
+                        .context("Invalid expected JSON assertion value")?;
+                }
+            }
             "status" | "duration" => {
                 if !templates || !a.expected.contains("{{") {
                     a.expected

@@ -78,7 +78,7 @@ export interface Auth {
 export interface Assertion {
   id: string;
   name: string;
-  kind: "status" | "duration" | "contains" | "json";
+  kind: "status" | "duration" | "contains" | "json" | "header" | "regex" | "jsonpath" | "xpath" | "schema";
   target: string;
   expected: string;
 }

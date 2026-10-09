@@ -11,6 +11,8 @@ Collection tests support temporary or saved CSV/JSON datasets, typed iteration d
 
 Collection scripts can branch, loop, stop an iteration or skip a request with pm.execution controls. See [flow behavior and limits](docs/SCRIPT-FLOW-COVERAGE.md).
 
+Response checks include header/regex/JSONPath/XPath/JSON Schema assertions through mature Rust engines. See [assertion behavior and limits](docs/ADVANCED-ASSERTION-COVERAGE.md).
+
 ## Screenshots
 
 These screenshots show the actual self-hosted interface with synthetic test data. The desktop shares this frontend; the screenshots do not establish native tray or installer verification.

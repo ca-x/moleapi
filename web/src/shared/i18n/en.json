@@ -1417,5 +1417,13 @@
   "脚本已结束集合流程。": "Script ended the collection flow.",
   "集合流程达到最大步骤限制。": "Collection flow reached its maximum step limit.",
   "下一请求不存在或名称不唯一，流程已停止。": "Next request is missing or its name is ambiguous. Flow stopped.",
-  "脚本已结束本轮流程。": "Script ended this iteration."
+  "脚本已结束本轮流程。": "Script ended this iteration.",
+  "响应 Header 等于": "Response header equals",
+  "正则匹配 / 捕获": "Regex match / capture",
+  "JSONPath 值等于": "JSONPath value equals",
+  "XPath 值等于": "XPath value equals",
+  "JSON Schema 校验": "Validate JSON Schema",
+  "正则表达式": "Regular expression",
+  "响应 Header 名称": "Response header name",
+  "断言 JSON Schema": "Assertion JSON Schema"
 }
