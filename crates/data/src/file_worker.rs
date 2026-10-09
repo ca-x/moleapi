@@ -35,6 +35,12 @@ enum Reply {
     Success(FileOutput),
     Failure(String),
 }
+/// Apply only in a headless application worker, before parsing untrusted input.
+pub fn limit_headless_worker_heap() -> Result<()> {
+    MEMORY
+        .set_limit(512 * 1024 * 1024)
+        .map_err(|_| anyhow::anyhow!("Cannot set headless worker heap limit"))
+}
 /// Invoke before CLI parsing/Tauri/Tokio initialization; only this sentinel enables heap caps.
 pub fn dispatch_file_worker() -> Result<bool> {
     if std::env::args_os().nth(1).as_deref() != Some(std::ffi::OsStr::new(ARGUMENT)) {

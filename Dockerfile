@@ -8,10 +8,13 @@ COPY web/ ./
 RUN npm run build
 
 FROM rust:1-bookworm AS rust
+RUN apt-get update && apt-get install -y --no-install-recommends python3 ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /source
 COPY Cargo.toml Cargo.lock ./
 COPY vendor/ ./vendor/
 COPY crates/ ./crates/
+COPY scripts/prepare_openapi_generator.py ./scripts/prepare_openapi_generator.py
+RUN python3 scripts/prepare_openapi_generator.py
 COPY desktop/ ./desktop/
 COPY --from=web /source/web/dist ./web/dist/
 RUN cargo build --locked --release -p moleapi-server

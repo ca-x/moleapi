@@ -59,6 +59,7 @@ jobs:
           key: server-${{ matrix.target }}
       - run: npm --prefix web ci
       - run: npm --prefix web run build
+      - run: python scripts/prepare_openapi_generator.py
       - run: cargo build --locked --release -p moleapi-server --target ${{ matrix.target }}
       - name: Verify standalone server worker dispatch
         run: python scripts/check-script-worker.py target/${{ matrix.target }}/release/${{ matrix.binary }}
@@ -114,6 +115,7 @@ jobs:
       - name: Generate platform icons from provided transparent logo
         working-directory: desktop
         run: ../web/node_modules/.bin/tauri icon ../assets/brand/logo.png --output icons
+      - run: python scripts/prepare_openapi_generator.py
       - uses: tauri-apps/tauri-action@v0
         with:
           projectPath: desktop

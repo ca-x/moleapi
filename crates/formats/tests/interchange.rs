@@ -1726,3 +1726,54 @@ fn network_source_backup_is_exact_and_default_export_screens_scoped_and_copied_c
     assert!(export(&w, "postman", true).is_err());
     assert!(export(&w, "openapi", true).is_err());
 }
+#[test]
+fn generated_specification_screens_credential_examples_and_copies_without_erasing_oauth_urls() {
+    let mut w = workspace(import("curl", "curl https://example.com").unwrap().data);
+    let source=json!({"openapi":"3.0.3","info":{"title":"Generator privacy","version":"1","description":"copied-credential-value"},"paths":{},"components":{"securitySchemes":{"oauth":{"type":"oauth2","flows":{"clientCredentials":{"tokenUrl":"https://provider.test/token","scopes":{}}}}},"schemas":{"Login":{"type":"object","properties":{"password":{"type":"string","format":"password","example":"copied-credential-value"},"type":{"type":"string"}}}}}}).to_string();
+    w.data.specifications.push(moleapi_core::Specification {
+        id: "spec".into(),
+        name: "Fixture".into(),
+        kind: "openapi".into(),
+        source: source.clone(),
+        dialect: "3.0.3".into(),
+    });
+    let safe = moleapi_formats::generation_specification(&w, "spec", false).unwrap();
+    assert!(!safe.source.contains("copied-credential-value"));
+    let value: Value = serde_json::from_str(&safe.source).unwrap();
+    assert_eq!(
+        value["components"]["securitySchemes"]["oauth"]["flows"]["clientCredentials"]["tokenUrl"],
+        "https://provider.test/token"
+    );
+    assert_eq!(
+        value["components"]["schemas"]["Login"]["properties"]["password"]["type"],
+        "string"
+    );
+    assert_eq!(
+        moleapi_formats::generation_specification(&w, "spec", true)
+            .unwrap()
+            .source,
+        source
+    );
+    assert_eq!(w.data.specifications[0].source, source);
+}
+#[test]
+fn project_naming_options_cannot_copy_specification_credentials_in_default_mode() {
+    let mut w = workspace(import("curl", "curl https://example.com").unwrap().data);
+    w.data.specifications.push(moleapi_core::Specification {id:"spec".into(),name:"Options".into(),kind:"openapi".into(),dialect:"3.0.3".into(),source:json!({"openapi":"3.0.3","info":{"title":"Fixture","version":"1"},"paths":{},"components":{"schemas":{"Auth":{"type":"object","properties":{"password":{"type":"string","format":"password","example":"private-package-copy"}}}}}}).to_string()});
+    assert!(
+        moleapi_formats::validate_generation_options(
+            &w,
+            "spec",
+            &json!({"packageName":"private-package-copy"})
+        )
+        .is_err()
+    );
+    assert!(
+        moleapi_formats::validate_generation_options(
+            &w,
+            "spec",
+            &json!({"packageName":"public-sdk"})
+        )
+        .is_ok()
+    );
+}

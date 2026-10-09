@@ -292,3 +292,21 @@ pub fn generation_request(
 ) -> Result<moleapi_core::RequestSpec> {
     redact::generation_request(workspace, request_id, include_secrets)
 }
+
+/// Select and screen canonical OpenAPI source without executing variables/scripts.
+pub fn generation_specification(
+    workspace: &Workspace,
+    id: &str,
+    include_secrets: bool,
+) -> Result<moleapi_core::Specification> {
+    redact::generation_specification(workspace, id, include_secrets)
+}
+
+/// Reject credential copies in naming/library options rather than rewriting code semantics.
+pub fn validate_generation_options(
+    workspace: &Workspace,
+    id: &str,
+    options: &serde_json::Value,
+) -> Result<()> {
+    redact::validate_generation_options(workspace, id, options)
+}

@@ -1820,3 +1820,166 @@ fn template_reference(text: &str) -> bool {
         .and_then(|s| s.strip_suffix("}}"))
         .is_some_and(|key| !key.trim().is_empty() && !key.contains(['{', '}']))
 }
+
+pub(super) fn generation_specification(
+    source: &Workspace,
+    id: &str,
+    include_secrets: bool,
+) -> anyhow::Result<moleapi_core::Specification> {
+    let specification = source
+        .data
+        .specifications
+        .iter()
+        .find(|s| s.id == id && s.kind == "openapi")
+        .ok_or_else(|| anyhow::anyhow!("OpenAPI specification not found"))?;
+    if include_secrets {
+        return Ok(specification.clone());
+    }
+    let mut private_source = source.clone();
+    let mut value: Value = serde_yaml_ng::from_str(&specification.source)
+        .map_err(|_| anyhow::anyhow!("Invalid canonical specification"))?;
+    let mut candidates = std::collections::BTreeSet::new();
+    let credential_names: std::collections::BTreeSet<String> = value
+        .pointer("/components/securitySchemes")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flat_map(|schemes| schemes.values())
+        .filter(|scheme| scheme["type"] == "apiKey")
+        .filter_map(|scheme| scheme["name"].as_str().map(|s| s.to_ascii_lowercase()))
+        .collect();
+    fn leaves(value: &Value, output: &mut std::collections::BTreeSet<String>) {
+        match value {
+            Value::String(s) => {
+                if !s.is_empty() {
+                    output.insert(s.clone());
+                }
+            }
+            Value::Array(a) => {
+                for v in a {
+                    leaves(v, output)
+                }
+            }
+            Value::Object(o) => {
+                for v in o.values() {
+                    leaves(v, output)
+                }
+            }
+            _ => {}
+        }
+    }
+    fn scan(
+        value: &mut Value,
+        output: &mut std::collections::BTreeSet<String>,
+        names: &std::collections::BTreeSet<String>,
+    ) {
+        match value {
+            Value::Object(o) => {
+                let credential_schema = o.get("format").and_then(Value::as_str) == Some("password")
+                    || o.get("name").and_then(Value::as_str).is_some_and(|name| {
+                        sensitive(name) || names.contains(&name.to_ascii_lowercase())
+                    });
+                if credential_schema {
+                    for key in ["example", "examples", "default"] {
+                        if let Some(v) = o.get(key) {
+                            leaves(v, output);
+                        }
+                    }
+                }
+                for (key, v) in o.iter_mut() {
+                    if let Some(text) = v.as_str() {
+                        if key.to_ascii_lowercase().ends_with("url") || key == "url" {
+                            if let Ok(url) = url::Url::parse(text) {
+                                if !url.username().is_empty() {
+                                    output.insert(url.username().into());
+                                }
+                                if let Some(password) = url.password() {
+                                    output.insert(password.into());
+                                }
+                                for (key, value) in url.query_pairs() {
+                                    if sensitive(&key) {
+                                        output.insert(value.into_owned());
+                                    }
+                                }
+                            }
+                            *v = Value::String(redact_url(text));
+                        } else if sensitive(key)
+                            && !matches!(
+                                key.as_str(),
+                                "authorizationUrl" | "tokenUrl" | "refreshUrl" | "bearerFormat"
+                            )
+                            && !text.is_empty()
+                        {
+                            output.insert(text.into());
+                        }
+                    } else if sensitive(key) && v.is_object() {
+                        for field in ["example", "examples", "default"] {
+                            if let Some(example) = v.get(field) {
+                                leaves(example, output);
+                            }
+                        }
+                    }
+                    scan(v, output, names);
+                }
+            }
+            Value::Array(a) => {
+                for v in a {
+                    scan(v, output, names)
+                }
+            }
+            _ => {}
+        }
+    }
+    scan(&mut value, &mut candidates, &credential_names);
+    for (index, value) in candidates.into_iter().enumerate() {
+        private_source
+            .data
+            .global_variables
+            .push(moleapi_core::Pair {
+                id: format!("generation-spec-secret-{index}"),
+                key: format!("generation_spec_secret_{index}"),
+                value,
+                enabled: true,
+                secret: Some(true),
+                local_value: None,
+            });
+    }
+    let privacy = ExportPrivacy::from_workspace(&private_source, true);
+    anyhow::ensure!(
+        !privacy.withhold,
+        "Specification privacy budget exceeded; default generation withheld"
+    );
+    let safe = privacy.screen_generation_json(&serde_json::to_string(&value)?);
+    anyhow::ensure!(
+        !safe.is_empty(),
+        "Specification generation withheld for privacy"
+    );
+    let mut result = specification.clone();
+    result.source = safe;
+    result.name = privacy.screen_text(&result.name);
+    Ok(result)
+}
+
+pub(super) fn validate_generation_options(
+    source: &Workspace,
+    id: &str,
+    options: &Value,
+) -> anyhow::Result<()> {
+    let mut probe = source.clone();
+    let spec = probe
+        .data
+        .specifications
+        .iter_mut()
+        .find(|s| s.id == id && s.kind == "openapi")
+        .ok_or_else(|| anyhow::anyhow!("OpenAPI specification not found"))?;
+    let mut value: Value = serde_yaml_ng::from_str(&spec.source)
+        .map_err(|_| anyhow::anyhow!("Invalid canonical specification"))?;
+    value["x-moleapi-generation-option-probe"] = options.clone();
+    spec.source = serde_json::to_string(&value)?;
+    let projected = generation_specification(&probe, id, false)?;
+    let safe: Value = serde_json::from_str(&projected.source)?;
+    anyhow::ensure!(
+        safe["x-moleapi-generation-option-probe"] == *options,
+        "Generator naming/options contain private values; default generation withheld"
+    );
+    Ok(())
+}

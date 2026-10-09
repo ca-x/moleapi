@@ -1,4 +1,5 @@
 //! Portable request generation. Scalar owns emitters; QuickJS has no host APIs.
+pub mod project;
 mod request;
 use anyhow::{Result, ensure};
 pub use request::*;

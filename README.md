@@ -33,6 +33,10 @@ These screenshots show the actual embedded self-hosted interface with synthetic 
 
 ![Request network settings with a real DNS override preserving Host](docs/images/network-en.png)
 
+![OpenAPI project generation and generated TypeScript SDK preview](docs/images/codegen-project-en.png)
+
+OpenAPI project generation uses a native Progenitor Rust client engine and a pinned embedded OpenAPI Generator for multi-language client/server artifacts. Java targets require an explicitly configured Java17+ executable (`MOLEAPI_CODEGEN_JAVA`); native Rust does not. Original definitions are preserved, default output excludes credentials, and ZIP manifests record generated files/checksums. See [actual target validation and remaining scope](docs/PROJECT-GENERATION-COVERAGE.md).
+
 HTTP/SOAP, SSE/WebSocket/GraphQL, gRPC, TCP/TLS, MQTT, Socket.IO, A2A and MCP HTTP requests support explicit HTTP/SOCKS proxies, bypass rules, custom CA roots, PEM/encrypted PFX client certificates, DNS overrides and HTTP/2. Network credentials are scrubbed from history/default exports; exact source backup requires including sensitive values. See [network support and current combinations](docs/specs/request-network.md).
 
 ## Languages

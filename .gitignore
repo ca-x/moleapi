@@ -20,3 +20,5 @@ __pycache__/
 /desktop/icons/ios/
 
 /tools/snippets/node_modules
+
+/vendor/openapi-generator/engine.jar

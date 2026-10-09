@@ -8,7 +8,9 @@ mod files;
 pub use files::FileSource;
 
 mod file_worker;
-pub use file_worker::{FileOutput, dispatch_file_worker, run_file_worker};
+pub use file_worker::{
+    FileOutput, dispatch_file_worker, limit_headless_worker_heap, run_file_worker,
+};
 
 #[cfg(test)]
 mod files_tests;

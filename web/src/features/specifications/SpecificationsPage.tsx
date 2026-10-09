@@ -1,3 +1,5 @@
+import {lazy,Suspense,useState} from "react";
+const ProjectGenerationDialog=lazy(()=>import("../generation/ProjectGenerationDialog"));
 import { t, useLanguage } from "../../shared/i18n";
 import { Badge, Button, Card, Flex, Heading, Text } from "@radix-ui/themes";
 import { Upload } from "lucide-react";
@@ -7,6 +9,7 @@ import { useWorkbench } from "../workbench/context";
 export default function SpecificationsPage() {
   useLanguage();
   const state = useWorkbench();
+  const [projectSpec,setProjectSpec]=useState<string|null>(null);
   const { dark, draft, openModal } = state;
   if (!draft) return null;
   return (
@@ -24,6 +27,7 @@ export default function SpecificationsPage() {
           <Card key={spec.id}>
             <Flex justify="between" align="center">
               <Heading size="3">{spec.name}</Heading>
+              {spec.kind==="openapi"&&<Button variant="soft" onClick={()=>setProjectSpec(spec.id)}>{t("生成 SDK / 服务端项目")}</Button>}
               <Badge color="gray">
                 {spec.kind} {spec.dialect}
               </Badge>
@@ -34,6 +38,7 @@ export default function SpecificationsPage() {
       ) : (
         <Text color="gray"> {t("导入 OpenAPI JSON/YAML 后，原始规范将在此保留。")} </Text>
       )}
+      {projectSpec&&<Suspense fallback={<Text role="status">{t("正在读取生成器…")}</Text>}><ProjectGenerationDialog open specificationId={projectSpec} onOpenChange={open=>{if(!open)setProjectSpec(null);}}/></Suspense>}
     </div>
   );
 }

@@ -5,6 +5,7 @@ mod entities;
 mod execution;
 mod formats;
 mod generation;
+mod generation_projects;
 mod graphql;
 mod grpc;
 mod history;
@@ -30,7 +31,10 @@ use axum::{
     routing::{get, post},
 };
 pub fn dispatch_script_worker() -> anyhow::Result<bool> {
-    if moleapi_script_runtime::dispatch_worker()? {
+    if moleapi_generation::project::dispatch_project_worker(
+        moleapi_data::limit_headless_worker_heap,
+    )? || moleapi_script_runtime::dispatch_worker()?
+    {
         Ok(true)
     } else {
         moleapi_data::dispatch_file_worker()
@@ -57,6 +61,9 @@ struct AppState {
     sync_lock: Arc<tokio::sync::Mutex<()>>,
     script_slots: Arc<tokio::sync::Semaphore>,
     generation_slots: Arc<tokio::sync::Semaphore>,
+    project_slots: Arc<tokio::sync::Semaphore>,
+    project_jobs: Arc<generation_projects::Jobs>,
+    project_runtime: Arc<moleapi_generation::project::ProjectRuntime>,
     cookies: Arc<cookies::Jars>,
     oauth1_slots: Arc<tokio::sync::Semaphore>,
     oauth1_flows: Arc<oauth1::flows::Hub>,
@@ -172,6 +179,12 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         sync_lock: Arc::new(tokio::sync::Mutex::new(())),
         script_slots: Arc::new(tokio::sync::Semaphore::new(4)),
         generation_slots: Arc::new(tokio::sync::Semaphore::new(4)),
+        project_slots: Arc::new(tokio::sync::Semaphore::new(2)),
+        project_jobs: Arc::default(),
+        project_runtime: Arc::new(moleapi_generation::project::ProjectRuntime::new(
+            script_worker.clone(),
+            std::env::var_os("MOLEAPI_CODEGEN_JAVA").map(PathBuf::from),
+        )?),
         cookies: Arc::default(),
         oauth1_slots: Arc::new(tokio::sync::Semaphore::new(8)),
         oauth1_flows: Arc::default(),
@@ -275,6 +288,15 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
             axum::routing::delete(oauth2::remove).patch(oauth2::rename),
         )
         .route("/execute", post(execution::execute))
+        .route(
+            "/generation/projects/catalog",
+            get(generation_projects::catalog),
+        )
+        .route("/generation/projects", post(generation_projects::generate))
+        .route(
+            "/generation/projects/cancel",
+            post(generation_projects::cancel),
+        )
         .route("/generation/snippets/catalog", get(generation::catalog))
         .route("/generation/snippets", post(generation::generate))
         .route("/soap/import", post(soap::import))

@@ -27,6 +27,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - run: python scripts/prepare_openapi_generator.py
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

@@ -1,0 +1,1707 @@
+{
+  "version": "7.26.0",
+  "sha256": "5ccb60c4678901715376c6114afba60c28d0844fe506bd1e02891cbc363ab9ff",
+  "url": "https://github.com/OpenAPITools/openapi-generator/releases/download/v7.26.0/openapi-generator-cli-7.26.0.jar",
+  "license": "Apache-2.0",
+  "targets": [
+    {
+      "id": "ada",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "android",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": null,
+        "apiPackage": null,
+        "invokerPackage": null,
+        "groupId": null,
+        "artifactId": null,
+        "artifactVersion": null,
+        "library": null
+      }
+    },
+    {
+      "id": "apex",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "bash",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "c",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "clojure",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "cpp-boost-beast-client",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "CppBoostBeastOpenAPIClient",
+        "modelPackage": "org.openapitools.client.model",
+        "apiPackage": "org.openapitools.client.api"
+      }
+    },
+    {
+      "id": "cpp-oatpp-client",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "cpp-qt-client",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "QtOpenAPIClient"
+      }
+    },
+    {
+      "id": "cpp-restsdk",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "CppRestOpenAPIClient",
+        "modelPackage": "org.openapitools.client.model",
+        "apiPackage": "org.openapitools.client.api",
+        "packageVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "cpp-tiny",
+      "kind": "client",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "cpp-tizen",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "cpp-ue4",
+      "kind": "client",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "crystal",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "csharp",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "Org.OpenAPITools",
+        "packageVersion": "1.0.0",
+        "library": "generichost"
+      }
+    },
+    {
+      "id": "dart",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "dart-dio",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "eiffel",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "openapi",
+        "packageVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "elixir",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "invokerPackage": null,
+        "packageName": null,
+        "library": "tesla"
+      }
+    },
+    {
+      "id": "elm",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "erlang-client",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "openapi",
+        "packageVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "erlang-proper",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "openapi",
+        "packageVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "gdscript",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "go",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "openapi",
+        "packageVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "groovy",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": "org.openapitools.model",
+        "apiPackage": "org.openapitools.api",
+        "invokerPackage": "org.openapitools.api",
+        "groupId": "org.openapitools",
+        "artifactId": "openapi-groovy",
+        "artifactVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "haskell-http-client",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "java",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": "org.openapitools.client.model",
+        "apiPackage": "org.openapitools.client.api",
+        "invokerPackage": "org.openapitools.client",
+        "groupId": "org.openapitools",
+        "artifactId": "openapi-java-client",
+        "artifactVersion": "1.0.0",
+        "library": "okhttp-gson"
+      }
+    },
+    {
+      "id": "java-helidon-client",
+      "kind": "client",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": "org.openapitools.client.model",
+        "apiPackage": "org.openapitools.client.api",
+        "invokerPackage": "org.openapitools.client",
+        "groupId": "org.openapitools",
+        "artifactId": "openapi-java-client",
+        "artifactVersion": "1.0.0",
+        "library": "mp"
+      }
+    },
+    {
+      "id": "java-micronaut-client",
+      "kind": "client",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": "org.openapitools.model",
+        "apiPackage": "org.openapitools.api",
+        "invokerPackage": "org.openapitools",
+        "groupId": "org.openapitools",
+        "artifactId": "openapi-micronaut-client",
+        "artifactVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "javascript",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "invokerPackage": null,
+        "apiPackage": null,
+        "modelPackage": null,
+        "library": "javascript"
+      }
+    },
+    {
+      "id": "javascript-closure-angular",
+      "kind": "client",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "javascript-flowtyped",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "npmName": null,
+        "npmVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "jaxrs-cxf-client",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": "org.openapitools.model",
+        "apiPackage": "org.openapitools.api",
+        "invokerPackage": "org.openapitools.api",
+        "groupId": "org.openapitools",
+        "artifactId": "openapi-jaxrs-client",
+        "artifactVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "jetbrains-http-client",
+      "kind": "client",
+      "upstream_stability": "experimental",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "jmeter",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "julia-client",
+      "kind": "client",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "APIClient"
+      }
+    },
+    {
+      "id": "k6",
+      "kind": "client",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "kotlin",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "org.openapitools.client",
+        "groupId": "org.openapitools",
+        "artifactId": "kotlin-client",
+        "artifactVersion": "1.0.0",
+        "library": "jvm-okhttp4"
+      }
+    },
+    {
+      "id": "lua",
+      "kind": "client",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "openapiclient",
+        "packageVersion": "1.0.0-1"
+      }
+    },
+    {
+      "id": "n4js",
+      "kind": "client",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "apiPackage": null,
+        "modelPackage": null
+      }
+    },
+    {
+      "id": "nim",
+      "kind": "client",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "objc",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "ocaml",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "perl",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "php",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": null,
+        "apiPackage": null,
+        "invokerPackage": null,
+        "packageName": null,
+        "artifactVersion": null,
+        "library": "guzzle"
+      }
+    },
+    {
+      "id": "php-dt",
+      "kind": "client",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": null,
+        "apiPackage": null,
+        "invokerPackage": null,
+        "packageName": null,
+        "artifactVersion": null
+      }
+    },
+    {
+      "id": "php-nextgen",
+      "kind": "client",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": null,
+        "apiPackage": null,
+        "invokerPackage": null,
+        "packageName": null,
+        "artifactVersion": null
+      }
+    },
+    {
+      "id": "powershell",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "PSOpenAPITools",
+        "packageVersion": "0.1.2"
+      }
+    },
+    {
+      "id": "python",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "openapi_client",
+        "packageVersion": "1.0.0",
+        "library": "urllib3"
+      }
+    },
+    {
+      "id": "python-pydantic-v1",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "openapi_client",
+        "packageVersion": "1.0.0",
+        "library": "urllib3"
+      }
+    },
+    {
+      "id": "r",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "openapi",
+        "packageVersion": "1.0.0",
+        "library": "httr"
+      }
+    },
+    {
+      "id": "ruby",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "library": "typhoeus"
+      }
+    },
+    {
+      "id": "ruby-nextgen",
+      "kind": "client",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "rust",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "openapi",
+        "packageVersion": "1.0.0",
+        "library": "reqwest"
+      }
+    },
+    {
+      "id": "scala-akka",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": null,
+        "apiPackage": null
+      }
+    },
+    {
+      "id": "scala-gatling",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": null,
+        "apiPackage": null
+      }
+    },
+    {
+      "id": "scala-http4s",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": null,
+        "apiPackage": null
+      }
+    },
+    {
+      "id": "scala-pekko",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": null,
+        "apiPackage": null
+      }
+    },
+    {
+      "id": "scala-sttp",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": null,
+        "apiPackage": null
+      }
+    },
+    {
+      "id": "scala-sttp4",
+      "kind": "client",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": null,
+        "apiPackage": null
+      }
+    },
+    {
+      "id": "scala-sttp4-jsoniter",
+      "kind": "client",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": null,
+        "apiPackage": null
+      }
+    },
+    {
+      "id": "scalaz",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": null,
+        "apiPackage": null
+      }
+    },
+    {
+      "id": "swift-combine",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "swift6",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "library": "urlsession"
+      }
+    },
+    {
+      "id": "terraform-provider",
+      "kind": "client",
+      "upstream_stability": "experimental",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "openapi",
+        "packageVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "typescript",
+      "kind": "client",
+      "upstream_stability": "experimental",
+      "validation": "upstream-catalog",
+      "options": {
+        "npmName": null,
+        "npmVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "typescript-angular",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "npmName": null,
+        "npmVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "typescript-aurelia",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "npmName": null,
+        "npmVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "typescript-axios",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "npmName": null,
+        "npmVersion": "1.0.0",
+        "modelPackage": null,
+        "apiPackage": null
+      }
+    },
+    {
+      "id": "typescript-fetch",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "npmName": null,
+        "npmVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "typescript-inversify",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "npmName": null,
+        "npmVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "typescript-jquery",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "npmName": null,
+        "npmVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "typescript-nestjs",
+      "kind": "client",
+      "upstream_stability": "experimental",
+      "validation": "upstream-catalog",
+      "options": {
+        "npmName": null,
+        "npmVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "typescript-node",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "npmName": null,
+        "npmVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "typescript-redux-query",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "npmName": null,
+        "npmVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "typescript-rxjs",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "npmName": null,
+        "npmVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "xojo-client",
+      "kind": "client",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "library": "httpsocket",
+        "apiPackage": null,
+        "modelPackage": null
+      }
+    },
+    {
+      "id": "zapier",
+      "kind": "client",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "ada-server",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "aspnet-fastendpoints",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "aspnetcore",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "Org.OpenAPITools",
+        "packageVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "cpp-boost-beast-server",
+      "kind": "server",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "CppBoostBeastServer",
+        "modelPackage": "org.openapitools.server.model",
+        "apiPackage": "org.openapitools.server.api"
+      }
+    },
+    {
+      "id": "cpp-httplib-server",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "cpp-oatpp-server",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "cpp-pistache-server",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "cpp-qt-qhttpengine-server",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "cpp-restbed-server",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": "org.openapitools.server.model",
+        "apiPackage": "org.openapitools.server.api",
+        "packageVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "cpp-restbed-server-deprecated",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": "org.openapitools.server.model",
+        "apiPackage": "org.openapitools.server.api",
+        "packageVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "csharp-functions",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "Org.OpenAPITools",
+        "packageVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "erlang-server",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "openapi"
+      }
+    },
+    {
+      "id": "fsharp-functions",
+      "kind": "server",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "OpenAPI",
+        "packageVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "fsharp-giraffe-server",
+      "kind": "server",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "OpenAPI",
+        "packageVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "go-echo-server",
+      "kind": "server",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "openapi",
+        "packageVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "go-gin-server",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "openapi",
+        "packageVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "go-server",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "openapi",
+        "packageVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "graphql-nodejs-express-server",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "openapi3graphql-server",
+        "packageVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "haskell",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": null,
+        "apiPackage": null
+      }
+    },
+    {
+      "id": "haskell-yesod",
+      "kind": "server",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "java-camel",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": "org.openapitools.model",
+        "apiPackage": "org.openapitools.api",
+        "invokerPackage": "org.openapitools.api",
+        "groupId": "org.openapitools",
+        "artifactId": "openapi-spring",
+        "artifactVersion": "1.0.0",
+        "library": "spring-boot"
+      }
+    },
+    {
+      "id": "java-dubbo",
+      "kind": "server",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": "org.openapitools.model",
+        "apiPackage": "org.openapitools.api",
+        "invokerPackage": "org.openapitools",
+        "groupId": "org.openapitools",
+        "artifactId": "openapi-dubbo",
+        "artifactVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "java-helidon-server",
+      "kind": "server",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": "org.openapitools.server.model",
+        "apiPackage": "org.openapitools.server.api",
+        "invokerPackage": "org.openapitools.server",
+        "groupId": "org.openapitools",
+        "artifactId": "openapi-java-server",
+        "artifactVersion": "1.0.0",
+        "library": "se"
+      }
+    },
+    {
+      "id": "java-inflector",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": "org.openapitools.model",
+        "apiPackage": "org.openapitools.controllers",
+        "invokerPackage": "org.openapitools.controllers",
+        "groupId": "org.openapitools",
+        "artifactId": "openapi-inflector-server",
+        "artifactVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "java-micronaut-server",
+      "kind": "server",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": "org.openapitools.model",
+        "invokerPackage": "org.openapitools",
+        "groupId": "org.openapitools",
+        "artifactId": "openapi-micronaut",
+        "artifactVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "java-microprofile",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": "org.openapitools.client.model",
+        "apiPackage": "org.openapitools.client.api",
+        "invokerPackage": "org.openapitools.client",
+        "groupId": "org.openapitools",
+        "artifactId": "openapi-java-client",
+        "artifactVersion": "1.0.0",
+        "library": "okhttp-gson"
+      }
+    },
+    {
+      "id": "java-msf4j",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": "org.openapitools.model",
+        "apiPackage": "org.openapitools.api",
+        "invokerPackage": "org.openapitools.api",
+        "groupId": "org.openapitools",
+        "artifactId": "openapi-jaxrs-server",
+        "artifactVersion": "1.0.0",
+        "library": "jersey2"
+      }
+    },
+    {
+      "id": "java-pkmst",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": "com.prokarma.pkmst.model",
+        "apiPackage": "com.prokarma.pkmst.controller",
+        "invokerPackage": "com.prokarma.pkmst.controller",
+        "groupId": "com.prokarma",
+        "artifactId": "pkmst-microservice",
+        "artifactVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "java-play-framework",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": "apimodels",
+        "apiPackage": "controllers",
+        "invokerPackage": "org.openapitools.api",
+        "groupId": "org.openapitools",
+        "artifactId": "openapi-java-playframework",
+        "artifactVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "java-undertow-server",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": null,
+        "apiPackage": null,
+        "invokerPackage": "org.openapitools.handler",
+        "groupId": "org.openapitools",
+        "artifactId": "openapi-undertow-server",
+        "artifactVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "java-vertx-web",
+      "kind": "server",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": "org.openapitools.vertxweb.server.model",
+        "apiPackage": "org.openapitools.vertxweb.server.api",
+        "invokerPackage": "org.openapitools.vertxweb.server",
+        "groupId": "org.openapitools",
+        "artifactId": "openapi-java-vertx-web-server",
+        "artifactVersion": "1.0.0-SNAPSHOT"
+      }
+    },
+    {
+      "id": "java-wiremock",
+      "kind": "server",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": null,
+        "apiPackage": null,
+        "invokerPackage": "org.openapitools",
+        "groupId": "org.openapitools",
+        "artifactId": "openapi-java",
+        "artifactVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "jaxrs-cxf",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": "org.openapitools.model",
+        "apiPackage": "org.openapitools.api",
+        "invokerPackage": "org.openapitools.api",
+        "groupId": "org.openapitools",
+        "artifactId": "openapi-cxf-server",
+        "artifactVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "jaxrs-cxf-cdi",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": "org.openapitools.model",
+        "apiPackage": "org.openapitools.api",
+        "invokerPackage": "org.openapitools.api",
+        "groupId": "org.openapitools",
+        "artifactId": "openapi-jaxrs-cxf-cdi-server",
+        "artifactVersion": "1.0.0",
+        "library": "<default>"
+      }
+    },
+    {
+      "id": "jaxrs-cxf-extended",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": "org.openapitools.model",
+        "apiPackage": "org.openapitools.api",
+        "invokerPackage": "org.openapitools.api",
+        "groupId": "org.openapitools",
+        "artifactId": "openapi-cxf-server",
+        "artifactVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "jaxrs-jersey",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": "org.openapitools.model",
+        "apiPackage": "org.openapitools.api",
+        "invokerPackage": "org.openapitools.api",
+        "groupId": "org.openapitools",
+        "artifactId": "openapi-jaxrs-server",
+        "artifactVersion": "1.0.0",
+        "library": "jersey2"
+      }
+    },
+    {
+      "id": "jaxrs-resteasy",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": "org.openapitools.model",
+        "apiPackage": "org.openapitools.api",
+        "invokerPackage": "org.openapitools.api",
+        "groupId": "org.openapitools",
+        "artifactId": "openapi-jaxrs-resteasy-server",
+        "artifactVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "jaxrs-resteasy-eap",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": "org.openapitools.model",
+        "apiPackage": "org.openapitools.api",
+        "invokerPackage": "org.openapitools.api",
+        "groupId": "org.openapitools",
+        "artifactId": "openapi-jaxrs-resteasy-eap-server",
+        "artifactVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "jaxrs-spec",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": "org.openapitools.model",
+        "apiPackage": "org.openapitools.api",
+        "invokerPackage": "org.openapitools.api",
+        "groupId": "org.openapitools",
+        "artifactId": "openapi-jaxrs-server",
+        "artifactVersion": "1.0.0",
+        "library": "<default>"
+      }
+    },
+    {
+      "id": "julia-server",
+      "kind": "server",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "APIServer"
+      }
+    },
+    {
+      "id": "kotlin-misk",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "org.openapitools",
+        "groupId": "org.openapitools",
+        "artifactId": null,
+        "artifactVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "kotlin-server",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "org.openapitools.server",
+        "groupId": "org.openapitools",
+        "artifactId": "kotlin-server",
+        "artifactVersion": "1.0.0",
+        "library": "ktor"
+      }
+    },
+    {
+      "id": "kotlin-spring",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "org.openapitools",
+        "groupId": "org.openapitools",
+        "artifactId": "openapi-spring",
+        "artifactVersion": "1.0.0",
+        "modelPackage": "org.openapitools.model",
+        "apiPackage": "org.openapitools.api",
+        "library": "spring-boot"
+      }
+    },
+    {
+      "id": "kotlin-vertx",
+      "kind": "server",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "org.openapitools",
+        "groupId": "org.openapitools",
+        "artifactId": null,
+        "artifactVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "kotlin-wiremock",
+      "kind": "server",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "org.openapitools",
+        "groupId": "org.openapitools",
+        "artifactId": null,
+        "artifactVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "nodejs-express-server",
+      "kind": "server",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "php-flight",
+      "kind": "server",
+      "upstream_stability": "experimental",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": null,
+        "apiPackage": null,
+        "invokerPackage": null,
+        "packageName": null,
+        "artifactVersion": null
+      }
+    },
+    {
+      "id": "php-laravel",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": null,
+        "apiPackage": null,
+        "invokerPackage": null,
+        "packageName": null,
+        "artifactVersion": null
+      }
+    },
+    {
+      "id": "php-lumen",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": null,
+        "apiPackage": null,
+        "invokerPackage": null,
+        "packageName": null,
+        "artifactVersion": null
+      }
+    },
+    {
+      "id": "php-mezzio-ph",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": null,
+        "apiPackage": null,
+        "invokerPackage": null,
+        "packageName": null,
+        "artifactVersion": null
+      }
+    },
+    {
+      "id": "php-slim4",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": null,
+        "apiPackage": null,
+        "invokerPackage": null,
+        "packageName": null,
+        "artifactVersion": null
+      }
+    },
+    {
+      "id": "php-symfony",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": null,
+        "apiPackage": null,
+        "invokerPackage": null,
+        "packageName": null,
+        "artifactVersion": null
+      }
+    },
+    {
+      "id": "python-aiohttp",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "openapi_server",
+        "packageVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "python-blueplanet",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "openapi_server",
+        "packageVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "python-fastapi",
+      "kind": "server",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "openapi_server",
+        "packageVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "python-flask",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "openapi_server",
+        "packageVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "ruby-on-rails",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "ruby-sinatra",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "rust-axum",
+      "kind": "server",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "openapi",
+        "packageVersion": null
+      }
+    },
+    {
+      "id": "rust-salvo",
+      "kind": "server",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "salvo_openapi",
+        "packageVersion": null
+      }
+    },
+    {
+      "id": "rust-server",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "openapi_client",
+        "packageVersion": null
+      }
+    },
+    {
+      "id": "rust-server-deprecated",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "openapi_client",
+        "packageVersion": null
+      }
+    },
+    {
+      "id": "scala-akka-http-server",
+      "kind": "server",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": null,
+        "apiPackage": null,
+        "invokerPackage": "org.openapitools.server",
+        "groupId": "org.openapitools",
+        "artifactId": "openapi-scala-akka-http-server",
+        "artifactVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "scala-cask",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": null,
+        "apiPackage": null,
+        "groupId": null,
+        "artifactId": null,
+        "artifactVersion": null,
+        "packageName": null
+      }
+    },
+    {
+      "id": "scala-http4s-server",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "scala-play-server",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": null,
+        "apiPackage": null
+      }
+    },
+    {
+      "id": "scalatra",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": null,
+        "apiPackage": null
+      }
+    },
+    {
+      "id": "spring",
+      "kind": "server",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "modelPackage": "org.openapitools.model",
+        "apiPackage": "org.openapitools.api",
+        "invokerPackage": "org.openapitools.api",
+        "groupId": "org.openapitools",
+        "artifactId": "openapi-spring",
+        "artifactVersion": "1.0.0",
+        "library": "spring-boot"
+      }
+    },
+    {
+      "id": "typescript-nestjs-server",
+      "kind": "server",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "npmName": null,
+        "npmVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "asciidoc",
+      "kind": "documentation",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "invokerPackage": null,
+        "groupId": null,
+        "artifactId": null,
+        "artifactVersion": null
+      }
+    },
+    {
+      "id": "cwiki",
+      "kind": "documentation",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "invokerPackage": null,
+        "groupId": null,
+        "artifactId": null,
+        "artifactVersion": null
+      }
+    },
+    {
+      "id": "dynamic-html",
+      "kind": "documentation",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "invokerPackage": null,
+        "groupId": null,
+        "artifactId": null,
+        "artifactVersion": null
+      }
+    },
+    {
+      "id": "html",
+      "kind": "documentation",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "invokerPackage": null,
+        "groupId": null,
+        "artifactId": null,
+        "artifactVersion": null
+      }
+    },
+    {
+      "id": "html2",
+      "kind": "documentation",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "invokerPackage": null,
+        "packageName": null,
+        "groupId": null,
+        "artifactId": null,
+        "artifactVersion": null
+      }
+    },
+    {
+      "id": "markdown",
+      "kind": "documentation",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "openapi",
+      "kind": "documentation",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "openapi-yaml",
+      "kind": "documentation",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "plantuml",
+      "kind": "documentation",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "avro-schema",
+      "kind": "schema",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": null
+      }
+    },
+    {
+      "id": "graphql-schema",
+      "kind": "schema",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "openapi2graphql",
+        "packageVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "ktorm-schema",
+      "kind": "schema",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {
+        "packageName": "org.openapitools.database",
+        "groupId": "org.openapitools",
+        "artifactId": "ktorm",
+        "artifactVersion": "1.0.0"
+      }
+    },
+    {
+      "id": "mysql-schema",
+      "kind": "schema",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "postgresql-schema",
+      "kind": "schema",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "postman-collection",
+      "kind": "schema",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "protobuf-schema",
+      "kind": "schema",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "wsdl-schema",
+      "kind": "schema",
+      "upstream_stability": "beta",
+      "validation": "upstream-catalog",
+      "options": {}
+    },
+    {
+      "id": "apache2",
+      "kind": "config",
+      "upstream_stability": "stable",
+      "validation": "upstream-catalog",
+      "options": {}
+    }
+  ]
+}

@@ -182,6 +182,7 @@ pub async fn delete(
     s.oauth2_flows.cancel_workspace(&owner.0, &id);
     s.oauth1_flows.cancel_workspace(&owner.0, &id);
     s.webhooks.cancel_scope(&owner.0, Some(&id), None);
+    s.project_jobs.stop_workspace(&owner.0, &id);
     s.protocol_sessions.close_workspace(&owner.0, &id).await;
     Ok(Json(serde_json::json!({"ok":true})))
 }
