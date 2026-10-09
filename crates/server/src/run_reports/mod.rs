@@ -262,6 +262,7 @@ pub(crate) async fn record(
             .exec(&tx)
             .await?;
     }
+    crate::notifications::enqueue_run(&tx, owner, source, &report).await?;
     tx.commit().await?;
     Ok(Some(report.id))
 }

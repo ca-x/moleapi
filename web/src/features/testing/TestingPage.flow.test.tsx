@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+vi.mock("../notifications/NotificationPicker",()=>({default:()=>null}));
 import {cleanup,render,screen} from "@testing-library/react";
 import {Theme} from "@radix-ui/themes";
 import {afterEach,expect,it,vi} from "vitest";

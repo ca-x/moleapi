@@ -1,12 +1,13 @@
 import {t,useLanguage} from "../../shared/i18n";
 import {useState} from "react";
-import {Badge,Button,Card,Flex,Heading,Text,Callout} from "@radix-ui/themes";
+import {Badge,Button,Card,Checkbox,Flex,Heading,Text,Callout} from "@radix-ui/themes";
 import {FlaskConical} from "lucide-react";
 import {Choice} from "../../shared/ui";
 import {useWorkbench} from "../workbench/context";
 import RunnerDataset,{runnerOptions,type RunnerConfig} from "./RunnerDataset";
 import SavedDatasets from "./SavedDatasets";
 import SavedScenarios from "./SavedScenarios";
+import NotificationPicker from "../notifications/NotificationPicker";
 import NotificationsPanel from "../notifications/NotificationsPanel";
 import SchedulesPanel from "../monitoring/SchedulesPanel";
 import SavedReports from "./SavedReports";
@@ -14,6 +15,8 @@ export default function TestingPage(){
  useLanguage();const state=useWorkbench();const {draft,runCollection,setRunCollection,runResult,runnerBusy,run,stopRunner}=state;
  const scope=JSON.stringify([state.accountId,draft?.id]);
  const [scheduleReport,setScheduleReport]=useState<{scope:string;id:string;ticket:number}|null>(null);
+ const [notificationSelection,setNotificationSelection]=useState<{scope:string;ids:string[];override:boolean}|null>(null);
+ const notifications=notificationSelection?.scope===scope?notificationSelection:{scope,ids:[] as string[],override:false};
  const [source,setSource]=useState<{scope:string;value:RunnerConfig}|null>(null),[invalid,setInvalid]=useState(false);
  const [previewBusy,setPreviewBusy]=useState<{scope:string;busy:boolean}|null>(null);
  const dataBusy=previewBusy?.scope===scope&&previewBusy.busy;
@@ -25,11 +28,13 @@ export default function TestingPage(){
  const [scenarioSelection,setScenarioSelection]=useState<{scope:string;id:string}|null>(null);
  const scenarios=(draft?.data.scenarios??[]).filter(scenario=>scenario.collection_id===collectionId);
  const scenarioId=scenarioSelection?.scope===scope&&scenarios.some(scenario=>scenario.id===scenarioSelection.id)?scenarioSelection.id:"";
- function start(){try{const options=runnerOptions(savedId?{...config,source:""}:config);if(savedId){if(!saved?.source)throw new Error("dataset source missing");options.dataset_id=savedId;}if(scenarioId)options.scenario_id=scenarioId;setInvalid(false);void run(options);}catch{setInvalid(true);}}
+ function start(){try{const options=runnerOptions(savedId?{...config,source:""}:config);if(savedId){if(!saved?.source)throw new Error("dataset source missing");options.dataset_id=savedId;}if(scenarioId)options.scenario_id=scenarioId;if(notifications.override)options.notification_ids=notifications.ids;setInvalid(false);void run(options);}catch{setInvalid(true);}}
  if(!draft)return null;
  return <div className="page-panel"><div className="page-heading"><div><Heading size="5">{t("集合测试")}</Heading><Text size="2" color="gray">{t("按顺序运行集合内的请求，并检查断言。")}</Text></div></div>
  <Flex gap="3" align="center" wrap="wrap"><Choice value={runCollection||draft.data.collections[0]?.id||"none"} onChange={setRunCollection} options={draft.data.collections.map(collection=>({value:collection.id,label:collection.name}))} label={t("测试集合")} disabled={runnerBusy}/><Button loading={runnerBusy} disabled={!draft.data.collections.length||dataBusy} onClick={start}><FlaskConical size={16}/>{t("运行集合")}</Button>{runnerBusy&&<Button variant="soft" onClick={()=>void stopRunner()}>{t("停止集合运行")}</Button>}</Flex>
  <Choice label={t("运行场景")} value={scenarioId||"collection"} disabled={runnerBusy} options={[{value:"collection",label:t("集合原始顺序")},...scenarios.map(scenario=>({value:scenario.id,label:scenario.name}))]} onChange={id=>setScenarioSelection({scope,id:id==="collection"?"":id})}/>
+ <label className="checkbox-label"><Checkbox checked={notifications.override} disabled={runnerBusy} onCheckedChange={override=>setNotificationSelection({...notifications,override:override===true})}/>{t("本次运行覆盖场景默认通知")}</label>
+ {notifications.override&&<NotificationPicker label={t("本次运行通知对象（空选项不通知）")} value={notifications.ids} disabled={runnerBusy} onChange={ids=>setNotificationSelection({...notifications,ids})}/>}
  <SavedScenarios key={scope+collectionId} collectionId={collectionId} disabled={runnerBusy}/>
  <Choice label={t("运行数据集")} value={savedId||"temporary"} disabled={runnerBusy} options={[{value:"temporary",label:t("临时数据 / 无数据")},...(draft.data.datasets??[]).map(dataset=>({value:dataset.id,label:dataset.name}))]} onChange={id=>{setSavedSelection({scope,id:id==="temporary"?"":id});setInvalid(false);}}/>
  <RunnerDataset key={scope+savedId} workspaceId={draft.id} scope={scope} value={savedId?{...config,format:saved?.source?.format??"json",source:saved?.source?.source??""}:config} onBusyChange={busy=>setPreviewBusy({scope,busy})} disabled={runnerBusy} sourceReadOnly={!!savedId} dark={state.dark} onChange={value=>{setSource({scope,value:savedId?{...config,iterations:value.iterations}:value});setInvalid(false);}}/>

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+vi.mock("../notifications/NotificationPicker",()=>({default:()=>null}));
 import {cleanup,fireEvent,render,screen} from "@testing-library/react";
 import {Theme} from "@radix-ui/themes";
 import {afterEach,expect,it,vi} from "vitest";
@@ -14,4 +15,8 @@ vi.mock("./SavedScenarios",()=>({default:()=>null}));
 afterEach(cleanup);
 it("runs only a selected scenario for the current root with dataset options",async()=>{
  await setLanguage("en");render(<Theme><TestingPage/></Theme>);expect(screen.queryByRole("option",{name:"Other root"})).toBeNull();fireEvent.change(screen.getByRole("combobox",{name:"Run scenario"}),{target:{value:"s"}});fireEvent.click(screen.getByRole("button",{name:"Run collection"}));expect(run).toHaveBeenCalledWith({iterations:2,scenario_id:"s"});
+});
+
+it("passes an explicit empty override rather than inheriting a scene's notification targets",async()=>{
+ await setLanguage("en");render(<Theme><TestingPage/></Theme>);fireEvent.click(screen.getByRole("checkbox",{name:"Override default scenario notifications for this run"}));fireEvent.click(screen.getByRole("button",{name:"Run collection"}));expect(run).toHaveBeenLastCalledWith({iterations:2,notification_ids:[]});
 });

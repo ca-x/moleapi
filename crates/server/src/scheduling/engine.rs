@@ -226,7 +226,7 @@ async fn execute(
         record.finished_at = Some(Utc::now().to_rfc3339());
         return finish(&state, &claim, record).await;
     }
-    let input=serde_json::from_value(serde_json::json!({"collection_id":claim.definition.collection_id,"scenario_id":claim.definition.scenario_id,"environment_id":claim.definition.environment_id,"dataset_id":claim.definition.dataset_id,"iterations":claim.definition.iterations,"job_id":claim.job.id})).map_err(|_|ApiError::internal())?;
+    let input=serde_json::from_value(serde_json::json!({"collection_id":claim.definition.collection_id,"notification_ids":[],"scenario_id":claim.definition.scenario_id,"environment_id":claim.definition.environment_id,"dataset_id":claim.definition.dataset_id,"iterations":claim.definition.iterations,"job_id":claim.job.id})).map_err(|_|ApiError::internal())?;
     let future = crate::runner::run(
         State(state.clone()),
         Extension(Identity(claim.owner.clone())),

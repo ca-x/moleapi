@@ -5,6 +5,8 @@ use moleapi_core::{
 };
 use serde_json::{Value, json};
 pub(crate) struct Source<'a> {
+    pub notification_ids: &'a [String],
+    pub run_origin: &'a str,
     pub workspace: &'a Workspace,
     pub collection: &'a Collection,
     pub scenario: Option<&'a Scenario>,

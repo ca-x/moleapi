@@ -150,7 +150,7 @@ export interface Specification {
 export type ScenarioTarget={action:"step";step_id:string}|{action:"stop"};
 export interface ScenarioStep {id:string;request_id:string;name:string;group:string;enabled:boolean;condition?:string;repeat?:number;on_true?:ScenarioTarget;on_false?:ScenarioTarget}
 export interface ScenarioParallel {id:string;name:string;step_ids:string[];concurrency:number}
-export interface Scenario {id:string;name:string;description:string;collection_id:string;steps:ScenarioStep[];parallel?:ScenarioParallel[]}
+export interface Scenario {notification_ids?:string[];id:string;name:string;description:string;collection_id:string;steps:ScenarioStep[];parallel?:ScenarioParallel[]}
 export interface WorkspaceData {
   scenarios?:Scenario[];
   datasets?:SavedDataset[];
@@ -278,7 +278,7 @@ export interface RunResult {
   failed: number;
   elapsed_ms: number;
 }
-export interface RunOptions {scenario_id?:string;iterations?:number;dataset?:{format:"csv"|"json";source:string};dataset_id?:string}
+export interface RunOptions {notification_ids?:string[];run_origin?:"interactive"|"ci";scenario_id?:string;iterations?:number;dataset?:{format:"csv"|"json";source:string};dataset_id?:string}
 export interface ImportResult {
   name: string;
   data: WorkspaceData;

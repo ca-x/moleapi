@@ -175,6 +175,8 @@ impl Target {
 }
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct Event {
+    #[serde(default = "schedule_event")]
+    pub kind: String,
     pub id: String,
     pub schedule_id: String,
     pub job_id: String,
@@ -276,4 +278,8 @@ impl CredentialsPatch {
         }
         previous
     }
+}
+
+fn schedule_event() -> String {
+    "SCHEDULE_RUN_COMPLETED".into()
 }

@@ -64,7 +64,7 @@ pub(super) fn payload(settings: &Settings, credentials: &Credentials, event: &Ev
             value
         }
         _ => {
-            json!({"event":"SCHEDULE_RUN_COMPLETED","event_id":event.id,"title":"MoleAPI task result","content":content,"data":event})
+            json!({"event":event.kind,"event_id":event.id,"title":"MoleAPI task result","content":content,"data":event})
         }
     }
 }
@@ -316,6 +316,7 @@ mod tests {
     use super::*;
     fn event() -> Event {
         Event {
+            kind: "SCHEDULE_RUN_COMPLETED".into(),
             id: "event".into(),
             schedule_id: "schedule".into(),
             job_id: "job".into(),

@@ -6,6 +6,8 @@ use std::collections::BTreeSet;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Scenario {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notification_ids: Vec<String>,
     pub id: String,
     pub name: String,
     #[serde(default)]
@@ -68,6 +70,15 @@ pub fn validate_scenarios(data: &WorkspaceData) -> Result<()> {
     let mut ids = BTreeSet::new();
     let mut count = 0usize;
     for scenario in &data.scenarios {
+        let notifications = scenario.notification_ids.iter().collect::<BTreeSet<_>>();
+        ensure!(
+            scenario.notification_ids.len() <= 20
+                && notifications.len() == scenario.notification_ids.len()
+                && notifications
+                    .iter()
+                    .all(|id| !id.is_empty() && id.len() <= 128),
+            "Scenario notification IDs must be unique, bounded and nonempty"
+        );
         ensure!(
             !scenario.id.is_empty() && scenario.id.len() <= 128 && ids.insert(&scenario.id),
             "Scenario IDs must be unique and nonempty"

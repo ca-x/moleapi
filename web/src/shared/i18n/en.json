@@ -1594,5 +1594,9 @@
   "发送失败": "Delivery failed",
   "发送中": "Sending",
   "等待发送": "Pending delivery",
-  "简体中文": "Simplified Chinese"
+  "简体中文": "Simplified Chinese",
+  "场景默认通知对象": "Default scenario notification targets",
+  "本次运行覆盖场景默认通知": "Override default scenario notifications for this run",
+  "本次运行通知对象（空选项不通知）": "Notification targets for this run (empty means none)",
+  "部分通知对象不可用，请重新选择。": "Some notification targets are unavailable. Select them again."
 }

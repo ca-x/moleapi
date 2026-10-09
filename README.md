@@ -132,3 +132,5 @@ Report steps can open their corresponding redacted historical response with the 
 Scheduled collection/scenario tasks support cron, IANA timezones, selected environments/datasets, enable/disable, queue-now, cancellation and execution history linked to saved reports. Definitions and job state persist across restart. Hosted tasks continue after logout; local desktop tasks require the app to stay running. See [schedule semantics, evidence and remaining scope](docs/SCHEDULED-RUN-COVERAGE.md).
 
 Scheduled tasks can notify selected Webhook, Slack, Teams Workflow, WeCom, DingTalk, Feishu, Jenkins, PagerDuty or SMTP targets. Configure outcome/change filters and inspect bounded retries/provider receipts without exposing saved credentials. See [actual local transport evidence and remaining integration scope](docs/NOTIFICATION-COVERAGE.md).
+
+Ordinary collection/scenario runs can inherit saved notification targets or override them per run. API callers can label CI runs explicitly; notification publication shares the saved-report transaction and scheduled runs avoid duplicate events. See [run notification bindings](docs/RUN-NOTIFICATION-EVENT-COVERAGE.md).

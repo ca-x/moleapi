@@ -34,6 +34,42 @@ pub(crate) async fn enqueue<C: ConnectionTrait>(
     previous_status: Option<&str>,
     run: &crate::scheduling::Occurrence,
 ) -> Result<(usize, usize), ApiError> {
+    enqueue_event(
+        db,
+        owner,
+        workspace,
+        run,
+        Binding {
+            ids,
+            name: schedule_name,
+            previous_status,
+            kind: "SCHEDULE_RUN_COMPLETED",
+            workspace_name: None,
+        },
+    )
+    .await
+}
+struct Binding<'a> {
+    ids: &'a [String],
+    name: &'a str,
+    previous_status: Option<&'a str>,
+    kind: &'a str,
+    workspace_name: Option<&'a str>,
+}
+async fn enqueue_event<C: ConnectionTrait>(
+    db: &C,
+    owner: &str,
+    workspace: &moleapi_core::Workspace,
+    run: &crate::scheduling::Occurrence,
+    binding: Binding<'_>,
+) -> Result<(usize, usize), ApiError> {
+    let Binding {
+        ids,
+        name: schedule_name,
+        previous_status,
+        kind,
+        workspace_name,
+    } = binding;
     if ids.is_empty() {
         return Ok((0, 0));
     }
@@ -87,6 +123,7 @@ pub(crate) async fn enqueue<C: ConnectionTrait>(
             value.as_str().unwrap_or("").to_string()
         };
         let event = Event {
+            kind: kind.into(),
             id: run.id.clone(),
             schedule_id: run.schedule_id.clone(),
             job_id: run.id.clone(),
@@ -97,7 +134,7 @@ pub(crate) async fn enqueue<C: ConnectionTrait>(
             passed: run.passed,
             failed: run.failed,
             skipped: run.skipped,
-            workspace_name: screen(&workspace.name),
+            workspace_name: screen(workspace_name.unwrap_or(&workspace.name)),
             schedule_name: screen(schedule_name),
         };
         let delivery = Delivery {
@@ -298,5 +335,96 @@ async fn deliver(state: &AppState, claim: Claim, stop: CancellationToken) -> Res
     save_delivery(&tx, &claim.owner, &delivery).await?;
     storage::retain(&tx, &claim.owner, &claim.workspace).await?;
     tx.commit().await?;
+    Ok(())
+}
+
+pub(crate) async fn enqueue_run<C: ConnectionTrait>(
+    db: &C,
+    owner: &str,
+    source: &crate::run_reports::Source<'_>,
+    report: &moleapi_core::SavedRunReport,
+) -> Result<(), ApiError> {
+    if source.notification_ids.is_empty() {
+        return Ok(());
+    }
+    let resource = source
+        .scenario
+        .map_or(&source.collection.id, |scenario| &scenario.id);
+    let key = store::workspace_key(
+        owner,
+        &format!(
+            "run-notify:{}:{}:{}",
+            source.workspace.id, resource, source.run_origin
+        ),
+    );
+    let previous = document::Entity::find_by_id(&key)
+        .filter(document::Column::Owner.eq(owner))
+        .filter(document::Column::Kind.eq("run-notify"))
+        .filter(document::Column::RefId.eq(&source.workspace.id))
+        .one(db)
+        .await?;
+    let previous_status = previous
+        .as_ref()
+        .and_then(|row| serde_json::from_str::<serde_json::Value>(&row.payload).ok())
+        .and_then(|value| value["status"].as_str().map(str::to_string));
+    let status = if report.summary.cancelled {
+        "cancelled"
+    } else if report.summary.failed > 0 || report.summary.stopped_reason.is_some() {
+        "failed"
+    } else {
+        "passed"
+    };
+    let run = crate::scheduling::Occurrence {
+        notification_queued: 0,
+        notification_skipped: 0,
+        id: report.id.clone(),
+        schedule_id: format!("{}:{resource}", source.run_origin),
+        config_revision: report.workspace_revision,
+        manual: true,
+        status: status.into(),
+        started_at: report.started_at.clone(),
+        finished_at: Some(report.finished_at.clone()),
+        report_id: Some(report.id.clone()),
+        passed: report.summary.passed,
+        failed: report.summary.failed,
+        skipped: report.summary.skipped,
+        error: None,
+    };
+    enqueue_event(
+        db,
+        owner,
+        source.workspace,
+        &run,
+        Binding {
+            ids: source.notification_ids,
+            workspace_name: Some(&report.workspace_name),
+            name: report
+                .scenario_name
+                .as_ref()
+                .unwrap_or(&report.collection_name),
+            previous_status: previous_status.as_deref(),
+            kind: if source.run_origin == "ci" {
+                "CI_RUN_COMPLETED"
+            } else {
+                "RUN_COMPLETED"
+            },
+        },
+    )
+    .await?;
+    let value = serde_json::json!({"status":status,"report_id":report.id});
+    if previous.is_some() {
+        storage::save(db, owner, &key, "run-notify", 0, &value).await?;
+    } else {
+        store::insert_doc(
+            db,
+            key,
+            owner,
+            "run-notify",
+            &source.workspace.id,
+            0,
+            &value,
+        )
+        .await?;
+    }
     Ok(())
 }

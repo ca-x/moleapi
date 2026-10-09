@@ -5,6 +5,7 @@ import {t} from "../../shared/i18n";
 import {Choice,Field,ToolButton} from "../../shared/ui";
 import {id} from "../../shared/model";
 import {useWorkbench} from "../workbench/context";
+import NotificationPicker from "../notifications/NotificationPicker";
 import ScenarioParallelEditor from "./ScenarioParallelEditor";
 import ScenarioStepControl from "./ScenarioStepControl";
 import type {Scenario,ScenarioStep} from "../../shared/types";
@@ -58,6 +59,7 @@ export default function SavedScenarios({collectionId,disabled}:{collectionId:str
   <Text size="1" color="gray">{t("删除或禁用目标步骤会将指向它的分支改为结束本轮。脚本跳转优先于场景重复和分支设置。")}</Text>
   <Button variant="soft" disabled={busy||!requests.length||edit.steps.length>=1000} onClick={()=>setEdit({...edit,steps:[...edit.steps,{id:id(),request_id:requests[0].value,name:"",group:"",enabled:true}]})}><Plus size={15}/>{t("添加请求步骤")}</Button>
   <ScenarioParallelEditor scenario={edit} disabled={busy} onChange={parallel=>setEdit({...edit,parallel})}/>
+  <NotificationPicker label={t("场景默认通知对象")} value={edit.notification_ids??[]} disabled={busy} onChange={notification_ids=>setEdit({...edit,notification_ids})}/>
   <Button disabled={busy||!edit.name.trim()||!edit.steps.some(step=>step.enabled)} loading={pending} onClick={()=>void persist()}>{t("保存场景到工作区")}</Button>
   {error&&<Callout.Root color="red"><Callout.Text role="alert">{t("场景保存失败，请检查名称、请求引用、步骤数量或工作区版本冲突。未保存的编辑已保留。")}</Callout.Text></Callout.Root>}
  </Flex></details>;

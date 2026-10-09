@@ -132,3 +132,5 @@ GitHub Actions 检查源代码与真实数据库用例，构建多平台服务�
 定时集合／场景任务支持 Cron、IANA 时区、指定环境／数据集、启停、立即排队、取消及关联报告的运行记录。配置和任务状态可跨重启保留；服务端任务退出登录后仍执行，本地桌面任务需要应用保持运行。参见[调度语义、证据与剩余范围](docs/SCHEDULED-RUN-COVERAGE.md)。
 
 定时任务可通知 Webhook、Slack、Teams Workflow、企业微信、钉钉、飞书、Jenkins、PagerDuty 或 SMTP 对象。支持结果／状态变化筛选、有限重试与投递记录，列表不返回保存的私密凭据。参见[本地传输证据与剩余集成范围](docs/NOTIFICATION-COVERAGE.md)。
+
+普通集合／场景运行可继承保存的通知对象，也可按本次运行覆盖或关闭通知。API 调用可标记 CI 运行；事件与报告在同一事务中保存，定时场景不会重复通知。参见[运行通知绑定](docs/RUN-NOTIFICATION-EVENT-COVERAGE.md)。

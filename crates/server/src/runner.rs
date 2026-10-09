@@ -22,6 +22,10 @@ use std::collections::BTreeMap;
 pub struct Run {
     collection_id: String,
     #[serde(default)]
+    notification_ids: Option<Vec<String>>,
+    #[serde(default = "interactive")]
+    run_origin: String,
+    #[serde(default)]
     scenario_id: Option<String>,
     environment_id: Option<String>,
     #[serde(default)]
@@ -38,6 +42,9 @@ pub struct Run {
     iterations: Option<usize>,
     #[serde(default)]
     job_id: Option<String>,
+}
+fn interactive() -> String {
+    "interactive".into()
 }
 #[derive(Deserialize)]
 pub struct Preview {
@@ -170,6 +177,14 @@ pub async fn run(
             "Scenario root does not match selected collection",
         ));
     }
+    if !matches!(c.run_origin.as_str(), "interactive" | "ci") {
+        return Err(ApiError::bad("Run origin must be interactive or ci"));
+    }
+    let notifications = c
+        .notification_ids
+        .as_deref()
+        .unwrap_or_else(|| scenario.map_or(&[], |scenario| scenario.notification_ids.as_slice()));
+    crate::notifications::validate_targets(&s.db, &owner.0, &id, notifications).await?;
     let plan = if let Some(scenario) = scenario {
         moleapi_core::scenario_plan(&w.data, scenario)
             .map_err(|error| ApiError::bad(error.to_string()))?
@@ -554,6 +569,8 @@ pub async fn run(
                 dataset: c.dataset_id.as_deref(),
                 started_at: &started_at,
                 scopes: &scopes,
+                notification_ids: notifications,
+                run_origin: &c.run_origin,
             };
             match crate::run_reports::record(&s, &owner.0, &source, &report).await {
                 Ok(Some(id)) => {
