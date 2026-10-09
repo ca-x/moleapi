@@ -1309,5 +1309,7 @@
   "合并冲突": "合并冲突",
   "已解决冲突": "已解决冲突",
   "已删除": "已删除",
-  "Protobuf / gRPC 客户端及服务端": "Protobuf / gRPC 客户端及服务端"
+  "Protobuf / gRPC 客户端及服务端": "Protobuf / gRPC 客户端及服务端",
+  "此目标需要部署方显式配置 protoc。原生 Rust gRPC 生成不需要外部编译器。": "此目标需要部署方显式配置 protoc。原生 Rust gRPC 生成不需要外部编译器。",
+  "当前生成 Protobuf 消息类型；gRPC 服务接口需要配置对应语言的插件。": "当前生成 Protobuf 消息类型；gRPC 服务接口需要配置对应语言的插件。"
 }

@@ -1309,5 +1309,7 @@
   "合并冲突": "Merge conflict",
   "已解决冲突": "Resolved conflict",
   "已删除": "Deleted",
-  "Protobuf / gRPC 客户端及服务端": "Protobuf / gRPC client and server"
+  "Protobuf / gRPC 客户端及服务端": "Protobuf / gRPC client and server",
+  "此目标需要部署方显式配置 protoc。原生 Rust gRPC 生成不需要外部编译器。": "This target requires explicitly configured protoc. Native Rust gRPC generation needs no external compiler.",
+  "当前生成 Protobuf 消息类型；gRPC 服务接口需要配置对应语言的插件。": "This target currently generates Protobuf message types; gRPC service interfaces require the corresponding language plugin."
 }

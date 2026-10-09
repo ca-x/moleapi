@@ -77,7 +77,7 @@ pub(crate) struct Generate {
 }
 pub(crate) async fn catalog(State(s): State<AppState>) -> Result<Json<Value>, ApiError> {
     Ok(Json(
-        json!({"targets":moleapi_generation::project::project_catalog().map_err(|_|ApiError::internal())?,"java_available":s.project_runtime.java_available(),"native_engine":"progenitor@0.15.0","multi_language_engine":"openapi-generator@7.26.0","scope":"OpenAPI SDK/client and server project artifacts; upstream catalog does not imply per-target compile validation"}),
+        json!({"targets":moleapi_generation::project::project_catalog().map_err(|_|ApiError::internal())?,"java_available":s.project_runtime.java_available(),"protoc_available":s.project_runtime.protoc.is_some(),"grpc_plugins":s.project_runtime.grpc_plugins.keys().collect::<Vec<_>>(),"native_engine":"progenitor@0.15.0","multi_language_engine":"openapi-generator@7.26.0","scope":"OpenAPI SDK/client and server project artifacts; upstream catalog does not imply per-target compile validation"}),
     ))
 }
 pub(crate) async fn generate(
@@ -93,7 +93,7 @@ pub(crate) async fn generate(
     let gate = s.protocol_admission.owner(&owner.0)?;
     let generation = *gate.lock().await;
     let w = owned(&s, &owner.0, &c.workspace_id).await?;
-    let document = if c.target == "rust-tonic" {
+    let document = if moleapi_generation::project::is_protobuf_target(&c.target) {
         if !c.include_secrets {
             moleapi_formats::validate_protobuf_generation_options(
                 &w,

@@ -6473,6 +6473,7 @@ dependencies = [
  "oas3",
  "openapiv3",
  "prettyplease",
+ "process-wrap",
  "progenitor",
  "prost",
  "prost-types",

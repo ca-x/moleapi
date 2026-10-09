@@ -10,6 +10,8 @@ use tokio_util::sync::CancellationToken;
 pub struct ProjectRuntime {
     pub worker: PathBuf,
     pub java: Option<PathBuf>,
+    pub protoc: Option<PathBuf>,
+    pub grpc_plugins: std::collections::BTreeMap<String, PathBuf>,
 }
 impl ProjectRuntime {
     pub fn new(worker: PathBuf, java: Option<PathBuf>) -> Result<Self> {
@@ -23,7 +25,12 @@ impl ProjectRuntime {
                 "Java executable must be explicitly configured as an absolute file path"
             );
         }
-        Ok(Self { worker, java })
+        Ok(Self {
+            worker,
+            java,
+            protoc: None,
+            grpc_plugins: std::collections::BTreeMap::new(),
+        })
     }
     pub fn java_available(&self) -> bool {
         self.java.is_some() && !JAR.is_empty()
@@ -33,7 +40,7 @@ impl ProjectRuntime {
         input: ProjectInput,
         cancel: CancellationToken,
     ) -> Result<ProjectArtifact> {
-        if input.target != "rust-tonic" {
+        if !is_protobuf_target(&input.target) {
             validate_project_specification(&input.specification)?;
         }
         validate_options(&input)?;
@@ -42,6 +49,9 @@ impl ProjectRuntime {
             "rust-progenitor" | "rust-progenitor-cli" | "rust-tonic"
         ) {
             return self.native(input, cancel).await;
+        }
+        if input.target.starts_with("protobuf-") {
+            return self.protoc_generate(input, cancel).await;
         }
         self.jvm(input, cancel).await
     }
@@ -259,5 +269,51 @@ impl ProjectRuntime {
             let _ = child.wait().await;
         }
         result
+    }
+}
+
+impl ProjectRuntime {
+    pub fn with_protoc(
+        mut self,
+        path: Option<PathBuf>,
+        plugins: std::collections::BTreeMap<String, PathBuf>,
+    ) -> Result<Self> {
+        if let Some(path) = &path {
+            ensure!(
+                path.is_absolute() && path.is_file(),
+                "Protoc must be an explicitly configured absolute executable"
+            );
+        }
+        for (language, path) in &plugins {
+            ensure!(
+                [
+                    "cpp", "csharp", "java", "kotlin", "objc", "php", "python", "ruby"
+                ]
+                .contains(&language.as_str())
+                    && path.is_absolute()
+                    && path.is_file(),
+                "gRPC plugins require a known language and explicit executable path"
+            );
+        }
+        self.protoc = path;
+        self.grpc_plugins = plugins;
+        Ok(self)
+    }
+    pub fn from_environment(worker: PathBuf) -> Result<Self> {
+        let java = std::env::var_os("MOLEAPI_CODEGEN_JAVA").map(PathBuf::from);
+        let protoc = std::env::var_os("MOLEAPI_CODEGEN_PROTOC").map(PathBuf::from);
+        let plugins = [
+            "cpp", "csharp", "java", "kotlin", "objc", "php", "python", "ruby",
+        ]
+        .into_iter()
+        .filter_map(|language| {
+            std::env::var_os(format!(
+                "MOLEAPI_CODEGEN_GRPC_{}",
+                language.to_ascii_uppercase()
+            ))
+            .map(|path| (language.into(), PathBuf::from(path)))
+        })
+        .collect();
+        Self::new(worker, java)?.with_protoc(protoc, plugins)
     }
 }

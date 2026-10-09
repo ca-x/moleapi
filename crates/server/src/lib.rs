@@ -181,10 +181,9 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         generation_slots: Arc::new(tokio::sync::Semaphore::new(4)),
         project_slots: Arc::new(tokio::sync::Semaphore::new(2)),
         project_jobs: Arc::default(),
-        project_runtime: Arc::new(moleapi_generation::project::ProjectRuntime::new(
-            script_worker.clone(),
-            std::env::var_os("MOLEAPI_CODEGEN_JAVA").map(PathBuf::from),
-        )?),
+        project_runtime: Arc::new(
+            moleapi_generation::project::ProjectRuntime::from_environment(script_worker.clone())?,
+        ),
         cookies: Arc::default(),
         oauth1_slots: Arc::new(tokio::sync::Semaphore::new(8)),
         oauth1_flows: Arc::default(),

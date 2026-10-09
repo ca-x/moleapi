@@ -2,6 +2,7 @@
 mod artifact;
 mod native;
 mod protobuf;
+mod protoc;
 mod regeneration;
 pub use regeneration::*;
 mod runtime;
@@ -93,6 +94,17 @@ pub fn project_catalog() -> Result<Vec<ProjectTarget>> {
             ]),
         },
     );
+    for language in [
+        "cpp", "csharp", "java", "kotlin", "objc", "php", "python", "ruby",
+    ] {
+        targets.push(ProjectTarget {
+            id: format!("protobuf-{language}"),
+            kind: "protobuf".into(),
+            upstream_stability: "stable".into(),
+            validation: "compiler-integration-awaiting-fixtures".into(),
+            options: BTreeMap::new(),
+        });
+    }
     Ok(targets)
 }
 pub(crate) fn validate_options(input: &ProjectInput) -> Result<()> {
@@ -176,3 +188,7 @@ pub(crate) fn validate_options(input: &ProjectInput) -> Result<()> {
 
 #[cfg(test)]
 mod tests;
+
+pub fn is_protobuf_target(target: &str) -> bool {
+    target == "rust-tonic" || target.starts_with("protobuf-")
+}

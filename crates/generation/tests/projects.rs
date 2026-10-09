@@ -131,3 +131,141 @@ async fn explicit_generator_process_is_killed_and_reaped_on_cancel_without_silen
         "Generator child remains alive or unreaped"
     );
 }
+#[tokio::test]
+#[ignore = "requires explicitly configured protoc executable"]
+async fn official_protoc_generates_all_builtin_language_messages_from_checked_descriptors() {
+    let compiler =
+        PathBuf::from(std::env::var_os("MOLEAPI_CODEGEN_TEST_PROTOC").expect("explicit protoc"));
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), None)
+        .unwrap()
+        .with_protoc(Some(compiler), BTreeMap::new())
+        .unwrap();
+    let spec = json!({"kind":"proto","files":[{"path":"fixture.proto","content":"syntax=\"proto3\"; package fixture; message Echo {string text=1;} service EchoService {rpc Call(Echo) returns(Echo);}"}],"entry_files":["fixture.proto"]});
+    for language in [
+        "cpp", "csharp", "java", "kotlin", "objc", "php", "python", "ruby",
+    ] {
+        let artifact = runtime
+            .generate(
+                ProjectInput {
+                    target: format!("protobuf-{language}"),
+                    specification: spec.clone(),
+                    options: BTreeMap::new(),
+                    include_secrets: false,
+                },
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap_or_else(|e| panic!("{language}: {e}"));
+        assert!(artifact.files.len() > 3);
+        println!("{language}: {} generated files", artifact.files.len());
+        if let Some(root) = std::env::var_os("MOLEAPI_CODEGEN_TEST_OUTPUT") {
+            let root = PathBuf::from(root).join(language);
+            for file in &artifact.files {
+                if file.encoding == "utf8" {
+                    let path = root.join(&file.path);
+                    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+                    std::fs::write(path, &file.content).unwrap();
+                }
+            }
+        }
+    }
+}
+#[tokio::test]
+#[ignore = "requires explicitly configured Python grpcio-tools compiler"]
+async fn integrated_official_python_compiler_emits_message_and_grpc_service_code() {
+    let compiler = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_GRPC_PYTHON")
+            .expect("explicit grpcio-tools compiler"),
+    );
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), None)
+        .unwrap()
+        .with_protoc(
+            Some(compiler.clone()),
+            BTreeMap::from([("python".into(), compiler)]),
+        )
+        .unwrap();
+    let spec = json!({"kind":"proto","files":[{"path":"fixture.proto","content":"syntax=\"proto3\"; package fixture; message Echo {string text=1;} service EchoService {rpc Call(Echo) returns(Echo);}"}],"entry_files":["fixture.proto"]});
+    let artifact = runtime
+        .generate(
+            ProjectInput {
+                target: "protobuf-python".into(),
+                specification: spec,
+                options: BTreeMap::new(),
+                include_secrets: false,
+            },
+            CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert!(artifact.files.iter().any(|f| f.path == "fixture_pb2.py"));
+    assert!(
+        artifact
+            .files
+            .iter()
+            .any(|f| f.path == "fixture_pb2_grpc.py"
+                && f.content.contains("EchoServiceStub")
+                && f.content.contains("EchoServiceServicer"))
+    );
+    if let Some(root) = std::env::var_os("MOLEAPI_CODEGEN_TEST_OUTPUT") {
+        let root = PathBuf::from(root);
+        for file in artifact.files {
+            if file.encoding == "utf8" {
+                let path = root.join(file.path);
+                std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+                std::fs::write(path, file.content).unwrap();
+            }
+        }
+    }
+}
+#[cfg(unix)]
+#[tokio::test]
+async fn protoc_plugin_process_group_is_terminated_and_reaped_on_cancellation() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().unwrap();
+    let compiler = root.path().join("compiler");
+    let pid = root.path().join("pid");
+    std::fs::write(
+        &compiler,
+        format!(
+            "#!/bin/sh\necho $$ > '{}'\nexec /bin/sleep 30\n",
+            pid.display()
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&compiler, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), None)
+        .unwrap()
+        .with_protoc(Some(compiler), BTreeMap::new())
+        .unwrap();
+    let cancel = CancellationToken::new();
+    let signal = cancel.clone();
+    let input = ProjectInput {
+        target: "protobuf-python".into(),
+        specification: json!({"kind":"proto","files":[{"path":"a.proto","content":"syntax=\"proto3\"; message A {}"}],"entry_files":["a.proto"]}),
+        options: BTreeMap::new(),
+        include_secrets: false,
+    };
+    let task = tokio::spawn(async move { runtime.generate(input, signal).await });
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        while !pid.is_file() {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let child = std::fs::read_to_string(pid).unwrap().trim().to_owned();
+    cancel.cancel();
+    let result = tokio::time::timeout(std::time::Duration::from_secs(2), task)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(result.unwrap_err().to_string().contains("cancelled"));
+    assert!(
+        !std::process::Command::new("/bin/kill")
+            .args(["-0", &child])
+            .stderr(std::process::Stdio::null())
+            .status()
+            .unwrap()
+            .success()
+    );
+}

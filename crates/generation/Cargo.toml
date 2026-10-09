@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+process-wrap = {version="10",features=["tokio1"]}
 tonic-prost-build = "=0.14.6"
 prost = "0.14"
 prost-types = "0.14"
