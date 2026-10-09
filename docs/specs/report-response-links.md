@@ -1,0 +1,9 @@
+# Run report links to stored response history
+
+Extend saved report detail rather than re-running interfaces or embedding live credentials into report artifacts. The existing history writer returns its immutable generated record ID. Preserve that identifier across privacy projection. Serial and parallel execution attach the ID before response trimming; saved step models add optional history_id defaults so previous reports remain readable. Skip/failed-before-response steps have no link. Parallel history retains peer-taint union before assignment.
+
+Add an authenticated owned GET reports/{report}/steps/{position}/response endpoint. Resolve the saved report in the requested owner/workspace, then only its stored history record of kind history and matching owner/ref workspace. Return its existing sanitized HistoryEntry, including exact executed method/status/body/header protections. No transport, scripts, workspace writes or secret reveal. Cleared history yields404 while report metadata remains intact; workspace deletion/recreation does not revive links.
+
+The bilingual React/Radix report details offer per-step stored response inspection through existing ResponsePane/CodeMirror. Account/workspace/report/position query keys and close/selection resets prevent late display under another report. Show absence/deleted history separately from a request failure. JSON exports carry IDs, not fetched live bodies; optional payload-inclusive/export/synchronization workflows remain required follow-on work.
+
+Necessary checks: real serial and parallel report/history correspondence and cross-peer privacy, metadata after source edits, clear history retains report, owned/wrong-workspace rejection, omitted live response retains link, old report defaults, low-entropy taints do not mutate generated history IDs, and scoped UI/catalog/type/build. No intermediate formal review, local Docker or installer work.

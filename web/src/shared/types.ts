@@ -252,6 +252,7 @@ export interface RunResult {
   stopped_reason?:string|null;
   omitted_responses?:number;
   results: {
+    history_id?:string|null;
     outcome?:"passed"|"failed"|"skipped";
     tests_passed?:number;
     tests_failed?:number;
@@ -296,6 +297,7 @@ export interface SavedRunSummary {
  passed:number;failed:number;skipped:number;elapsed_ms:number;iteration_count:number;completed_iterations:number;executed_steps:number;tests_passed:number;tests_failed:number;diagnostics_omitted:number;stopped_reason:string|null;cancelled:boolean;
 }
 export interface RunStepReport {
+ history_id?:string|null;
  position:number;request_id:string;request_name:string;collection_id:string;method:string;iteration:number;step_id:string|null;step_name:string|null;step_group:string|null;parallel_id:string|null;parallel_name:string|null;repeat_index:number;outcome:"passed"|"failed"|"skipped";status:number|null;elapsed_ms:number;size_bytes:number;tests:{id:string;name:string;passed:boolean;actual:string;expected:string}[];tests_passed:number;tests_failed:number;diagnostics_omitted:number;error:string|null;
 }
 export interface SavedRunReport {

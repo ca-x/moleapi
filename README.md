@@ -126,3 +126,5 @@ Scenario steps support JavaScript boolean conditions, true/false step destinatio
 Named parallel scenario blocks run conditional/repeated requests with configurable concurrency. Branches keep isolated variables and merge after completion; differing writes stop the block, and histories use combined peer privacy taints. See [parallel semantics, evidence and remaining scope](docs/SCENARIO-PARALLEL-COVERAGE.md).
 
 Collection/scenario runs automatically save redacted reports with source revisions, ordered outcomes, assertions and timings. Browse/filter/delete reports, locate current failed interfaces and export JSON, CSV, JUnit XML or standalone English/Chinese HTML. Each workspace retains its latest100 reports; live bodies/headers/logs/variables stay outside these artifacts. See [report evidence and remaining scope](docs/SAVED-RUN-REPORT-COVERAGE.md).
+
+Report steps can open their corresponding redacted historical response with the existing response viewer. This reads saved history without sending the request again; clearing history removes payload access while retaining the report. See [response links and limitations](docs/REPORT-RESPONSE-COVERAGE.md).

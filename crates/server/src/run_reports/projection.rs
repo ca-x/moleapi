@@ -115,6 +115,7 @@ pub(super) fn project(source: &Source<'_>, live: &Value) -> Result<SavedRunRepor
             .find(|request| request.id == request_id);
         let optional = |key: &str, limit| item[key].as_str().map(|value| screen(value, limit));
         results.push(RunStepReport {
+            history_id: item["history_id"].as_str().map(str::to_string),
             position,
             request_id: screen(request_id, 128),
             request_name: screen(item["request_name"].as_str().unwrap_or(""), 256),

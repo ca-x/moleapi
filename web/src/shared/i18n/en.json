@@ -1521,5 +1521,11 @@
   "上一页步骤": "Previous steps",
   "下一页步骤": "Next steps",
   "即时结果已保留，但报告未能保存。请检查存储或工作区状态。": "Live results are retained, but the report could not be saved. Check storage or workspace state.",
-  "已保存脱敏报告": "Redacted report saved"
+  "已保存脱敏报告": "Redacted report saved",
+  "步骤 {{position}} 的历史响应": "Historical response for step {{position}}",
+  "关闭历史响应": "Close historical response",
+  "读取运行时保存的脱敏历史，不会重新发送请求。清空历史后，此响应链接不可用，报告结果仍保留。": "Read the redacted history saved during execution without sending another request. Clearing history removes this response link while retaining the report.",
+  "历史响应已删除或不可用，报告结果仍然保留。": "Historical response was deleted or is unavailable; the report remains.",
+  "无法读取历史响应。": "Could not load historical response.",
+  "查看脱敏历史响应": "View redacted historical response"
 }

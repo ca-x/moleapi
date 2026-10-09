@@ -39,7 +39,7 @@ pub(crate) async fn record(
     environment: Option<&moleapi_core::Environment>,
     response: &moleapi_core::Response,
     privacy: crate::privacy::HistoryPrivacy<'_>,
-) -> Result<(), ApiError> {
+) -> Result<Option<String>, ApiError> {
     let mut stored = response.clone();
     stored.url = moleapi_core::redact_url(&response.url, environment);
     // Logs and variable diffs are for the active execution view only.
@@ -171,10 +171,13 @@ pub(crate) async fn record(
     if !redactor.withholds_text() {
         redactor.scrub(&mut value);
     }
+    // Generated identifiers are storage handles, not user-controlled diagnostic text.
+    value["id"] = entry.id.clone().into();
     let entry: HistoryEntry = serde_json::from_value(value).map_err(|_| ApiError::internal())?;
     // The workspace may have been deleted while the endpoint was running.
     if storage::get(&s.db, owner, &w.id).await?.is_some() {
         storage::insert_doc(&s.db, entry.id.clone(), owner, "history", &w.id, 0, &entry).await?;
+        return Ok(Some(entry.id));
     }
-    Ok(())
+    Ok(None)
 }

@@ -276,7 +276,7 @@ pub(super) async fn run(
                         batch.stopped = Some("owner_changed");
                         break;
                     }
-                    crate::history::record(
+                    let history_id = crate::history::record(
                         context.state,
                         context.owner,
                         context.workspace,
@@ -289,6 +289,8 @@ pub(super) async fn run(
                         },
                     )
                     .await?;
+                    item["history_id"] =
+                        serde_json::to_value(history_id).map_err(|_| ApiError::internal())?;
                 }
                 if visit.error.is_none() {
                     if outcome.response.skipped {

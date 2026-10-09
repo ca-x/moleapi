@@ -1,0 +1,13 @@
+# Report response history links
+
+Serial and parallel collection/scenario executions attach an immutable generated history identifier before response-detail trimming. Saved report steps carry optional history_id; prior reports default to no link. Skipped requests and failures without a saved response have no link. The ordinary single-request response API remains unchanged.
+
+GET /api/workspaces/{workspace}/reports/{report}/steps/{position}/response first resolves the owned report in the requested workspace, then only its owned history document of kind history and matching workspace. It returns the existing redacted HistoryEntry, not a re-executed interface or a reconstructed live response. Existing credential/body/header, SOAP/binary and failed-worker history protections remain in force. Parallel records are still assigned after unioning peer taints. Generated history IDs are protected from text redaction so short private patterns cannot corrupt storage handles; user-controlled content continues to be screened.
+
+The bilingual report detail opens the existing ResponsePane/CodeMirror viewer for a linked step. Query identity includes account/workspace/report/position, and closing or changing the selected report resets the response selection. Deleted/unavailable history is distinguished from request failure. Clearing request history removes linked payload access while leaving report metadata and counters intact. Source interface edits do not replace the response. JSON report exports include the identifier without fetching/embedding payloads.
+
+## Necessary evidence
+
+Actual serial and parallel fixtures prove report/history correspondence, UUID stability under a one-character private value, known runtime token removal, no variable setters in stored responses, no link for skipped requests, source-edit stability, clear-history report retention, distinct peer records and owner/workspace isolation. The existing large-response fixture proves links survive live report response omission. Existing extraction/history regressions passed after the history writer return-type change. Frontend cases prove stored response fetching, missing-history messaging, stale report response exclusion and detail-button selection. Bilingual catalogs, TypeScript, production frontend and scoped Clippy checks passed. No formal intermediate review or native platform/browser visual audit was run.
+
+Payload-inclusive exports, report comparison/sharing/trends/synchronization, scheduling/crash-recoverable runners, richer orchestration and all remaining product requirements remain open before unified review and the main-branch Actions release.

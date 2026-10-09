@@ -523,6 +523,27 @@ async fn omitted_live_responses_keep_failed_outcomes_and_assertion_counts_in_sav
             .iter()
             .all(|item| item["outcome"] == "failed")
     );
+    for item in report["results"].as_array().unwrap() {
+        assert!(item["history_id"].is_string());
+    }
+    let position = live["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .position(|item| item["response_omitted"] == true)
+        .unwrap();
+    assert_eq!(
+        call(
+            &router,
+            "GET",
+            &format!("/api/workspaces/w/reports/{id}/steps/{position}/response"),
+            None,
+            None
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
     fixture.abort();
 }
 #[tokio::test]

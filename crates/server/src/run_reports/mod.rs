@@ -120,6 +120,29 @@ pub async fn get(
 ) -> Result<Json<SavedRunReport>, ApiError> {
     Ok(Json(lookup(&state, &owner.0, &workspace, &id).await?))
 }
+pub async fn response(
+    State(state): State<AppState>,
+    Extension(owner): Extension<Identity>,
+    Path((workspace, id, position)): Path<(String, String, usize)>,
+) -> Result<Json<moleapi_core::HistoryEntry>, ApiError> {
+    let report = lookup(&state, &owner.0, &workspace, &id).await?;
+    let history_id = report
+        .results
+        .iter()
+        .find(|step| step.position == position)
+        .and_then(|step| step.history_id.as_ref())
+        .ok_or_else(ApiError::not_found)?;
+    let row = document::Entity::find_by_id(history_id)
+        .filter(document::Column::Owner.eq(owner.0))
+        .filter(document::Column::Kind.eq("history"))
+        .filter(document::Column::RefId.eq(workspace))
+        .one(&state.db)
+        .await?
+        .ok_or_else(ApiError::not_found)?;
+    Ok(Json(
+        serde_json::from_str(&row.payload).map_err(|_| ApiError::internal())?,
+    ))
+}
 pub async fn remove(
     State(state): State<AppState>,
     Extension(owner): Extension<Identity>,

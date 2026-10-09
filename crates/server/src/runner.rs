@@ -7,7 +7,7 @@ type PlanStep<'a> = (
     &'a moleapi_core::RequestSpec,
     Option<&'a moleapi_core::ScenarioStep>,
 );
-use crate::execution::{environment, perform, variables};
+use crate::execution::{environment, perform_recorded, variables};
 use crate::{ApiError, AppState, auth::Identity, workspaces::owned};
 use axum::{
     Extension, Json,
@@ -397,9 +397,9 @@ pub async fn run(
                             break 'iterations;
                         }
                     }
-                    let result = tokio::select! {biased;_=lease.cancel.cancelled()=>{stopped=Some("cancelled");break 'iterations;},_=tokio::time::sleep_until(deadline)=>{stopped=Some("deadline");break 'iterations;},result=perform(&s,&owner.0,&w,request,Some(selected),&mut scopes)=>result};
+                    let result = tokio::select! {biased;_=lease.cancel.cancelled()=>{stopped=Some("cancelled");break 'iterations;},_=tokio::time::sleep_until(deadline)=>{stopped=Some("deadline");break 'iterations;},result=perform_recorded(&s,&owner.0,&w,request,Some(selected),&mut scopes)=>result};
                     match result {
-                        Ok(response) => {
+                        Ok((response, history_id)) => {
                             if response.skipped {
                                 skipped += 1;
                             } else {
@@ -410,7 +410,7 @@ pub async fn run(
                                     failed += 1;
                                 }
                             }
-                            json!({"request_id":request.id,"request_name":request.name,"method":request.method,"collection_id":selected.id,"iteration":index,"status":response.status,"elapsed_ms":response.elapsed_ms,"response":response})
+                            json!({"request_id":request.id,"request_name":request.name,"method":request.method,"collection_id":selected.id,"iteration":index,"status":response.status,"elapsed_ms":response.elapsed_ms,"history_id":history_id,"response":response})
                         }
                         Err(error) => {
                             previous_response = None;

@@ -115,8 +115,20 @@ pub(crate) async fn perform(
     collection: Option<&Collection>,
     scopes: &mut VariableScopes,
 ) -> Result<Response, ApiError> {
+    Ok(perform_recorded(s, owner, w, r, collection, scopes)
+        .await?
+        .0)
+}
+pub(crate) async fn perform_recorded(
+    s: &AppState,
+    owner: &str,
+    w: &Workspace,
+    r: &RequestSpec,
+    collection: Option<&Collection>,
+    scopes: &mut VariableScopes,
+) -> Result<(Response, Option<String>), ApiError> {
     let outcome = perform_deferred(s, owner, w, r, collection, scopes).await?;
-    if let Some(history) = outcome.history {
+    let history_id = if let Some(history) = outcome.history {
         crate::history::record(
             s,
             owner,
@@ -129,9 +141,11 @@ pub(crate) async fn perform(
                 redact_failed_response: history.redact_failed_response,
             },
         )
-        .await?;
-    }
-    Ok(outcome.response)
+        .await?
+    } else {
+        None
+    };
+    Ok((outcome.response, history_id))
 }
 pub(crate) async fn perform_deferred(
     s: &AppState,

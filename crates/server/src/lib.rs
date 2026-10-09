@@ -273,6 +273,10 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
             "/workspaces/{workspace}/reports/{report}/export",
             get(run_reports::export),
         )
+        .route(
+            "/workspaces/{workspace}/reports/{report}/steps/{position}/response",
+            get(run_reports::response),
+        )
         .route("/workspaces/{id}/run", post(runner::run))
         .route("/workspaces/{id}/run/cancel", post(runner::cancel))
         .route("/testing/dataset/preview", post(runner::preview))

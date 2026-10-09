@@ -33,6 +33,8 @@ pub struct RunIterationReport {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RunStepReport {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub history_id: Option<String>,
     pub position: usize,
     pub request_id: String,
     pub request_name: String,
