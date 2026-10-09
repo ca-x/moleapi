@@ -102,6 +102,12 @@ pub(crate) async fn generate(
             "Invalid specification generation identifiers",
         ));
     }
+    let template_privacy = c
+        .templates
+        .as_ref()
+        .map(|templates| templates.privacy_value())
+        .transpose()
+        .map_err(|error| ApiError::bad(error.to_string()))?;
     let gate = s.protocol_admission.owner(&owner.0)?;
     let generation = *gate.lock().await;
     let w = owned(&s, &owner.0, &c.workspace_id).await?;
@@ -122,7 +128,7 @@ pub(crate) async fn generate(
         if !c.include_secrets {
             moleapi_formats::validate_protobuf_generation_options(
                 &w,
-                &json!({"options":c.options,"templates":c.templates}),
+                &json!({"options":c.options,"templates":template_privacy}),
             )
             .map_err(|e| ApiError::bad(e.to_string()))?;
         }
@@ -175,7 +181,7 @@ pub(crate) async fn generate(
             moleapi_formats::validate_generation_options(
                 &projection,
                 &c.specification_id,
-                &json!({"options":c.options,"templates":c.templates}),
+                &json!({"options":c.options,"templates":template_privacy}),
             )
             .map_err(|e| ApiError::bad(e.to_string()))?;
         }

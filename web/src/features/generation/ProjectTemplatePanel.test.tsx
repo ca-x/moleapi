@@ -11,6 +11,11 @@ vi.mock("../../shared/ui",async()=>{const real=await vi.importActual<object>("..
 const bundle={format:"moleapi-codegen-templates-v1" as const,files:[{path:"models.mustache",content:"{{classname}}"}]};
 beforeEach(async()=>{await setLanguage("en");vi.stubGlobal("ResizeObserver",class{observe(){}unobserve(){}disconnect(){}});pick.mockReset();call.mockReset();});
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
+it("previews binary assets as metadata without editing encoded bytes as a template",()=>{
+ const value=parseTemplateBundle({format:"moleapi-codegen-templates-v1",files:[{path:"asset.bin",encoding:"base64",content:"AP+A"}],outputs:{"asset.bin":{}}});
+ render(<Theme><ProjectTemplatePanel workspaceId="w" scope="owner" value={value} disabled={false} dark={false} onChange={vi.fn()} onBusyChange={vi.fn()}/></Theme>);
+ fireEvent.click(screen.getByText("Custom Mustache templates (1)"));expect(screen.getByText("Binary static assets retain their original bytes and are copied using their output mappings.")).toBeTruthy();expect(screen.queryByRole("textbox",{name:"template-editor"})).toBeNull();
+});
 it("restores exact template source from a saved generated snapshot and edits through the existing editor",async()=>{
  const change=vi.fn();pick.mockResolvedValue(JSON.stringify({files:[{path:"moleapi-templates.json",encoding:"utf8",content:JSON.stringify(bundle)}]}));
  const props={workspaceId:"w",scope:"owner",value:null,disabled:false,dark:false,onChange:change,onBusyChange:vi.fn()};

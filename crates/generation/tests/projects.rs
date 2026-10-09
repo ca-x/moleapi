@@ -9,7 +9,7 @@ async fn explicit_templates_override_upstream_rendering_and_preserve_repeatable_
         std::env::var_os("MOLEAPI_CODEGEN_TEST_JAVA").expect("explicit Java executable"),
     );
     let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), Some(java)).unwrap();
-    let templates = TemplateBundle {format:"moleapi-codegen-templates-v1".into(),files:vec![TemplateFile {path:"models.mustache".into(),content:"{{#models}}{{#model}}export interface {{classname}} { readonly templateMarker: string; }\n{{/model}}{{/models}}".into()}]};
+    let templates = TemplateBundle {format:"moleapi-codegen-templates-v1".into(),outputs:BTreeMap::new(),files:vec![TemplateFile {encoding:None,path:"models.mustache".into(),content:"{{#models}}{{#model}}export interface {{classname}} { readonly templateMarker: string; }\n{{/model}}{{/models}}".into()}]};
     let result=runtime.generate(ProjectInput {specification:json!({"openapi":"3.0.3","info":{"title":"Template fixture","version":"1"},"paths":{},"components":{"schemas":{"Pet":{"type":"object","properties":{"id":{"type":"integer"}}}}}}),target:"typescript-fetch".into(),options:BTreeMap::new(),include_secrets:false,templates:Some(templates.clone())},CancellationToken::new()).await.unwrap();
     assert!(result.files.iter().any(|file| {
         file.path.ends_with("Pet.ts")

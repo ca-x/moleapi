@@ -23,7 +23,9 @@ use serde_json::Value;
 pub use source::*;
 pub use source_bundle::*;
 use std::collections::BTreeMap;
-pub use templates::{TemplateBundle, TemplateFile, supports_templates};
+pub use templates::{
+    TemplateBundle, TemplateFile, TemplateKind, TemplateOutput, supports_templates,
+};
 pub const SPEC_LIMIT: usize = 1024 * 1024;
 pub const FILE_LIMIT: usize = 4 * 1024 * 1024;
 pub const PROJECT_LIMIT: usize = 8 * 1024 * 1024;
