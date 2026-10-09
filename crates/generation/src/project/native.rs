@@ -112,7 +112,7 @@ fn native_project(input: &ProjectInput) -> Result<ProjectArtifact> {
         let cli_source = prettyplease::unparse(&cli_file);
         ensure!(
             !cli_source.contains("todo!()"),
-            "Native CLI generator does not yet support raw/upgrade responses; use a different CLI target"
+            "Native CLI generator does not yet support upgrade or raw paginated responses; use a different CLI target"
         );
         code.push_str("\npub mod cli;\n");
         files.insert("src/lib.rs".into(), code.into_bytes());
@@ -123,9 +123,9 @@ fn native_project(input: &ProjectInput) -> Result<ProjectArtifact> {
                 .replace("__SDK_CRATE__", &package.replace('-', "_"))
                 .into_bytes(),
         );
-        manifest.push_str("anyhow = \"1\"\nclap = {version=\"4\",features=[\"env\"]}\nschemars = {version=\"0.8\",features=[\"chrono\",\"uuid1\"]}\ntokio = {version=\"1\",features=[\"macros\",\"rt-multi-thread\"]}\n");
+        manifest.push_str("anyhow = \"1\"\nclap = {version=\"4\",features=[\"env\"]}\nschemars = {version=\"0.8\",features=[\"chrono\",\"uuid1\"]}\ntokio = {version=\"1\",features=[\"macros\",\"rt-multi-thread\",\"fs\",\"io-util\",\"io-std\"]}\n");
         files.insert("Cargo.toml".into(), manifest.into_bytes());
-        files.insert("README.md".into(),b"Generated CLI uses Progenitor's clap operation parser and typed SDK. Build with cargo build. Set MOLEAPI_API_URL or --base-url and choose an operation with --help. Optional MOLEAPI_API_TOKEN supplies a Bearer token; no credentials are baked into generated code. JSON results go to stdout, errors exit nonzero.\n".to_vec());
+        files.insert("README.md".into(),b"Generated CLI uses Progenitor's clap operation parser and typed SDK. Build with cargo build. Set MOLEAPI_API_URL or --base-url and choose an operation with --help. Optional MOLEAPI_API_TOKEN supplies a Bearer token; no credentials are baked into generated code. JSON results go to stdout; binary responses stream unchanged to stdout or --output-file (new files only). Use operation --body-file for raw binary/text request bodies (loaded into memory). Errors exit nonzero.\n".to_vec());
     }
     artifact(
         input,
@@ -155,5 +155,136 @@ mod tests {
                 .any(|f| f.path == "src/lib.rs" && f.content.contains("pub async fn health"))
         );
         assert!(result.files.iter().any(|f| f.path == "Cargo.toml"));
+    }
+    #[test]
+    #[ignore = "Compiles a generated standalone project; run explicitly with a cached Cargo toolchain"]
+    fn native_cli_streams_binary_and_returns_raw_errors() {
+        use std::{net::TcpListener, process::Command};
+        let input = ProjectInput {
+            target: "rust-progenitor-cli".into(),
+            options: BTreeMap::new(),
+            include_secrets: false,
+            specification: serde_json::json!({
+                "openapi":"3.0.3", "info":{"title":"Binary fixture","version":"1"},
+                "paths":{
+                    "/download":{"get":{"operationId":"download","responses":{
+                        "200":{"description":"Bytes","content":{"application/octet-stream":{"schema":{"type":"string","format":"binary"}}}}
+                    }}},
+                    "/upload":{"post":{"operationId":"upload","requestBody":{"required":true,"content":{"application/octet-stream":{"schema":{"type":"string","format":"binary"}}}},"responses":{
+                        "204":{"description":"Uploaded"}
+                    }}},
+                    "/failure":{"get":{"operationId":"failure","responses":{
+                        "204":{"description":"Empty"},
+                        "400":{"description":"Binary error","content":{"application/octet-stream":{"schema":{"type":"string","format":"binary"}}}}
+                    }}}
+                }
+            }),
+        };
+        let artifact = native_project(&input).unwrap();
+        let project = tempfile::tempdir().unwrap();
+        for file in &artifact.files {
+            let path = project.path().join(&file.path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, file.content.as_bytes()).unwrap();
+        }
+        let target = std::env::var_os("MOLEAPI_GENERATED_TEST_TARGET")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| project.path().join("target"));
+        let build = Command::new("cargo")
+            .args(["build", "--quiet"])
+            .current_dir(project.path())
+            .env("CARGO_TARGET_DIR", &target)
+            .output()
+            .unwrap();
+        assert!(
+            build.status.success(),
+            "{}",
+            String::from_utf8_lossy(&build.stderr)
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let payload = vec![0, 255, 128, b'\n', b'X'];
+        let response = payload.clone();
+        let server = std::thread::spawn(move || {
+            for _ in 0..5 {
+                let (mut socket, _) = listener.accept().unwrap();
+                socket
+                    .set_read_timeout(Some(std::time::Duration::from_secs(10)))
+                    .unwrap();
+                let mut request = Vec::new();
+                while !request.ends_with(b"\r\n\r\n") {
+                    let mut byte = [0];
+                    socket.read_exact(&mut byte).unwrap();
+                    request.push(byte[0]);
+                }
+                if request.starts_with(b"POST /upload ") {
+                    let headers = String::from_utf8_lossy(&request);
+                    let length = headers
+                        .lines()
+                        .find_map(|line| {
+                            let (name, value) = line.split_once(':')?;
+                            name.eq_ignore_ascii_case("content-length")
+                                .then(|| value.trim().parse::<usize>().unwrap())
+                        })
+                        .unwrap();
+                    assert_eq!(length, response.len());
+                    let mut body = vec![0; length];
+                    socket.read_exact(&mut body).unwrap();
+                    assert_eq!(body, response);
+                    socket
+                        .write_all(b"HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n")
+                        .unwrap();
+                    continue;
+                }
+                let status = if request.starts_with(b"GET /failure ") {
+                    "400 Bad Request"
+                } else {
+                    "200 OK"
+                };
+                write!(socket, "HTTP/1.1 {status}\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", response.len()).unwrap();
+                socket.write_all(&response).unwrap();
+            }
+        });
+        let executable = target
+            .join("debug")
+            .join(format!("moleapi_sdk{}", std::env::consts::EXE_SUFFIX));
+        let run = |args: &[&str]| {
+            Command::new(&executable)
+                .args(["--base-url", &url])
+                .args(args)
+                .output()
+                .unwrap()
+        };
+        let stdout = run(&["download"]);
+        assert!(
+            stdout.status.success(),
+            "{}",
+            String::from_utf8_lossy(&stdout.stderr)
+        );
+        assert_eq!(stdout.stdout, payload);
+        let file = project.path().join("download.bin");
+        let saved = run(&["--output-file", file.to_str().unwrap(), "download"]);
+        assert!(
+            saved.status.success(),
+            "{}",
+            String::from_utf8_lossy(&saved.stderr)
+        );
+        assert!(saved.stdout.is_empty());
+        assert_eq!(std::fs::read(&file).unwrap(), payload);
+        let overwrite = run(&["--output-file", file.to_str().unwrap(), "download"]);
+        assert!(!overwrite.status.success());
+        assert_eq!(std::fs::read(&file).unwrap(), payload);
+        let upload = run(&["upload", "--body-file", file.to_str().unwrap()]);
+        assert!(
+            upload.status.success(),
+            "{}",
+            String::from_utf8_lossy(&upload.stderr)
+        );
+        assert!(upload.stdout.is_empty());
+        let error = run(&["failure"]);
+        assert!(!error.status.success());
+        assert!(error.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&error.stderr).contains("400"));
+        server.join().unwrap();
     }
 }

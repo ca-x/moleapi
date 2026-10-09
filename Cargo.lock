@@ -8419,8 +8419,6 @@ dependencies = [
 [[package]]
 name = "progenitor-impl"
 version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83aef4388cf237992f3f55aeead8417f45e9305fdbb77e97a551e8166629c692"
 dependencies = [
  "heck 0.5.0",
  "http 1.5.0",

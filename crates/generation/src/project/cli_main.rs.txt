@@ -1,9 +1,23 @@
 use __SDK_CRATE__::{Client, Error, ResponseValue};
 use __SDK_CRATE__::cli::{Cli, CliConfig, CliCommand};
-struct Output;
+struct Output { file: Option<std::path::PathBuf> }
 impl CliConfig for Output {
     fn success_item<T>(&self, value: &ResponseValue<T>) where T: schemars::JsonSchema + serde::Serialize + std::fmt::Debug {
         println!("{}", serde_json::to_string(&**value).expect("Serialize typed response"));
+    }
+    async fn success_raw(&self, value: ResponseValue<__SDK_CRATE__::ByteStream>) -> anyhow::Result<()> {
+        use futures::StreamExt;
+        use tokio::io::AsyncWriteExt;
+        let mut output: Box<dyn tokio::io::AsyncWrite + Unpin + Send> = match &self.file {
+            Some(path) => Box::new(tokio::fs::OpenOptions::new().write(true).create_new(true).open(path).await?),
+            None => Box::new(tokio::io::stdout()),
+        };
+        let mut stream = value.into_inner_stream();
+        while let Some(chunk) = stream.next().await {
+            output.write_all(&chunk?).await?;
+        }
+        output.flush().await?;
+        Ok(())
     }
     fn success_no_item(&self, _: &ResponseValue<()>) {}
     fn error<T>(&self, _: &Error<T>) where T: schemars::JsonSchema + serde::Serialize + std::fmt::Debug {}
@@ -19,6 +33,7 @@ async fn main() -> anyhow::Result<()> {
     let mut command = clap::Command::new(env!("CARGO_PKG_NAME"))
         .subcommand_required(true).arg_required_else_help(true)
         .arg(clap::Arg::new("base-url").long("base-url").env("MOLEAPI_API_URL").hide_env_values(true).required(true))
+        .arg(clap::Arg::new("output-file").long("output-file").value_name("NEW_FILE").help("Stream binary responses to a new file; refuses overwrite"))
         .arg(clap::Arg::new("token").long("token").env("MOLEAPI_API_TOKEN").hide_env_values(true));
     for operation in CliCommand::iter() {
         command = command.subcommand(Cli::<Output>::get_command(operation).name(operation.operation_id()));
@@ -33,5 +48,5 @@ async fn main() -> anyhow::Result<()> {
     }
     let http = reqwest::Client::builder().default_headers(headers).build()?;
     let client = Client::new_with_client(matches.get_one::<String>("base-url").expect("Required URL"), http);
-    Cli::new(client, Output).execute(operation, args).await
+    Cli::new(client, Output { file: matches.get_one::<String>("output-file").map(std::path::PathBuf::from) }).execute(operation, args).await
 }
