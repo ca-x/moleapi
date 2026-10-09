@@ -122,3 +122,5 @@ Response extraction rules support JSON Pointer, JSONPath, XPath, regex, headers 
 Saved test scenarios reference original interfaces with custom step order, groups, enable flags and repeated requests. Run them with the selected environment and existing dataset/iteration options; create/edit/reorder/save them on the testing page. See [scenario behavior and remaining scope](docs/SCENARIO-COVERAGE.md).
 
 Scenario steps support JavaScript boolean conditions, true/false step destinations, end-iteration branches, fixed repeats and backwards loops. Conditions use the existing sandbox, discard their changes and skip requests entirely when false. See [control ordering, limits and evidence](docs/SCENARIO-CONTROL-COVERAGE.md).
+
+Named parallel scenario blocks run conditional/repeated requests with configurable concurrency. Branches keep isolated variables and merge after completion; differing writes stop the block, and histories use combined peer privacy taints. See [parallel semantics, evidence and remaining scope](docs/SCENARIO-PARALLEL-COVERAGE.md).

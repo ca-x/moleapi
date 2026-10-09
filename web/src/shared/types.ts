@@ -149,7 +149,8 @@ export interface Specification {
 }
 export type ScenarioTarget={action:"step";step_id:string}|{action:"stop"};
 export interface ScenarioStep {id:string;request_id:string;name:string;group:string;enabled:boolean;condition?:string;repeat?:number;on_true?:ScenarioTarget;on_false?:ScenarioTarget}
-export interface Scenario {id:string;name:string;description:string;collection_id:string;steps:ScenarioStep[]}
+export interface ScenarioParallel {id:string;name:string;step_ids:string[];concurrency:number}
+export interface Scenario {id:string;name:string;description:string;collection_id:string;steps:ScenarioStep[];parallel?:ScenarioParallel[]}
 export interface WorkspaceData {
   scenarios?:Scenario[];
   datasets?:SavedDataset[];
@@ -238,6 +239,7 @@ export interface SyncResult {
   message: string;
 }
 export interface RunResult {
+  parallel_variable_updates?:({collection_id:string}&VariableUpdate)[];
   scenario_id?:string;
   skipped?:number;
   executed_steps?:number;
@@ -248,6 +250,9 @@ export interface RunResult {
   stopped_reason?:string|null;
   omitted_responses?:number;
   results: {
+    parallel_id?:string;
+    parallel_name?:string;
+    variable_updates_applied?:boolean;
     condition_skipped?:boolean;
     step_repeat_index?:number;
     step_id?:string;

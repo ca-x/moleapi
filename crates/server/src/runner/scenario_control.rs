@@ -7,6 +7,12 @@ pub(super) async fn condition(
     response: Option<&Response>,
     scopes: &mut VariableScopes,
 ) -> Result<bool, ()> {
+    let _permit = state
+        .script_slots
+        .clone()
+        .acquire_owned()
+        .await
+        .map_err(|_| ())?;
     match moleapi_script_runtime::condition_worker(
         &state.script_worker,
         expression,

@@ -12,6 +12,20 @@ pub struct Scenario {
     pub description: String,
     pub collection_id: String,
     pub steps: Vec<ScenarioStep>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parallel: Vec<ScenarioParallel>,
+}
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ScenarioParallel {
+    pub id: String,
+    pub name: String,
+    pub step_ids: Vec<String>,
+    #[serde(default = "parallel_concurrency")]
+    pub concurrency: usize,
+}
+fn parallel_concurrency() -> usize {
+    4
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -77,6 +91,56 @@ pub fn validate_scenarios(data: &WorkspaceData) -> Result<()> {
             .flat_map(|collection| &collection.requests)
             .map(|request| &request.id)
             .collect::<BTreeSet<_>>();
+        ensure!(
+            scenario.parallel.len() <= 100,
+            "Scenario exceeds 100 parallel blocks"
+        );
+        let active = scenario
+            .steps
+            .iter()
+            .filter(|step| step.enabled)
+            .collect::<Vec<_>>();
+        let mut block_ids = BTreeSet::new();
+        let mut members = BTreeSet::new();
+        let mut interiors = BTreeSet::new();
+        for block in &scenario.parallel {
+            ensure!(
+                !block.id.is_empty() && block.id.len() <= 128 && block_ids.insert(&block.id),
+                "Parallel block IDs must be unique and nonempty"
+            );
+            ensure!(
+                !block.name.trim().is_empty()
+                    && block.name.len() <= 256
+                    && (1..=4).contains(&block.concurrency),
+                "Invalid parallel block name or concurrency"
+            );
+            ensure!(
+                (2..=8).contains(&block.step_ids.len()),
+                "Parallel block requires 2 to 8 steps"
+            );
+            let mut previous = None;
+            for (offset, id) in block.step_ids.iter().enumerate() {
+                ensure!(members.insert(id), "Parallel blocks cannot overlap");
+                let index = active
+                    .iter()
+                    .position(|step| step.id == *id)
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("Parallel member must be an enabled scenario step")
+                    })?;
+                ensure!(
+                    previous.is_none_or(|previous| index == previous + 1),
+                    "Parallel members must follow consecutive saved order"
+                );
+                previous = Some(index);
+                ensure!(
+                    active[index].on_true.is_none() && active[index].on_false.is_none(),
+                    "Parallel members cannot redirect shared flow"
+                );
+                if offset > 0 {
+                    interiors.insert(id);
+                }
+            }
+        }
         let mut steps = BTreeSet::new();
         for step in &scenario.steps {
             ensure!(
@@ -107,6 +171,10 @@ pub fn validate_scenarios(data: &WorkspaceData) -> Result<()> {
                     ensure!(
                         !step.enabled || selected.enabled,
                         "Enabled scenario branch targets a disabled step"
+                    );
+                    ensure!(
+                        !interiors.contains(step_id),
+                        "Scenario branch must enter the first parallel member"
                     );
                 }
             }

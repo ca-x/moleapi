@@ -5,6 +5,7 @@ import {t} from "../../shared/i18n";
 import {Choice,Field,ToolButton} from "../../shared/ui";
 import {id} from "../../shared/model";
 import {useWorkbench} from "../workbench/context";
+import ScenarioParallelEditor from "./ScenarioParallelEditor";
 import ScenarioStepControl from "./ScenarioStepControl";
 import type {Scenario,ScenarioStep} from "../../shared/types";
 export default function SavedScenarios({collectionId,disabled}:{collectionId:string;disabled:boolean}){
@@ -36,6 +37,9 @@ export default function SavedScenarios({collectionId,disabled}:{collectionId:str
   const saved=await state.save(true);if(mounted.current){if(saved)setEdit(fresh());else setError(true);}
  }catch{if(mounted.current)setError(true);}finally{if(mounted.current)setPending(false);}}
  const busy=disabled||pending;
+ const members=new Set((edit.parallel??[]).flatMap(block=>block.step_ids));
+ const interiors=new Set((edit.parallel??[]).flatMap(block=>block.step_ids.slice(1)));
+ const canMove=(index:number,offset:number)=>index+offset>=0&&index+offset<edit.steps.length&&!members.has(edit.steps[index].id)&&!members.has(edit.steps[index+offset].id);
  return <details><summary>{t("工作区测试场景")} ({scenarios.length})</summary><Flex direction="column" gap="3" mt="3">
   <Text size="1" color="gray">{t("场景保存请求引用、顺序和分组，随工作区同步。步骤使用原接口定义及当前环境，允许重复执行同一请求。")}</Text>
   {scenarios.map(scenario=><Flex key={scenario.id} gap="2" wrap="wrap" align="center"><Text>{scenario.name}</Text><Button variant="soft" disabled={busy} onClick={()=>{setEdit(structuredClone(scenario));setError(false);}}>{t("编辑场景")}</Button><Button variant="ghost" disabled={busy} onClick={()=>void persist(scenario.id)}>{t("删除场景")}</Button></Flex>)}
@@ -43,16 +47,17 @@ export default function SavedScenarios({collectionId,disabled}:{collectionId:str
   <Field label={t("场景名称")}><TextField.Root disabled={busy} value={edit.name} maxLength={256} onChange={event=>setEdit({...edit,name:event.target.value})}/></Field>
   <Field label={t("场景说明")}><TextArea disabled={busy} value={edit.description} maxLength={4096} onChange={event=>setEdit({...edit,description:event.target.value})}/></Field>
   {edit.steps.map((step,index)=><Card key={step.id}><Flex gap="2" wrap="wrap" align="center">
-   <Text size="1">{index+1}</Text><label className="checkbox-label"><Checkbox disabled={busy} checked={step.enabled} onCheckedChange={enabled=>change(step,{enabled:enabled===true})}/>{t("启用步骤")}</label>
+   <Text size="1">{index+1}</Text><label className="checkbox-label"><Checkbox checked={step.enabled} disabled={busy||members.has(step.id)} onCheckedChange={enabled=>change(step,{enabled:enabled===true})}/>{t("启用步骤")}</label>
    <Choice label={t("场景请求")} disabled={busy} value={step.request_id} options={requests} onChange={request_id=>change(step,{request_id})}/>
    <TextField.Root aria-label={t("步骤名称")} disabled={busy} value={step.name} maxLength={256} onChange={event=>change(step,{name:event.target.value})}/>
    <TextField.Root aria-label={t("步骤分组")} placeholder={t("步骤分组")} disabled={busy} value={step.group} maxLength={256} onChange={event=>change(step,{group:event.target.value})}/>
-   <ToolButton label={t("上移步骤")} disabled={busy||index===0} onClick={()=>move(index,-1)}><ArrowUp size={15}/></ToolButton>
-   <ToolButton label={t("下移步骤")} disabled={busy||index===edit.steps.length-1} onClick={()=>move(index,1)}><ArrowDown size={15}/></ToolButton>
-   <ToolButton label={t("删除步骤")} disabled={busy} onClick={()=>removeStep(step.id)}><Trash2 size={15}/></ToolButton>
-  </Flex><ScenarioStepControl step={step} steps={edit.steps} disabled={busy} onChange={patch=>change(step,patch)}/></Card>)}
+   <ToolButton label={t("上移步骤")} disabled={busy||!canMove(index,-1)} onClick={()=>move(index,-1)}><ArrowUp size={15}/></ToolButton>
+   <ToolButton label={t("下移步骤")} disabled={busy||!canMove(index,1)} onClick={()=>move(index,1)}><ArrowDown size={15}/></ToolButton>
+   <ToolButton label={t("删除步骤")} disabled={busy||members.has(step.id)} onClick={()=>removeStep(step.id)}><Trash2 size={15}/></ToolButton>
+  </Flex>{members.has(step.id)&&<Text size="1" color="gray">{t("并行块成员：请先移除并行块，再删除、禁用或调整步骤顺序。")}</Text>}<ScenarioStepControl step={step} steps={edit.steps} parallel={members.has(step.id)} interiors={interiors} disabled={busy} onChange={patch=>change(step,patch)}/></Card>)}
   <Text size="1" color="gray">{t("删除或禁用目标步骤会将指向它的分支改为结束本轮。脚本跳转优先于场景重复和分支设置。")}</Text>
   <Button variant="soft" disabled={busy||!requests.length||edit.steps.length>=1000} onClick={()=>setEdit({...edit,steps:[...edit.steps,{id:id(),request_id:requests[0].value,name:"",group:"",enabled:true}]})}><Plus size={15}/>{t("添加请求步骤")}</Button>
+  <ScenarioParallelEditor scenario={edit} disabled={busy} onChange={parallel=>setEdit({...edit,parallel})}/>
   <Button disabled={busy||!edit.name.trim()||!edit.steps.some(step=>step.enabled)} loading={pending} onClick={()=>void persist()}>{t("保存场景到工作区")}</Button>
   {error&&<Callout.Root color="red"><Callout.Text role="alert">{t("场景保存失败，请检查名称、请求引用、步骤数量或工作区版本冲突。未保存的编辑已保留。")}</Callout.Text></Callout.Root>}
  </Flex></details>;

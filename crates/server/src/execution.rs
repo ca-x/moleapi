@@ -98,6 +98,15 @@ async fn script_phase(
             privacy_complete: failure.privacy_complete,
         })
 }
+pub(crate) struct DeferredHistory {
+    pub request: RequestSpec,
+    pub environment: moleapi_core::Environment,
+    pub redact_failed_response: bool,
+}
+pub(crate) struct DeferredExecution {
+    pub response: Response,
+    pub history: Option<DeferredHistory>,
+}
 pub(crate) async fn perform(
     s: &AppState,
     owner: &str,
@@ -106,6 +115,32 @@ pub(crate) async fn perform(
     collection: Option<&Collection>,
     scopes: &mut VariableScopes,
 ) -> Result<Response, ApiError> {
+    let outcome = perform_deferred(s, owner, w, r, collection, scopes).await?;
+    if let Some(history) = outcome.history {
+        crate::history::record(
+            s,
+            owner,
+            w,
+            &history.request,
+            Some(&history.environment),
+            &outcome.response,
+            crate::privacy::HistoryPrivacy {
+                values: &scopes.private_values,
+                redact_failed_response: history.redact_failed_response,
+            },
+        )
+        .await?;
+    }
+    Ok(outcome.response)
+}
+pub(crate) async fn perform_deferred(
+    s: &AppState,
+    owner: &str,
+    w: &Workspace,
+    r: &RequestSpec,
+    collection: Option<&Collection>,
+    scopes: &mut VariableScopes,
+) -> Result<DeferredExecution, ApiError> {
     scopes.execution = moleapi_core::ExecutionControl::default();
     let execution_start = std::time::Instant::now();
     let cookie_jar = s
@@ -154,23 +189,26 @@ pub(crate) async fn perform(
         }
     }
     if scopes.execution.skip_request {
-        return Ok(Response {
-            skipped: true,
-            private_auth_values: vec![],
-            soap_fault: None,
-            request_updates: vec![],
-            logs,
-            variable_updates: updates,
-            status: 0,
-            status_text: "Skipped".into(),
-            headers: vec![],
-            body: String::new(),
-            body_base64: None,
-            elapsed_ms: execution_start.elapsed().as_millis() as u64,
-            size_bytes: 0,
-            truncated: false,
-            url: request.url,
-            tests,
+        return Ok(DeferredExecution {
+            history: None,
+            response: Response {
+                skipped: true,
+                private_auth_values: vec![],
+                soap_fault: None,
+                request_updates: vec![],
+                logs,
+                variable_updates: updates,
+                status: 0,
+                status_text: "Skipped".into(),
+                headers: vec![],
+                body: String::new(),
+                body_base64: None,
+                elapsed_ms: execution_start.elapsed().as_millis() as u64,
+                size_bytes: 0,
+                truncated: false,
+                url: request.url,
+                tests,
+            },
         });
     }
     let mut request_updates = vec![];
@@ -332,20 +370,14 @@ pub(crate) async fn perform(
     let mut history_request = resolved.clone();
     history_request.id = r.id.clone();
     history_request.name = r.name.clone();
-    crate::history::record(
-        s,
-        owner,
-        w,
-        &history_request,
-        Some(&history_environment),
-        &response,
-        crate::privacy::HistoryPrivacy {
-            values: &scopes.private_values,
+    Ok(DeferredExecution {
+        response,
+        history: Some(DeferredHistory {
+            request: history_request,
+            environment: history_environment,
             redact_failed_response,
-        },
-    )
-    .await?;
-    Ok(response)
+        }),
+    })
 }
 pub async fn execute(
     State(s): State<AppState>,

@@ -1471,5 +1471,20 @@
   "删除或禁用目标步骤会将指向它的分支改为结束本轮。脚本跳转优先于场景重复和分支设置。": "Deleting or disabling a target ends branches pointing to it. Script jumps take precedence over scenario repeats and branches.",
   "请求因场景条件不成立而跳过。": "Request skipped because the scenario condition is false.",
   "场景条件执行失败，请检查布尔结果和执行限制。": "Scenario condition failed. Check its boolean result and execution limits.",
-  "场景分支已结束本轮。": "Scenario branch ended this iteration."
+  "场景分支已结束本轮。": "Scenario branch ended this iteration.",
+  "并行执行块": "Parallel execution blocks",
+  "选择连续的 2–8 个启用步骤，并发数为 1–4。分支变量相互隔离，汇合时不同写值会停止流程；成员支持条件和重复，不支持流程跳转。": "Select 2–8 consecutive enabled steps with concurrency 1–4. Branch variables are isolated; conflicting writes stop the flow at join. Members support conditions and repeats, without flow redirects.",
+  "块并发数": "Block concurrency",
+  "移除并行块": "Remove parallel block",
+  "并行块名称": "Parallel block name",
+  "并行起始步骤": "Parallel starting step",
+  "选择起始步骤": "Choose starting step",
+  "并行步骤数": "Parallel step count",
+  "并发数": "Concurrency",
+  "添加并行块": "Add parallel block",
+  "请选择连续、未分组且没有流程跳转的启用步骤，并检查数量和名称。": "Choose consecutive enabled steps without existing block membership or flow redirects, and check the count and name.",
+  "并行块成员：请先移除并行块，再删除、禁用或调整步骤顺序。": "Parallel member: remove its block before deleting, disabling or reordering the step.",
+  "并行变量写入冲突，本块更新未应用。": "Parallel variable writes conflict; this block's updates were not applied.",
+  "并行块流程跳转无效，场景已停止。": "Invalid parallel block flow redirect; the scenario stopped.",
+  "并行块": "Parallel block"
 }

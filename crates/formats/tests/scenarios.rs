@@ -34,4 +34,26 @@ fn scenario_metadata_is_screened_but_explicit_backup_is_exact() {
     let backup = moleapi_formats::export(&workspace, "moleapi", true).unwrap();
     let imported = moleapi_formats::import("moleapi", &backup.content).unwrap();
     assert_eq!(imported.data.scenarios, workspace.data.scenarios);
+    let scenario = &mut workspace.data.scenarios[0];
+    scenario.steps[1].on_true = None;
+    let mut third = scenario.steps[1].clone();
+    third.id = "c".into();
+    scenario.steps.push(third);
+    scenario.parallel = vec![moleapi_core::ScenarioParallel {
+        id: "block".into(),
+        name: "private-scenario-value".into(),
+        step_ids: vec!["a".into(), "b".into(), "c".into()],
+        concurrency: 2,
+    }];
+    let safe = moleapi_formats::export(&workspace, "moleapi", false).unwrap();
+    assert!(!safe.content.contains("private-scenario-value"));
+    let imported = moleapi_formats::import("moleapi", &safe.content).unwrap();
+    moleapi_core::validate_workspace(&imported.data).unwrap();
+    assert_eq!(
+        imported.data.scenarios[0].parallel[0].step_ids,
+        vec!["b", "c"]
+    );
+    let backup = moleapi_formats::export(&workspace, "moleapi", true).unwrap();
+    let imported = moleapi_formats::import("moleapi", &backup.content).unwrap();
+    assert_eq!(imported.data.scenarios, workspace.data.scenarios);
 }

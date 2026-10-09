@@ -1,4 +1,12 @@
+mod parallel;
+mod report;
 mod scenario_control;
+mod scopes;
+type PlanStep<'a> = (
+    &'a moleapi_core::Collection,
+    &'a moleapi_core::RequestSpec,
+    Option<&'a moleapi_core::ScenarioStep>,
+);
 use crate::execution::{environment, perform, variables};
 use crate::{ApiError, AppState, auth::Identity, workspaces::owned};
 use axum::{
@@ -235,7 +243,8 @@ pub async fn run(
     let (mut passed, mut failed, mut report_bytes, mut omitted) = (0usize, 0usize, 0usize, 0usize);
     let mut stopped = None;
     let (mut executed, mut skipped) = (0usize, 0usize);
-    let mut overlays = BTreeMap::<String, BTreeMap<String, Option<String>>>::new();
+    let mut overlays = scopes::Overlays::new();
+    let mut parallel_writes = parallel::Writes::new();
     for local in c.locals.iter().filter(|local| local.scope == "collection") {
         overlays
             .entry(collection.id.clone())
@@ -281,37 +290,76 @@ pub async fn run(
             let (selected, request, step) = plan[cursor];
             let mut condition_passed = true;
             let mut condition_failed = false;
-            let base = variables(&s, &w, Some(selected), e, &pairs, &c.variables, &[])?;
-            scopes.private_values.extend(base.private_values);
-            scopes.collection.clear();
-            for ancestor in moleapi_core::collection_chain(&w.data, selected)
-                .map_err(|error| ApiError::bad(error.to_string()))?
-            {
-                for pair in ancestor
-                    .variables
+            if let Some(block) = scenario.and_then(|scenario| {
+                scenario
+                    .parallel
                     .iter()
-                    .filter(|pair| pair.enabled && ancestor.variables_enabled != Some(false))
-                {
-                    scopes.collection.insert(
-                        pair.key.clone(),
-                        if s.local {
-                            pair.local_value.as_ref().unwrap_or(&pair.value)
-                        } else {
-                            &pair.value
-                        }
-                        .clone(),
-                    );
+                    .find(|block| block.step_ids.first() == step.map(|step| &step.id))
+            }) {
+                let end = cursor + block.step_ids.len();
+                let context = parallel::Context {
+                    state: &s,
+                    owner: &owner.0,
+                    workspace: &w,
+                    environment: e,
+                    data: &pairs,
+                    temporary: &c.variables,
+                    gate: &gate,
+                    epoch,
+                    cancel: &lease.cancel,
+                    deadline,
+                    iteration: index,
+                };
+                let batch = parallel::run(
+                    &context,
+                    block,
+                    plan.get(cursor..end).ok_or_else(ApiError::internal)?,
+                    &mut scopes,
+                    &mut overlays,
+                    previous_response.as_ref(),
+                    &mut executed,
+                )
+                .await?;
+                passed += batch.passed;
+                failed += batch.failed;
+                skipped += batch.skipped;
+                for item in batch.items {
+                    report::append(&mut results, item, &mut report_bytes, &mut omitted)?;
                 }
-                if let Some(overlay) = overlays.get(&ancestor.id) {
-                    for (key, value) in overlay {
-                        if let Some(value) = value {
-                            scopes.collection.insert(key.clone(), value.clone());
-                        } else {
-                            scopes.collection.remove(key);
-                        }
-                    }
+                parallel_writes.extend(batch.writes);
+                if let Some(reason) = batch.stopped {
+                    stopped = Some(reason);
+                    break 'iterations;
                 }
+                previous_response = None;
+                repeat_index = 0;
+                cursor = end;
+                continue 'steps;
             }
+            if scenario.is_some_and(|scenario| {
+                scenario.parallel.iter().any(|block| {
+                    block
+                        .step_ids
+                        .iter()
+                        .skip(1)
+                        .any(|id| step.is_some_and(|step| step.id == *id))
+                })
+            }) {
+                stopped = Some("parallel_entry");
+                break 'iterations;
+            }
+            scopes::prepare(
+                &scopes::Inputs {
+                    state: &s,
+                    workspace: &w,
+                    environment: e,
+                    data: &pairs,
+                    temporary: &c.variables,
+                    overlays: &overlays,
+                },
+                selected,
+                &mut scopes,
+            )?;
             {
                 executed += 1;
                 if lease.cancel.is_cancelled() {
@@ -380,41 +428,13 @@ pub async fn run(
                     privacy.scrub(&mut item["step_name"]);
                     privacy.scrub(&mut item["step_group"]);
                 }
-                let size = serde_json::to_vec(&item)
-                    .map_err(|_| ApiError::internal())?
-                    .len();
-                if report_bytes.saturating_add(size) > 8 * 1024 * 1024 {
-                    item.as_object_mut().unwrap().remove("response");
-                    item["response_omitted"] = true.into();
-                    omitted += 1;
-                }
-                report_bytes += serde_json::to_vec(&item)
-                    .map_err(|_| ApiError::internal())?
-                    .len();
-                results.push(item);
+                report::append(&mut results, item, &mut report_bytes, &mut omitted)?;
                 if condition_failed {
                     stopped = Some("condition_error");
                     break 'iterations;
                 }
-                for key in before
-                    .keys()
-                    .chain(scopes.collection.keys())
-                    .collect::<std::collections::BTreeSet<_>>()
-                {
-                    if before.get(key) != scopes.collection.get(key) {
-                        overlays
-                            .entry(selected.id.clone())
-                            .or_default()
-                            .insert(key.clone(), scopes.collection.get(key).cloned());
-                    }
-                }
-                if overlays
-                    .values()
-                    .flat_map(|values| values.iter())
-                    .map(|(key, value)| key.len() + value.as_ref().map_or(0, String::len))
-                    .sum::<usize>()
-                    > moleapi_core::MAX_VARIABLE_BYTES
-                {
+                scopes::capture(&before, &scopes.collection, &selected.id, &mut overlays);
+                if !scopes::validate_overlays(&overlays) {
                     stopped = Some("variable_limit");
                     break 'iterations;
                 }
@@ -486,6 +506,24 @@ pub async fn run(
         summaries.push(json!({"iteration":index,"passed":passed-before_passed,"failed":failed-before_failed,"elapsed_ms":iteration_start.elapsed().as_millis()as u64,"script_stopped":script_stopped,"scenario_stopped":scenario_stopped}));
     }
     let mut report = json!({"results":results,"iterations":summaries,"iteration_count":count,"completed_iterations":summaries.len(),"passed":passed,"failed":failed,"elapsed_ms":start.elapsed().as_millis()as u64,"cancelled":matches!(stopped,Some("cancelled"|"owner_changed")),"stopped_reason":stopped,"omitted_responses":omitted,"job_id":job_id,"executed_steps":executed,"skipped":skipped});
+    let mut final_parallel = vec![];
+    for ((scope, collection, key), _) in parallel_writes {
+        let value = match scope.as_str() {
+            "project" => scopes.project.get(&key).cloned(),
+            "environment" => scopes.environment.get(&key).cloned(),
+            "temporary" => scopes.temporary.get(&key).cloned(),
+            "collection" => overlays
+                .get(&collection)
+                .and_then(|values| values.get(&key))
+                .cloned()
+                .flatten(),
+            _ => continue,
+        };
+        final_parallel.push(json!({"collection_id":if collection.is_empty(){c.collection_id.clone()}else{collection},"scope":scope,"key":key,"value":value}));
+    }
+    if !final_parallel.is_empty() {
+        report["parallel_variable_updates"] = final_parallel.into();
+    }
     if let Some(scenario) = scenario {
         report["scenario_id"] = scenario.id.clone().into();
     }

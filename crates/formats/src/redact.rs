@@ -246,6 +246,22 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
             }
         }
     }
+    for scenario in &mut result.data.scenarios {
+        let safe = scenario
+            .steps
+            .iter()
+            .filter(|step| step.enabled)
+            .map(|step| step.id.clone())
+            .collect::<std::collections::BTreeSet<_>>();
+        for block in &mut scenario.parallel {
+            block.name = data_privacy.screen_bounded(&block.name, 256);
+            if block.name.trim().is_empty() {
+                block.name = "[REDACTED]".into();
+            }
+            block.step_ids.retain(|id| safe.contains(id));
+        }
+        scenario.parallel.retain(|block| block.step_ids.len() >= 2);
+    }
     for dataset in &mut result.data.datasets {
         dataset.name = data_privacy.screen_bounded(&dataset.name, 256);
         if dataset.name.is_empty() {

@@ -65,13 +65,12 @@ export function useRunner(
         accountRef.current === accountId &&
         stateRef.current.draft?.id === workspaceId
       ) {
-        for (const result of value.results)
-          localVariables?.apply(
-            draft,
-            result.collection_id??collectionId,
-            environmentId,
-            result.response?.variable_updates || [],
+        for (const result of value.results) {
+          if(result.variable_updates_applied!==false)localVariables?.apply(
+            draft,result.collection_id??collectionId,environmentId,result.response?.variable_updates||[],
           );
+        }
+        for(const update of value.parallel_variable_updates??[])localVariables?.apply(draft,update.collection_id,environmentId,[{scope:update.scope,key:update.key,value:update.value}]);
       }
       setResult({ accountId, workspaceId, collectionId, value });
       void client.invalidateQueries({ queryKey: ["history", workspaceId] });
