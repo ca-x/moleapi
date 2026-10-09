@@ -109,6 +109,7 @@ async fn execute_inner(
             HeaderValue::from_static("application/x-www-form-urlencoded"),
         );
     }
+    let mut network = r.network.clone();
     let mut redirect = 0;
     let mut private_auth_values = Vec::new();
     let mut digest_attempts = 0;
@@ -130,7 +131,7 @@ async fn execute_inner(
                         policy,
                         r.verify_tls,
                         binding,
-                        r.network.as_deref(),
+                        network.as_deref(),
                     )
                     .await?,
                 );
@@ -138,7 +139,7 @@ async fn execute_inner(
             None
         } else {
             Some(
-                crate::checked_request_client(&url, policy, r.verify_tls, r.network.as_deref())
+                crate::checked_request_client(&url, policy, r.verify_tls, network.as_deref())
                     .await?,
             )
         };
@@ -322,6 +323,9 @@ async fn execute_inner(
                 "HTTPS downgrade redirect blocked"
             );
             if url.origin() != next.origin() {
+                if let Some(network) = &mut network {
+                    network.identity.enabled = false;
+                }
                 headers.remove("authorization");
                 headers.remove("cookie");
                 for row in r.headers.iter().filter(|row| {

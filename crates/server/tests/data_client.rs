@@ -260,3 +260,81 @@ async fn saved_data_ca_accepts_certificates_and_rejects_private_keys_before_pers
     let result = moleapi_core::resolve_request(&request, Some(&environment));
     assert!(result.is_err() || moleapi_core::validate_request(&result.unwrap(), false).is_err());
 }
+#[tokio::test]
+async fn remote_file_network_dns_settings_download_real_csv_and_run_bounded_sql_worker() {
+    let (base, server) = serve(Router::new().route(
+        "/data.csv",
+        axum::routing::get(|headers: axum::http::HeaderMap| async move {
+            assert!(
+                headers["host"]
+                    .to_str()
+                    .unwrap()
+                    .starts_with("data-network.test:")
+            );
+            assert_eq!(headers["accept-encoding"], "identity");
+            (
+                [("content-type", "text/csv")],
+                "id,name\n1,first\n2,network-second\n",
+            )
+        }),
+    ))
+    .await;
+    let port = url::Url::parse(&base).unwrap().port().unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let router =
+        moleapi_server::local_with_worker(&temp.path().join("remote-network.db"), &worker())
+            .await
+            .unwrap();
+    let mut source = data();
+    let r = &mut source["collections"][0]["requests"][0];
+    r["url"] = json!(format!("http://data-network.test:{port}/data.csv"));
+    r["protocol"]["source"] = json!("remote_file");
+    r["protocol"]["file_base64"] = json!("");
+    r["network"] = json!({"dns":[{"hostname":"data-network.test","addresses":["127.0.0.1"]}]});
+    let (status, w) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"data","name":"Remote network","data":source})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{w}");
+    let (status, s) = call(
+        &router,
+        "POST",
+        "/api/sessions",
+        None,
+        Some(json!({"workspace_id":"data","request":w["data"]["collections"][0]["requests"][0]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{s}");
+    let id = s["id"].as_str().unwrap();
+    ready(&router, None, id).await;
+    let result = query(
+        &router,
+        None,
+        id,
+        "network-query",
+        "SELECT name FROM data WHERE id=2",
+    )
+    .await;
+    let row = result["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| {
+            e["message"]["kind"] == "data_rows" && e["message"]["query_id"] == "network-query"
+        })
+        .expect("SQL worker result missing");
+    assert_eq!(row["message"]["rows"][0][0]["value"], "network-second");
+    call(
+        &router,
+        "DELETE",
+        &format!("/api/sessions/{id}"),
+        None,
+        None,
+    )
+    .await;
+    server.abort();
+}

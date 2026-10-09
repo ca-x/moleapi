@@ -67,6 +67,7 @@ pub(crate) async fn run(
         url.query_pairs_mut().append_pair(&query.key, &query.value);
     }
     let mut request_headers = request_headers(&request)?;
+    let mut network = request.network.clone();
     if ws {
         url.set_scheme(if url.scheme() == "wss" {
             "https"
@@ -76,13 +77,9 @@ pub(crate) async fn run(
         .map_err(|_| anyhow::anyhow!("Invalid WebSocket scheme"))?;
         let connect = async {
             for redirect in 0..=10 {
-                let client = checked_request_client(
-                    &url,
-                    policy,
-                    request.verify_tls,
-                    request.network.as_deref(),
-                )
-                .await?;
+                let client =
+                    checked_request_client(&url, policy, request.verify_tls, network.as_deref())
+                        .await?;
                 let config = tungstenite::protocol::WebSocketConfig::default()
                     .max_message_size(Some(MAX_MESSAGE))
                     .max_frame_size(Some(MAX_MESSAGE))
@@ -117,6 +114,9 @@ pub(crate) async fn run(
                         "HTTPS downgrade redirect blocked"
                     );
                     if url.origin() != next.origin() {
+                        if let Some(network) = &mut network {
+                            network.identity.enabled = false;
+                        }
                         request_headers.remove("authorization");
                         request_headers.remove("cookie");
                     }
@@ -184,13 +184,9 @@ pub(crate) async fn run(
     );
     let connect = async {
         for redirect in 0..=10 {
-            let client = checked_request_client(
-                &url,
-                policy,
-                request.verify_tls,
-                request.network.as_deref(),
-            )
-            .await?;
+            let client =
+                checked_request_client(&url, policy, request.verify_tls, network.as_deref())
+                    .await?;
             let response = client
                 .get(url.clone())
                 .headers(request_headers.clone())
@@ -208,6 +204,9 @@ pub(crate) async fn run(
                     "HTTPS downgrade redirect blocked"
                 );
                 if url.origin() != next.origin() {
+                    if let Some(network) = &mut network {
+                        network.identity.enabled = false;
+                    }
                     request_headers.remove("authorization");
                     request_headers.remove("cookie");
                 }

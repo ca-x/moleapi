@@ -145,12 +145,17 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
                     | Protocol::Tcp { .. }
                     | Protocol::Mqtt { .. }
                     | Protocol::Socketio { .. }
+                    | Protocol::Data { .. }
             ),
             "Selected network settings require a supported HTTP transport"
         );
         ensure!(
             !matches!(&r.protocol, Protocol::Mcp{config} if config.transport != "http"),
             "Network settings require MCP HTTP transport"
+        );
+        ensure!(
+            !matches!(&r.protocol, Protocol::Data{config} if config.source != crate::DataSource::RemoteFile),
+            "Request network settings require a remote HTTP Data file"
         );
         if r.protocol.is_socketio() {
             ensure!(

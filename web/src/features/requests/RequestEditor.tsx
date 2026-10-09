@@ -482,7 +482,7 @@ export default function RequestEditor({
             </Tabs.Content>
             <Tabs.Content value="settings">
               <div className="form-panel">
-                <NetworkSettings key={`${bodyScope}/${request.id}`} value={request.network} change={network=>update({network})} disabled={busy||sending} ntlm={request.auth.kind==="ntlm"} websocket={request.protocol?.kind==="websocket"||socketio} grpc={grpc} rawTcp={tcp} mqtt={mqtt}/>
+                {(!data||(request.protocol?.kind==="data"&&request.protocol.source==="remote_file"))&&<NetworkSettings key={`${bodyScope}/${request.id}`} value={request.network} change={network=>update({network})} disabled={busy||sending} ntlm={request.auth.kind==="ntlm"} websocket={request.protocol?.kind==="websocket"||socketio} grpc={grpc} rawTcp={tcp} mqtt={mqtt}/>}
                 {cookieWorkspace && <CookieManager key={bodyScope} workspace={cookieWorkspace} environment={workspaceData?.active_environment_id} url={request.url}/>}
                 <Field label={t("请求超时 (ms)")} hint={t("最大 120000ms。")}>
                   <TextField.Root

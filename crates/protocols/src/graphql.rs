@@ -194,16 +194,13 @@ pub(crate) async fn run(
         url.query_pairs_mut().append_pair(&query.key, &query.value);
     }
     let mut headers = request_headers(&request)?;
+    let mut network = request.network.clone();
     let mut parameters = connection_params.clone();
     let connect = async {
         for redirect in 0..=10 {
-            let client = checked_request_client(
-                &url,
-                policy,
-                request.verify_tls,
-                request.network.as_deref(),
-            )
-            .await?;
+            let client =
+                checked_request_client(&url, policy, request.verify_tls, network.as_deref())
+                    .await?;
             let response = client
                 .get(url.clone())
                 .headers(headers.clone())
@@ -235,6 +232,9 @@ pub(crate) async fn run(
                     "HTTPS downgrade redirect blocked"
                 );
                 if url.origin() != next.origin() {
+                    if let Some(network) = &mut network {
+                        network.identity.enabled = false;
+                    }
                     headers.remove("authorization");
                     headers.remove("cookie");
                     // Connection parameters are auth-bearing and never forwarded across origins.

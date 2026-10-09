@@ -6464,6 +6464,8 @@ dependencies = [
  "futures-util",
  "graphql-ws-client",
  "http 1.5.0",
+ "http-body-util",
+ "hyper",
  "hyper-util",
  "jsonschema 0.58.5",
  "moleapi-core",

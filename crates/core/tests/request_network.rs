@@ -406,3 +406,158 @@ async fn socks5_authentication_tunnels_without_forwarding_credentials_to_http_ta
     tunnel.abort();
     server.abort();
 }
+#[tokio::test]
+async fn client_identity_stays_on_same_origin_and_is_not_sent_after_cross_origin_redirect() {
+    use rcgen::{BasicConstraints, CertificateParams, ExtendedKeyUsagePurpose, IsCa, KeyPair};
+    let mut params = CertificateParams::new(vec!["Redirect Test CA".into()]).unwrap();
+    params
+        .distinguished_name
+        .push(rcgen::DnType::CommonName, "redirect-ca");
+    params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+    let ca_key = KeyPair::generate().unwrap();
+    let ca = params.self_signed(&ca_key).unwrap();
+    let issuer = rcgen::Issuer::from_params(&params, &ca_key);
+    let mut params = CertificateParams::new(vec!["redirect.test".into()]).unwrap();
+    params
+        .distinguished_name
+        .push(rcgen::DnType::CommonName, "redirect.test");
+    params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
+    let server_key = KeyPair::generate().unwrap();
+    let server_cert = params.signed_by(&server_key, &issuer).unwrap();
+    let mut params = CertificateParams::new(vec!["client.test".into()]).unwrap();
+    params
+        .distinguished_name
+        .push(rcgen::DnType::CommonName, "redirect-client");
+    params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ClientAuth];
+    let client_key = KeyPair::generate().unwrap();
+    let client_cert = params.signed_by(&client_key, &issuer).unwrap();
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    let mut roots = rustls::RootCertStore::empty();
+    roots.add(ca.der().clone()).unwrap();
+    let roots = Arc::new(roots);
+    let required = rustls::server::WebPkiClientVerifier::builder_with_provider(
+        roots.clone(),
+        provider.clone(),
+    )
+    .build()
+    .unwrap();
+    let optional =
+        rustls::server::WebPkiClientVerifier::builder_with_provider(roots, provider.clone())
+            .allow_unauthenticated()
+            .build()
+            .unwrap();
+    let config = |verifier| {
+        rustls::ServerConfig::builder_with_provider(provider.clone())
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_client_cert_verifier(verifier)
+            .with_single_cert(
+                vec![server_cert.der().clone()],
+                rustls::pki_types::PrivatePkcs8KeyDer::from(server_key.serialize_der()).into(),
+            )
+            .unwrap()
+    };
+    let source_config = Arc::new(config(required));
+    let target_config = Arc::new(config(optional));
+    let target = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let target_url = format!(
+        "https://redirect.test:{}/done",
+        target.local_addr().unwrap().port()
+    );
+    let target_task = tokio::spawn(async move {
+        let (socket, _) = target.accept().await.unwrap();
+        let tls = tokio_rustls::TlsAcceptor::from(target_config)
+            .accept(socket)
+            .await
+            .unwrap();
+        let has_identity = tls
+            .get_ref()
+            .1
+            .peer_certificates()
+            .is_some_and(|c| !c.is_empty());
+        let _ = hyper::server::conn::http1::Builder::new()
+            .serve_connection(
+                TokioIo::new(tls),
+                hyper::service::service_fn(
+                    move |_: hyper::Request<hyper::body::Incoming>| async move {
+                        Ok::<_, Infallible>(
+                            hyper::Response::builder()
+                                .header("connection", "close")
+                                .body(Full::new(Bytes::from_static(if has_identity {
+                                    b"client-present"
+                                } else {
+                                    b"anonymous"
+                                })))
+                                .unwrap(),
+                        )
+                    },
+                ),
+            )
+            .await;
+    });
+    let source = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let source_url = format!(
+        "https://redirect.test:{}/start",
+        source.local_addr().unwrap().port()
+    );
+    let source_task = tokio::spawn(async move {
+        for _ in 0..2 {
+            let (socket, _) = source.accept().await.unwrap();
+            let tls = tokio_rustls::TlsAcceptor::from(source_config.clone())
+                .accept(socket)
+                .await
+                .unwrap();
+            assert!(
+                tls.get_ref()
+                    .1
+                    .peer_certificates()
+                    .is_some_and(|c| !c.is_empty())
+            );
+            let target_url = target_url.clone();
+            let _ = hyper::server::conn::http1::Builder::new()
+                .serve_connection(
+                    TokioIo::new(tls),
+                    hyper::service::service_fn(move |r: hyper::Request<hyper::body::Incoming>| {
+                        let location = if r.uri().path() == "/start" {
+                            "/jump".to_owned()
+                        } else {
+                            target_url.clone()
+                        };
+                        async move {
+                            Ok::<_, Infallible>(
+                                hyper::Response::builder()
+                                    .status(302)
+                                    .header("location", location)
+                                    .header("connection", "close")
+                                    .body(Full::new(Bytes::new()))
+                                    .unwrap(),
+                            )
+                        }
+                    }),
+                )
+                .await;
+        }
+    });
+    let r = request(
+        source_url,
+        RequestNetwork {
+            built_in_roots: false,
+            ca_pem: ca.pem(),
+            dns: vec![DnsOverride {
+                hostname: "redirect.test".into(),
+                addresses: vec!["127.0.0.1".into()],
+            }],
+            identity: ClientIdentity {
+                enabled: true,
+                certificate_pem: client_cert.pem(),
+                key_pem: client_key.serialize_pem(),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    );
+    assert_eq!(execute(&r, None, LOCAL).await.unwrap().body, "anonymous");
+    assert!(r.network.as_ref().unwrap().identity.enabled);
+    source_task.await.unwrap();
+    target_task.await.unwrap();
+}

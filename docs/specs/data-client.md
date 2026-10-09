@@ -43,3 +43,5 @@ Schema reads use independent, promptly disposable SDK transports to the same che
 
 
 CA field validation accepts only complete certificate PEM blocks separated by whitespace, or one whole `{{variable}}` at save time. Mature pem parsing exposes all section labels; DER is checked with rustls. Literal/mixed/encrypted/OpenSSH private keys and unparsed trailing material must fail before persistence. Resolved variable values are checked before TLS construction. Original valid certificate source remains exact; private keys belong to a future explicit client-certificate capability, never the CA field.
+
+Remote HTTP file downloads now accept the shared request network source (CA/client certificate, proxy, DNS override, HTTP mode and connection timeout). Database sources retain their dedicated driver/TLS configuration; local files do not accept HTTP network options. The mature downloader and SQL/file worker paths are reused, with original Host/TLS name and redirect client-identity fencing. A real CSV DNS mapping plus SQL worker result verifies the integrated route.

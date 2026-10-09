@@ -603,3 +603,182 @@ async fn sse_and_websocket_network_dns_settings_preserve_handshake_host_and_priv
     }
     server.abort();
 }
+#[tokio::test]
+async fn live_redirects_do_not_forward_client_identity_to_a_different_origin() {
+    use bytes::Bytes;
+    use futures_util::SinkExt;
+    use http_body_util::Full;
+    use hyper_util::rt::TokioIo;
+    use rcgen::{BasicConstraints, CertificateParams, ExtendedKeyUsagePurpose, IsCa, KeyPair};
+    use std::convert::Infallible;
+    let mut params = CertificateParams::new(vec!["Live Redirect CA".into()]).unwrap();
+    params
+        .distinguished_name
+        .push(rcgen::DnType::CommonName, "live-redirect-ca");
+    params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+    let ca_key = KeyPair::generate().unwrap();
+    let ca = params.self_signed(&ca_key).unwrap();
+    let issuer = rcgen::Issuer::from_params(&params, &ca_key);
+    let mut params = CertificateParams::new(vec!["live-redirect.test".into()]).unwrap();
+    params
+        .distinguished_name
+        .push(rcgen::DnType::CommonName, "live-redirect.test");
+    params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
+    let server_key = KeyPair::generate().unwrap();
+    let cert = params.signed_by(&server_key, &issuer).unwrap();
+    let mut params = CertificateParams::new(vec!["client.test".into()]).unwrap();
+    params
+        .distinguished_name
+        .push(rcgen::DnType::CommonName, "live-client");
+    params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ClientAuth];
+    let client_key = KeyPair::generate().unwrap();
+    let client_cert = params.signed_by(&client_key, &issuer).unwrap();
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    let mut roots = rustls::RootCertStore::empty();
+    roots.add(ca.der().clone()).unwrap();
+    let roots = Arc::new(roots);
+    let required = rustls::server::WebPkiClientVerifier::builder_with_provider(
+        roots.clone(),
+        provider.clone(),
+    )
+    .build()
+    .unwrap();
+    let optional =
+        rustls::server::WebPkiClientVerifier::builder_with_provider(roots, provider.clone())
+            .allow_unauthenticated()
+            .build()
+            .unwrap();
+    let config = |verifier| {
+        rustls::ServerConfig::builder_with_provider(provider.clone())
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_client_cert_verifier(verifier)
+            .with_single_cert(
+                vec![cert.der().clone()],
+                rustls::pki_types::PrivatePkcs8KeyDer::from(server_key.serialize_der()).into(),
+            )
+            .unwrap()
+    };
+    let source_config = Arc::new(config(required));
+    let target_config = Arc::new(config(optional));
+    for kind in ["sse", "websocket"] {
+        let target = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let target_url = format!(
+            "https://live-redirect.test:{}/target",
+            target.local_addr().unwrap().port()
+        );
+        let tls_config = target_config.clone();
+        let target_task = tokio::spawn(async move {
+            let (socket, _) = target.accept().await.unwrap();
+            let tls = tokio_rustls::TlsAcceptor::from(tls_config)
+                .accept(socket)
+                .await
+                .unwrap();
+            let identity = tls
+                .get_ref()
+                .1
+                .peer_certificates()
+                .is_some_and(|c| !c.is_empty());
+            let body = if identity {
+                "client-present"
+            } else {
+                "anonymous"
+            };
+            if kind == "websocket" {
+                let mut ws = tokio_tungstenite::accept_async(tls).await.unwrap();
+                ws.send(tokio_tungstenite::tungstenite::Message::Text(body.into()))
+                    .await
+                    .unwrap();
+                ws.close(None).await.unwrap();
+            } else {
+                let _ = hyper::server::conn::http1::Builder::new()
+                    .serve_connection(
+                        TokioIo::new(tls),
+                        hyper::service::service_fn(
+                            move |_: hyper::Request<hyper::body::Incoming>| async move {
+                                Ok::<_, Infallible>(
+                                    hyper::Response::builder()
+                                        .header("connection", "close")
+                                        .header("content-type", "text/event-stream")
+                                        .body(Full::new(Bytes::from(format!("data:{body}\n\n"))))
+                                        .unwrap(),
+                                )
+                            },
+                        ),
+                    )
+                    .await;
+            }
+        });
+        let source = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let source_url = format!(
+            "{}://live-redirect.test:{}/start",
+            if kind == "websocket" { "wss" } else { "https" },
+            source.local_addr().unwrap().port()
+        );
+        let tls_config = source_config.clone();
+        let source_task = tokio::spawn(async move {
+            let (socket, _) = source.accept().await.unwrap();
+            let tls = tokio_rustls::TlsAcceptor::from(tls_config)
+                .accept(socket)
+                .await
+                .unwrap();
+            assert!(
+                tls.get_ref()
+                    .1
+                    .peer_certificates()
+                    .is_some_and(|c| !c.is_empty())
+            );
+            let _ = hyper::server::conn::http1::Builder::new()
+                .serve_connection(
+                    TokioIo::new(tls),
+                    hyper::service::service_fn(move |_: hyper::Request<hyper::body::Incoming>| {
+                        let location = target_url.clone();
+                        async move {
+                            Ok::<_, Infallible>(
+                                hyper::Response::builder()
+                                    .status(302)
+                                    .header("location", location)
+                                    .header("connection", "close")
+                                    .body(Full::new(Bytes::new()))
+                                    .unwrap(),
+                            )
+                        }
+                    }),
+                )
+                .await;
+        });
+        let mut r = request(&source_url, kind);
+        r.network = Some(Box::new(moleapi_core::RequestNetwork {
+            built_in_roots: false,
+            ca_pem: ca.pem(),
+            dns: vec![moleapi_core::DnsOverride {
+                hostname: "live-redirect.test".into(),
+                addresses: vec!["127.0.0.1".into()],
+            }],
+            identity: moleapi_core::ClientIdentity {
+                enabled: true,
+                certificate_pem: client_cert.pem(),
+                key_pem: client_key.serialize_pem(),
+                ..Default::default()
+            },
+            ..Default::default()
+        }));
+        let manager = SessionManager::new();
+        let id = start(&manager, r, true);
+        wait(&manager, &id, SessionState::Closed).await;
+        assert!(
+            manager
+                .events("owner", &id, 0)
+                .unwrap()
+                .events
+                .iter()
+                .any(|e| match &e.message {
+                    EventMessage::Sse { data, .. } => data == "anonymous",
+                    EventMessage::Text { text } => text == "anonymous",
+                    _ => false,
+                })
+        );
+        source_task.await.unwrap();
+        target_task.await.unwrap();
+    }
+}
