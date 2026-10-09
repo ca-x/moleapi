@@ -15,6 +15,7 @@ mod oauth2;
 mod privacy;
 mod protocol_admission;
 mod protocols;
+mod run_reports;
 mod runner;
 mod soap;
 mod storage;
@@ -259,6 +260,18 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         .route(
             "/workspaces/{id}/history",
             get(history::history).delete(history::clear_history),
+        )
+        .route(
+            "/workspaces/{workspace}/reports",
+            get(run_reports::list).delete(run_reports::clear),
+        )
+        .route(
+            "/workspaces/{workspace}/reports/{report}",
+            get(run_reports::get).delete(run_reports::remove),
+        )
+        .route(
+            "/workspaces/{workspace}/reports/{report}/export",
+            get(run_reports::export),
         )
         .route("/workspaces/{id}/run", post(runner::run))
         .route("/workspaces/{id}/run/cancel", post(runner::cancel))

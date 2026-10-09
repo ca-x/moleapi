@@ -236,6 +236,7 @@ pub async fn run(
         .clone()
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let lease = s.project_jobs.start(&owner.0, &w.id, &job_id)?;
+    let started_at = crate::storage::now();
     let start = std::time::Instant::now();
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(300);
     let mut results = vec![];
@@ -383,10 +384,10 @@ pub async fn run(
                 }
                 let mut item = if condition_failed {
                     failed += 1;
-                    json!({"request_id":request.id,"request_name":request.name,"collection_id":selected.id,"iteration":index,"error":"Scenario condition failed; check its boolean result and execution limits"})
+                    json!({"request_id":request.id,"request_name":request.name,"method":request.method,"collection_id":selected.id,"iteration":index,"error":"Scenario condition failed; check its boolean result and execution limits"})
                 } else if !condition_passed {
                     skipped += 1;
-                    json!({"request_id":request.id,"request_name":request.name,"collection_id":selected.id,"iteration":index,"condition_skipped":true})
+                    json!({"request_id":request.id,"request_name":request.name,"method":request.method,"collection_id":selected.id,"iteration":index,"condition_skipped":true})
                 } else {
                     // A condition worker may have yielded while the owner or workspace changed.
                     if step.and_then(|step| step.condition.as_ref()).is_some() {
@@ -409,12 +410,12 @@ pub async fn run(
                                     failed += 1;
                                 }
                             }
-                            json!({"request_id":request.id,"request_name":request.name,"collection_id":selected.id,"iteration":index,"status":response.status,"elapsed_ms":response.elapsed_ms,"response":response})
+                            json!({"request_id":request.id,"request_name":request.name,"method":request.method,"collection_id":selected.id,"iteration":index,"status":response.status,"elapsed_ms":response.elapsed_ms,"response":response})
                         }
                         Err(error) => {
                             previous_response = None;
                             failed += 1;
-                            json!({"request_id":request.id,"request_name":request.name,"collection_id":selected.id,"iteration":index,"error":error.message})
+                            json!({"request_id":request.id,"request_name":request.name,"method":request.method,"collection_id":selected.id,"iteration":index,"error":error.message})
                         }
                     }
                 };
@@ -541,6 +542,32 @@ pub async fn run(
             item["response_omitted"] = true.into();
         }
         report["omitted_responses"] = items.len().into();
+    }
+    {
+        let admission = gate.lock().await;
+        if *admission == epoch {
+            let source = crate::run_reports::Source {
+                workspace: &w,
+                collection,
+                scenario,
+                environment: e,
+                dataset: c.dataset_id.as_deref(),
+                started_at: &started_at,
+                scopes: &scopes,
+            };
+            match crate::run_reports::record(&s, &owner.0, &source, &report).await {
+                Ok(Some(id)) => {
+                    report["report_id"] = id.into();
+                }
+                Ok(None) => {
+                    report["report_save_error"] =
+                        "Workspace was deleted before the report could be saved".into();
+                }
+                Err(_) => {
+                    report["report_save_error"] = "Run report could not be persisted".into();
+                }
+            }
+        }
     }
     Ok(Json(report))
 }

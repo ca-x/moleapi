@@ -260,7 +260,7 @@ pub(super) async fn run(
             }
             let (collection, request, step) = branch.step;
             let step = step.ok_or_else(ApiError::internal)?;
-            let mut item = json!({"request_id":request.id,"request_name":request.name,"collection_id":collection.id,"iteration":context.iteration,"step_id":step.id,"step_name":step.name,"step_group":step.group,"step_repeat_index":branch.repeat,"parallel_id":block.id,"parallel_name":block.name,"variable_updates_applied":false});
+            let mut item = json!({"request_id":request.id,"request_name":request.name,"method":request.method,"collection_id":collection.id,"iteration":context.iteration,"step_id":step.id,"step_name":step.name,"step_group":step.group,"step_repeat_index":branch.repeat,"parallel_id":block.id,"parallel_name":block.name,"variable_updates_applied":false});
             if visit.condition_skipped {
                 batch.skipped += 1;
                 item["condition_skipped"] = true.into();

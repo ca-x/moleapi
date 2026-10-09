@@ -7,6 +7,7 @@ import {useWorkbench} from "../workbench/context";
 import RunnerDataset,{runnerOptions,type RunnerConfig} from "./RunnerDataset";
 import SavedDatasets from "./SavedDatasets";
 import SavedScenarios from "./SavedScenarios";
+import SavedReports from "./SavedReports";
 export default function TestingPage(){
  useLanguage();const state=useWorkbench();const {draft,runCollection,setRunCollection,runResult,runnerBusy,run,stopRunner}=state;
  const scope=JSON.stringify([state.accountId,draft?.id]);
@@ -32,6 +33,9 @@ export default function TestingPage(){
  {savedId&&!saved?.source&&<Text>{t("数据源缺失，请重新导入。")}</Text>}
  <SavedDatasets key={scope+draft.revision} scope={scope+draft.revision} disabled={runnerBusy}/>
  {invalid&&<Callout.Root color="red"><Callout.Text role="alert">{t("测试数据无效，请检查格式、迭代次数和大小限制。")}</Callout.Text></Callout.Root>}
+ <SavedReports key={"reports:"+scope} disabled={runnerBusy}/>
+ {runResult?.report_save_error&&<Callout.Root color="orange"><Callout.Text>{t("即时结果已保留，但报告未能保存。请检查存储或工作区状态。")}</Callout.Text></Callout.Root>}
+ {runResult?.report_id&&<Text size="1" color="gray">{t("已保存脱敏报告")} · {runResult.report_id}</Text>}
  {runResult&&<><Flex gap="4" align="center"><Badge color="green">{t("通过")} {runResult.passed}</Badge><Badge color="red">{t("失败")} {runResult.failed}</Badge><Text size="2" color="gray">{runResult.elapsed_ms} ms</Text>{!!runResult.skipped&&<Badge color="gray">{t("跳过")} {runResult.skipped}</Badge>}</Flex>
  {runResult.stopped_reason&&<Text role="status">{runResult.stopped_reason==="parallel_variable_conflict"?t("并行变量写入冲突，本块更新未应用。"):runResult.stopped_reason==="parallel_control"||runResult.stopped_reason==="parallel_entry"?t("并行块流程跳转无效，场景已停止。"):runResult.stopped_reason==="condition_error"?t("场景条件执行失败，请检查布尔结果和执行限制。"):runResult.stopped_reason==="deadline"?t("集合运行达到时间限制。"):runResult.stopped_reason==="variable_limit"?t("集合运行达到变量大小限制。"):runResult.stopped_reason==="script_stop"?t("脚本已结束集合流程。"):runResult.stopped_reason==="step_limit"?t("集合流程达到最大步骤限制。"):runResult.stopped_reason.startsWith("next_request_")?t("下一请求不存在或名称不唯一，流程已停止。"):t("集合运行已取消。")}</Text>}
  {runResult.iterations?.map(iteration=><Text key={iteration.iteration}>{t("第 {{iteration}} 轮：通过 {{passed}}，失败 {{failed}}。",{iteration:iteration.iteration+1,passed:iteration.passed,failed:iteration.failed})}{iteration.script_stopped&&` · ${t("脚本已结束本轮流程。")}`}{iteration.scenario_stopped&&` · ${t("场景分支已结束本轮。")}`}</Text>)}

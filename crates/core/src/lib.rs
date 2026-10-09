@@ -1,3 +1,5 @@
+mod run_reports;
+pub use run_reports::*;
 mod scenarios;
 pub use scenarios::*;
 mod datasets;

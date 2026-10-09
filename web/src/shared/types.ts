@@ -239,6 +239,8 @@ export interface SyncResult {
   message: string;
 }
 export interface RunResult {
+  report_id?:string;
+  report_save_error?:string;
   parallel_variable_updates?:({collection_id:string}&VariableUpdate)[];
   scenario_id?:string;
   skipped?:number;
@@ -250,6 +252,9 @@ export interface RunResult {
   stopped_reason?:string|null;
   omitted_responses?:number;
   results: {
+    outcome?:"passed"|"failed"|"skipped";
+    tests_passed?:number;
+    tests_failed?:number;
     parallel_id?:string;
     parallel_name?:string;
     variable_updates_applied?:boolean;
@@ -284,3 +289,16 @@ export interface ExportResult {
   content: string;
   mime: string;
 }
+export interface RunReportSummary {
+ id:string;workspace_revision:number;collection_name:string;scenario_name:string|null;environment_name:string|null;started_at:string;finished_at:string;summary:SavedRunSummary;
+}
+export interface SavedRunSummary {
+ passed:number;failed:number;skipped:number;elapsed_ms:number;iteration_count:number;completed_iterations:number;executed_steps:number;tests_passed:number;tests_failed:number;diagnostics_omitted:number;stopped_reason:string|null;cancelled:boolean;
+}
+export interface RunStepReport {
+ position:number;request_id:string;request_name:string;collection_id:string;method:string;iteration:number;step_id:string|null;step_name:string|null;step_group:string|null;parallel_id:string|null;parallel_name:string|null;repeat_index:number;outcome:"passed"|"failed"|"skipped";status:number|null;elapsed_ms:number;size_bytes:number;tests:{id:string;name:string;passed:boolean;actual:string;expected:string}[];tests_passed:number;tests_failed:number;diagnostics_omitted:number;error:string|null;
+}
+export interface SavedRunReport {
+ schema_version:number;id:string;workspace_id:string;workspace_name:string;workspace_revision:number;collection_id:string;collection_name:string;scenario_id:string|null;scenario_name:string|null;environment_id:string|null;environment_name:string|null;dataset_id:string|null;started_at:string;finished_at:string;summary:SavedRunSummary;iterations:{iteration:number;passed:number;failed:number;elapsed_ms:number;script_stopped:boolean;scenario_stopped:boolean}[];results:RunStepReport[];
+}
+export interface RunReportPage {items:RunReportSummary[];next_cursor:string|null}

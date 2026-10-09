@@ -74,6 +74,7 @@ export function useRunner(
       }
       setResult({ accountId, workspaceId, collectionId, value });
       void client.invalidateQueries({ queryKey: ["history", workspaceId] });
+      void client.invalidateQueries({queryKey:["run-reports",accountId,workspaceId]});
     } catch (error) {
       if(accountRef.current===accountId&&stateRef.current.draft?.id===workspaceId)toast.error(liveError(error));
     } finally {

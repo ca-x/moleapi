@@ -883,7 +883,7 @@ fn sensitive(key: &str) -> bool {
 }
 
 // XML entity spelling is arbitrary; screen decoded data before default exports.
-struct ExportPrivacy {
+pub(super) struct ExportPrivacy {
     matcher: Option<aho_corasick::AhoCorasick>,
     withhold: bool,
 }
@@ -945,7 +945,7 @@ impl ExportPrivacy {
     fn new(workspace: &Workspace) -> Self {
         Self::from_workspace(workspace, false)
     }
-    fn from_workspace(workspace: &Workspace, generation: bool) -> Self {
+    pub(super) fn from_workspace(workspace: &Workspace, generation: bool) -> Self {
         let mut secrets = std::collections::BTreeSet::new();
         for dataset in &workspace.data.datasets {
             if let Some(source) = &dataset.source {
@@ -1592,7 +1592,7 @@ impl ExportPrivacy {
             None => text.into(),
         }
     }
-    fn screen_bounded(&self, text: &str, maximum: usize) -> String {
+    pub(super) fn screen_bounded(&self, text: &str, maximum: usize) -> String {
         if self.withhold {
             return String::new();
         }

@@ -23,3 +23,5 @@ Seven actual API fixtures cover a two-request synchronization barrier proving ge
 Frontend tests cover creation/concurrency/removal, redirect rejection, existing step/condition editors, ignoring unapplied peer setters, final approved namespace updates and bilingual catalogs. TypeScript, production frontend and scoped Clippy checks passed. Only changed-path checks were repeated after fixes/new code.
 
 This provides parallel batches of conditional/repeated request branches. Nested parallel groups, multi-step branch graphs, block-level branch/loop destinations, richer group reorder/rename controls, standalone visual graph orchestration, schedules, durable jobs/reports and all other remaining matrix capabilities are still required before unified review and the final main-branch Actions release. No local Docker or installer/release build was performed.
+
+Owned durable report summaries/diagnostics and JSON/CSV/JUnit/bilingual HTML exports are now available; see [saved report scope and evidence](SAVED-RUN-REPORT-COVERAGE.md). Detailed response linking, richer report comparison/sharing and scheduling remain unfinished.
