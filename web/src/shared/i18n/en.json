@@ -1376,5 +1376,6 @@
   "输出映射无效，请检查文件名、目录、重复目标和保留的清单路径。": "Invalid output mapping. Check the filename, folder, duplicate destinations and reserved manifest paths.",
   "导入 .mustache 模板或 UTF-8 静态文件，路径相对模板根目录。最多 128 个文件，每个 64 KiB，合计 512 KiB；静态文件通过输出映射复制。": "Import .mustache templates or UTF-8 static files with paths relative to the template root. Up to 128 files, 64 KiB each, 512 KiB total. Static files are copied through output mappings.",
   "导入 UTF-8 Mustache 模板及文本、图片等静态资源，路径相对模板根目录。最多 128 个文件，每个 64 KiB，包 512 KiB；静态资源通过输出映射复制。": "Import UTF-8 Mustache templates and static assets such as text or images, with paths relative to the template root. Up to 128 files, 64 KiB each, 512 KiB per bundle. Static assets are copied through output mappings.",
-  "二进制静态资源保留原始字节，生成时按输出映射复制。": "Binary static assets retain their original bytes and are copied using their output mappings."
+  "二进制静态资源保留原始字节，生成时按输出映射复制。": "Binary static assets retain their original bytes and are copied using their output mappings.",
+  "文件上传代码引用文件名，不嵌入保存的文件字节。运行代码前请在目标环境准备对应文件，并检查库的 MIME 类型和文件名处理。": "File upload code references filenames without embedding saved file bytes. Prepare the corresponding files in the target environment before running, and check the library's MIME type and filename behavior."
 }

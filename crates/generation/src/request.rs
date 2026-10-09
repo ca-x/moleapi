@@ -21,6 +21,7 @@ pub fn generate_request(
     include_secrets: bool,
 ) -> Result<Snippet> {
     let mut request = moleapi_formats::generation_request(workspace, request_id, include_secrets)?;
+    moleapi_core::validate_structured_body(&request, true)?;
     ensure!(
         matches!(request.protocol, Protocol::Http),
         "Request snippets currently require an HTTP request"
@@ -186,20 +187,48 @@ pub fn generate_request(
         "form" => {
             json!({"mimeType":"application/x-www-form-urlencoded","params":url::form_urlencoded::parse(request.body.as_bytes()).map(|(name,value)|json!({"name":name,"value":value})).collect::<Vec<_>>()})
         }
+        "multipart" => {
+            let body: moleapi_core::MultipartBody = serde_json::from_str(&request.body)?;
+            let params = body
+                .parts
+                .into_iter()
+                .filter(|part| part.enabled)
+                .map(|part| match part.value {
+                    moleapi_core::MultipartValue::Text { text, mime } => {
+                        let mut value = json!({"name":part.name,"value":text});
+                        if !mime.is_empty() {
+                            value["contentType"] = mime.into();
+                        }
+                        value
+                    }
+                    moleapi_core::MultipartValue::File { file } => {
+                        let mut value = json!({"name":part.name,"fileName":file.file_name});
+                        if !file.mime.is_empty() {
+                            value["contentType"] = file.mime.into();
+                        }
+                        value
+                    }
+                })
+                .collect::<Vec<_>>();
+            json!({"mimeType":"multipart/form-data","params":params})
+        }
         _ => anyhow::bail!("This body mode is not supported by request snippets"),
     };
     let har = json!({"method":request.method,"url":url,"httpVersion":"HTTP/1.1","headers":headers,"queryString":[],"cookies":[],"postData":post_data});
     let code = generate_har(target, client, &har)?;
+    let mut warnings = vec![
+        "生成静态请求示例；不执行脚本、不解析环境变量、不附加浏览器私有覆盖。请检查占位符。".into(),
+        "各语言的超时、TLS、重定向策略由其 HTTP 库决定；此轮示例尚不映射这些设置。".into(),
+    ];
+    if request.body_kind == "multipart" {
+        warnings.push("文件上传代码引用文件名，不嵌入保存的文件字节。运行代码前请在目标环境准备对应文件，并检查库的 MIME 类型和文件名处理。".into());
+    }
     Ok(Snippet {
         engine: ENGINE,
         target: target.into(),
         client: client.into(),
         code,
-        warnings: vec![
-            "生成静态请求示例；不执行脚本、不解析环境变量、不附加浏览器私有覆盖。请检查占位符。"
-                .into(),
-            "各语言的超时、TLS、重定向策略由其 HTTP 库决定；此轮示例尚不映射这些设置。".into(),
-        ],
+        warnings,
         include_secrets,
     })
 }
@@ -207,6 +236,55 @@ pub fn generate_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn multipart_catalog_uses_mature_emitters_for_every_selected_library() {
+        let body=json!({"parts":[{"id":"label","name":"label","value":{"kind":"text","text":"fixture","mime":""}},{"id":"upload","name":"upload","value":{"kind":"file","file":{"file_name":"upload.bin","mime":"application/octet-stream","base64":null}}}]}).to_string();
+        let w = workspace("multipart", &body);
+        for target in crate::catalog().unwrap() {
+            for client in target.clients {
+                let result = generate_request(&w, "r", &target.target, &client.client, true);
+                assert!(
+                    result.is_ok(),
+                    "{}/{}: {result:?}",
+                    target.target,
+                    client.client
+                );
+                assert!(!result.unwrap().code.is_empty());
+            }
+        }
+    }
+    #[test]
+    fn multipart_generation_preserves_structure_and_default_privacy_without_file_bytes() {
+        let body=json!({"parts":[{"id":"secret","name":"password","value":{"kind":"text","text":"file","mime":""}},{"id":"copy","name":"copy","value":{"kind":"text","text":"file","mime":""}},{"id":"upload","name":"upload","value":{"kind":"file","file":{"file_name":"upload.bin","mime":"application/octet-stream","base64":"AP+AClg="}}},{"id":"off","name":"disabled","enabled":false,"value":{"kind":"text","text":"must-not-send","mime":""}}]}).to_string();
+        let w = workspace("multipart", &body);
+        let selected = moleapi_formats::generation_request(&w, "r", false).unwrap();
+        let parsed: moleapi_core::MultipartBody = serde_json::from_str(&selected.body).unwrap();
+        assert!(
+            matches!(&parsed.parts[2].value,moleapi_core::MultipartValue::File{file} if file.base64.is_none())
+        );
+        assert!(
+            matches!(&parsed.parts[1].value,moleapi_core::MultipartValue::Text{text,..} if text!="file")
+        );
+        for (target, client) in [
+            ("shell", "curl"),
+            ("node", "fetch"),
+            ("go", "native"),
+            ("csharp", "httpclient"),
+            ("python", "requests"),
+            ("node", "native"),
+            ("node", "request"),
+            ("node", "unirest"),
+        ] {
+            let result = generate_request(&w, "r", target, client, false).unwrap();
+            assert!(
+                !result.code.contains("AP+AClg=") && !result.code.contains("must-not-send"),
+                "{target}/{client}: {}",
+                result.code
+            );
+            assert!(result.code.contains("upload.bin"));
+        }
+        assert_eq!(w.data.collections[0].requests[0].body, body);
+    }
     fn workspace(body_kind: &str, body: &str) -> Workspace {
         serde_json::from_value(json!({"id":"w","name":"Fixture","revision":1,"updated_at":"now","data":{"schema_version":1,"collections":[{"id":"c","name":"Collection","description":"","requests":[{"id":"r","name":"Request","method":"POST","url":"http://127.0.0.1/echo?original=one","description":"","query":[{"id":"q","key":"q","value":"space & + unicode 鼹鼠","enabled":true}],"headers":[],"body_kind":body_kind,"body":body,"auth":{"kind":"none","token":"","username":"","password":""},"timeout_ms":1000,"follow_redirects":false,"verify_tls":true,"assertions":[],"examples":[]}]}],"environments":[],"active_environment_id":null}})).unwrap()
     }

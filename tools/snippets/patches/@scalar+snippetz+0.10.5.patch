@@ -1,0 +1,23 @@
+diff --git a/node_modules/@scalar/snippetz/dist/plugins/node/fetch/fetch.js b/node_modules/@scalar/snippetz/dist/plugins/node/fetch/fetch.js
+--- a/node_modules/@scalar/snippetz/dist/plugins/node/fetch/fetch.js
++++ b/node_modules/@scalar/snippetz/dist/plugins/node/fetch/fetch.js
+@@ -1,5 +1,5 @@
+ import { buildQueryString, normalizeMethod } from '../../../libs/http.js';
+-import { Raw, objectToString } from '../../../libs/javascript.js';
++import { Raw, objectToString, escapeJsString } from '../../../libs/javascript.js';
+ /**
+  * node/fetch
+  */
+@@ -64,10 +64,10 @@
+                             prefix = `import fs from 'node:fs'\n\n${prefix}`;
+                             hasFsImport = true;
+                         }
+-                        prefix += `formData.append('${param.name}', new Blob([fs.readFileSync('${param.fileName}')]), '${param.fileName}')\n`;
++                        prefix += `formData.append('${escapeJsString(param.name)}', new Blob([fs.readFileSync('${escapeJsString(param.fileName)}')], {type: '${escapeJsString(param.contentType ?? 'application/octet-stream')}'}), '${escapeJsString(param.fileName)}')\n`;
+                     }
+                     else if (param.value !== undefined) {
+-                        prefix += `formData.append('${param.name}', '${param.value}')\n`;
++                        prefix += `formData.append('${escapeJsString(param.name)}', '${escapeJsString(param.value)}')\n`;
+                     }
+                 });
+                 prefix += '\n';

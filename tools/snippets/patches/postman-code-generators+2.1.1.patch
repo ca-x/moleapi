@@ -17,3 +17,91 @@ diff --git a/node_modules/postman-code-generators/codegens/nodejs-native/lib/req
    optionsArray.push(parseRequest.parseHeader(request, indentString));
    if (options.followRedirect) {
      optionsArray.push(indentString + '\'maxRedirects\': 20');
+diff --git a/node_modules/postman-code-generators/codegens/nodejs-native/lib/parseRequest.js b/node_modules/postman-code-generators/codegens/nodejs-native/lib/parseRequest.js
+--- a/node_modules/postman-code-generators/codegens/nodejs-native/lib/parseRequest.js
++++ b/node_modules/postman-code-generators/codegens/nodejs-native/lib/parseRequest.js
+@@ -40,7 +40,7 @@
+   var postData = '';
+ 
+   if (dataArray.length) {
+-    postData = '"' + boundary + _.reduce(dataArray, (accumalator, dataArrayElement) => {
++    postData = 'Buffer.concat([Buffer.from("' + boundary + _.reduce(dataArray, (accumalator, dataArrayElement) => {
+       if (!dataArrayElement.disabled || dataArrayElement.disabled === false) {
+         const key = dataArrayElement.key.replace(/"/g, '\'');
+ 
+@@ -48,11 +48,11 @@
+           var pathArray = dataArrayElement.src.split(path.sep),
+             fileName = pathArray[pathArray.length - 1];
+           const filename = `filename=\\"${fileName}\\"`,
+-            contentType = 'Content-Type: \\"{Insert_File_Content_Type}\\"',
+-            fileContent = `fs.readFileSync('${dataArrayElement.src}')`;
++            contentType = 'Content-Type: ' + JSON.stringify(dataArrayElement.contentType || 'application/octet-stream').slice(1, -1),
++            fileContent = `fs.readFileSync(${JSON.stringify(dataArrayElement.src)})`;
+ 
+           // eslint-disable-next-line max-len
+-          accumalator.push(`name=\\"${key}\\"; ${filename}\\r\\n${contentType}\\r\\n\\r\\n" + ${fileContent} + "\\r\\n`);
++          accumalator.push(`name=\\"${key}\\"; ${filename}\\r\\n${contentType}\\r\\n\\r\\n"), ${fileContent}, Buffer.from("\\r\\n`);
+         }
+         else {
+           // eslint-disable-next-line no-useless-escape
+@@ -67,7 +67,7 @@
+       }
+       return accumalator;
+       // eslint-disable-next-line no-useless-escape
+-    }, []).join(`${boundary}`) + '------WebKitFormBoundary7MA4YWxkTrZu0gW--\"';
++    }, []).join(`${boundary}`) + '------WebKitFormBoundary7MA4YWxkTrZu0gW--")])';
+   }
+ 
+   return postData;
+diff --git a/node_modules/postman-code-generators/codegens/nodejs-request/lib/parseRequest.js b/node_modules/postman-code-generators/codegens/nodejs-request/lib/parseRequest.js
+--- a/node_modules/postman-code-generators/codegens/nodejs-request/lib/parseRequest.js
++++ b/node_modules/postman-code-generators/codegens/nodejs-request/lib/parseRequest.js
+@@ -14,6 +14,18 @@
+ function extractFormData (dataArray, indentString, trimBody) {
+   if (!dataArray) {
+     return '';
++  }
++  const groups = new Map();
++  dataArray.filter(item => !item.disabled).forEach(item => {
++    const members = groups.get(item.key) || [];
++    members.push(item); groups.set(item.key, members);
++  });
++  if ([...groups.values()].some(members => members.length > 1)) {
++    return [...groups].map(([key, members]) => {
++      const prefix = `'${sanitize(key, trimBody)}': `;
++      const values = members.map(item => extractFormData([item], indentString, trimBody).trim().slice(prefix.length));
++      return indentString.repeat(2) + prefix + '[\n' + values.join(',\n') + '\n' + indentString.repeat(2) + ']';
++    }).join(',\n') + '\n';
+   }
+   var snippetString = _.reduce(dataArray, (accumalator, item) => {
+     if (item.disabled) {
+@@ -54,7 +66,7 @@
+           indentString.repeat(3) + '\'value\': fs.createReadStream(\'/path/to/file\'),',
+           indentString.repeat(3) + '\'options\': {',
+           indentString.repeat(4) + '\'filename\': \'filename\'',
+-          indentString.repeat(4) + '\'contentType\': null',
++          indentString.repeat(4) + `'contentType': ${item.contentType ? JSON.stringify(item.contentType) : 'null'}`,
+           indentString.repeat(3) + '}',
+           indentString.repeat(2) + '}'
+         ].join('\n'));
+@@ -67,7 +79,7 @@
+           indentString.repeat(3) + `'value': fs.createReadStream('${sanitize(item.src, trimBody)}'),`,
+           indentString.repeat(3) + '\'options\': {',
+           indentString.repeat(4) + `'filename': '${sanitize(fileName, trimBody)}',`,
+-          indentString.repeat(4) + '\'contentType\': null',
++          indentString.repeat(4) + `'contentType': ${item.contentType ? JSON.stringify(item.contentType) : 'null'}`,
+           indentString.repeat(3) + '}',
+           indentString.repeat(2) + '}'
+         ].join('\n'));
+diff --git a/node_modules/postman-code-generators/codegens/nodejs-unirest/lib/parseRequest.js b/node_modules/postman-code-generators/codegens/nodejs-unirest/lib/parseRequest.js
+--- a/node_modules/postman-code-generators/codegens/nodejs-unirest/lib/parseRequest.js
++++ b/node_modules/postman-code-generators/codegens/nodejs-unirest/lib/parseRequest.js
+@@ -18,7 +18,7 @@
+     }
+     /* istanbul ignore next */
+     if (item.type === 'file') {
+-      bodyString += indentString + `.attach('file', '${sanitize(item.src, trimBody)}')\n`;
++      bodyString += indentString + `.attach('${sanitize(item.key, trimBody)}', '${sanitize(item.src, trimBody)}'${item.contentType ? ', '+JSON.stringify({contentType:item.contentType}) : ''})\n`;
+     }
+     else {
+       bodyString += indentString +

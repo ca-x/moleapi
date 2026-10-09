@@ -1767,6 +1767,7 @@ pub(super) fn generation_request(
     } else {
         privacy.screen_text(&request.url)
     };
+    let structured = matches!(request.body_kind.as_str(), "binary" | "multipart");
     request.body = if request.body_kind == "form" {
         url::form_urlencoded::Serializer::new(String::new())
             .extend_pairs(url::form_urlencoded::parse(request.body.as_bytes()).map(
@@ -1783,6 +1784,8 @@ pub(super) fn generation_request(
                 },
             ))
             .finish()
+    } else if structured {
+        request.body.clone()
     } else {
         redact_embedded_json(&request.body)
     };
@@ -1795,7 +1798,9 @@ pub(super) fn generation_request(
     // Screen user data, never the fixed RequestSpec/Pair/Auth schema keys.
     // A common credential such as "user" must not delete auth.username.
     request.url = privacy.screen_text(&request.url);
-    request.body = if serde_json::from_str::<Value>(&request.body).is_ok() {
+    request.body = if structured {
+        generation_structured_body(&request, &privacy)?
+    } else if serde_json::from_str::<Value>(&request.body).is_ok() {
         privacy.screen_generation_json(&request.body)
     } else {
         privacy.screen_generation_text(&request.body)
@@ -1819,6 +1824,48 @@ pub(super) fn generation_request(
     request.auth.password = privacy.screen_text(&request.auth.password);
     request.auth.token = privacy.screen_text(&request.auth.token);
     Ok(request)
+}
+
+fn generation_structured_body(
+    request: &moleapi_core::RequestSpec,
+    privacy: &ExportPrivacy,
+) -> anyhow::Result<String> {
+    let screen_file = |file: &mut moleapi_core::BinaryBody| {
+        file.base64 = None;
+        file.file_name = privacy.screen_bounded(&file.file_name, 512);
+        if file.file_name.is_empty() {
+            file.file_name = "{{FILE_NAME}}".into();
+        }
+        if privacy.screen_text(&file.mime) != file.mime {
+            file.mime.clear();
+        }
+    };
+    if request.body_kind == "binary" {
+        let mut file: moleapi_core::BinaryBody = serde_json::from_str(&request.body)?;
+        screen_file(&mut file);
+        return Ok(serde_json::to_string(&file)?);
+    }
+    let mut body: moleapi_core::MultipartBody = serde_json::from_str(&request.body)?;
+    for part in &mut body.parts {
+        match &mut part.value {
+            moleapi_core::MultipartValue::Text { text, mime } => {
+                *text = if sensitive(&part.name) {
+                    "{{REDACTED}}".into()
+                } else {
+                    privacy.screen_generation_text(text)
+                };
+                if privacy.screen_text(mime) != *mime {
+                    mime.clear();
+                }
+            }
+            moleapi_core::MultipartValue::File { file } => screen_file(file),
+        }
+        part.name = privacy.screen_bounded(&part.name, 512);
+        if part.name.is_empty() {
+            part.name = "{{FIELD_NAME}}".into();
+        }
+    }
+    Ok(serde_json::to_string(&body)?)
 }
 
 fn template_reference(text: &str) -> bool {
