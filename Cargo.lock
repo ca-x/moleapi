@@ -6396,6 +6396,7 @@ dependencies = [
  "bytes",
  "chrono",
  "cookie_store",
+ "csv",
  "cynic",
  "cynic-introspection",
  "cynic-parser",

@@ -5,9 +5,18 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const MAX_VARIABLE_BYTES: usize = 1024 * 1024;
 pub const MAX_SCRIPT_BYTES: usize = 256 * 1024;
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct IterationInfo {
+    pub index: usize,
+    pub count: usize,
+}
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct VariableScopes {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub iteration: Option<IterationInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub iteration_data: Option<BTreeMap<String, serde_json::Value>>,
     #[serde(skip)]
     pub environment_id: Option<String>,
     pub project: BTreeMap<String, String>,
@@ -110,6 +119,12 @@ impl VariableScopes {
         }
     }
     pub fn validate(&self) -> Result<()> {
+        if let Some(data) = &self.iteration_data {
+            ensure!(
+                data.len() <= 1000 && serde_json::to_vec(data)?.len() <= MAX_VARIABLE_BYTES,
+                "Typed iteration data exceeds execution limit"
+            );
+        }
         ensure!(
             self.private_values.len() <= 5000
                 && self.private_values.iter().map(String::len).sum::<usize>()

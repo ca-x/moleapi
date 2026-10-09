@@ -229,9 +229,20 @@ export interface SyncResult {
   message: string;
 }
 export interface RunResult {
+  iteration_count?:number;
+  completed_iterations?:number;
+  iterations?:{iteration:number;passed:number;failed:number;elapsed_ms:number}[];
+  cancelled?:boolean;
+  stopped_reason?:string|null;
+  omitted_responses?:number;
   results: {
     request_id: string;
     request_name: string;
+    collection_id?:string;
+    iteration?:number;
+    status?:number;
+    elapsed_ms?:number;
+    response_omitted?:boolean;
     response?: ApiResponse;
     error?: string;
   }[];
@@ -239,6 +250,7 @@ export interface RunResult {
   failed: number;
   elapsed_ms: number;
 }
+export interface RunOptions {iterations?:number;dataset?:{format:"csv"|"json";source:string}}
 export interface ImportResult {
   name: string;
   data: WorkspaceData;

@@ -89,28 +89,29 @@ export async function saveFile(file: ExportResult): Promise<void> {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-export async function pickFile(): Promise<string | null> {
+export async function pickFile(options?:{extensions?:string[];maximum?:number;label?:string}): Promise<string | null> {
+  const extensions=options?.extensions??["json","yaml","yml","txt"],maximum=options?.maximum??20*1024*1024;
   if (native) {
     const { open } = await import("@tauri-apps/plugin-dialog");
     const path = await open({
       multiple: false,
       filters: [
-        { name: t("API 定义"), extensions: ["json", "yaml", "yml", "txt"] },
+        { name: options?.label??t("API 定义"), extensions },
       ],
     });
     return typeof path === "string"
-      ? (await readBoundedTextFiles([path], 20 * 1024 * 1024, 20 * 1024 * 1024))[0]
+      ? (await readBoundedTextFiles([path], maximum, maximum))[0]
       : null;
   }
   return new Promise((resolve, reject) => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = ".json,.yaml,.yml,.txt";
+    input.accept = extensions.map(extension=>"."+extension).join(",");
     input.onchange = () => {
       const file = input.files?.[0];
       if (!file) return resolve(null);
-      if (file.size > 20 * 1024 * 1024) {
-        reject(new LocalizedError("文件超过 20 MiB 导入限制。"));
+      if (file.size > maximum) {
+        reject(new LocalizedError("文件超过 {{limit}} MiB 导入限制。",{limit:maximum/(1024*1024)}));
         return;
       }
       file.text().then(resolve, reject);

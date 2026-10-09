@@ -1,10 +1,11 @@
 import { liveError } from "./../../shared/i18n/errors";
 import { useLanguage } from "../../shared/i18n";
-import { useRef, useState } from "react";
+import { useEffect,useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "../../shared/api";
-import type { RunResult } from "../../shared/types";
+import type { RunResult,RunOptions } from "../../shared/types";
+import {id} from "../../shared/model";
 import type { useLocalVariables } from "../variables/useLocalVariables";
 import type { useWorkspace } from "../workspaces/useWorkspace";
 
@@ -27,12 +28,17 @@ export function useRunner(
   } | null>(null);
   const [runnerBusy, setRunnerBusy] = useState(false);
   const running = useRef(false);
-  async function run() {
+  const job=useRef<{id:string;workspaceId:string}|null>(null);
+  const cancelled=useRef(new Set<string>());
+  async function stopRunner(){const previous=job.current;if(previous){cancelled.current.add(previous.id);try{await api(`/api/workspaces/${previous.workspaceId}/run/cancel`,"POST",{job_id:previous.id});}catch(error){toast.error(liveError(error));}}}
+  useEffect(()=>()=>{const previous=job.current;job.current=null;if(previous)void api(`/api/workspaces/${previous.workspaceId}/run/cancel`,"POST",{job_id:previous.id}).catch(()=>{});},[accountId,draft?.id]);
+  async function run(options:RunOptions={}) {
     if (!draft || !runCollection || running.current) return;
     const workspaceId = draft.id;
     const collectionId = runCollection;
     const environmentId = draft.data.active_environment_id;
     running.current = true;
+    const ticket=id();job.current={id:ticket,workspaceId};
     setRunnerBusy(true);
     setResult(null);
     try {
@@ -42,6 +48,7 @@ export function useRunner(
         stateRef.current.draft?.id !== workspaceId
       )
         return;
+      if(cancelled.current.has(ticket)){setResult({accountId,workspaceId,collectionId,value:{results:[],passed:0,failed:0,elapsed_ms:0,cancelled:true,stopped_reason:"cancelled"}});return;}
       const locals =
         localVariables?.values(draft, collectionId, environmentId) || [];
       const value = await api<RunResult>(
@@ -51,6 +58,7 @@ export function useRunner(
           collection_id: collectionId,
           environment_id: environmentId,
           ...(locals.length ? { locals } : {}),
+          ...options,job_id:ticket,
         },
       );
       if (
@@ -60,7 +68,7 @@ export function useRunner(
         for (const result of value.results)
           localVariables?.apply(
             draft,
-            collectionId,
+            result.collection_id??collectionId,
             environmentId,
             result.response?.variable_updates || [],
           );
@@ -68,8 +76,10 @@ export function useRunner(
       setResult({ accountId, workspaceId, collectionId, value });
       void client.invalidateQueries({ queryKey: ["history", workspaceId] });
     } catch (error) {
-      toast.error(liveError(error));
+      if(accountRef.current===accountId&&stateRef.current.draft?.id===workspaceId)toast.error(liveError(error));
     } finally {
+      if(job.current?.id===ticket)job.current=null;
+      cancelled.current.delete(ticket);
       running.current = false;
       setRunnerBusy(false);
     }
@@ -85,5 +95,6 @@ export function useRunner(
         ? result.value
         : null,
     run,
+    stopRunner,
   };
 }

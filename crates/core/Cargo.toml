@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+csv = "=1.4.0"
 no-proxy = {version="=0.3.7",default-features=false}
 p12-keystore = "=0.3.2"
 rustls-pemfile = "2"

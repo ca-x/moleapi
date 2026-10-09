@@ -2,6 +2,7 @@
   "use strict";
   const stringify = JSON.stringify.bind(JSON), parse = JSON.parse.bind(JSON);
   const source = input.request, scopes = input.scopes;
+  const iterationInfo=scopes.iteration, iterationValues=scopes.iteration_data;
   const taint = __moleapiTaint;
   const uncertain = __moleapiPrivacyUncertain, privacyOverflow = __moleapiPrivacyOverflow, captureUrl = __moleapiCaptureUrl, captureQuery = __moleapiCaptureQuery;
   const captureBegin = __moleapiCaptureBegin, captureEnd = __moleapiCaptureEnd;
@@ -247,7 +248,16 @@
   const pm = {
     compatibilityVersion: "moleapi-pm/1",
     variables: store("temporary",true),
-    iterationData: store("data",false,true),
+    iterationData: iterationValues ? api({
+      get:key=>has(iterationValues,String(key))?parse(stringify(iterationValues[String(key)])):undefined,
+      has:key=>has(iterationValues,String(key)),
+      toObject:()=>parse(stringify(iterationValues)),
+      set:()=>{throw new Error("Execution data is read-only");},
+      unset:()=>{throw new Error("Execution data is read-only");},
+      clear:()=>{throw new Error("Execution data is read-only");},
+      replaceIn:text=>store("data",false,true).replaceIn(text)
+    },"iterationData") : store("data",false,true),
+    info:api(Object.freeze({requestId:source.id,requestName:source.name,iteration:iterationInfo?.index??0,iterationCount:iterationInfo?.count??1,eventName:input.response?"test":"prerequest"}),"info"),
     environment: store("environment"),
     globals: store("project"),
     collectionVariables: store("collection"),

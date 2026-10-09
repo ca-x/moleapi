@@ -4,6 +4,22 @@ use serde_json::json;
 fn request() -> RequestSpec {
     serde_json::from_value(json!({"id":"r","name":"r","method":"GET","url":"https://example.com/","description":"","query":[],"headers":[],"body_kind":"none","body":"","auth":{"kind":"none","token":"","username":"","password":""},"timeout_ms":1000,"follow_redirects":true,"verify_tls":true,"assertions":[],"examples":[]})).unwrap()
 }
+#[test]
+fn iteration_data_is_typed_read_only_and_copied_with_iteration_info() {
+    let mut scopes = VariableScopes {
+        iteration: Some(IterationInfo { index: 1, count: 3 }),
+        ..VariableScopes::default()
+    };
+    scopes.data.insert("id".into(), "2".into());
+    scopes.iteration_data = Some(
+        serde_json::from_value(json!({"id":2,"flag":false,"object":{"secret":"original"}}))
+            .unwrap(),
+    );
+    let result=run(&[r#"pm.test('typed',()=>{pm.expect(pm.iterationData.get('id')).to.equal(2);pm.expect(pm.iterationData.get('flag')).to.equal(false);pm.expect(pm.variables.get('id')).to.equal('2');});pm.test('info',()=>{pm.expect(pm.info.iteration).to.equal(1);pm.expect(pm.info.iterationCount).to.equal(3);pm.expect(pm.info.eventName).to.equal('prerequest');});pm.test('copied',()=>{const value=pm.iterationData.get('object');value.secret='changed';pm.expect(pm.iterationData.get('object').secret).to.equal('original');});pm.test('readonly',()=>{let rejected=false;try{pm.iterationData.set('id',3);}catch{rejected=true;}pm.expect(rejected).to.equal(true);});"#.into()],&request(),None,&scopes).unwrap();
+    assert_eq!(result.tests.len(), 4);
+    assert!(result.tests.iter().all(|test| test.passed));
+    assert!(result.updates.is_empty());
+}
 fn evaluate(source: &str) -> anyhow::Result<moleapi_script_runtime::ScriptOutput> {
     run(
         &[source.into()],

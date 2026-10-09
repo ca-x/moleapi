@@ -258,6 +258,8 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
             get(history::history).delete(history::clear_history),
         )
         .route("/workspaces/{id}/run", post(runner::run))
+        .route("/workspaces/{id}/run/cancel", post(runner::cancel))
+        .route("/testing/dataset/preview", post(runner::preview))
         .route("/workspaces/{id}/export", post(formats::export))
         .route("/oauth2/flows", post(oauth2::flows::begin))
         .route("/oauth2/flows/{id}", get(oauth2::flows::status))

@@ -11,9 +11,49 @@ use tokio_util::sync::CancellationToken;
 #[derive(Default)]
 pub(crate) struct Jobs {
     entries: Mutex<HashMap<String, (String, String, CancellationToken)>>,
+    early_cancels: Mutex<HashMap<(String, String, String), std::time::Instant>>,
 }
 impl Jobs {
-    fn start(self: &Arc<Self>, owner: &str, workspace: &str, id: &str) -> Result<Lease, ApiError> {
+    pub(crate) fn cancel_job(
+        &self,
+        owner: &str,
+        workspace: Option<&str>,
+        id: &str,
+    ) -> Result<(), ApiError> {
+        let entries = self.entries.lock().unwrap();
+        let Some((job_owner, job_workspace, token)) = entries.get(id) else {
+            let workspace = workspace.ok_or_else(ApiError::not_found)?;
+            if id.is_empty()
+                || id.len() > 128
+                || !id
+                    .chars()
+                    .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+            {
+                return Err(ApiError::bad("Invalid run job ID"));
+            }
+            let mut early = self.early_cancels.lock().unwrap();
+            early.retain(|_, created| created.elapsed() < std::time::Duration::from_secs(30));
+            if early.len() >= 64 {
+                return Err(ApiError::bad("Cancellation capacity reached"));
+            }
+            early.insert(
+                (owner.into(), workspace.into(), id.into()),
+                std::time::Instant::now(),
+            );
+            return Ok(());
+        };
+        if job_owner != owner || workspace.is_some_and(|workspace| workspace != job_workspace) {
+            return Err(ApiError::not_found());
+        }
+        token.cancel();
+        Ok(())
+    }
+    pub(crate) fn start(
+        self: &Arc<Self>,
+        owner: &str,
+        workspace: &str,
+        id: &str,
+    ) -> Result<Lease, ApiError> {
         if id.is_empty()
             || id.len() > 128
             || !id
@@ -30,6 +70,14 @@ impl Jobs {
             return Err(ApiError::bad("Generation job ID already active"));
         }
         let cancel = CancellationToken::new();
+        let mut early = self.early_cancels.lock().unwrap();
+        early.retain(|_, created| created.elapsed() < std::time::Duration::from_secs(30));
+        if early
+            .remove(&(owner.into(), workspace.into(), id.into()))
+            .is_some()
+        {
+            cancel.cancel();
+        }
         jobs.insert(id.into(), (owner.into(), workspace.into(), cancel.clone()));
         Ok(Lease {
             hub: self.clone(),
@@ -52,10 +100,10 @@ impl Jobs {
         }
     }
 }
-struct Lease {
+pub(crate) struct Lease {
     hub: Arc<Jobs>,
     id: String,
-    cancel: CancellationToken,
+    pub(crate) cancel: CancellationToken,
 }
 impl Drop for Lease {
     fn drop(&mut self) {
