@@ -194,7 +194,8 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
     let privacy = ExportPrivacy::new(source);
     let tcp_privacy = ExportPrivacy::from_workspace(source, true);
     let data_privacy = &tcp_privacy;
-    let auth_private = source.data.auth.is_some()
+    let auth_private = !source.data.datasets.is_empty()
+        || source.data.auth.is_some()
         || source.data.collections.iter().any(|c| c.auth.is_some())
         || source
             .data
@@ -214,6 +215,26 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
                     || r.network.is_some()
             });
     let mut result = source.clone();
+    for dataset in &mut result.data.datasets {
+        dataset.name = data_privacy.screen_bounded(&dataset.name, 256);
+        if dataset.name.is_empty() {
+            dataset.name = "[REDACTED]".into();
+        }
+        dataset.description = data_privacy.screen_bounded(&dataset.description, 4096);
+        let safe = dataset.source.as_ref().is_some_and(|source| {
+            source
+                .parse()
+                .ok()
+                .and_then(|parsed| serde_json::to_string(&parsed.rows).ok())
+                .is_some_and(|rows| {
+                    serde_json::from_str::<Value>(&data_privacy.screen_generation_json(&rows)).ok()
+                        == serde_json::from_str::<Value>(&rows).ok()
+                })
+        });
+        if dataset.secret || !safe {
+            dataset.source = None;
+        }
+    }
     if auth_private {
         result.data.pre_request_script = tcp_privacy.screen_bounded(
             &result.data.pre_request_script,
@@ -864,6 +885,43 @@ impl ExportPrivacy {
     }
     fn from_workspace(workspace: &Workspace, generation: bool) -> Self {
         let mut secrets = std::collections::BTreeSet::new();
+        for dataset in &workspace.data.datasets {
+            if let Some(source) = &dataset.source {
+                let Ok(parsed) = source.parse() else {
+                    return Self {
+                        matcher: None,
+                        withhold: true,
+                    };
+                };
+                let mut pending = parsed
+                    .rows
+                    .iter()
+                    .flat_map(|row| {
+                        row.iter()
+                            .map(|(key, value)| (value, dataset.secret || sensitive(key)))
+                    })
+                    .collect::<Vec<_>>();
+                while let Some((value, private)) = pending.pop() {
+                    match value {
+                        Value::Object(values) => pending.extend(
+                            values
+                                .iter()
+                                .map(|(key, value)| (value, private || sensitive(key))),
+                        ),
+                        Value::Array(values) => {
+                            pending.extend(values.iter().map(|value| (value, private)))
+                        }
+                        Value::String(value) if private => {
+                            secrets.insert(value.clone());
+                        }
+                        Value::Number(_) | Value::Bool(_) if private => {
+                            secrets.insert(value.to_string());
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
         let mut projection = ProjectionBudget::new();
         let mut pairs = |rows: &[moleapi_core::Pair]| {
             for row in rows {

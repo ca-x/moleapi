@@ -146,6 +146,7 @@ export interface Specification {
   dialect: string;
 }
 export interface WorkspaceData {
+  datasets?:SavedDataset[];
   auth?: Auth | null;
   global_variables?: Pair[];
   pre_request_script?: string;
@@ -156,6 +157,7 @@ export interface WorkspaceData {
   environments: Environment[];
   active_environment_id: string | null;
 }
+export interface SavedDataset {id:string;name:string;description:string;secret:boolean;source?:{format:"csv"|"json";source:string}}
 export interface Workspace {
   id: string;
   name: string;
@@ -250,7 +252,7 @@ export interface RunResult {
   failed: number;
   elapsed_ms: number;
 }
-export interface RunOptions {iterations?:number;dataset?:{format:"csv"|"json";source:string}}
+export interface RunOptions {iterations?:number;dataset?:{format:"csv"|"json";source:string};dataset_id?:string}
 export interface ImportResult {
   name: string;
   data: WorkspaceData;

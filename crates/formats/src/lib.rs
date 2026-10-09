@@ -53,6 +53,9 @@ pub fn import(format: &str, content: &str) -> Result<ImportResult> {
 }
 
 pub fn export(workspace: &Workspace, format: &str, include_secrets: bool) -> Result<ExportResult> {
+    if format != "moleapi" && !workspace.data.datasets.is_empty() {
+        bail!("This export format cannot preserve saved datasets; use MoleAPI backup");
+    }
     if let Some(auth) = &workspace.data.auth {
         moleapi_core::validate_authentication(auth, true)?;
     }
@@ -268,6 +271,7 @@ pub(crate) fn data(
 ) -> WorkspaceData {
     let environment_id = uid();
     WorkspaceData {
+        datasets: vec![],
         auth: None,
         global_variables: vec![],
         pre_request_script: String::new(),

@@ -349,6 +349,7 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
     Ok(())
 }
 pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
+    crate::validate_saved_datasets(&data.datasets)?;
     ensure!(
         data.schema_version == 1,
         "Unsupported workspace schema version"

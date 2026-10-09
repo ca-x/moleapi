@@ -1,0 +1,11 @@
+# Reusable workspace datasets
+
+Required testing/data capabilities extend data-driven-runner.md. Implement named dataset CRUD in the workspace document, saved dataset selection by ID for the shared runner, native backup/import, optional server sync and source/owner fences. The current instruction is implementation before unified review; no intermediate confirmation gate is added.
+
+Dataset metadata: id, name, description, secret (default true), optional original DatasetSource. Old workspaces default to an empty list. At most20 datasets and4 MiB aggregate source, each parsed with existing CSV/JSON limits. Missing source is valid metadata for default redacted imports and cannot be executed. No new database table/storage engine is introduced. All edits use existing workspace CAS/save/sync and never mutate another owner's workspace.
+
+Runner accepts dataset_id or an explicit ephemeral dataset, mutually exclusive. The selected saved source is resolved from the owned canonical workspace and uses identical prevalidation, typed scripts, privacy, cancellation and reporting. UI edits/imports/previews source with existing components, names and saves it explicitly; selection/add/delete/update is reflected in dirty workspace state and common save controls. Saved source values are not emitted in result metadata.
+
+Default exports omit secret sources, keep importable metadata and screen known private copies elsewhere. Public source is retained only when semantic/known-value screening leaves the parsed rows unchanged. Explicit include-secrets native backups preserve exact source. Unknown external formats do not silently imply dataset roundtrip. Modern native/server synchronization carries sources via normal authenticated workspace storage; old acknowledgments that drop added data must conflict rather than silently succeed.
+
+Checks: old/missing-source compatibility, IDs/count/source limits; persisted CRUD/CAS/ownership; exact native backup restoration and default masking of private/sensitive/nested copies; actual runner selected by ID; UI save/edit/select/owner fences and existing sync acknowledgment checks. Persistent query-produced/live/remote datasets and scheduled scenarios remain separate unfinished capabilities. Use only necessary scoped parser/API/interchange/UI/type/build checks.

@@ -7,7 +7,7 @@ MoleAPI uses Rust/Axum/SeaORM, React/Radix UI/CodeMirror, and Tauri. SQLite is t
 
 **Development is ongoing; complete Apifox/Postman feature coverage has not been achieved.** [Implementation status](docs/IMPLEMENTATION-STATUS.md), [protocol coverage](docs/PROTOCOL-COVERAGE.md), and [code-generation coverage](docs/SNIPPET-COVERAGE.md) distinguish verified behavior from remaining work. Dedicated clients cover HTTP, SSE, WebSocket, GraphQL, gRPC, Socket.IO, MQTT, SOAP, MCP, A2A, TCP/TLS, Data SQL, and Webhook receivers. Workspaces, collections, scoped/environment variables, scripts, history, assertions, basic Mock, and collection execution are available. Multi-language request examples and full SDK/server generation are separate capabilities; the latter remains in progress.
 
-Collection tests support ephemeral CSV/JSON datasets, typed iteration data, multiple iterations and cancellation. Sources stay outside canonical workspace data; saved histories screen nested data values. See [data-runner behavior and remaining scope](docs/DATA-RUNNER-COVERAGE.md).
+Collection tests support temporary or saved CSV/JSON datasets, typed iteration data, multiple iterations and cancellation. Reusable datasets use workspace save/versioning/sync; private sources are hidden in default backups. See [runner behavior](docs/DATA-RUNNER-COVERAGE.md) and [saved dataset coverage](docs/SAVED-DATASETS-COVERAGE.md).
 
 ## Screenshots
 

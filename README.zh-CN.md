@@ -7,7 +7,7 @@ MoleAPI 使用 Rust/Axum/SeaORM、React/Radix UI/CodeMirror 和 Tauri。默认 S
 
 **项目仍在开发，尚未完整覆盖 Apifox／Postman。** [实现与验证状态](docs/IMPLEMENTATION-STATUS.md)、[协议覆盖](docs/PROTOCOL-COVERAGE.md)和[代码生成覆盖](docs/SNIPPET-COVERAGE.md)记录真实证据与缺口。已有专用 HTTP、SSE、WebSocket、GraphQL、gRPC、Socket.IO、MQTT、SOAP、MCP、A2A、TCP/TLS、Data SQL 专用客户端和 Webhook 接收器，以及工作区、集合、环境／作用域变量、脚本、历史、断言、基础 Mock 和集合运行器。多语言请求示例与完整 SDK／服务端生成是不同能力，后者仍在推进。
 
-集合测试支持临时 CSV／JSON 数据集、带类型的迭代数据、多轮运行和停止操作。数据不自动写入工作区，保存的历史记录会检查嵌套数据中的私密值。参见[数据驱动运行与剩余范围](docs/DATA-RUNNER-COVERAGE.md)。
+集合测试支持临时或保存的 CSV／JSON 数据集、带类型的迭代数据、多轮运行和停止操作。可复用数据集随工作区保存、版本管理和同步，默认备份隐藏私密源。参见[运行器能力](docs/DATA-RUNNER-COVERAGE.md)及[可复用数据集覆盖](docs/SAVED-DATASETS-COVERAGE.md)。
 
 ## 软件截图
 

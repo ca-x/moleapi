@@ -1397,5 +1397,19 @@
   "集合运行已取消。": "Collection run cancelled.",
   "第 {{iteration}} 轮：通过 {{passed}}，失败 {{failed}}。": "Iteration {{iteration}}: {{passed}} passed, {{failed}} failed.",
   "第 {{iteration}} 轮": "Iteration {{iteration}}",
-  "响应详情因报告大小限制被省略。": "Response details omitted because of the report size limit."
+  "响应详情因报告大小限制被省略。": "Response details omitted because of the report size limit.",
+  "工作区数据集": "Workspace datasets",
+  "数据集随工作区保存和同步。默认备份隐藏私密数据源；包含私密值的备份保留原文。": "Datasets are saved and synchronized with the workspace. Default backups hide private sources; backups including private values retain the original source.",
+  "数据源缺失，请重新导入。": "Data source missing. Import its data again.",
+  "编辑数据集": "Edit dataset",
+  "删除数据集": "Delete dataset",
+  "新建数据集": "New dataset",
+  "数据集名称": "Dataset name",
+  "数据集说明": "Dataset description",
+  "私密数据集（默认备份不包含数据源）": "Private dataset (source excluded from default backups)",
+  "保存数据集到工作区": "Save dataset to workspace",
+  "数据集保存失败，请检查数据、名称、大小或工作区版本冲突。未保存的编辑保留在工作区草稿中。": "Dataset save failed. Check the data, name, size or workspace revision conflict. Unsaved edits remain in the workspace draft.",
+  "运行数据集": "Run dataset",
+  "临时数据 / 无数据": "Temporary data / no dataset",
+  "数据集保存失败，请检查数据、名称、大小或工作区版本冲突。未保存的编辑已保留。": "Dataset save failed. Check the data, name, size or workspace revision conflict. Unsaved edits are retained."
 }

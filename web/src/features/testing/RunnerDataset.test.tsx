@@ -6,9 +6,14 @@ import {setLanguage} from "../../shared/i18n";
 import RunnerDataset,{runnerOptions} from "./RunnerDataset";
 const api=vi.hoisted(()=>vi.fn());const pick=vi.hoisted(()=>vi.fn());
 vi.mock("../../shared/api",()=>({api,pickFile:pick}));
-vi.mock("../../shared/ui",async()=>{const actual=await vi.importActual<object>("../../shared/ui");return {...actual,Editor:({value,onChange,label}:{value:string;onChange:(value:string)=>void;label:string})=><textarea aria-label={label} value={value} onChange={event=>onChange(event.target.value)}/>};});
+vi.mock("../../shared/ui",async()=>{const actual=await vi.importActual<object>("../../shared/ui");return {...actual,Editor:({value,onChange,label,readOnly}:{value:string;onChange:(value:string)=>void;label:string;readOnly?:boolean})=><textarea aria-label={label} readOnly={readOnly} value={value} onChange={event=>onChange(event.target.value)}/>};});
 beforeEach(async()=>{await setLanguage("en");vi.stubGlobal("ResizeObserver",class{observe(){}unobserve(){}disconnect(){}});api.mockReset();pick.mockReset();});
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
+it("keeps saved source read-only while allowing iteration count changes",()=>{
+ const change=vi.fn();render(<Theme><RunnerDataset workspaceId="w" scope="owner" value={{format:"csv",source:"id\n1\n2\n",iterations:""}} sourceReadOnly disabled={false} dark={false} onChange={change}/></Theme>);
+ expect(screen.getByRole("textbox",{name:"Test data source"}).getAttribute("readonly")).not.toBeNull();expect(screen.getByRole("button",{name:"Import test data"}).hasAttribute("disabled")).toBe(true);
+ fireEvent.change(screen.getByRole("spinbutton",{name:"Iteration count"}),{target:{value:"1"}});expect(change).toHaveBeenCalledWith({format:"csv",source:"id\n1\n2\n",iterations:"1"});
+});
 it("previews typed rows through the owned API and leaves iteration count automatic",async()=>{
  api.mockResolvedValue({columns:["id"],rows:[{id:1},{id:2}]});const value={format:"json" as const,source:'[{"id":1},{"id":2}]',iterations:""};
  render(<Theme><RunnerDataset workspaceId="w" scope="owner" value={value} disabled={false} dark={false} onChange={vi.fn()}/></Theme>);fireEvent.click(screen.getByRole("button",{name:"Preview data rows"}));await screen.findByText("Dataset contains 2 rows and 1 columns.");

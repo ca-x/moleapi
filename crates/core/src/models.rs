@@ -238,6 +238,8 @@ pub struct Environment {
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct WorkspaceData {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub datasets: Vec<crate::SavedDataset>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auth: Option<Auth>,
     #[serde(default)]

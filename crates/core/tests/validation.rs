@@ -62,6 +62,7 @@ fn canonical_specification_references_and_size_are_checked() {
     let mut r = request();
     r.specification_id = Some("spec".into());
     let mut w = WorkspaceData {
+        datasets: vec![],
         auth: None,
         global_variables: vec![],
         pre_request_script: String::new(),

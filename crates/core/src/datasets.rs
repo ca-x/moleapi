@@ -5,11 +5,52 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 pub const DATASET_LIMIT: usize = 1024 * 1024;
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DatasetSource {
     pub format: String,
     pub source: String,
+}
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SavedDataset {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default = "dataset_secret")]
+    pub secret: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<DatasetSource>,
+}
+fn dataset_secret() -> bool {
+    true
+}
+pub fn validate_saved_datasets(datasets: &[SavedDataset]) -> Result<()> {
+    ensure!(datasets.len() <= 20, "Workspace exceeds 20 saved datasets");
+    let mut ids = BTreeSet::new();
+    let mut bytes = 0usize;
+    for dataset in datasets {
+        ensure!(
+            !dataset.id.is_empty() && dataset.id.len() <= 128 && ids.insert(&dataset.id),
+            "Dataset IDs must be unique and nonempty"
+        );
+        ensure!(
+            !dataset.name.trim().is_empty()
+                && dataset.name.len() <= 256
+                && dataset.description.len() <= 4096,
+            "Invalid dataset name or description"
+        );
+        if let Some(source) = &dataset.source {
+            bytes = bytes.saturating_add(source.source.len());
+            ensure!(
+                bytes <= 4 * DATASET_LIMIT,
+                "Saved dataset sources exceed 4 MiB"
+            );
+            source.parse()?;
+        }
+    }
+    Ok(())
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct Dataset {
@@ -153,6 +194,29 @@ pub fn dataset_private_values(rows: &[BTreeMap<String, Value>]) -> Result<BTreeS
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn saved_dataset_metadata_and_original_source_are_backward_compatible() {
+        let value: SavedDataset =
+            serde_json::from_str(r#"{"id":"d","name":"Missing source"}"#).unwrap();
+        assert!(value.secret && value.source.is_none());
+        validate_saved_datasets(std::slice::from_ref(&value)).unwrap();
+        assert!(validate_saved_datasets(&[value.clone(), value]).is_err());
+        let source = "value\n\"line\nnext\"\n";
+        let value = SavedDataset {
+            id: "d".into(),
+            name: "Source".into(),
+            description: String::new(),
+            secret: false,
+            source: Some(DatasetSource {
+                format: "csv".into(),
+                source: source.into(),
+            }),
+        };
+        validate_saved_datasets(std::slice::from_ref(&value)).unwrap();
+        let restored: SavedDataset =
+            serde_json::from_str(&serde_json::to_string(&value).unwrap()).unwrap();
+        assert_eq!(restored.source.unwrap().source, source);
+    }
     #[test]
     fn datasets_parse_csv_quotes_and_typed_json() {
         let csv = DatasetSource {

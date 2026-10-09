@@ -22,6 +22,8 @@ pub struct Run {
     #[serde(default)]
     dataset: Option<DatasetSource>,
     #[serde(default)]
+    dataset_id: Option<String>,
+    #[serde(default)]
     iterations: Option<usize>,
     #[serde(default)]
     job_id: Option<String>,
@@ -101,9 +103,28 @@ pub async fn run(
         .find(|value| value.id == c.collection_id)
         .ok_or_else(ApiError::not_found)?;
     let e = environment(&w, c.environment_id.as_deref())?;
-    let dataset = c
-        .dataset
-        .as_ref()
+    if c.dataset.is_some() && c.dataset_id.is_some() {
+        return Err(ApiError::bad(
+            "Select a saved dataset or supply temporary data, not both",
+        ));
+    }
+    let selected_source = if let Some(id) = &c.dataset_id {
+        Some(
+            w.data
+                .datasets
+                .iter()
+                .find(|dataset| dataset.id == *id)
+                .ok_or_else(ApiError::not_found)?
+                .source
+                .as_ref()
+                .ok_or_else(|| {
+                    ApiError::bad("Saved dataset source is missing; import its data again")
+                })?,
+        )
+    } else {
+        c.dataset.as_ref()
+    };
+    let dataset = selected_source
         .map(DatasetSource::parse)
         .transpose()
         .map_err(|error| ApiError::bad(error.to_string()))?;
