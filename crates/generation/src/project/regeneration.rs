@@ -293,11 +293,25 @@ pub(crate) fn dispatch_diff_worker(limit: impl FnOnce() -> Result<()>) -> Result
         bytes.len() <= IPC_LIMIT,
         "Regeneration worker input limit exceeded"
     );
-    let input: RegenerationInput = serde_json::from_slice(&bytes)?;
-    let reply = match regenerate(input) {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum WorkerInput {
+        Regenerate(RegenerationInput),
+        Import(ProjectImportInput),
+    }
+    let input: WorkerInput = serde_json::from_slice(&bytes)?;
+    let result = match input {
+        WorkerInput::Regenerate(input) => {
+            regenerate(input).and_then(|result| Ok(serde_json::to_value(result)?))
+        }
+        WorkerInput::Import(input) => {
+            import_project(input).and_then(|result| Ok(serde_json::to_value(result)?))
+        }
+    };
+    let reply = match result {
         Ok(result) => serde_json::json!({"result":result}),
         Err(_) => {
-            serde_json::json!({"error":"Regeneration failed; check file hashes and resource limits"})
+            serde_json::json!({"error":"Project import/regeneration failed; check files, hashes and resource limits"})
         }
     };
     let output = serde_json::to_vec(&reply)?;

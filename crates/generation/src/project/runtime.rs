@@ -222,6 +222,21 @@ impl ProjectRuntime {
         input: RegenerationInput,
         cancel: CancellationToken,
     ) -> Result<RegenerationResult> {
+        self.file_worker(input, cancel).await
+    }
+    /// Archive parsing shares regeneration's bounded and cancellable process.
+    pub async fn import(
+        &self,
+        input: ProjectImportInput,
+        cancel: CancellationToken,
+    ) -> Result<ImportedProject> {
+        self.file_worker(input, cancel).await
+    }
+    async fn file_worker<I: Serialize, O: serde::de::DeserializeOwned>(
+        &self,
+        input: I,
+        cancel: CancellationToken,
+    ) -> Result<O> {
         let bytes = serde_json::to_vec(&input)?;
         ensure!(
             bytes.len() <= IPC_LIMIT,
@@ -259,7 +274,7 @@ impl ProjectRuntime {
             let value: Value = serde_json::from_slice(&output)?;
             ensure!(
                 value.get("error").is_none(),
-                "Regeneration failed; check file hashes and limits"
+                "Project import/regeneration failed; check paths, file hashes and limits"
             );
             serde_json::from_value(value["result"].clone()).map_err(Into::into)
         };

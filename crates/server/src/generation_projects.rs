@@ -233,3 +233,55 @@ pub(crate) async fn regenerate(
     drop(slot);
     Ok(Json(result))
 }
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ImportProject {
+    workspace_id: String,
+    job_id: String,
+    role: moleapi_generation::project::ImportRole,
+    source: moleapi_generation::project::ProjectImportSource,
+}
+pub(crate) async fn import(
+    State(s): State<AppState>,
+    Extension(owner): Extension<Identity>,
+    Json(c): Json<ImportProject>,
+) -> Result<Json<moleapi_generation::project::ImportedProject>, ApiError> {
+    if c.workspace_id.len() > 128 {
+        return Err(ApiError::bad("Invalid project import workspace identifier"));
+    }
+    let gate = s.protocol_admission.owner(&owner.0)?;
+    let generation = *gate.lock().await;
+    owned(&s, &owner.0, &c.workspace_id).await?;
+    let slot = s
+        .project_slots
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| ApiError::bad("Project generation capacity reached"))?;
+    let lease = s.project_jobs.start(&owner.0, &c.workspace_id, &c.job_id)?;
+    let admission = gate.lock().await;
+    if *admission != generation {
+        return Err(ApiError::bad("Project import owner changed"));
+    }
+    owned(&s, &owner.0, &c.workspace_id).await?;
+    drop(admission);
+    let result = s
+        .project_runtime
+        .import(
+            moleapi_generation::project::ProjectImportInput {
+                role: c.role,
+                source: c.source,
+            },
+            lease.cancel.clone(),
+        )
+        .await
+        .map_err(|e| ApiError::bad(e.to_string()))?;
+    let admission = gate.lock().await;
+    if *admission != generation || lease.cancel.is_cancelled() {
+        return Err(ApiError::bad("Project import owner changed or cancelled"));
+    }
+    owned(&s, &owner.0, &c.workspace_id).await?;
+    drop(admission);
+    drop(slot);
+    Ok(Json(result))
+}

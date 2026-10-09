@@ -6,6 +6,7 @@
     "beforeBuildCommand": { "script": "npm run build", "cwd": "../web" },
     "devUrl": "http://localhost:1420", "frontendDist": "../web/dist"
   },
+  "plugins": { "fs": { "requireLiteralLeadingDot": false } },
   "app": {
     "windows": [{ "title": "MoleAPI", "width": 1360, "height": 900, "minWidth": 720, "minHeight": 560 }],
     "security": { "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: data:; font-src 'self' data:; connect-src ipc: http://ipc.localhost; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-src 'none'" }

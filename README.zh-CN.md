@@ -9,7 +9,7 @@ MoleAPI 使用 Rust/Axum/SeaORM、React/Radix UI/CodeMirror 和 Tauri。默认 S
 
 ## 软件截图
 
-截图来自实际运行的嵌入式自托管界面，使用合成测试数据；与桌面端共用前端，截图不代表托盘或安装包已通过实机验证。
+截图来自实际运行的自托管界面，使用合成测试数据；与桌面端共用前端，截图不代表托盘或安装包已通过实机验证。
 
 ![英文 API 工作台](docs/images/workbench-en.png)
 
@@ -36,6 +36,10 @@ MoleAPI 使用 Rust/Axum/SeaORM、React/Radix UI/CodeMirror 和 Tauri。默认 S
 ![OpenAPI 项目生成与 Rust SDK 文件预览](docs/images/codegen-project-zh-CN.png)
 
 OpenAPI 项目生成使用原生 Progenitor Rust 客户端引擎，以及固定版本、嵌入二进制的 OpenAPI Generator 多语言客户端/服务端生成器。Java 目标需显式配置 Java17+ 可执行文件（`MOLEAPI_CODEGEN_JAVA`），原生 Rust 不需要 Java。保留原始定义，默认隐藏凭据；ZIP 清单记录文件及校验和。参见[实际目标验证与剩余范围](docs/PROJECT-GENERATION-COVERAGE.md)。
+
+![目录与 ZIP 输入的生成项目再生成合并](docs/images/codegen-regeneration-zh-CN.png)
+
+再生成可以读取旧生成 ZIP 或快照，以及当前编辑目录／ZIP；保留用户文件，比较删除项，选择冲突处理后下载新的合并 ZIP，不覆盖原文件。
 
 HTTP/SOAP、SSE/WebSocket/GraphQL、gRPC、TCP/TLS、MQTT、Socket.IO、A2A 和 MCP HTTP 请求支持显式 HTTP/SOCKS 代理、绕过规则、自定义 CA、PEM/加密 PFX 客户端证书、DNS 覆盖和 HTTP/2。网络凭据会从历史与默认导出中脱敏；精确保留源配置需要显式包含敏感信息。参见[网络支持与当前组合限制](docs/specs/request-network.md)。
 

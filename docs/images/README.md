@@ -13,3 +13,5 @@ Data captures were added on 2026-10-05 with agent-browser at 1440 × 1000:
 - `data-zh-CN.png`: Chinese dark-theme SQL editor and expanded customers schema on an actual connected file session.
 
 These use the same synthetic fixture account/file. Actual downloaded results preserve `18.00`, `12.50` and `7.25`; native desktop dialogs are not inferred from browser downloads.
+
+`codegen-regeneration-{en,zh-CN}.png` show the production frontend with a real local Rust server using synthetic ZIP/directory sources. English light and Chinese dark previews show retained authored files/source edits; directory import excludes the documented build/VCS/dependency paths. Native picker/installer verification is not implied.

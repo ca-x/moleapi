@@ -20,6 +20,7 @@ syn = {version="2",features=["full"]}
 serde_yaml_ng = "0.10"
 sha2 = "0.10"
 zip = {version="4",default-features=false,features=["deflate"]}
+rawzip = "=0.5.2"
 tempfile = "3"
 tokio.workspace = true
 tokio-util = {version="0.7",features=["rt"]}

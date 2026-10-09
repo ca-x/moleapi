@@ -2,6 +2,7 @@ import { t, message, translateCopy } from "./i18n";
 import type { LocalizedCopy } from "./i18n";
 import { AppError, LocalizedError } from "./i18n/errors";
 import type { ExportResult } from "./types";
+import { readBoundedTextFiles } from "./readBoundedTextFiles";
 export const native =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 export class ApiError extends AppError {
@@ -90,17 +91,16 @@ export async function saveFile(file: ExportResult): Promise<void> {
 }
 export async function pickFile(): Promise<string | null> {
   if (native) {
-    const [{ open }, { readTextFile }] = await Promise.all([
-      import("@tauri-apps/plugin-dialog"),
-      import("@tauri-apps/plugin-fs"),
-    ]);
+    const { open } = await import("@tauri-apps/plugin-dialog");
     const path = await open({
       multiple: false,
       filters: [
         { name: t("API 定义"), extensions: ["json", "yaml", "yml", "txt"] },
       ],
     });
-    return typeof path === "string" ? readTextFile(path) : null;
+    return typeof path === "string"
+      ? (await readBoundedTextFiles([path], 20 * 1024 * 1024, 20 * 1024 * 1024))[0]
+      : null;
   }
   return new Promise((resolve, reject) => {
     const input = document.createElement("input");
