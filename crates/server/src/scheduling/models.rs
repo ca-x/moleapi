@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Definition {
+    #[serde(default)]
+    pub notification_ids: Vec<String>,
     pub name: String,
     pub cron: String,
     pub timezone: String,
@@ -39,6 +41,10 @@ pub struct Queued {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Occurrence {
+    #[serde(default)]
+    pub notification_queued: usize,
+    #[serde(default)]
+    pub notification_skipped: usize,
     pub id: String,
     pub schedule_id: String,
     pub config_revision: i64,
@@ -176,6 +182,7 @@ mod tests {
     use super::*;
     fn definition(cron: &str, timezone: &str) -> Definition {
         Definition {
+            notification_ids: vec![],
             name: "Time".into(),
             cron: cron.into(),
             timezone: timezone.into(),

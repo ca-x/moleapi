@@ -6,7 +6,7 @@ use sea_orm::{
 };
 pub(super) const KIND: &str = "schedule";
 pub(super) const RUN: &str = "sched-run";
-pub(super) async fn workspace_lock<C: ConnectionTrait>(
+pub(crate) async fn workspace_lock<C: ConnectionTrait>(
     db: &C,
     owner: &str,
     workspace: &str,

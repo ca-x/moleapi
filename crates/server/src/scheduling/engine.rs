@@ -58,6 +58,8 @@ struct Claim {
 }
 fn occurrence(claim: &Claim) -> Occurrence {
     Occurrence {
+        notification_queued: 0,
+        notification_skipped: 0,
         id: claim.job.id.clone(),
         schedule_id: claim.schedule.clone(),
         config_revision: claim.job.config_revision,
@@ -112,7 +114,7 @@ async fn claim(
 ) -> Result<Option<Claim>, ApiError> {
     let now = Utc::now();
     let tx = state.db.begin().await?;
-    workspace_lock(&tx, owner, workspace).await?;
+    let workspace_data = workspace_lock(&tx, owner, workspace).await?;
     let mut schedule = locked(&tx, owner, workspace, id).await?;
     if let Some(job) = &schedule.running {
         if DateTime::parse_from_rfc3339(&job.lease_until)
@@ -122,6 +124,8 @@ async fn claim(
             return Ok(None);
         }
         let mut interrupted = Occurrence {
+            notification_queued: 0,
+            notification_skipped: 0,
             id: job.id.clone(),
             schedule_id: schedule.id.clone(),
             config_revision: job.config_revision,
@@ -139,6 +143,18 @@ async fn claim(
             interrupted.status = "cancelled".into();
             interrupted.error = None;
         }
+        let stats = crate::notifications::enqueue(
+            &tx,
+            owner,
+            &workspace_data,
+            &schedule.definition.notification_ids,
+            &schedule.definition.name,
+            schedule.last_run.as_ref().map(|run| run.status.as_str()),
+            &interrupted,
+        )
+        .await?;
+        interrupted.notification_queued = stats.0;
+        interrupted.notification_skipped = stats.1;
         save_run(&tx, owner, workspace, &interrupted).await?;
         schedule.last_run = Some(interrupted);
         schedule.running = None;
@@ -270,7 +286,7 @@ async fn execute(
     }
     finish(&state, &claim, record).await
 }
-async fn finish(state: &AppState, claim: &Claim, record: Occurrence) -> Result<(), ApiError> {
+async fn finish(state: &AppState, claim: &Claim, mut record: Occurrence) -> Result<(), ApiError> {
     let tx = state.db.begin().await?;
     if workspace_lock(&tx, &claim.owner, &claim.workspace)
         .await
@@ -287,6 +303,21 @@ async fn finish(state: &AppState, claim: &Claim, record: Occurrence) -> Result<(
         .as_ref()
         .is_some_and(|job| job.id == claim.job.id)
     {
+        let workspace = crate::storage::get(&tx, &claim.owner, &claim.workspace)
+            .await?
+            .ok_or_else(ApiError::not_found)?;
+        let stats = crate::notifications::enqueue(
+            &tx,
+            &claim.owner,
+            &workspace,
+            &schedule.definition.notification_ids,
+            &claim.definition.name,
+            schedule.last_run.as_ref().map(|run| run.status.as_str()),
+            &record,
+        )
+        .await?;
+        record.notification_queued = stats.0;
+        record.notification_skipped = stats.1;
         schedule.running = None;
         schedule.last_run = Some(record.clone());
         save(&tx, &claim.owner, &schedule).await?;

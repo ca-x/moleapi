@@ -7,6 +7,7 @@ import {useWorkbench} from "../workbench/context";
 import RunnerDataset,{runnerOptions,type RunnerConfig} from "./RunnerDataset";
 import SavedDatasets from "./SavedDatasets";
 import SavedScenarios from "./SavedScenarios";
+import NotificationsPanel from "../notifications/NotificationsPanel";
 import SchedulesPanel from "../monitoring/SchedulesPanel";
 import SavedReports from "./SavedReports";
 export default function TestingPage(){
@@ -35,6 +36,7 @@ export default function TestingPage(){
  {savedId&&!saved?.source&&<Text>{t("数据源缺失，请重新导入。")}</Text>}
  <SavedDatasets key={scope+draft.revision} scope={scope+draft.revision} disabled={runnerBusy}/>
  {invalid&&<Callout.Root color="red"><Callout.Text role="alert">{t("测试数据无效，请检查格式、迭代次数和大小限制。")}</Callout.Text></Callout.Root>}
+ <NotificationsPanel key={"notifications:"+scope}/>
  <SchedulesPanel key={"schedules:"+scope} onReport={id=>setScheduleReport({scope,id,ticket:(scheduleReport?.ticket??0)+1})}/>
  <SavedReports key={"reports:"+scope} disabled={runnerBusy} externalSelection={scheduleReport?.scope===scope?scheduleReport:undefined}/>
  {runResult?.report_save_error&&<Callout.Root color="orange"><Callout.Text>{t("即时结果已保留，但报告未能保存。请检查存储或工作区状态。")}</Callout.Text></Callout.Root>}

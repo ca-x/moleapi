@@ -130,3 +130,5 @@ Collection/scenario runs automatically save redacted reports with source revisio
 Report steps can open their corresponding redacted historical response with the existing response viewer. This reads saved history without sending the request again; clearing history removes payload access while retaining the report. See [response links and limitations](docs/REPORT-RESPONSE-COVERAGE.md).
 
 Scheduled collection/scenario tasks support cron, IANA timezones, selected environments/datasets, enable/disable, queue-now, cancellation and execution history linked to saved reports. Definitions and job state persist across restart. Hosted tasks continue after logout; local desktop tasks require the app to stay running. See [schedule semantics, evidence and remaining scope](docs/SCHEDULED-RUN-COVERAGE.md).
+
+Scheduled tasks can notify selected Webhook, Slack, Teams Workflow, WeCom, DingTalk, Feishu, Jenkins, PagerDuty or SMTP targets. Configure outcome/change filters and inspect bounded retries/provider receipts without exposing saved credentials. See [actual local transport evidence and remaining integration scope](docs/NOTIFICATION-COVERAGE.md).

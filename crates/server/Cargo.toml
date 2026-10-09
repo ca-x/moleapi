@@ -11,6 +11,9 @@ default = ["web"]
 web = ["dep:rust-embed", "dep:mime_guess"]
 
 [dependencies]
+lettre = { version = "=0.11.23", default-features = false, features = ["smtp-transport", "builder", "tokio1-rustls-tls"] }
+hmac = "0.12"
+sha1 = "0.10"
 croner = "=4.0.1"
 chrono-tz = "=0.10.4"
 oauth2 = {version="=5.0.0",default-features=false}

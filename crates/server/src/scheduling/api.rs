@@ -34,6 +34,8 @@ pub(crate) async fn create(
     let tx = state.db.begin().await?;
     let data = workspace_lock(&tx, &owner.0, &workspace).await?;
     definition.validate_refs(&data)?;
+    crate::notifications::validate_targets(&tx, &owner.0, &workspace, &definition.notification_ids)
+        .await?;
     let existing = document::Entity::find()
         .filter(document::Column::Owner.eq(&owner.0))
         .filter(document::Column::Kind.eq(KIND))
@@ -84,6 +86,13 @@ pub(crate) async fn update(
     let tx = state.db.begin().await?;
     let data = workspace_lock(&tx, &owner.0, &workspace).await?;
     input.definition.validate_refs(&data)?;
+    crate::notifications::validate_targets(
+        &tx,
+        &owner.0,
+        &workspace,
+        &input.definition.notification_ids,
+    )
+    .await?;
     let mut schedule = locked(&tx, &owner.0, &workspace, &id).await?;
     if schedule.revision != input.expected_revision {
         return Err(ApiError::conflict("Schedule revision changed"));
@@ -179,6 +188,7 @@ pub(crate) async fn preview(
 ) -> Result<Json<Value>, ApiError> {
     owned(&state, &owner.0, &workspace).await?;
     let definition = Definition {
+        notification_ids: vec![],
         name: "Preview".into(),
         cron: input.cron,
         timezone: input.timezone,
@@ -294,6 +304,8 @@ pub(crate) async fn history(
 
 fn queued_record(schedule: &Schedule, job: &Queued, status: &str) -> Occurrence {
     Occurrence {
+        notification_queued: 0,
+        notification_skipped: 0,
         id: job.id.clone(),
         schedule_id: schedule.id.clone(),
         config_revision: schedule.revision,

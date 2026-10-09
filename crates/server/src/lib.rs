@@ -10,6 +10,7 @@ mod graphql;
 mod grpc;
 mod history;
 mod mock;
+mod notifications;
 mod oauth1;
 mod oauth2;
 mod privacy;
@@ -201,6 +202,7 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         webhooks: Arc::new(webhooks::Hub::default()),
     };
     let schedule_lifetime = scheduling::start(state.clone());
+    let notification_lifetime = notifications::start(state.clone());
     let protected = Router::new()
         .route("/oauth1/flows", post(oauth1::flows::begin))
         .route("/oauth1/flows/{id}", get(oauth1::flows::status))
@@ -302,6 +304,22 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         .route(
             "/workspaces/{workspace}/schedules/{schedule}/runs",
             get(scheduling::history),
+        )
+        .route(
+            "/workspaces/{workspace}/notifications",
+            get(notifications::list).post(notifications::create),
+        )
+        .route(
+            "/workspaces/{workspace}/notifications/{target}",
+            axum::routing::put(notifications::update).delete(notifications::remove),
+        )
+        .route(
+            "/workspaces/{workspace}/notification-deliveries",
+            get(notifications::deliveries),
+        )
+        .route(
+            "/workspaces/{workspace}/notification-deliveries/{delivery}/retry",
+            post(notifications::retry),
         )
         .route("/workspaces/{id}/run", post(runner::run))
         .route("/workspaces/{id}/run/cancel", post(runner::cancel))
@@ -427,7 +445,9 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
     };
     #[cfg(not(feature = "web"))]
     let router = router.fallback(|| async { ApiError::not_found() });
-    Ok(router.layer(axum::Extension(schedule_lifetime)))
+    Ok(router
+        .layer(axum::Extension(schedule_lifetime))
+        .layer(axum::Extension(notification_lifetime)))
 }
 #[cfg(feature = "web")]
 #[derive(rust_embed::RustEmbed)]

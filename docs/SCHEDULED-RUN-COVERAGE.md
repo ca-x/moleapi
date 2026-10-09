@@ -23,3 +23,5 @@ Six actual API fixtures cover genuine cron execution with selected scenario/envi
 Frontend cases cover preview and saved references without copied variables, report selection, existing runner UI and bilingual catalogs. TypeScript, production frontend and scoped Clippy passed. Only changed paths were repeated after failures or new changes. Real PostgreSQL/MySQL multi-process, native OS lifecycle and rendered/browser verification remain for the final unified phase.
 
 Notification channels, distributed runner enrollment/configuration/scaling, broader monitoring/performance, task/artifact synchronization, richer scenario graph/parallel branching and all other remaining matrix features are still required before unified review, main merge/branch cleanup and the new GitHub Actions release. No local Docker or package/release build was performed.
+
+Scheduled completion/interruption notification targets and durable delivery records are now available; see [notification scope and evidence](NOTIFICATION-COVERAGE.md). Extra integration/event bindings and distributed runner capabilities remain unfinished.
