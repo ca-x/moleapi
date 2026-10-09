@@ -26,7 +26,7 @@ pub fn dispatch_project_worker(limit: impl FnOnce() -> Result<()>) -> Result<boo
     let reply = match result {
         Ok(Ok(artifact)) => serde_json::json!({"artifact":artifact}),
         _ => {
-            serde_json::json!({"error":"Rust SDK generation failed; check the specification and target options"})
+            serde_json::json!({"error":"Native code generation failed; check the specification and target options"})
         }
     };
     let output = serde_json::to_vec(&reply)?;
@@ -38,6 +38,9 @@ pub fn dispatch_project_worker(limit: impl FnOnce() -> Result<()>) -> Result<boo
     Ok(true)
 }
 fn native_project(input: &ProjectInput) -> Result<ProjectArtifact> {
+    if input.target.starts_with("model-") {
+        return super::models::generate(input);
+    }
     if input.target == "rust-tonic" {
         return super::protobuf::native_protobuf(input);
     }

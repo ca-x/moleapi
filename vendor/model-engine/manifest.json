@@ -1,0 +1,1205 @@
+{
+  "engine": "quicktype-core",
+  "version": "26.0.0",
+  "schema_converter": "@openapi-contrib/openapi-schema-to-json-schema@5.1.0",
+  "sha256": "1f3c0dd2b192c45165ed0b6bfa0dfb01850426164be20b60944f6fbc22c339fc",
+  "targets": [
+    {
+      "id": "model-c++",
+      "kind": "model",
+      "title": "C++",
+      "upstream_stability": "upstream",
+      "validation": "engine-integration",
+      "options": {
+        "schemaName": "*",
+        "source-style": "single-source",
+        "include-location": "local-include",
+        "code-format": "with-getter-setter",
+        "wstring": "use-string",
+        "const-style": "west-const",
+        "just-types": false,
+        "namespace": "quicktype",
+        "enum-type": "int",
+        "type-style": "pascal-case",
+        "member-style": "underscore-case",
+        "enumerator-style": "upper-underscore-case",
+        "boost": false,
+        "hide-null-optional": false
+      },
+      "model_options": [
+        {
+          "name": "source-style",
+          "type": "enum",
+          "description": "Source code generation type,  whether to generate single or multiple source files",
+          "values": [
+            "single-source",
+            "multi-source"
+          ]
+        },
+        {
+          "name": "include-location",
+          "type": "enum",
+          "description": "Whether json.hpp is to be located globally or locally",
+          "values": [
+            "local-include",
+            "global-include"
+          ]
+        },
+        {
+          "name": "code-format",
+          "type": "enum",
+          "description": "Generate classes with getters/setters, instead of structs",
+          "values": [
+            "with-struct",
+            "with-getter-setter"
+          ]
+        },
+        {
+          "name": "wstring",
+          "type": "enum",
+          "description": "Store strings using Utf-16 std::wstring, rather than Utf-8 std::string",
+          "values": [
+            "use-string",
+            "use-wstring"
+          ]
+        },
+        {
+          "name": "const-style",
+          "type": "enum",
+          "description": "Put const to the left/west (const T) or right/east (T const)",
+          "values": [
+            "west-const",
+            "east-const"
+          ]
+        },
+        {
+          "name": "just-types",
+          "type": "boolean",
+          "description": "Plain types only"
+        },
+        {
+          "name": "namespace",
+          "type": "string",
+          "description": "Name of the generated namespace(s)"
+        },
+        {
+          "name": "enum-type",
+          "type": "string",
+          "description": "Type of enum class"
+        },
+        {
+          "name": "type-style",
+          "type": "enum",
+          "description": "Naming style for types",
+          "values": [
+            "pascal-case",
+            "original-case",
+            "underscore-case",
+            "camel-case",
+            "upper-underscore-case",
+            "pascal-case-upper-acronyms",
+            "camel-case-upper-acronyms"
+          ]
+        },
+        {
+          "name": "member-style",
+          "type": "enum",
+          "description": "Naming style for members",
+          "values": [
+            "pascal-case",
+            "original-case",
+            "underscore-case",
+            "camel-case",
+            "upper-underscore-case",
+            "pascal-case-upper-acronyms",
+            "camel-case-upper-acronyms"
+          ]
+        },
+        {
+          "name": "enumerator-style",
+          "type": "enum",
+          "description": "Naming style for enumerators",
+          "values": [
+            "pascal-case",
+            "original-case",
+            "underscore-case",
+            "camel-case",
+            "upper-underscore-case",
+            "pascal-case-upper-acronyms",
+            "camel-case-upper-acronyms"
+          ]
+        },
+        {
+          "name": "boost",
+          "type": "boolean",
+          "description": "Require a dependency on boost. Without boost, C++17 is required"
+        },
+        {
+          "name": "hide-null-optional",
+          "type": "boolean",
+          "description": "Hide null value for optional field"
+        }
+      ]
+    },
+    {
+      "id": "model-crystal",
+      "kind": "model",
+      "title": "Crystal",
+      "upstream_stability": "upstream",
+      "validation": "engine-integration",
+      "options": {
+        "schemaName": "*"
+      },
+      "model_options": []
+    },
+    {
+      "id": "model-cs",
+      "kind": "model",
+      "title": "C#",
+      "upstream_stability": "upstream",
+      "validation": "engine-integration",
+      "options": {
+        "schemaName": "*",
+        "framework": "SystemTextJson",
+        "array-type": "array",
+        "density": "normal",
+        "namespace": "QuickType",
+        "csharp-version": "8",
+        "virtual": false,
+        "any-type": "object",
+        "number-type": "double",
+        "features": "complete",
+        "just-types": false,
+        "base-class": "Object",
+        "check-required": false,
+        "keep-property-name": false,
+        "dateonly-timeonly-converters": true
+      },
+      "model_options": [
+        {
+          "name": "framework",
+          "type": "enum",
+          "description": "Serialization framework",
+          "values": [
+            "NewtonSoft",
+            "SystemTextJson"
+          ]
+        },
+        {
+          "name": "array-type",
+          "type": "enum",
+          "description": "Use T[] or List<T>",
+          "values": [
+            "array",
+            "list"
+          ]
+        },
+        {
+          "name": "density",
+          "type": "enum",
+          "description": "Property density",
+          "values": [
+            "normal",
+            "dense"
+          ]
+        },
+        {
+          "name": "namespace",
+          "type": "string",
+          "description": "Generated namespace"
+        },
+        {
+          "name": "csharp-version",
+          "type": "enum",
+          "description": "C# version",
+          "values": [
+            "5",
+            "6",
+            "8"
+          ]
+        },
+        {
+          "name": "virtual",
+          "type": "boolean",
+          "description": "Generate virtual properties"
+        },
+        {
+          "name": "any-type",
+          "type": "enum",
+          "description": "Type to use for \"any\"",
+          "values": [
+            "object",
+            "dynamic"
+          ]
+        },
+        {
+          "name": "number-type",
+          "type": "enum",
+          "description": "Type to use for numbers",
+          "values": [
+            "double",
+            "decimal"
+          ]
+        },
+        {
+          "name": "features",
+          "type": "enum",
+          "description": "Output features",
+          "values": [
+            "complete",
+            "attributes-only"
+          ]
+        },
+        {
+          "name": "just-types",
+          "type": "boolean",
+          "description": "Plain types only"
+        },
+        {
+          "name": "base-class",
+          "type": "enum",
+          "description": "Base class",
+          "values": [
+            "EntityData",
+            "Object"
+          ]
+        },
+        {
+          "name": "check-required",
+          "type": "boolean",
+          "description": "Fail if required properties are missing"
+        },
+        {
+          "name": "keep-property-name",
+          "type": "boolean",
+          "description": "Keep original field name generate"
+        },
+        {
+          "name": "dateonly-timeonly-converters",
+          "type": "boolean",
+          "description": "Emit DateOnly/TimeOnly converters (requires .NET 6 or later)"
+        }
+      ]
+    },
+    {
+      "id": "model-dart",
+      "kind": "model",
+      "title": "Dart",
+      "upstream_stability": "upstream",
+      "validation": "engine-integration",
+      "options": {
+        "schemaName": "*",
+        "just-types": false,
+        "coders-in-class": false,
+        "from-map": false,
+        "required-props": false,
+        "final-props": true,
+        "copy-with": false,
+        "use-freezed": false,
+        "use-hive": false,
+        "use-json-annotation": false,
+        "part-name": ""
+      },
+      "model_options": [
+        {
+          "name": "just-types",
+          "type": "boolean",
+          "description": "Types only"
+        },
+        {
+          "name": "coders-in-class",
+          "type": "boolean",
+          "description": "Put encoder & decoder in Class"
+        },
+        {
+          "name": "from-map",
+          "type": "boolean",
+          "description": "Use method names fromMap() & toMap()"
+        },
+        {
+          "name": "required-props",
+          "type": "boolean",
+          "description": "Make all properties required"
+        },
+        {
+          "name": "final-props",
+          "type": "boolean",
+          "description": "Make all properties final"
+        },
+        {
+          "name": "copy-with",
+          "type": "boolean",
+          "description": "Generate CopyWith method"
+        },
+        {
+          "name": "use-freezed",
+          "type": "boolean",
+          "description": "Generate class definitions with @freezed compatibility"
+        },
+        {
+          "name": "use-hive",
+          "type": "boolean",
+          "description": "Generate annotations for Hive type adapters"
+        },
+        {
+          "name": "use-json-annotation",
+          "type": "boolean",
+          "description": "Generate annotations for json_serializable"
+        },
+        {
+          "name": "part-name",
+          "type": "string",
+          "description": "Use this name in `part` directive"
+        }
+      ]
+    },
+    {
+      "id": "model-elm",
+      "kind": "model",
+      "title": "Elm",
+      "upstream_stability": "upstream",
+      "validation": "engine-integration",
+      "options": {
+        "schemaName": "*",
+        "just-types": false,
+        "array-type": "list",
+        "module": "QuickType"
+      },
+      "model_options": [
+        {
+          "name": "just-types",
+          "type": "boolean",
+          "description": "Plain types only"
+        },
+        {
+          "name": "array-type",
+          "type": "enum",
+          "description": "Use Array or List",
+          "values": [
+            "array",
+            "list"
+          ]
+        },
+        {
+          "name": "module",
+          "type": "string",
+          "description": "Generated module name"
+        }
+      ]
+    },
+    {
+      "id": "model-flow",
+      "kind": "model",
+      "title": "Flow",
+      "upstream_stability": "upstream",
+      "validation": "engine-integration",
+      "options": {
+        "schemaName": "*",
+        "acronym-style": "pascal",
+        "runtime-typecheck": true,
+        "runtime-typecheck-ignore-unknown-properties": false,
+        "converters": "top-level",
+        "raw-type": "json",
+        "just-types": false,
+        "nice-property-names": false,
+        "explicit-unions": false,
+        "prefer-unions": true,
+        "prefer-types": false,
+        "prefer-const-values": false,
+        "readonly": false,
+        "prefer-unknown": true
+      },
+      "model_options": [
+        {
+          "name": "acronym-style",
+          "type": "enum",
+          "description": "Acronym naming style",
+          "values": [
+            "original",
+            "pascal",
+            "camel",
+            "lowerCase"
+          ]
+        },
+        {
+          "name": "runtime-typecheck",
+          "type": "boolean",
+          "description": "Verify JSON.parse results at runtime"
+        },
+        {
+          "name": "runtime-typecheck-ignore-unknown-properties",
+          "type": "boolean",
+          "description": "Ignore unknown properties when verifying at runtime"
+        },
+        {
+          "name": "converters",
+          "type": "enum",
+          "description": "Which converters to generate (top-level by default)",
+          "values": [
+            "top-level",
+            "all-objects"
+          ]
+        },
+        {
+          "name": "raw-type",
+          "type": "enum",
+          "description": "Type of raw input (json by default)",
+          "values": [
+            "json",
+            "any"
+          ]
+        },
+        {
+          "name": "just-types",
+          "type": "boolean",
+          "description": "Interfaces only"
+        },
+        {
+          "name": "nice-property-names",
+          "type": "boolean",
+          "description": "Transform property names to be JavaScripty"
+        },
+        {
+          "name": "explicit-unions",
+          "type": "boolean",
+          "description": "Explicitly name unions"
+        },
+        {
+          "name": "prefer-unions",
+          "type": "boolean",
+          "description": "Use union type instead of enum"
+        },
+        {
+          "name": "prefer-types",
+          "type": "boolean",
+          "description": "Use types instead of interfaces"
+        },
+        {
+          "name": "prefer-const-values",
+          "type": "boolean",
+          "description": "Use string instead of enum for string enums with single value"
+        },
+        {
+          "name": "readonly",
+          "type": "boolean",
+          "description": "Use readonly type members"
+        },
+        {
+          "name": "prefer-unknown",
+          "type": "boolean",
+          "description": "Use unknown (TypeScript) or mixed (Flow) instead of any"
+        }
+      ]
+    },
+    {
+      "id": "model-go",
+      "kind": "model",
+      "title": "Go",
+      "upstream_stability": "upstream",
+      "validation": "engine-integration",
+      "options": {
+        "schemaName": "*",
+        "just-types": false,
+        "just-types-and-package": false,
+        "package": "main",
+        "multi-file-output": false,
+        "field-tags": "json",
+        "omit-empty": false
+      },
+      "model_options": [
+        {
+          "name": "just-types",
+          "type": "boolean",
+          "description": "Plain types only"
+        },
+        {
+          "name": "just-types-and-package",
+          "type": "boolean",
+          "description": "Plain types with package only"
+        },
+        {
+          "name": "package",
+          "type": "string",
+          "description": "Generated package name"
+        },
+        {
+          "name": "multi-file-output",
+          "type": "boolean",
+          "description": "Renders each top-level object in its own Go file"
+        },
+        {
+          "name": "field-tags",
+          "type": "string",
+          "description": "list of tags which should be generated for fields"
+        },
+        {
+          "name": "omit-empty",
+          "type": "boolean",
+          "description": "If set, all non-required objects will be tagged with \",omitempty\""
+        }
+      ]
+    },
+    {
+      "id": "model-haskell",
+      "kind": "model",
+      "title": "Haskell",
+      "upstream_stability": "upstream",
+      "validation": "engine-integration",
+      "options": {
+        "schemaName": "*",
+        "just-types": false,
+        "array-type": "list",
+        "module": "QuickType"
+      },
+      "model_options": [
+        {
+          "name": "just-types",
+          "type": "boolean",
+          "description": "Plain types only"
+        },
+        {
+          "name": "array-type",
+          "type": "enum",
+          "description": "Use Array or List",
+          "values": [
+            "array",
+            "list"
+          ]
+        },
+        {
+          "name": "module",
+          "type": "string",
+          "description": "Generated module name"
+        }
+      ]
+    },
+    {
+      "id": "model-java",
+      "kind": "model",
+      "title": "Java",
+      "upstream_stability": "upstream",
+      "validation": "engine-integration",
+      "options": {
+        "schemaName": "*",
+        "array-type": "list",
+        "just-types": false,
+        "datetime-provider": "java8",
+        "acronym-style": "pascal",
+        "package": "io.quicktype",
+        "lombok": false,
+        "lombok-copy-annotations": true
+      },
+      "model_options": [
+        {
+          "name": "array-type",
+          "type": "enum",
+          "description": "Use T[] or List<T>",
+          "values": [
+            "array",
+            "list"
+          ]
+        },
+        {
+          "name": "just-types",
+          "type": "boolean",
+          "description": "Plain types only"
+        },
+        {
+          "name": "datetime-provider",
+          "type": "enum",
+          "description": "Date time provider type",
+          "values": [
+            "java8",
+            "legacy"
+          ]
+        },
+        {
+          "name": "acronym-style",
+          "type": "enum",
+          "description": "Acronym naming style",
+          "values": [
+            "original",
+            "pascal",
+            "camel",
+            "lowerCase"
+          ]
+        },
+        {
+          "name": "package",
+          "type": "string",
+          "description": "Generated package name"
+        },
+        {
+          "name": "lombok",
+          "type": "boolean",
+          "description": "Use lombok"
+        },
+        {
+          "name": "lombok-copy-annotations",
+          "type": "boolean",
+          "description": "Copy accessor annotations"
+        }
+      ]
+    },
+    {
+      "id": "model-javascript",
+      "kind": "model",
+      "title": "JavaScript",
+      "upstream_stability": "upstream",
+      "validation": "engine-integration",
+      "options": {
+        "schemaName": "*",
+        "acronym-style": "pascal",
+        "runtime-typecheck": true,
+        "runtime-typecheck-ignore-unknown-properties": false,
+        "converters": "top-level",
+        "raw-type": "json"
+      },
+      "model_options": [
+        {
+          "name": "acronym-style",
+          "type": "enum",
+          "description": "Acronym naming style",
+          "values": [
+            "original",
+            "pascal",
+            "camel",
+            "lowerCase"
+          ]
+        },
+        {
+          "name": "runtime-typecheck",
+          "type": "boolean",
+          "description": "Verify JSON.parse results at runtime"
+        },
+        {
+          "name": "runtime-typecheck-ignore-unknown-properties",
+          "type": "boolean",
+          "description": "Ignore unknown properties when verifying at runtime"
+        },
+        {
+          "name": "converters",
+          "type": "enum",
+          "description": "Which converters to generate (top-level by default)",
+          "values": [
+            "top-level",
+            "all-objects"
+          ]
+        },
+        {
+          "name": "raw-type",
+          "type": "enum",
+          "description": "Type of raw input (json by default)",
+          "values": [
+            "json",
+            "any"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "model-kotlin",
+      "kind": "model",
+      "title": "Kotlin",
+      "upstream_stability": "upstream",
+      "validation": "engine-integration",
+      "options": {
+        "schemaName": "*",
+        "just-types": false,
+        "framework": "jackson",
+        "acronym-style": "pascal",
+        "package": "quicktype"
+      },
+      "model_options": [
+        {
+          "name": "just-types",
+          "type": "boolean",
+          "description": "Plain types only"
+        },
+        {
+          "name": "framework",
+          "type": "enum",
+          "description": "Serialization framework",
+          "values": [
+            "jackson",
+            "klaxon",
+            "kotlinx"
+          ]
+        },
+        {
+          "name": "acronym-style",
+          "type": "enum",
+          "description": "Acronym naming style",
+          "values": [
+            "original",
+            "pascal",
+            "camel",
+            "lowerCase"
+          ]
+        },
+        {
+          "name": "package",
+          "type": "string",
+          "description": "Package"
+        }
+      ]
+    },
+    {
+      "id": "model-objc",
+      "kind": "model",
+      "title": "Objective-C",
+      "upstream_stability": "upstream",
+      "validation": "engine-integration",
+      "options": {
+        "schemaName": "*",
+        "features": "all",
+        "just-types": false,
+        "functions": false,
+        "class-prefix": "QT",
+        "extra-comments": false
+      },
+      "model_options": [
+        {
+          "name": "features",
+          "type": "enum",
+          "description": "Interface and implementation",
+          "values": [
+            "all",
+            "interface",
+            "implementation"
+          ]
+        },
+        {
+          "name": "just-types",
+          "type": "boolean",
+          "description": "Plain types only"
+        },
+        {
+          "name": "functions",
+          "type": "boolean",
+          "description": "C-style functions"
+        },
+        {
+          "name": "class-prefix",
+          "type": "string",
+          "description": "Class prefix"
+        },
+        {
+          "name": "extra-comments",
+          "type": "boolean",
+          "description": "Extra comments"
+        }
+      ]
+    },
+    {
+      "id": "model-pike",
+      "kind": "model",
+      "title": "Pike",
+      "upstream_stability": "upstream",
+      "validation": "engine-integration",
+      "options": {
+        "schemaName": "*"
+      },
+      "model_options": []
+    },
+    {
+      "id": "model-python",
+      "kind": "model",
+      "title": "Python",
+      "upstream_stability": "upstream",
+      "validation": "engine-integration",
+      "options": {
+        "schemaName": "*",
+        "python-version": "3.10",
+        "just-types": false,
+        "nice-property-names": true,
+        "pydantic-base-model": false
+      },
+      "model_options": [
+        {
+          "name": "python-version",
+          "type": "enum",
+          "description": "Python version",
+          "values": [
+            "3.5",
+            "3.6",
+            "3.7",
+            "3.9",
+            "3.10"
+          ]
+        },
+        {
+          "name": "just-types",
+          "type": "boolean",
+          "description": "Classes only"
+        },
+        {
+          "name": "nice-property-names",
+          "type": "boolean",
+          "description": "Transform property names to be Pythonic"
+        },
+        {
+          "name": "pydantic-base-model",
+          "type": "boolean",
+          "description": "Uses pydantic BaseModel"
+        }
+      ]
+    },
+    {
+      "id": "model-ruby",
+      "kind": "model",
+      "title": "Ruby",
+      "upstream_stability": "upstream",
+      "validation": "engine-integration",
+      "options": {
+        "schemaName": "*",
+        "just-types": false,
+        "strictness": "strict",
+        "namespace": ""
+      },
+      "model_options": [
+        {
+          "name": "just-types",
+          "type": "boolean",
+          "description": "Plain types only"
+        },
+        {
+          "name": "strictness",
+          "type": "enum",
+          "description": "Type strictness",
+          "values": [
+            "strict",
+            "coercible",
+            "none"
+          ]
+        },
+        {
+          "name": "namespace",
+          "type": "string",
+          "description": "Specify a wrapping Namespace"
+        }
+      ]
+    },
+    {
+      "id": "model-rust",
+      "kind": "model",
+      "title": "Rust",
+      "upstream_stability": "upstream",
+      "validation": "engine-integration",
+      "options": {
+        "schemaName": "*",
+        "density": "normal",
+        "visibility": "public",
+        "integer-type": "conservative",
+        "derive-debug": true,
+        "derive-clone": true,
+        "derive-partial-eq": false,
+        "skip-serializing-none": false,
+        "leading-comments": true
+      },
+      "model_options": [
+        {
+          "name": "density",
+          "type": "enum",
+          "description": "Density",
+          "values": [
+            "normal",
+            "dense"
+          ]
+        },
+        {
+          "name": "visibility",
+          "type": "enum",
+          "description": "Field visibility",
+          "values": [
+            "private",
+            "crate",
+            "public"
+          ]
+        },
+        {
+          "name": "integer-type",
+          "type": "enum",
+          "description": "Integer type inference",
+          "values": [
+            "conservative",
+            "force-i32",
+            "force-i64"
+          ]
+        },
+        {
+          "name": "derive-debug",
+          "type": "boolean",
+          "description": "Derive Debug impl"
+        },
+        {
+          "name": "derive-clone",
+          "type": "boolean",
+          "description": "Derive Clone impl"
+        },
+        {
+          "name": "derive-partial-eq",
+          "type": "boolean",
+          "description": "Derive PartialEq impl"
+        },
+        {
+          "name": "skip-serializing-none",
+          "type": "boolean",
+          "description": "Skip serializing empty Option fields"
+        },
+        {
+          "name": "leading-comments",
+          "type": "boolean",
+          "description": "Leading Comments"
+        }
+      ]
+    },
+    {
+      "id": "model-swift",
+      "kind": "model",
+      "title": "Swift",
+      "upstream_stability": "upstream",
+      "validation": "engine-integration",
+      "options": {
+        "schemaName": "*",
+        "just-types": false,
+        "initializers": true,
+        "coding-keys": true,
+        "coding-keys-protocol": "",
+        "alamofire": false,
+        "type-prefix": "",
+        "struct-or-class": "struct",
+        "final-classes": false,
+        "mutable-properties": false,
+        "acronym-style": "pascal",
+        "density": "normal",
+        "support-linux": false,
+        "objective-c-support": false,
+        "optional-enums": false,
+        "sendable": false,
+        "multi-file-output": false,
+        "access-level": "internal",
+        "protocol": "none"
+      },
+      "model_options": [
+        {
+          "name": "just-types",
+          "type": "boolean",
+          "description": "Plain types only"
+        },
+        {
+          "name": "initializers",
+          "type": "boolean",
+          "description": "Generate initializers and mutators"
+        },
+        {
+          "name": "coding-keys",
+          "type": "boolean",
+          "description": "Explicit CodingKey values in Codable types"
+        },
+        {
+          "name": "coding-keys-protocol",
+          "type": "string",
+          "description": "CodingKeys implements protocols"
+        },
+        {
+          "name": "alamofire",
+          "type": "boolean",
+          "description": "Alamofire extensions"
+        },
+        {
+          "name": "type-prefix",
+          "type": "string",
+          "description": "Prefix for type names"
+        },
+        {
+          "name": "struct-or-class",
+          "type": "enum",
+          "description": "Structs or classes",
+          "values": [
+            "struct",
+            "class"
+          ]
+        },
+        {
+          "name": "final-classes",
+          "type": "boolean",
+          "description": "Mark classes as final"
+        },
+        {
+          "name": "mutable-properties",
+          "type": "boolean",
+          "description": "Use var instead of let for object properties"
+        },
+        {
+          "name": "acronym-style",
+          "type": "enum",
+          "description": "Acronym naming style",
+          "values": [
+            "original",
+            "pascal",
+            "camel",
+            "lowerCase"
+          ]
+        },
+        {
+          "name": "density",
+          "type": "enum",
+          "description": "Code density",
+          "values": [
+            "dense",
+            "normal"
+          ]
+        },
+        {
+          "name": "support-linux",
+          "type": "boolean",
+          "description": "Support Linux"
+        },
+        {
+          "name": "objective-c-support",
+          "type": "boolean",
+          "description": "Objects inherit from NSObject and @objcMembers is added to classes"
+        },
+        {
+          "name": "optional-enums",
+          "type": "boolean",
+          "description": "If no matching case is found enum value is set to null"
+        },
+        {
+          "name": "sendable",
+          "type": "boolean",
+          "description": "Mark generated models as Sendable"
+        },
+        {
+          "name": "multi-file-output",
+          "type": "boolean",
+          "description": "Renders each top-level object in its own Swift file"
+        },
+        {
+          "name": "access-level",
+          "type": "enum",
+          "description": "Access level",
+          "values": [
+            "internal",
+            "public"
+          ]
+        },
+        {
+          "name": "protocol",
+          "type": "enum",
+          "description": "Make types implement protocol",
+          "values": [
+            "none",
+            "equatable",
+            "hashable"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "model-typescript",
+      "kind": "model",
+      "title": "TypeScript",
+      "upstream_stability": "upstream",
+      "validation": "engine-integration",
+      "options": {
+        "schemaName": "*",
+        "acronym-style": "pascal",
+        "runtime-typecheck": true,
+        "runtime-typecheck-ignore-unknown-properties": false,
+        "converters": "top-level",
+        "raw-type": "json",
+        "just-types": false,
+        "nice-property-names": false,
+        "explicit-unions": false,
+        "prefer-unions": true,
+        "prefer-types": false,
+        "prefer-const-values": false,
+        "readonly": false,
+        "prefer-unknown": true
+      },
+      "model_options": [
+        {
+          "name": "acronym-style",
+          "type": "enum",
+          "description": "Acronym naming style",
+          "values": [
+            "original",
+            "pascal",
+            "camel",
+            "lowerCase"
+          ]
+        },
+        {
+          "name": "runtime-typecheck",
+          "type": "boolean",
+          "description": "Verify JSON.parse results at runtime"
+        },
+        {
+          "name": "runtime-typecheck-ignore-unknown-properties",
+          "type": "boolean",
+          "description": "Ignore unknown properties when verifying at runtime"
+        },
+        {
+          "name": "converters",
+          "type": "enum",
+          "description": "Which converters to generate (top-level by default)",
+          "values": [
+            "top-level",
+            "all-objects"
+          ]
+        },
+        {
+          "name": "raw-type",
+          "type": "enum",
+          "description": "Type of raw input (json by default)",
+          "values": [
+            "json",
+            "any"
+          ]
+        },
+        {
+          "name": "just-types",
+          "type": "boolean",
+          "description": "Interfaces only"
+        },
+        {
+          "name": "nice-property-names",
+          "type": "boolean",
+          "description": "Transform property names to be JavaScripty"
+        },
+        {
+          "name": "explicit-unions",
+          "type": "boolean",
+          "description": "Explicitly name unions"
+        },
+        {
+          "name": "prefer-unions",
+          "type": "boolean",
+          "description": "Use union type instead of enum"
+        },
+        {
+          "name": "prefer-types",
+          "type": "boolean",
+          "description": "Use types instead of interfaces"
+        },
+        {
+          "name": "prefer-const-values",
+          "type": "boolean",
+          "description": "Use string instead of enum for string enums with single value"
+        },
+        {
+          "name": "readonly",
+          "type": "boolean",
+          "description": "Use readonly type members"
+        },
+        {
+          "name": "prefer-unknown",
+          "type": "boolean",
+          "description": "Use unknown (TypeScript) or mixed (Flow) instead of any"
+        }
+      ]
+    }
+  ]
+}

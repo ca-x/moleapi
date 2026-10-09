@@ -2,6 +2,8 @@
 
 Project generation is implemented separately from request snippets. It uses Progenitor0.15.0 for native Rust3.0 clients and an unmodified, SHA256-pinned, embedded OpenAPI Generator7.26.0 for upstream clients/server frameworks. Hosted API and offline desktop IPC use the same service. No target program or package publishing runs during preview/download.
 
+Data models have a separate category covering Apifox's19 language families with pinned Quicktype26.0.0 (18 targets) and MySQL/PostgreSQL DDL. See [MODEL-GENERATION-COVERAGE.md](MODEL-GENERATION-COVERAGE.md) for the exact selection list and compile/runtime evidence; model generation does not complete SDK/server/custom-template coverage.
+
 | Target | Current evidence | Limits |
 | --- | --- | --- |
 | rust-progenitor | Generated3.0 reference/nullable model SDK compiled; async client called a real HTTP fixture; owned API/default private-example screening preserved original source | Native engine supports3.0; broader union/auth/file fixtures and generated CLI remain required |

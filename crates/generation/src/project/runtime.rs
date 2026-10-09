@@ -44,10 +44,12 @@ impl ProjectRuntime {
             validate_project_specification(&input.specification)?;
         }
         validate_options(&input)?;
-        if matches!(
-            input.target.as_str(),
-            "rust-progenitor" | "rust-progenitor-cli" | "rust-tonic"
-        ) {
+        if input.target.starts_with("model-")
+            || matches!(
+                input.target.as_str(),
+                "rust-progenitor" | "rust-progenitor-cli" | "rust-tonic"
+            )
+        {
             return self.native(input, cancel).await;
         }
         if input.target.starts_with("protobuf-") {
@@ -99,7 +101,7 @@ impl ProjectRuntime {
                 .map_err(|_| anyhow::anyhow!("Invalid native generation worker reply"))?;
             ensure!(
                 value.get("error").is_none(),
-                "Rust SDK generation failed; check specification and target options"
+                "Native code generation failed; check specification and target options"
             );
             serde_json::from_value(value["artifact"].clone()).map_err(Into::into)
         };

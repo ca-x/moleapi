@@ -5,6 +5,8 @@ export default defineConfig({
   test: { setupFiles: ["./src/testSetup.ts"] },
   clearScreen: false,
   worker: { format: "es" },
+  // Vite's worker transform must see these imports before esbuild prebundling.
+  optimizeDeps: { exclude: ["graphiql/setup-workers/vite", "@graphiql/react/setup-workers/vite"] },
   server: {
     port: 1420,
     strictPort: true,

@@ -47,6 +47,10 @@ Single HTTP endpoints can also generate Go net/http and C# HttpClient/RestSharp 
 
 Interface request-code languages and libraries follow the current Apifox/Postman lists, with23 language families and55 adapters. See the [exact language/library catalog](docs/REQUEST-CODE-PARITY.md).
 
+Data model generation covers Apifox's19 language families using embedded Quicktype for18 languages and OpenAPI Generator for MySQL/PostgreSQL table definitions. Choose all or one component and its serialization/style options, then preview/copy/download or regenerate. See [actual model runtime evidence and remaining limits](docs/MODEL-GENERATION-COVERAGE.md).
+
+![Data model generation and TypeScript preview](docs/images/codegen-models-en.png)
+
 HTTP/SOAP, SSE/WebSocket/GraphQL, gRPC, TCP/TLS, MQTT, Socket.IO, A2A and MCP HTTP requests support explicit HTTP/SOCKS proxies, bypass rules, custom CA roots, PEM/encrypted PFX client certificates, DNS overrides and HTTP/2. Network credentials are scrubbed from history/default exports; exact source backup requires including sensitive values. See [network support and current combinations](docs/specs/request-network.md).
 
 ## Languages

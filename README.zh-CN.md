@@ -47,6 +47,10 @@ OpenAPI 项目生成使用原生 Progenitor Rust 客户端引擎，以及固定�
 
 接口请求代码的语言和 HTTP 库按当前 Apifox／Postman 列表提供，包含23类语言和55种库适配器。参见[完整语言／库目录](docs/REQUEST-CODE-PARITY.md)。
 
+数据模型生成覆盖 Apifox 的19类语言：18种语言复用嵌入式 Quicktype，MySQL／PostgreSQL 建表语句复用 OpenAPI Generator。可选全部或单个模型、调整序列化与代码风格，再预览、复制、下载或再生成。参见[模型运行证据与剩余限制](docs/MODEL-GENERATION-COVERAGE.md)。
+
+![数据模型生成与 C# 预览](docs/images/codegen-models-zh-CN.png)
+
 HTTP/SOAP、SSE/WebSocket/GraphQL、gRPC、TCP/TLS、MQTT、Socket.IO、A2A 和 MCP HTTP 请求支持显式 HTTP/SOCKS 代理、绕过规则、自定义 CA、PEM/加密 PFX 客户端证书、DNS 覆盖和 HTTP/2。网络凭据会从历史与默认导出中脱敏；精确保留源配置需要显式包含敏感信息。参见[网络支持与当前组合限制](docs/specs/request-network.md)。
 
 ## 语言

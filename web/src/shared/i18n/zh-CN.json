@@ -1351,5 +1351,10 @@
   "各语言的超时、TLS、重定向策略由其 HTTP 库决定；此轮示例尚不映射这些设置。": "各语言的超时、TLS、重定向策略由其 HTTP 库决定；此轮示例尚不映射这些设置。",
   "语言与 HTTP 库按 Apifox／Postman 官方请求代码列表提供；库依赖需要在目标项目中安装。": "语言与 HTTP 库按 Apifox／Postman 官方请求代码列表提供；库依赖需要在目标项目中安装。",
   "此选项生成 Node.js CommonJS 代码；Request、Unirest 和 follow-redirects 等依赖按生成的 require 安装。": "此选项生成 Node.js CommonJS 代码；Request、Unirest 和 follow-redirects 等依赖按生成的 require 安装。",
-  "此选项生成 Postman CLI 命令，需要目标环境安装该 CLI；生成过程不会执行命令。": "此选项生成 Postman CLI 命令，需要目标环境安装该 CLI；生成过程不会执行命令。"
+  "此选项生成 Postman CLI 命令，需要目标环境安装该 CLI；生成过程不会执行命令。": "此选项生成 Postman CLI 命令，需要目标环境安装该 CLI；生成过程不会执行命令。",
+  "生成 SDK / 服务端项目 / 数据模型": "生成 SDK / 服务端项目 / 数据模型",
+  "数据模型 / SQL 建表语句": "数据模型 / SQL 建表语句",
+  "模型名称": "模型名称",
+  "留空或 * 生成全部 components.schemas；填写名称只生成该模型及引用的类型。": "留空或 * 生成全部 components.schemas；填写名称只生成该模型及引用的类型。",
+  "模型代码风格与序列化选项": "模型代码风格与序列化选项"
 }

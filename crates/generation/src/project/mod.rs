@@ -2,7 +2,9 @@
 mod artifact;
 mod import;
 pub use import::*;
+mod models;
 mod native;
+pub use models::ModelOption;
 mod protobuf;
 mod protoc;
 mod regeneration;
@@ -40,11 +42,15 @@ pub struct ProjectInput {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ProjectTarget {
     pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
     pub kind: String,
     pub upstream_stability: String,
     pub validation: String,
     #[serde(default)]
     pub options: BTreeMap<String, Value>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub model_options: Vec<ModelOption>,
 }
 pub fn project_catalog() -> Result<Vec<ProjectTarget>> {
     let manifest: Value = serde_json::from_str(include_str!(
@@ -52,6 +58,17 @@ pub fn project_catalog() -> Result<Vec<ProjectTarget>> {
     ))?;
     let mut targets: Vec<ProjectTarget> = serde_json::from_value(manifest["targets"].clone())?;
     for target in &mut targets {
+        if matches!(target.id.as_str(), "mysql-schema" | "postgresql-schema") {
+            target.kind = "model".into();
+            target.title = Some(
+                if target.id == "mysql-schema" {
+                    "SQL (MySQL)"
+                } else {
+                    "SQL (PostgreSQL)"
+                }
+                .into(),
+            );
+        }
         if target.options.get("npmName") == Some(&Value::Null) {
             target.options.insert(
                 "npmName".into(),
@@ -63,6 +80,8 @@ pub fn project_catalog() -> Result<Vec<ProjectTarget>> {
         0,
         ProjectTarget {
             id: "rust-progenitor".into(),
+            title: None,
+            model_options: Vec::new(),
             kind: "client".into(),
             upstream_stability: "stable".into(),
             validation: "representative-compile-call-fixture".into(),
@@ -77,6 +96,8 @@ pub fn project_catalog() -> Result<Vec<ProjectTarget>> {
         1,
         ProjectTarget {
             id: "rust-progenitor-cli".into(),
+            title: None,
+            model_options: Vec::new(),
             kind: "cli".into(),
             upstream_stability: "stable".into(),
             validation: "implementation-awaiting-cli-fixtures".into(),
@@ -90,6 +111,8 @@ pub fn project_catalog() -> Result<Vec<ProjectTarget>> {
         2,
         ProjectTarget {
             id: "rust-tonic".into(),
+            title: None,
+            model_options: Vec::new(),
             kind: "protobuf".into(),
             upstream_stability: "stable".into(),
             validation: "awaiting-protobuf-fixtures".into(),
@@ -104,15 +127,21 @@ pub fn project_catalog() -> Result<Vec<ProjectTarget>> {
     ] {
         targets.push(ProjectTarget {
             id: format!("protobuf-{language}"),
+            title: None,
+            model_options: Vec::new(),
             kind: "protobuf".into(),
             upstream_stability: "stable".into(),
             validation: "compiler-integration-awaiting-fixtures".into(),
             options: BTreeMap::new(),
         });
     }
+    targets.splice(3..3, models::catalog()?);
     Ok(targets)
 }
 pub(crate) fn validate_options(input: &ProjectInput) -> Result<()> {
+    if input.target.starts_with("model-") {
+        return models::validate(input);
+    }
     ensure!(
         project_catalog()?.iter().any(|t| t.id == input.target),
         "Unknown project generator"

@@ -1,0 +1,11 @@
+{
+  "name": "moleapi-model-engine",
+  "private": true,
+  "type": "module",
+  "scripts": {"build":"node build.mjs"},
+  "dependencies": {
+    "@openapi-contrib/openapi-schema-to-json-schema": "5.1.0",
+    "esbuild": "0.25.12",
+    "quicktype-core": "26.0.0"
+  }
+}

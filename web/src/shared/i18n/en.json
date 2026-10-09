@@ -1351,5 +1351,10 @@
   "各语言的超时、TLS、重定向策略由其 HTTP 库决定；此轮示例尚不映射这些设置。": "Timeout, TLS and redirect behavior depends on the target HTTP library; snippets do not yet map these settings.",
   "语言与 HTTP 库按 Apifox／Postman 官方请求代码列表提供；库依赖需要在目标项目中安装。": "Languages and HTTP libraries follow the official Apifox/Postman request-code lists. Install library dependencies in the target project.",
   "此选项生成 Node.js CommonJS 代码；Request、Unirest 和 follow-redirects 等依赖按生成的 require 安装。": "This option generates Node.js CommonJS code. Install dependencies such as Request, Unirest and follow-redirects as indicated by require statements.",
-  "此选项生成 Postman CLI 命令，需要目标环境安装该 CLI；生成过程不会执行命令。": "This option generates Postman CLI commands and requires that CLI in the target environment. Generation does not execute commands."
+  "此选项生成 Postman CLI 命令，需要目标环境安装该 CLI；生成过程不会执行命令。": "This option generates Postman CLI commands and requires that CLI in the target environment. Generation does not execute commands.",
+  "生成 SDK / 服务端项目 / 数据模型": "Generate SDK / server project / data models",
+  "数据模型 / SQL 建表语句": "Data models / SQL table definitions",
+  "模型名称": "Model name",
+  "留空或 * 生成全部 components.schemas；填写名称只生成该模型及引用的类型。": "Leave blank or use * for all components.schemas. Enter a name to generate that model and its referenced types.",
+  "模型代码风格与序列化选项": "Model code style and serialization options"
 }

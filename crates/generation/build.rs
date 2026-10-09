@@ -1,5 +1,29 @@
 use sha2::{Digest, Sha256};
 fn main() {
+    let model_directory =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../vendor/model-engine");
+    let model_manifest = model_directory.join("manifest.json");
+    let model_bundle = model_directory.join("engine.js");
+    println!("cargo:rerun-if-changed={}", model_manifest.display());
+    println!("cargo:rerun-if-changed={}", model_bundle.display());
+    let model_metadata: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(model_manifest).expect("Model manifest missing"))
+            .expect("Model manifest JSON");
+    assert_eq!(model_metadata["version"], "26.0.0");
+    assert_eq!(
+        model_metadata["schema_converter"],
+        "@openapi-contrib/openapi-schema-to-json-schema@5.1.0"
+    );
+    assert_eq!(
+        format!(
+            "{:x}",
+            Sha256::digest(std::fs::read(model_bundle).expect("Model bundle missing"))
+        ),
+        model_metadata["sha256"]
+            .as_str()
+            .expect("Model bundle digest"),
+        "Model bundle digest mismatch"
+    );
     let engine =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../vendor/openapi-generator");
     let metadata_path = engine.join("manifest.json");
