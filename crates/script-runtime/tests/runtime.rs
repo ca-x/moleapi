@@ -29,6 +29,21 @@ fn evaluate(source: &str) -> anyhow::Result<moleapi_script_runtime::ScriptOutput
     )
 }
 #[test]
+fn execution_flow_directives_are_typed_and_skip_short_circuits_phase_scripts() {
+    let result =
+        evaluate("pm.execution.setNextRequest('first');pm.execution.setNextRequest(null);")
+            .unwrap();
+    assert!(matches!(
+        result.control.next_request,
+        Some(NextRequest::Stop)
+    ));
+    let result=run(&["pm.variables.set('before','yes');pm.execution.skipRequest();pm.variables.set('after','no');".into(),"pm.variables.set('later','no');".into()],&request(),None,&VariableScopes::default()).unwrap();
+    assert!(result.control.skip_request);
+    assert_eq!(result.updates.len(), 1);
+    assert_eq!(result.updates[0].key, "before");
+    assert!(evaluate("pm.execution.setNextRequest(42)").is_err());
+}
+#[test]
 fn genuine_javascript_mutates_request_and_collects_tests() {
     let result = evaluate(
         r#"

@@ -10,9 +10,24 @@ pub struct IterationInfo {
     pub index: usize,
     pub count: usize,
 }
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ExecutionControl {
+    #[serde(default)]
+    pub next_request: Option<NextRequest>,
+    #[serde(default)]
+    pub skip_request: bool,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub enum NextRequest {
+    Stop,
+    Request { target: String },
+}
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct VariableScopes {
+    #[serde(skip)]
+    pub execution: ExecutionControl,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub iteration: Option<IterationInfo>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

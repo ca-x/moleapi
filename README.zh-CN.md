@@ -9,6 +9,8 @@ MoleAPI 使用 Rust/Axum/SeaORM、React/Radix UI/CodeMirror 和 Tauri。默认 S
 
 集合测试支持临时或保存的 CSV／JSON 数据集、带类型的迭代数据、多轮运行和停止操作。可复用数据集随工作区保存、版本管理和同步，默认备份隐藏私密源。参见[运行器能力](docs/DATA-RUNNER-COVERAGE.md)及[可复用数据集覆盖](docs/SAVED-DATASETS-COVERAGE.md)。
 
+集合脚本可通过 pm.execution 控制跳转、循环、结束本轮或跳过请求。参见[流程行为与限制](docs/SCRIPT-FLOW-COVERAGE.md)。
+
 ## 软件截图
 
 截图来自实际运行的自托管界面，使用合成测试数据；与桌面端共用前端，截图不代表托盘或安装包已通过实机验证。

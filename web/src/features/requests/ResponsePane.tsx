@@ -67,8 +67,8 @@ export function ResponsePane({
           <Text weight="medium" size="2"> {t("响应")} </Text>
           {response && (
             <>
-              <Badge color={response.status < 400 ? "green" : "red"}>
-                {response.status} {response.status_text}
+              <Badge color={response.skipped?"gray":response.status < 400 ? "green" : "red"}>
+                {response.skipped?t("请求已由脚本跳过。"):<>{response.status} {response.status_text}</>}
               </Badge>
               <Text size="1" color="gray" className="mono">
                 {response.elapsed_ms} ms

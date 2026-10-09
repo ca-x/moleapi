@@ -15,6 +15,8 @@
   const privacyVisit = () => { if (++privacyVisits > 16384) privacyOverflow(); };
   for (const name of Object.keys(scopes)) scopes[name] = Object.assign(Object.create(null),scopes[name]);
   const logs = [], tests = [], updates = [];
+  const control={next_request:null,skip_request:false};
+  const skipRequest=__moleapiSkipRequest;
   const MAX_VALUE = 1024 * 1024, MAX_OUTPUT = 64 * 1024;
   let outputBytes = 0;
   const unsupported = name => { throw new Error(`Unsupported pm API: ${name} (compatibility v1)`); };
@@ -275,7 +277,11 @@
       tests.push({id:`script-${tests.length}`,name,passed,actual,expected:"passed"});
     },
     sendRequest: () => unsupported("sendRequest"),
-    execution: api({},"execution")
+    execution: api({
+      location:api(Object.freeze({current:source.id}),"execution.location"),
+      setNextRequest(target){if(target===null){control.next_request={action:"stop"};return;}if(typeof target!=="string"||!target||target.length>256)throw new Error("Next request must be a nonempty ID/name up to256 characters or null");control.next_request={action:"request",target};},
+      skipRequest(){if(input.response)throw new Error("skipRequest is only available in pre-request scripts");control.skip_request=true;skipRequest();throw new Error("Request skipped");}
+    },"execution")
   };
   if (input.response) {
     const response = input.response;
@@ -295,6 +301,6 @@
   }])),writable:false});
   for (const name of ["require","fetch","setTimeout","setInterval","queueMicrotask"]) globalThis[name] = () => unsupported(name);
   captureCurrentRequest();
-  const exportState = () => stringify({request:source,logs,tests,updates});
+  const exportState = () => stringify({request:source,logs,tests,updates,control});
   Object.defineProperty(globalThis,"__moleapiExport",{value:exportState,writable:false,configurable:false});
 })

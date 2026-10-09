@@ -26,6 +26,8 @@ struct Input<'a> {
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ScriptOutput {
+    #[serde(default)]
+    pub control: moleapi_core::ExecutionControl,
     pub request: RequestSpec,
     pub logs: Vec<ScriptLog>,
     pub tests: Vec<TestResult>,
@@ -143,6 +145,14 @@ pub fn run(
         runtime.set_promise_hook(Some(Box::new(move |_, _, _, _| promise_flag.set(true))));
         let context = Context::full(&runtime).context("Create JavaScript context")?;
         let output = context.with(|ctx| {
+            let skipped = Rc::new(Cell::new(false));
+            let skip_flag = skipped.clone();
+            ctx.globals().set(
+                "__moleapiSkipRequest",
+                Function::new(ctx.clone(), move || {
+                    skip_flag.set(true);
+                })?,
+            )?;
             let evaluate = |source: &str| -> Result<Value<'_>> {
                 ctx.eval(source).map_err(|error| {
                     let detail = if error.is_exception() {
@@ -268,15 +278,23 @@ pub fn run(
                 "__moleapiCaptureQuery",
                 "__moleapiCaptureBegin",
                 "__moleapiCaptureEnd",
+                "__moleapiSkipRequest",
             ] {
                 ctx.globals().remove(name)?;
             }
             for script in scripts.iter().filter(|s| !s.trim().is_empty()) {
-                let result = evaluate(script)?;
+                let result = match evaluate(script) {
+                    Ok(result) => result,
+                    Err(_) if skipped.get() => break,
+                    Err(error) => return Err(error),
+                };
                 ensure!(
                     !result.is_promise() && !promise_seen.get(),
                     "Asynchronous scripts are unsupported in pm compatibility v1"
                 );
+                if skipped.get() {
+                    break;
+                }
             }
             let output: String = ctx.eval("__moleapiExport()").map_err(|_| {
                 anyhow::anyhow!("JavaScript output exceeded limits or execution deadline")

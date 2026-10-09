@@ -186,6 +186,7 @@ export interface RequestUpdate {
   value: string;
 }
 export interface ApiResponse {
+  skipped?:boolean;
   request_updates?: RequestUpdate[];
   logs?: ScriptLog[];
   variable_updates?: VariableUpdate[];
@@ -231,9 +232,11 @@ export interface SyncResult {
   message: string;
 }
 export interface RunResult {
+  skipped?:number;
+  executed_steps?:number;
   iteration_count?:number;
   completed_iterations?:number;
-  iterations?:{iteration:number;passed:number;failed:number;elapsed_ms:number}[];
+  iterations?:{iteration:number;passed:number;failed:number;elapsed_ms:number;script_stopped?:boolean}[];
   cancelled?:boolean;
   stopped_reason?:string|null;
   omitted_responses?:number;

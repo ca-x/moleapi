@@ -273,6 +273,8 @@ pub struct TestResult {
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Response {
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub skipped: bool,
     #[serde(skip)]
     pub private_auth_values: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

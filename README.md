@@ -9,6 +9,8 @@ MoleAPI uses Rust/Axum/SeaORM, React/Radix UI/CodeMirror, and Tauri. SQLite is t
 
 Collection tests support temporary or saved CSV/JSON datasets, typed iteration data, multiple iterations and cancellation. Reusable datasets use workspace save/versioning/sync; private sources are hidden in default backups. See [runner behavior](docs/DATA-RUNNER-COVERAGE.md) and [saved dataset coverage](docs/SAVED-DATASETS-COVERAGE.md).
 
+Collection scripts can branch, loop, stop an iteration or skip a request with pm.execution controls. See [flow behavior and limits](docs/SCRIPT-FLOW-COVERAGE.md).
+
 ## Screenshots
 
 These screenshots show the actual self-hosted interface with synthetic test data. The desktop shares this frontend; the screenshots do not establish native tray or installer verification.

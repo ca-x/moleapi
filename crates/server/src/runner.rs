@@ -150,6 +150,15 @@ pub async fn run(
     if steps.saturating_mul(count) > 1000 {
         return Err(ApiError::bad("Run exceeds 1000 request executions"));
     }
+    let plan = subtree
+        .iter()
+        .flat_map(|collection| {
+            collection
+                .requests
+                .iter()
+                .map(move |request| (*collection, request))
+        })
+        .collect::<Vec<_>>();
     let mut scopes = variables(
         &s,
         &w,
@@ -195,6 +204,7 @@ pub async fn run(
     let mut summaries = vec![];
     let (mut passed, mut failed, mut report_bytes, mut omitted) = (0usize, 0usize, 0usize, 0usize);
     let mut stopped = None;
+    let (mut executed, mut skipped) = (0usize, 0usize);
     let mut overlays = BTreeMap::<String, BTreeMap<String, Option<String>>>::new();
     for local in c.locals.iter().filter(|local| local.scope == "collection") {
         overlays
@@ -204,6 +214,7 @@ pub async fn run(
     }
     'iterations: for index in 0..count {
         let iteration_start = std::time::Instant::now();
+        let mut script_stopped = false;
         let (before_passed, before_failed) = (passed, failed);
         let pairs = iteration_pairs(&c, dataset.as_ref().map(|dataset| &dataset.rows[index]))?;
         let iteration_base = variables(&s, &w, Some(collection), e, &pairs, &c.variables, &[])?;
@@ -228,7 +239,13 @@ pub async fn run(
         scopes
             .validate()
             .map_err(|error| ApiError::bad(error.to_string()))?;
-        for selected in &subtree {
+        let mut cursor = 0usize;
+        'steps: while cursor < plan.len() {
+            if executed >= 1000 {
+                stopped = Some("step_limit");
+                break 'iterations;
+            }
+            let (selected, request) = plan[cursor];
             let base = variables(&s, &w, Some(selected), e, &pairs, &c.variables, &[])?;
             scopes.private_values.extend(base.private_values);
             scopes.collection.clear();
@@ -260,7 +277,8 @@ pub async fn run(
                     }
                 }
             }
-            for request in &selected.requests {
+            {
+                executed += 1;
                 if lease.cancel.is_cancelled() {
                     stopped = Some("cancelled");
                     break 'iterations;
@@ -275,7 +293,9 @@ pub async fn run(
                 let result = tokio::select! {biased;_=lease.cancel.cancelled()=>{stopped=Some("cancelled");break 'iterations;},_=tokio::time::sleep_until(deadline)=>{stopped=Some("deadline");break 'iterations;},result=perform(&s,&owner.0,&w,request,Some(selected),&mut scopes)=>result};
                 let mut item = match result {
                     Ok(response) => {
-                        if response.tests.iter().all(|test| test.passed) {
+                        if response.skipped {
+                            skipped += 1;
+                        } else if response.tests.iter().all(|test| test.passed) {
                             passed += 1;
                         } else {
                             failed += 1;
@@ -322,10 +342,39 @@ pub async fn run(
                     break 'iterations;
                 }
             }
+            cursor = match &scopes.execution.next_request {
+                None => cursor + 1,
+                Some(moleapi_core::NextRequest::Stop) => {
+                    script_stopped = true;
+                    break 'steps;
+                }
+                Some(moleapi_core::NextRequest::Request { target }) => {
+                    if let Some(index) = plan.iter().position(|(_, request)| request.id == *target)
+                    {
+                        index
+                    } else {
+                        let matches = plan
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, (_, request))| request.name == *target)
+                            .map(|(index, _)| index)
+                            .collect::<Vec<_>>();
+                        if matches.len() != 1 {
+                            stopped = Some(if matches.is_empty() {
+                                "next_request_missing"
+                            } else {
+                                "next_request_ambiguous"
+                            });
+                            break 'iterations;
+                        }
+                        matches[0]
+                    }
+                }
+            };
         }
-        summaries.push(json!({"iteration":index,"passed":passed-before_passed,"failed":failed-before_failed,"elapsed_ms":iteration_start.elapsed().as_millis()as u64}));
+        summaries.push(json!({"iteration":index,"passed":passed-before_passed,"failed":failed-before_failed,"elapsed_ms":iteration_start.elapsed().as_millis()as u64,"script_stopped":script_stopped}));
     }
-    let mut report = json!({"results":results,"iterations":summaries,"iteration_count":count,"completed_iterations":summaries.len(),"passed":passed,"failed":failed,"elapsed_ms":start.elapsed().as_millis()as u64,"cancelled":matches!(stopped,Some("cancelled"|"owner_changed")),"stopped_reason":stopped,"omitted_responses":omitted,"job_id":job_id});
+    let mut report = json!({"results":results,"iterations":summaries,"iteration_count":count,"completed_iterations":summaries.len(),"passed":passed,"failed":failed,"elapsed_ms":start.elapsed().as_millis()as u64,"cancelled":matches!(stopped,Some("cancelled"|"owner_changed")),"stopped_reason":stopped,"omitted_responses":omitted,"job_id":job_id,"executed_steps":executed,"skipped":skipped});
     if serde_json::to_vec(&report)
         .map_err(|_| ApiError::internal())?
         .len()

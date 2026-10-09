@@ -1,0 +1,13 @@
+# Script-directed request flow
+
+The existing host-free QuickJS/pm adapter implements `pm.execution.setNextRequest` and pre-request `skipRequest`, plus read-only execution.location.current. Successful phases return typed ephemeral controls, never executable server commands or persisted workspace/history directives.
+
+setNextRequest accepts null or an exact ID/unique name in the selected collection subtree. ID lookup takes precedence. Unset uses normal depth-first request order. Null ends the current iteration; configured subsequent iterations continue, matching the [Postman workflow documentation](https://learning.postman.com/docs/tests-and-scripts/running-collections/building-workflows), checked2026-10-10. A missing or ambiguous target stops with a fixed reason without echoing private target text. Pre/post phases can direct flow; the latest successful phase setting wins. Single-request execution does not follow additional requests.
+
+skipRequest halts the remaining successful pre-script phase, avoids network/auth/token preparation and post scripts, and exposes a distinct skipped result. Pre-phase variable/test/log effects remain available. A skipped result is not counted as a passed network request and does not create ordinary response history. Live-session pre-skip rejects connection creation explicitly instead of silently connecting; it currently returns a fixed skipped error rather than a session/result object. The UI distinguishes skips from status0 and annotates script-ended iterations.
+
+The runner rebuilds collection scopes from ancestry plus run overlays for each cursor step, preserving mutation chaining across jumps and dataset iterations. Existing owner/job cancellation, checked execution, privacy and300s deadline apply. All executed/skipped steps consume the1000-step quota; looping cannot escape it. Report size limits remain shared.
+
+Evidence: typed last-setting/null controls and worker skip short-circuit; actual ID/name jump, three-request loop, skipped network/post/history, pre-variable propagation and multi-iteration null semantics; missing/ambiguous/private target handling;1000-step infinite skip loop termination; live pre-skip with zero fixture connections. Existing dataset/legacy runner cases passed after cursor changes. UI skip/iteration labels, English/Chinese catalog, typecheck/production frontend and scoped Clippy passed. Runtime scripts still have their independent CPU/memory/output/process limits.
+
+This supplies script-directed branching/loops. Persisted visual scenario graphs, explicit conditional/loop/parallel blocks, schedules, reusable step components and complete product/release parity remain required work.

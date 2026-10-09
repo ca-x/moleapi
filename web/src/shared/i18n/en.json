@@ -1411,5 +1411,11 @@
   "数据集保存失败，请检查数据、名称、大小或工作区版本冲突。未保存的编辑保留在工作区草稿中。": "Dataset save failed. Check the data, name, size or workspace revision conflict. Unsaved edits remain in the workspace draft.",
   "运行数据集": "Run dataset",
   "临时数据 / 无数据": "Temporary data / no dataset",
-  "数据集保存失败，请检查数据、名称、大小或工作区版本冲突。未保存的编辑已保留。": "Dataset save failed. Check the data, name, size or workspace revision conflict. Unsaved edits are retained."
+  "数据集保存失败，请检查数据、名称、大小或工作区版本冲突。未保存的编辑已保留。": "Dataset save failed. Check the data, name, size or workspace revision conflict. Unsaved edits are retained.",
+  "请求已由脚本跳过。": "Request skipped by script.",
+  "跳过": "Skipped",
+  "脚本已结束集合流程。": "Script ended the collection flow.",
+  "集合流程达到最大步骤限制。": "Collection flow reached its maximum step limit.",
+  "下一请求不存在或名称不唯一，流程已停止。": "Next request is missing or its name is ambiguous. Flow stopped.",
+  "脚本已结束本轮流程。": "Script ended this iteration."
 }

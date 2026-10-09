@@ -15,3 +15,5 @@ Evidence: quoted/newline CSV and typed JSON fixtures; copied/read-only script ac
 Persistent/reusable datasets, scenario branch/loop/parallel graphs, schedules/remote runners and durable report publication/export remain required. Native OS picker and new platform/database checks are not established by these fixtures. Overall parity and final release remain open.
 
 Named sources can now be persisted in workspace datasets and selected by dataset_id, with the same runtime semantics. See SAVED-DATASETS-COVERAGE.md for storage, backup privacy and sync evidence; query-backed/remote sources and the other scenario/report requirements remain open.
+
+Script-directed branching/loops/skip now use typed pm.execution controls and the shared bounded runner cursor. See SCRIPT-FLOW-COVERAGE.md; visual scenario graphs and explicit parallel/control blocks remain separate unfinished capabilities.

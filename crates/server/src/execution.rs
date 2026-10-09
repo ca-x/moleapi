@@ -106,6 +106,8 @@ pub(crate) async fn perform(
     collection: Option<&Collection>,
     scopes: &mut VariableScopes,
 ) -> Result<Response, ApiError> {
+    scopes.execution = moleapi_core::ExecutionControl::default();
+    let execution_start = std::time::Instant::now();
     let cookie_jar = s
         .cookies
         .lookup(owner, &w.id, scopes.environment_id.as_deref());
@@ -138,6 +140,7 @@ pub(crate) async fn perform(
         let output = script_phase(s, pre, &request, None, scopes)
             .await
             .map_err(|failure| failure.error)?;
+        scopes.execution = output.control;
         scopes.private_values.extend(output.private_values);
         scopes
             .apply(&output.updates)
@@ -149,6 +152,26 @@ pub(crate) async fn perform(
         for test in &mut tests {
             test.id = format!("pre-{}", test.id);
         }
+    }
+    if scopes.execution.skip_request {
+        return Ok(Response {
+            skipped: true,
+            private_auth_values: vec![],
+            soap_fault: None,
+            request_updates: vec![],
+            logs,
+            variable_updates: updates,
+            status: 0,
+            status_text: "Skipped".into(),
+            headers: vec![],
+            body: String::new(),
+            body_base64: None,
+            elapsed_ms: execution_start.elapsed().as_millis() as u64,
+            size_bytes: 0,
+            truncated: false,
+            url: request.url,
+            tests,
+        });
     }
     let mut request_updates = vec![];
     for (field, before, after) in [
@@ -221,6 +244,9 @@ pub(crate) async fn perform(
     if post.iter().any(|s| !s.trim().is_empty()) {
         match script_phase(s, post, &resolved, Some(&response), scopes).await {
             Ok(mut output) => {
+                if output.control.next_request.is_some() {
+                    scopes.execution.next_request = output.control.next_request;
+                }
                 scopes.private_values.extend(output.private_values);
                 scopes
                     .apply(&output.updates)
@@ -362,6 +388,11 @@ pub(crate) async fn prepare_live(
             .map_err(|e| ApiError::bad(e.to_string()))?;
         request = output.request;
         crate::privacy::request_values(&request, scopes)?;
+        if output.control.skip_request {
+            return Err(ApiError::bad(
+                "Live connection skipped by pre-request script",
+            ));
+        }
         feedback.logs = output.logs;
         feedback.tests = output.tests;
         updates = output.updates;
