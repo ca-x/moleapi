@@ -7,7 +7,13 @@ use serde_json::{Value, json};
 async fn generated_commit_test_script_runs_real_collection_and_preserves_failure_exit() {
     let (url, fixture) = serve(axum::Router::new().route(
         "/",
-        axum::routing::get(|| async { axum::Json(json!({"ok":true})) }),
+        axum::routing::get(|headers: axum::http::HeaderMap| async move {
+            assert_eq!(
+                headers.get("x-private").unwrap(),
+                "runtime-private-ci-value"
+            );
+            axum::Json(json!({"ok":true}))
+        }),
     ))
     .await;
     let temporary = tempfile::tempdir().unwrap();
@@ -17,11 +23,11 @@ async fn generated_commit_test_script_runs_real_collection_and_preserves_failure
     let config = temporary.path().join("ci.json");
     let database = temporary.path().join("must-not-exist/db.sqlite");
     let suite = "-Suite $(touch injected) 'quoted'";
-    let mut collection = json!({"info":{"name":suite,"schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},"item":[{"name":"Echo","request":{"method":"GET","url":url},"event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('ok',()=>pm.expect(pm.response.json().ok).to.equal(true));"]}}]}]});
+    let mut collection = json!({"info":{"name":suite,"schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},"item":[{"name":"Echo","request":{"method":"GET","url":url,"header":[{"key":"X-Private","value":"{{injected}}"}]},"event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('ok',()=>{pm.expect(pm.response.json().ok).to.equal(true);pm.expect(pm.variables.has('injected')).to.equal(true);});"]}}]}]});
     write(&input, &collection);
     write(
         &config,
-        &json!({"provider":"github","source":{"kind":"file","path":input.file_name().unwrap().to_str().unwrap(),"format":"postman"},"collection":suite,"iterations":2}),
+        &json!({"provider":"github","source":{"kind":"file","path":input.file_name().unwrap().to_str().unwrap(),"format":"postman"},"collection":suite,"iterations":2,"variables_secret":"CI_VARIABLES_JSON"}),
     );
     let preset = result(
         cli(&[
@@ -77,6 +83,10 @@ async fn generated_commit_test_script_runs_real_collection_and_preserves_failure
     let run = tokio::process::Command::new("sh")
         .args(["-c", script])
         .env("PATH", &path)
+        .env(
+            "MOLEAPI_RUN_VARIABLES",
+            r#"{"temporary":{"injected":"runtime-private-ci-value"}}"#,
+        )
         .current_dir(temporary.path())
         .output()
         .await
@@ -92,6 +102,10 @@ async fn generated_commit_test_script_runs_real_collection_and_preserves_failure
     let failed = tokio::process::Command::new("sh")
         .args(["-c", script])
         .env("PATH", &path)
+        .env(
+            "MOLEAPI_RUN_VARIABLES",
+            r#"{"temporary":{"injected":"runtime-private-ci-value"}}"#,
+        )
         .current_dir(temporary.path())
         .output()
         .await

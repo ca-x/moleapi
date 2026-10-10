@@ -42,6 +42,8 @@ Scenario notifications inherit configured defaults unless overridden. `--no-noti
 
 Interpret native exit codes:0 means completed passing nonempty execution;1 means failed/empty/stopped execution;2 means usage/transport/storage/export failure;130 means user interrupt after owned cancellation. Do not call an empty run successful or suppress a failing exit code in CI. Ctrl-C requests cancellation of the tracked run, including remote execution.
 
+For private request variables, use exclusive `run --variables-file PATH` or `--variables-env NAME`. The named OS variable contains bounded JSON: `temporary` maps names to strings; `project`, `collection` and `environment` map names to strings or null deletions. Overrides stay private and do not save workspace values. Temporary scope has highest precedence. Environment overrides need a selected/active saved profile. Keep values outside argv and source collections. CI preset `variables_secret` names this JSON secret; it is separate from service-auth `secret_name`, and bindings must not collide. Native overrides are not original Newman environment-file format.
+
 ## Reports and request examples
 
 Use persisted report IDs from persistent-workspace runs:

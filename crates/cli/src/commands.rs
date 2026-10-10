@@ -257,6 +257,10 @@ fn output_message(message: &str) -> Result<()> {
     output(&json!({"message":message}))
 }
 async fn run(_cli: &Cli, backend: &Backend, options: &Run) -> Result<u8> {
+    let overrides = crate::variables::read(
+        options.variables_file.as_deref(),
+        options.variables_env.as_deref(),
+    )?;
     let mut imported = None;
     let workspace = if let Some(input) = &options.input {
         let value = import(backend, input, &options.input_format, None).await?;
@@ -272,7 +276,7 @@ async fn run(_cli: &Cli, backend: &Backend, options: &Run) -> Result<u8> {
         )
         .await?
     };
-    let result = run_workspace(backend, options, &workspace).await;
+    let result = run_workspace(backend, options, &workspace, overrides).await;
     if let Some((id, revision)) = imported {
         let cleanup = backend
             .request(
@@ -295,6 +299,7 @@ async fn run_workspace(
     backend: &Backend,
     options: &Run,
     workspace: &moleapi_core::Workspace,
+    overrides: crate::variables::Overrides,
 ) -> Result<u8> {
     let scenario = options
         .scenario
@@ -347,6 +352,16 @@ async fn run_workspace(
         .as_deref()
         .map(|name| resource(&workspace.data.environments, name))
         .transpose()?;
+    if overrides
+        .locals
+        .iter()
+        .any(|value| value.scope == "environment")
+    {
+        ensure!(
+            environment.is_some() || workspace.data.active_environment_id.is_some(),
+            "Environment overrides require a selected or active profile; use temporary overrides otherwise"
+        );
+    }
     let dataset_id = options
         .dataset
         .as_deref()
@@ -361,7 +376,7 @@ async fn run_workspace(
         })
         .transpose()?;
     let ticket = uuid::Uuid::new_v4().to_string();
-    let mut body = json!({"collection_id":collection,"scenario_id":scenario,"request_ids":request_ids,"environment_id":environment,"dataset_id":dataset_id,"dataset":dataset,"iterations":options.iterations,"job_id":ticket,"run_origin":if options.ci{"ci"}else{"interactive"}});
+    let mut body = json!({"collection_id":collection,"scenario_id":scenario,"request_ids":request_ids,"environment_id":environment,"dataset_id":dataset_id,"dataset":dataset,"iterations":options.iterations,"job_id":ticket,"run_origin":if options.ci{"ci"}else{"interactive"},"variables":overrides.temporary,"locals":overrides.locals});
     if options.no_notifications {
         body["notification_ids"] = json!([]);
     } else if !options.notify.is_empty() {

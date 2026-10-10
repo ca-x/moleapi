@@ -1658,5 +1658,7 @@
   "无数据集": "No dataset",
   "报告格式": "Report format",
   "CI 接口筛选": "CI request selection",
-  "选择接口可限制执行范围；留空时运行整个集合及子目录。": "Select requests to restrict execution. Leave the selection empty to run the collection and its descendants."
+  "选择接口可限制执行范围；留空时运行整个集合及子目录。": "Select requests to restrict execution. Leave the selection empty to run the collection and its descendants.",
+  "运行变量密钥引用（可选）": "Run-variable secret reference (optional)",
+  "该 CI 密钥保存 JSON 变量覆盖，运行时读取；与服务端登录令牌分开，不写入集合或配置文件。": "This CI secret holds JSON variable overrides read at runtime. Keep it separate from the service token; values are not saved in collections or configuration."
 }

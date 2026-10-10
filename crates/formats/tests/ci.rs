@@ -80,3 +80,44 @@ fn invalid_configuration_is_rejected_before_emitting_executable_content() {
     value["token"] = json!("never-inline");
     assert!(serde_json::from_value::<Config>(value).is_err());
 }
+
+#[test]
+fn private_run_variables_bind_by_reference_for_each_provider_and_reject_collisions() {
+    let mut config = config();
+    config.variables_secret = Some("CI_VARIABLES_JSON".into());
+    let github = ci::generate(&config).unwrap();
+    let doc: Value = serde_yaml_ng::from_str(&github.content).unwrap();
+    assert_eq!(
+        doc["jobs"]["api-tests"]["steps"][1]["env"]["MOLEAPI_RUN_VARIABLES"],
+        "${{ secrets.CI_VARIABLES_JSON }}"
+    );
+    assert!(
+        github
+            .command
+            .iter()
+            .any(|arg| arg == "--variables-env=MOLEAPI_RUN_VARIABLES")
+    );
+    config.provider = Provider::Gitlab;
+    let doc: Value = serde_yaml_ng::from_str(&ci::generate(&config).unwrap().content).unwrap();
+    assert_eq!(
+        doc["moleapi-tests"]["variables"]["MOLEAPI_RUN_VARIABLES"],
+        "$CI_VARIABLES_JSON"
+    );
+    config.provider = Provider::Jenkins;
+    let preset = ci::generate(&config).unwrap();
+    assert!(
+        preset
+            .content
+            .contains("credentialsId: 'CI_VARIABLES_JSON', variable: 'MOLEAPI_RUN_VARIABLES'")
+    );
+    config.variables_secret = Some(config.secret_name.clone());
+    assert!(ci::generate(&config).is_err());
+    config.source = Source::File {
+        path: "collection.json".into(),
+        format: "postman".into(),
+    };
+    config.variables_secret = Some("MOLEAPI_RUN_VARIABLES".into());
+    config.provider = Provider::Gitlab;
+    let doc: Value = serde_yaml_ng::from_str(&ci::generate(&config).unwrap().content).unwrap();
+    assert!(doc["moleapi-tests"].get("variables").is_none());
+}

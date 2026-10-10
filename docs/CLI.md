@@ -38,15 +38,37 @@ Default snippet/export output screens saved private values. Use `--include-secre
 
 Runs return0 for passing nonempty execution,1 for failed/empty/stopped execution,2 for usage/transport/storage/export errors and130 after Ctrl-C cancellation. `--input` workspaces are temporary: stdout identifies them as such and omits a persistent report ID. Export with `--report` to retain results. A persistent `import` followed by `run --workspace` retains owned reports.
 
+Private run variables use `--variables-file PATH` or `--variables-env NAME` (exclusive). The environment option names an OS variable containing JSON. Keep actual values in a private file or CI secret store, outside command arguments and repository collections:
+
+```json
+{
+  "temporary": {"access_token": "runtime-secret"},
+  "project": {"obsolete": null},
+  "collection": {"tenant": "runtime-tenant"},
+  "environment": {"api_key": "runtime-key"}
+}
+```
+
+```sh
+moleapi-cli --database ./moleapi.db run --workspace Demo --collection Smoke --environment Staging --variables-file ./private-variables.json
+moleapi-cli --server https://api.example.com --token-env MOLEAPI_TOKEN run --workspace Demo --collection Smoke --environment Staging --variables-env MOLEAPI_RUN_VARIABLES
+```
+
+Inputs are bounded to1MiB. `temporary` accepts strings; the other scopes accept strings or `null` deletions. Unknown envelope fields are rejected before import/execution. Overrides reuse existing scope precedence (temporary overrides environment, collection and project), remain private in native reports/history and do not save changes to workspace variables. Environment overrides require a selected or active saved environment. Use temporary variables when no profile exists. Native JSON overrides and original Newman environment files have separate formats.
+
+运行变量支持互斥的 `--variables-file` 和 `--variables-env`，后者读取指定系统环境变量中的 JSON。临时作用域接受字符串，项目、集合和环境作用域还支持 `null` 删除；临时值优先于环境、集合和项目值。输入最多1MiB，会在导入和执行前校验。所有注入值按私密变量处理，不写回已保存的工作区；环境覆盖需要选中或已激活的环境配置。服务端访问令牌与接口请求中的令牌分别配置。
+
 GitHub Actions can invoke an installed CLI without Docker:
 
 ```yaml
 - name: Run API smoke tests
   env:
     MOLEAPI_TOKEN: ${{ secrets.MOLEAPI_TOKEN }}
+    MOLEAPI_RUN_VARIABLES: ${{ secrets.API_RUN_VARIABLES_JSON }}
   run: >-
     moleapi-cli --server https://api.example.com --token-env MOLEAPI_TOKEN
     run --workspace Demo --collection Smoke --ci --no-notifications
+    --variables-env MOLEAPI_RUN_VARIABLES
     --report report.xml --reporter junit
 - uses: actions/upload-artifact@v4
   if: always()
@@ -106,6 +128,10 @@ moleapi-cli ci --config ci.json --output moleapi-tests.yml
 ```
 
 Set `provider` to `github`, `gitlab` or `jenkins`. For a repository collection, use `source: {kind: "file", path: "collection.json", format: "postman"}` and choose its collection/scenario ID or unique name. Native workspace exports preserve IDs; other converters may require selecting imported names. File runs are silent. Choose a saved dataset or `data_file` plus `data_format` (`csv`/`json`), optional1–100 `iterations`, collection-only `requests`, report `junit`/`json`/`html`/`csv` and exact branch names. Remote notifications can be `silent`, `defaults` or `{mode: "selected", ids: [...]}`. Credentials are configured in the CI platform under the reference name and are not written into the configuration.
+
+Add `"variables_secret": "API_RUN_VARIABLES_JSON"` to the preset JSON to bind private request-variable JSON. `secret_name` authenticates the CLI to MoleAPI; `variables_secret` supplies request values and must use a separate secret reference. File-mode presets can also use this option.
+
+在配置 JSON 中添加 `variables_secret` 可引用请求变量密钥；`secret_name` 用于登录 MoleAPI 服务端，两者不能共用引用。仓库文件模式同样支持运行时变量注入。
 
 Place the GitHub file under `.github/workflows/`; the default job uses a self-hosted Linux runner with `moleapi-cli` already installed. Use the GitLab file as `.gitlab-ci.yml` or include it and retain a `test` stage. Set Jenkins's Pipeline from SCM script path to `Jenkinsfile.moleapi`; exact branch selection requires a multibranch job, and credential/artifact/JUnit plugins must be present. Reports are archived after failures, with native failure status retained. Configuration generation contacts no services and executes no requests. Source/native report privacy and external CI integration limits are recorded in [CI-PRESET-COVERAGE.md](CI-PRESET-COVERAGE.md).
 

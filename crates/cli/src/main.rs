@@ -6,6 +6,7 @@ mod io;
 mod newman;
 mod skill;
 mod tokens;
+mod variables;
 use args::{Cli, Command};
 use clap::{CommandFactory, Parser};
 fn schema(command: &clap::Command) -> serde_json::Value {

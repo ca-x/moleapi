@@ -154,6 +154,12 @@ pub struct Run {
     pub requests: Vec<String>,
     #[arg(long)]
     pub environment: Option<String>,
+    /// Read private temporary/project/collection/environment overlays from JSON.
+    #[arg(long, conflicts_with = "variables_env")]
+    pub variables_file: Option<PathBuf>,
+    /// Name of an OS/CI variable containing private overlay JSON (not its value).
+    #[arg(long, conflicts_with = "variables_file")]
+    pub variables_env: Option<String>,
     #[arg(long, conflicts_with = "data_file")]
     pub dataset: Option<String>,
     #[arg(long, conflicts_with = "dataset")]

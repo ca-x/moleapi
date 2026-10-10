@@ -87,6 +87,7 @@ pub struct Config {
     pub language: String,
     #[serde(default = "secret")]
     pub secret_name: String,
+    pub variables_secret: Option<String>,
     #[serde(default)]
     pub branches: Vec<String>,
 }
@@ -106,6 +107,18 @@ fn literal(value: &str) -> Result<()> {
             && !value.chars().any(char::is_control)
             && !value.contains("${{"),
         "CI values must be nonempty bounded literals without controls or workflow expressions"
+    );
+    Ok(())
+}
+fn secret_reference(value: &str) -> Result<()> {
+    ensure!(
+        !value.is_empty()
+            && value.len() <= 64
+            && value
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+            && !value.starts_with(|ch: char| ch.is_ascii_digit()),
+        "Secret reference must be an ASCII identifier"
     );
     Ok(())
 }
@@ -143,6 +156,17 @@ impl Config {
                 && matches!(self.data_format.as_str(), "csv" | "json"),
             "Unsupported report language or data format"
         );
+        if let Some(reference) = &self.variables_secret {
+            secret_reference(reference)?;
+            if matches!(self.source, Source::Remote { .. }) {
+                ensure!(
+                    reference != &self.secret_name
+                        && reference != "MOLEAPI_TOKEN"
+                        && self.secret_name != "MOLEAPI_RUN_VARIABLES",
+                    "Authentication and run-variable secret references must remain separate"
+                );
+            }
+        }
         let mut args = vec!["moleapi-cli".into()];
         match &self.source {
             Source::Remote { server, workspace } => {
@@ -158,16 +182,7 @@ impl Config {
                         && url.fragment().is_none(),
                     "CI service URL must be HTTP(S) without URL credentials/query/fragment"
                 );
-                ensure!(
-                    !self.secret_name.is_empty()
-                        && self.secret_name.len() <= 64
-                        && self
-                            .secret_name
-                            .bytes()
-                            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
-                        && !self.secret_name.starts_with(|ch: char| ch.is_ascii_digit()),
-                    "Secret reference must be an ASCII identifier"
-                );
+                secret_reference(&self.secret_name)?;
                 args.extend([
                     format!("--server={server}"),
                     "--token-env=MOLEAPI_TOKEN".into(),
@@ -236,6 +251,9 @@ impl Config {
         for branch in &self.branches {
             literal(branch)?;
         }
+        if self.variables_secret.is_some() {
+            args.push("--variables-env=MOLEAPI_RUN_VARIABLES".into());
+        }
         args.extend([
             "--ci".into(),
             format!("--report={}", self.reporter.path()),
@@ -262,6 +280,13 @@ pub fn generate(config: &Config) -> Result<Preset> {
         shlex::try_quote(&report)?
     );
     let remote = matches!(config.source, Source::Remote { .. });
+    let mut bindings = vec![];
+    if remote {
+        bindings.push(("MOLEAPI_TOKEN", config.secret_name.as_str()));
+    }
+    if let Some(reference) = &config.variables_secret {
+        bindings.push(("MOLEAPI_RUN_VARIABLES", reference.as_str()));
+    }
     let (filename, mime, content) = match config.provider {
         Provider::Github => {
             let mut trigger = json!({"push":{},"pull_request":{},"workflow_dispatch":{}});
@@ -284,12 +309,20 @@ pub fn generate(config: &Config) -> Result<Preset> {
             }
             let mut run =
                 json!({"name":"Run API tests","id":"api-tests","shell":"bash","run":script});
-            if remote {
-                run["env"] =
-                    json!({"MOLEAPI_TOKEN":format!("${{{{ secrets.{} }}}}",config.secret_name)});
+            if !bindings.is_empty() {
+                let values = bindings
+                    .iter()
+                    .map(|(variable, reference)| {
+                        (
+                            (*variable).into(),
+                            json!(format!("${{{{ secrets.{reference} }}}}")),
+                        )
+                    })
+                    .collect::<serde_json::Map<String, serde_json::Value>>();
+                run["env"] = serde_json::Value::Object(values);
             }
             let mut job = json!({"runs-on":["self-hosted","linux"],"steps":[{"uses":"actions/checkout@v4"},run,{"name":"Archive API report","if":"always()","uses":"actions/upload-artifact@v4","with":{"name":"moleapi-report","path":report,"if-no-files-found":"ignore"}}]});
-            if remote {
+            if !bindings.is_empty() {
                 job["if"] = json!(
                     "github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository"
                 );
@@ -321,11 +354,13 @@ pub fn generate(config: &Config) -> Result<Preset> {
                 artifact["reports"] = json!({"junit":report});
             }
             let mut job = json!({"stage":"test","script":[script],"rules":[{"if":format!("($CI_PIPELINE_SOURCE == \"push\" || $CI_PIPELINE_SOURCE == \"merge_request_event\" || $CI_PIPELINE_SOURCE == \"web\"){branch}")}],"artifacts":artifact});
-            if remote {
-                job["variables"] = json!({"MOLEAPI_TOKEN":format!("${}",config.secret_name)});
-                if config.secret_name == "MOLEAPI_TOKEN" {
-                    job.as_object_mut().unwrap().remove("variables");
-                }
+            let aliases = bindings
+                .iter()
+                .filter(|(variable, reference)| variable != reference)
+                .map(|(variable, reference)| ((*variable).into(), json!(format!("${reference}"))))
+                .collect::<serde_json::Map<String, serde_json::Value>>();
+            if !aliases.is_empty() {
+                job["variables"] = serde_json::Value::Object(aliases);
             }
             (
                 "moleapi.gitlab-ci.yml",
@@ -336,11 +371,15 @@ pub fn generate(config: &Config) -> Result<Preset> {
         Provider::Jenkins => {
             let encoded = STANDARD.encode(script.as_bytes());
             let step = format!("sh(script: new String('{encoded}'.decodeBase64(), 'UTF-8'))");
-            let run = if remote {
-                format!(
-                    "withCredentials([string(credentialsId: '{}', variable: 'MOLEAPI_TOKEN')]) {{\n            {step}\n          }}",
-                    config.secret_name
-                )
+            let run = if !bindings.is_empty() {
+                let credentials = bindings
+                    .iter()
+                    .map(|(variable, reference)| {
+                        format!("string(credentialsId: '{reference}', variable: '{variable}')")
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("withCredentials([{credentials}]) {{\n            {step}\n          }}")
             } else {
                 step
             };
@@ -369,8 +408,8 @@ pub fn generate(config: &Config) -> Result<Preset> {
     let mut prerequisites = vec![
         "Use a POSIX runner with moleapi-cli installed and check out the repository before execution.".into(),
     ];
-    if remote {
-        prerequisites.push("Configure the named CI secret/string credential with a hosted personal API token; generation never includes its value.".into());
+    if !bindings.is_empty() {
+        prerequisites.push("Configure the named CI secret/string credentials with the hosted token and/or private run-variable JSON; generation never includes their values.".into());
     }
     if matches!(config.provider, Provider::Jenkins) {
         prerequisites.push("Use Pipeline from SCM for commit polling; branch selection requires a multibranch job. Jenkins needs Credentials Binding and the selected artifact/JUnit publishers.".into());
