@@ -6497,6 +6497,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "moleapi-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "clap",
+ "moleapi-core",
+ "moleapi-formats",
+ "moleapi-server",
+ "reqwest 0.12.28",
+ "roxmltree",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tower",
+ "uuid",
+]
+
+[[package]]
 name = "moleapi-core"
 version = "0.1.0"
 dependencies = [

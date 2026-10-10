@@ -51,6 +51,8 @@ OpenAPI 项目生成使用原生 Progenitor Rust 客户端引擎，以及固定�
 
 单个 HTTP 接口可生成与 Apifox／Postman 请求代码目录对应的23类语言／工具、55种库适配器，支持预览、复制和源文件下载：C、C#、Clojure、Dart、F#、Go、HTTP、Java、JavaScript、Julia、Kotlin、Node.js、Objective-C、OCaml、PHP、PowerShell、Python、R、Ruby、Rust、Shell、Swift 和 Postman CLI。可分别选择 HttpClient／RestSharp、Fetch／Axios、Requests／HTTPX、OkHttp／Unirest 等库。参见[完整语言／库目录](docs/REQUEST-CODE-PARITY.md)和[正文类型、依赖与运行证据](docs/SNIPPET-COVERAGE.md)。原始文件正文仅显示支持文件字节读取的适配器。
 
+原生命令行复用离线和远程执行模块，支持环境/数据集、接口筛选、隐私报告和完整请求代码目录。参见[使用与 CI 示例](docs/CLI.md)及[当前验证范围](docs/CLI-COVERAGE.md)。CLI 打包和 Newman 兼容仍在开发。
+
 数据模型生成覆盖 Apifox 的19类语言：18种语言复用嵌入式 Quicktype，MySQL／PostgreSQL 建表语句复用 OpenAPI Generator。可选全部或单个模型、调整序列化与代码风格，再预览、复制、下载或再生成。参见[模型运行证据与剩余限制](docs/MODEL-GENERATION-COVERAGE.md)。
 
 ![数据模型生成与 C# 预览](docs/images/codegen-models-zh-CN.png)

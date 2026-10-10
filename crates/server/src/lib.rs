@@ -151,6 +151,7 @@ pub async fn local_with_worker(database_path: &Path, worker: &Path) -> anyhow::R
         },
         true,
         worker.to_owned(),
+        true,
     )
     .await
 }
@@ -163,7 +164,7 @@ pub async fn hosted(config: Config) -> anyhow::Result<Router> {
 
 /// Embedder entrypoint with an explicitly trusted worker executable.
 pub async fn hosted_with_worker(config: Config, worker: &Path) -> anyhow::Result<Router> {
-    build(config, false, worker.to_owned()).await
+    build(config, false, worker.to_owned(), true).await
 }
 pub async fn setup_required(database_url: &str) -> anyhow::Result<bool> {
     use sea_orm::EntityTrait;
@@ -172,7 +173,27 @@ pub async fn setup_required(database_url: &str) -> anyhow::Result<bool> {
         .await?
         .is_some_and(|s| s.revision == 0))
 }
-async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::Result<Router> {
+/// Headless local API for explicit CLI commands; never starts background task/delivery loops.
+pub async fn offline_with_worker(database_path: &Path, worker: &Path) -> anyhow::Result<Router> {
+    build(
+        Config {
+            database_url: storage::sqlite_url(database_path)?,
+            setup_token: String::new(),
+            allow_registration: false,
+            allow_private_network: true,
+        },
+        true,
+        worker.to_owned(),
+        false,
+    )
+    .await
+}
+async fn build(
+    config: Config,
+    local: bool,
+    script_worker: PathBuf,
+    background: bool,
+) -> anyhow::Result<Router> {
     anyhow::ensure!(
         script_worker.is_absolute(),
         "Script worker executable must be an absolute path"
@@ -201,8 +222,8 @@ async fn build(config: Config, local: bool, script_worker: PathBuf) -> anyhow::R
         a2a_sources: Arc::new(a2a::Sources::default()),
         webhooks: Arc::new(webhooks::Hub::default()),
     };
-    let schedule_lifetime = scheduling::start(state.clone());
-    let notification_lifetime = notifications::start(state.clone());
+    let schedule_lifetime = background.then(|| scheduling::start(state.clone()));
+    let notification_lifetime = background.then(|| notifications::start(state.clone()));
     let protected = Router::new()
         .route("/oauth1/flows", post(oauth1::flows::begin))
         .route("/oauth1/flows/{id}", get(oauth1::flows::status))

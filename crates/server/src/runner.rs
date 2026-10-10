@@ -22,6 +22,8 @@ use std::collections::BTreeMap;
 pub struct Run {
     collection_id: String,
     #[serde(default)]
+    request_ids: Option<Vec<String>>,
+    #[serde(default)]
     notification_ids: Option<Vec<String>>,
     #[serde(default = "interactive")]
     run_origin: String,
@@ -185,7 +187,12 @@ pub async fn run(
         .as_deref()
         .unwrap_or_else(|| scenario.map_or(&[], |scenario| scenario.notification_ids.as_slice()));
     crate::notifications::validate_targets(&s.db, &owner.0, &id, notifications).await?;
-    let plan = if let Some(scenario) = scenario {
+    if scenario.is_some() && c.request_ids.is_some() {
+        return Err(ApiError::bad(
+            "Request filtering requires a collection run; use scenario steps for scenario selection",
+        ));
+    }
+    let mut plan = if let Some(scenario) = scenario {
         moleapi_core::scenario_plan(&w.data, scenario)
             .map_err(|error| ApiError::bad(error.to_string()))?
             .into_iter()
@@ -202,6 +209,24 @@ pub async fn run(
             })
             .collect::<Vec<_>>()
     };
+    if let Some(ids) = &c.request_ids {
+        if ids.is_empty() || ids.len() > 1000 {
+            return Err(ApiError::bad("Select 1 to 1000 request IDs"));
+        }
+        let selected = ids.iter().collect::<std::collections::BTreeSet<_>>();
+        if selected.len() != ids.len()
+            || selected.iter().any(|id| {
+                !plan
+                    .iter()
+                    .any(|(_, request, _)| request.id.as_str() == id.as_str())
+            })
+        {
+            return Err(ApiError::bad(
+                "Request IDs must be distinct and belong to the selected collection subtree",
+            ));
+        }
+        plan.retain(|(_, request, _)| selected.contains(&request.id));
+    }
     if plan
         .iter()
         .map(|(_, _, step)| step.map_or(1, |step| step.repeat))

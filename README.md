@@ -53,6 +53,8 @@ OpenAPI Generator targets also accept custom Mustache templates and static asset
 
 Single HTTP endpoints offer the Apifox/Postman request-code catalog:23 language/tool families and55 library adapters, with preview, copy and source download. Families include C, C#, Clojure, Dart, F#, Go, HTTP, Java, JavaScript, Julia, Kotlin, Node.js, Objective-C, OCaml, PHP, PowerShell, Python, R, Ruby, Rust, Shell, Swift and Postman CLI. Choose libraries such as HttpClient/RestSharp, Fetch/Axios, Requests/HTTPX and OkHttp/Unirest independently. See the [complete language/library catalog](docs/REQUEST-CODE-PARITY.md) and [body support, dependencies and runtime evidence](docs/SNIPPET-COVERAGE.md). Raw file bodies show only adapters that can read file bytes.
 
+Native CLI commands share offline and remote execution, environments/datasets, request filters, private reports and the full request-code catalog. See [usage and CI examples](docs/CLI.md) and [current evidence and limits](docs/CLI-COVERAGE.md). CLI packaging and Newman compatibility remain in progress.
+
 Data model generation covers Apifox's19 language families using embedded Quicktype for18 languages and OpenAPI Generator for MySQL/PostgreSQL table definitions. Choose all or one component and its serialization/style options, then preview/copy/download or regenerate. See [actual model runtime evidence and remaining limits](docs/MODEL-GENERATION-COVERAGE.md).
 
 ![Data model generation and TypeScript preview](docs/images/codegen-models-en.png)
