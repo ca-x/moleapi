@@ -26,6 +26,11 @@ pub enum Command {
     Schema,
     /// Run an explicitly installed official Newman CLI (optional Node runtime).
     Newman(Newman),
+    /// Manage hosted personal API tokens using a login session.
+    Tokens {
+        #[command(subcommand)]
+        command: TokenCommand,
+    },
     /// Log into a remote service and save its token privately.
     Login {
         #[arg(long)]
@@ -160,4 +165,23 @@ pub struct Newman {
     /// Official Newman arguments, e.g. -- run collection.json --reporters cli,junit
     #[arg(required = true, allow_hyphen_values = true)]
     pub arguments: Vec<std::ffi::OsString>,
+}
+
+#[derive(Subcommand)]
+pub enum TokenCommand {
+    List,
+    Create {
+        #[arg(long)]
+        name: String,
+        #[arg(long,default_value_t=90,value_parser=clap::value_parser!(u16).range(1..=365))]
+        days: u16,
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long)]
+        overwrite: bool,
+    },
+    Revoke {
+        #[arg(long)]
+        id: String,
+    },
 }

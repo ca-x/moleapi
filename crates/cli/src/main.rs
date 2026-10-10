@@ -3,6 +3,7 @@ mod backend;
 mod commands;
 mod io;
 mod newman;
+mod tokens;
 use args::{Cli, Command};
 use clap::{CommandFactory, Parser};
 fn schema(command: &clap::Command) -> serde_json::Value {

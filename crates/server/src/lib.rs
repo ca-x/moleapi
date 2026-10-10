@@ -1,4 +1,5 @@
 mod a2a;
+mod access_tokens;
 mod auth;
 mod cookies;
 mod entities;
@@ -271,6 +272,14 @@ async fn build(
         .route("/webhooks/listener/start", post(webhooks::listener_start))
         .route("/webhooks/listener/stop", post(webhooks::listener_stop))
         .route("/auth/logout", post(auth::logout))
+        .route(
+            "/auth/tokens",
+            get(access_tokens::list).post(access_tokens::create),
+        )
+        .route(
+            "/auth/tokens/{id}",
+            axum::routing::delete(access_tokens::revoke),
+        )
         .route(
             "/workspaces",
             get(workspaces::list).post(workspaces::create),

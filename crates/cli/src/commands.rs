@@ -60,7 +60,7 @@ async fn import(
         .await?;
     Ok(serde_json::from_value(result)?)
 }
-fn output(value: &Value) -> Result<()> {
+pub(crate) fn output(value: &Value) -> Result<()> {
     println!("{}", serde_json::to_string_pretty(value)?);
     Ok(())
 }
@@ -93,6 +93,13 @@ async fn report_file(
 }
 pub async fn execute(cli: &Cli, backend: &Backend) -> Result<u8> {
     match &cli.command {
+        Command::Tokens { command } => {
+            ensure!(
+                cli.server.is_some(),
+                "Access tokens require --server and a login session"
+            );
+            return crate::tokens::execute(backend, command).await;
+        }
         Command::Schema | Command::Newman(_) => unreachable!(),
         Command::Login {
             username,

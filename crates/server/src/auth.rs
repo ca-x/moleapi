@@ -1,6 +1,6 @@
 use crate::{
     ApiError, AppState,
-    entities::{account, session, setting},
+    entities::{access_token, account, session, setting},
 };
 use argon2::{
     Argon2, PasswordHasher, PasswordVerifier,
@@ -21,6 +21,28 @@ use sha2::{Digest, Sha256};
 
 #[derive(Clone)]
 pub struct Identity(pub String);
+#[derive(Clone)]
+pub(crate) struct SessionAuthentication;
+
+async fn credential(state: &AppState, token: &str) -> Result<Option<(String, bool)>, ApiError> {
+    let now = chrono::Utc::now().timestamp();
+    if let Some(secret) = token.strip_prefix(crate::access_tokens::PREFIX) {
+        if secret.len() != 64 || !secret.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return Ok(None);
+        }
+        return Ok(access_token::Entity::find()
+            .filter(access_token::Column::Digest.eq(token_hash(token)))
+            .filter(access_token::Column::ExpiresAt.gt(now))
+            .one(&state.db)
+            .await?
+            .map(|token| (token.owner, false)));
+    }
+    Ok(session::Entity::find_by_id(token_hash(token))
+        .filter(session::Column::ExpiresAt.gt(now))
+        .one(&state.db)
+        .await?
+        .map(|session| (session.owner, true)))
+}
 #[derive(Deserialize)]
 pub struct Credentials {
     pub username: String,
@@ -174,13 +196,12 @@ pub async fn guard(State(state): State<AppState>, mut request: Request, next: Ne
     let Some(token) = token else {
         return ApiError::unauthorized().into_response();
     };
-    match session::Entity::find_by_id(token_hash(token))
-        .filter(session::Column::ExpiresAt.gt(chrono::Utc::now().timestamp()))
-        .one(&state.db)
-        .await
-    {
-        Ok(Some(s)) => {
-            request.extensions_mut().insert(Identity(s.owner));
+    match credential(&state, token).await {
+        Ok(Some((owner, session))) => {
+            request.extensions_mut().insert(Identity(owner));
+            if session {
+                request.extensions_mut().insert(SessionAuthentication);
+            }
             next.run(request).await
         }
         Ok(None) => ApiError::unauthorized().into_response(),
@@ -200,9 +221,17 @@ pub async fn logout(
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "))
     {
-        session::Entity::delete_by_id(token_hash(token))
-            .exec(&state.db)
-            .await?;
+        if token.starts_with(crate::access_tokens::PREFIX) {
+            access_token::Entity::delete_many()
+                .filter(access_token::Column::Digest.eq(token_hash(token)))
+                .filter(access_token::Column::Owner.eq(&owner.0))
+                .exec(&state.db)
+                .await?;
+        } else {
+            session::Entity::delete_by_id(token_hash(token))
+                .exec(&state.db)
+                .await?;
+        }
     }
     *generation = next;
     state.cookies.clear_scope(&owner.0, None);
@@ -212,6 +241,19 @@ pub async fn logout(
     state.project_jobs.stop_owner(&owner.0);
     state.protocol_sessions.close_owner(&owner.0).await;
     Ok(Json(serde_json::json!({"ok":true})))
+}
+
+pub(crate) async fn invalidate_owner(state: &AppState, owner: &str) -> Result<(), ApiError> {
+    let gate = state.protocol_admission.owner(owner)?;
+    let mut generation = gate.lock().await;
+    *generation = generation.checked_add(1).ok_or_else(ApiError::internal)?;
+    state.cookies.clear_scope(owner, None);
+    state.oauth2_flows.cancel_owner(owner);
+    state.oauth1_flows.cancel_owner(owner);
+    state.webhooks.cancel_scope(owner, None, None);
+    state.project_jobs.stop_owner(owner);
+    state.protocol_sessions.close_owner(owner).await;
+    Ok(())
 }
 
 /// Recheck a previously authenticated call under its owner admission gate.
@@ -228,12 +270,8 @@ pub(crate) async fn still_authenticated(
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "))
         .ok_or_else(ApiError::unauthorized)?;
-    let active = session::Entity::find_by_id(token_hash(token))
-        .filter(session::Column::Owner.eq(owner))
-        .filter(session::Column::ExpiresAt.gt(chrono::Utc::now().timestamp()))
-        .one(&state.db)
-        .await?;
-    if active.is_none() {
+    let active = credential(state, token).await?;
+    if active.is_none_or(|(identity, _)| identity != owner) {
         return Err(ApiError::unauthorized());
     }
     Ok(())

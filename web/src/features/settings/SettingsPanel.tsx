@@ -1,3 +1,4 @@
+import AccessTokensPanel from "./AccessTokensPanel";
 import RequestAuthEditor from "../authentication/RequestAuthEditor";
 import LanguageSelector from "../../shared/i18n/LanguageSelector";
 import { t, useLanguage, message } from "../../shared/i18n";
@@ -8,6 +9,7 @@ import { useWorkbench } from "../workbench/context";
 export default function SettingsPanel() {
   useLanguage();
   const {
+    accountId,
     draft,
     setDraft,
     sync,
@@ -79,6 +81,7 @@ export default function SettingsPanel() {
           }}
         > {t("删除当前工作区")} </Button>
       )}
+      {!native && <AccessTokensPanel key={accountId} accountId={accountId}/>}
       {!native && (
         <Button color="gray" variant="soft" onClick={logout}> {t("退出登录")} </Button>
       )}
