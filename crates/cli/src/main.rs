@@ -1,5 +1,6 @@
 mod args;
 mod backend;
+mod ci;
 mod commands;
 mod io;
 mod newman;
@@ -51,6 +52,18 @@ fn main() {
     } = &cli.command
     {
         if let Err(error) = skill::execute(format, output.as_deref(), *overwrite) {
+            eprintln!("{error}");
+            std::process::exit(2);
+        }
+        return;
+    }
+    if let Command::Ci {
+        config,
+        output,
+        overwrite,
+    } = &cli.command
+    {
+        if let Err(error) = ci::execute(config, output.as_deref(), *overwrite) {
             eprintln!("{error}");
             std::process::exit(2);
         }

@@ -24,6 +24,15 @@ pub struct Cli {
 pub enum Command {
     /// Inspect machine-readable Clap command metadata.
     Schema,
+    /// Generate a CI test preset from explicit configuration without executing requests.
+    Ci {
+        #[arg(long)]
+        config: PathBuf,
+        #[arg(long)]
+        output: Option<PathBuf>,
+        #[arg(long)]
+        overwrite: bool,
+    },
     /// Read or export the embedded coding-agent skill without contacting a service.
     Skill {
         #[arg(long, value_enum, default_value = "markdown")]

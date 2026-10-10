@@ -1,3 +1,4 @@
+import CiPanel from "../ci/CiPanel";
 import AccessTokensPanel from "./AccessTokensPanel";
 import RequestAuthEditor from "../authentication/RequestAuthEditor";
 import LanguageSelector from "../../shared/i18n/LanguageSelector";
@@ -81,6 +82,7 @@ export default function SettingsPanel() {
           }}
         > {t("删除当前工作区")} </Button>
       )}
+      {draft && <CiPanel/>}
       {!native && <AccessTokensPanel key={accountId} accountId={accountId}/>}
       {!native && (
         <Button color="gray" variant="soft" onClick={logout}> {t("退出登录")} </Button>

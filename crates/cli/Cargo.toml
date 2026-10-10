@@ -22,3 +22,4 @@ moleapi-server = {path="../server",default-features=false}
 
 [dev-dependencies]
 roxmltree = "0.18"
+serde_yaml_ng = "0.10"

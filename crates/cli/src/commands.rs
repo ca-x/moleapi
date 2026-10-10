@@ -100,7 +100,9 @@ pub async fn execute(cli: &Cli, backend: &Backend) -> Result<u8> {
             );
             return crate::tokens::execute(backend, command).await;
         }
-        Command::Schema | Command::Newman(_) | Command::Skill { .. } => unreachable!(),
+        Command::Schema | Command::Newman(_) | Command::Skill { .. } | Command::Ci { .. } => {
+            unreachable!()
+        }
         Command::Login {
             username,
             password_env,

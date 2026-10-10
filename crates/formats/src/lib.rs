@@ -1,3 +1,4 @@
+pub mod ci;
 mod run_reports;
 pub use run_reports::{RunReportPrivacy, export_run_report};
 mod curl;

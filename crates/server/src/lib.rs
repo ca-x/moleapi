@@ -2,6 +2,7 @@ mod a2a;
 mod access_tokens;
 mod auth;
 mod cookies;
+mod ci;
 mod entities;
 mod execution;
 mod formats;
@@ -291,6 +292,7 @@ async fn build(
                 .delete(workspaces::delete),
         )
         .route("/workspaces/{id}/versions", get(workspaces::versions))
+        .route("/workspaces/{id}/ci-preset", post(ci::generate))
         .route(
             "/workspaces/{id}/history",
             get(history::history).delete(history::clear_history),

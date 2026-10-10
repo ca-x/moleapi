@@ -82,3 +82,31 @@ moleapi-cli --database ./moleapi.db list requests --workspace Demo
 ```
 
 The Markdown export is a standalone standard `SKILL.md`; the JSON bundle additionally contains optional Codex interface metadata at `agents/openai.yaml`. The repository's full source lives at [tools/skills/moleapi](../tools/skills/moleapi/SKILL.md). Export only to the caller's explicit destination; no global agent installation or service contact occurs automatically. Request metadata exposes identifiers/methods/collections without exporting request URL/body/auth values. Clap now rejects runs without either input/workspace and snippet calls with only one of workspace/request before any storage initialization. Schema includes actual option conflicts and value cardinality from Clap.
+
+Generate a Git-triggered test configuration for GitHub Actions, GitLab CI or Jenkins using shared presets:
+
+```json
+{
+  "provider": "github",
+  "source": {"kind": "remote", "server": "https://api.example.com", "workspace": "WORKSPACE_ID"},
+  "collection": "COLLECTION_ID",
+  "environment": "ENVIRONMENT_ID",
+  "dataset": "DATASET_ID",
+  "notifications": {"mode": "silent"},
+  "reporter": "junit",
+  "language": "en",
+  "secret_name": "MOLEAPI_TOKEN",
+  "branches": ["main"]
+}
+```
+
+```sh
+moleapi-cli ci --config ci.json
+moleapi-cli ci --config ci.json --output moleapi-tests.yml
+```
+
+Set `provider` to `github`, `gitlab` or `jenkins`. For a repository collection, use `source: {kind: "file", path: "collection.json", format: "postman"}` and choose its collection/scenario ID or unique name. Native workspace exports preserve IDs; other converters may require selecting imported names. File runs are silent. Choose a saved dataset or `data_file` plus `data_format` (`csv`/`json`), optional1–100 `iterations`, collection-only `requests`, report `junit`/`json`/`html`/`csv` and exact branch names. Remote notifications can be `silent`, `defaults` or `{mode: "selected", ids: [...]}`. Credentials are configured in the CI platform under the reference name and are not written into the configuration.
+
+Place the GitHub file under `.github/workflows/`; the default job uses a self-hosted Linux runner with `moleapi-cli` already installed. Use the GitLab file as `.gitlab-ci.yml` or include it and retain a `test` stage. Set Jenkins's Pipeline from SCM script path to `Jenkinsfile.moleapi`; exact branch selection requires a multibranch job, and credential/artifact/JUnit plugins must be present. Reports are archived after failures, with native failure status retained. Configuration generation contacts no services and executes no requests. Source/native report privacy and external CI integration limits are recorded in [CI-PRESET-COVERAGE.md](CI-PRESET-COVERAGE.md).
+
+设置界面也可以选择集合或场景、环境、数据集、接口筛选、通知、报告和触发分支，预览并下载三种平台的配置。先保存工作区；本地文件模式可以另行导出隐藏私密值的原生集合快照。生成不会执行请求、注册远程任务或安装执行器。CI 执行器需先安装 CLI，敏感凭据通过平台密钥配置。
