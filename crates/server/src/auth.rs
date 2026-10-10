@@ -215,7 +215,7 @@ pub async fn logout(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let gate = state.protocol_admission.owner(&owner.0)?;
     let mut generation = gate.lock().await;
-    let next = generation.checked_add(1).ok_or_else(ApiError::internal)?;
+    let tx = state.db.begin().await?;
     if let Some(token) = headers
         .get("authorization")
         .and_then(|v| v.to_str().ok())
@@ -225,35 +225,34 @@ pub async fn logout(
             access_token::Entity::delete_many()
                 .filter(access_token::Column::Digest.eq(token_hash(token)))
                 .filter(access_token::Column::Owner.eq(&owner.0))
-                .exec(&state.db)
+                .exec(&tx)
                 .await?;
         } else {
             session::Entity::delete_by_id(token_hash(token))
-                .exec(&state.db)
+                .exec(&tx)
                 .await?;
         }
     }
-    *generation = next;
-    state.cookies.clear_scope(&owner.0, None);
-    state.oauth2_flows.cancel_owner(&owner.0);
-    state.oauth1_flows.cancel_owner(&owner.0);
-    state.webhooks.cancel_scope(&owner.0, None, None);
-    state.project_jobs.stop_owner(&owner.0);
-    state.protocol_sessions.close_owner(&owner.0).await;
+    if state.local {
+        tx.commit().await?;
+        *generation = generation.checked_add(1).ok_or_else(ApiError::internal)?;
+        stop_owner(&state, &owner.0).await;
+    } else {
+        let revision = crate::credential_revocations::publish(&tx, &owner.0).await?;
+        tx.commit().await?;
+        crate::credential_revocations::apply_locked(&state, &owner.0, revision, &mut generation)
+            .await?;
+    }
     Ok(Json(serde_json::json!({"ok":true})))
 }
 
-pub(crate) async fn invalidate_owner(state: &AppState, owner: &str) -> Result<(), ApiError> {
-    let gate = state.protocol_admission.owner(owner)?;
-    let mut generation = gate.lock().await;
-    *generation = generation.checked_add(1).ok_or_else(ApiError::internal)?;
+pub(crate) async fn stop_owner(state: &AppState, owner: &str) {
     state.cookies.clear_scope(owner, None);
     state.oauth2_flows.cancel_owner(owner);
     state.oauth1_flows.cancel_owner(owner);
     state.webhooks.cancel_scope(owner, None, None);
     state.project_jobs.stop_owner(owner);
     state.protocol_sessions.close_owner(owner).await;
-    Ok(())
 }
 
 /// Recheck a previously authenticated call under its owner admission gate.
@@ -291,6 +290,7 @@ mod tests {
     #[tokio::test]
     async fn session_storage_contains_only_digest_and_expired_sessions_are_rejected() {
         let state = AppState {
+            credential_revisions: std::sync::Arc::default(),
             db: crate::storage::connect("sqlite::memory:").await.unwrap(),
             config: crate::Config {
                 database_url: "sqlite::memory:".into(),

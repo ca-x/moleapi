@@ -1616,7 +1616,7 @@
   "尚无访问令牌": "No access tokens yet",
   "到期时间": "Expires at",
   "撤销令牌": "Revoke token",
-  "撤销后该令牌立即失效，当前服务实例上此账户正在执行的任务和连接也会停止。": "Revocation immediately invalidates this token and stops this account's active tasks and connections on the current server instance.",
+  "撤销后该令牌立即失效，当前服务实例上此账户正在执行的任务和连接也会停止。": "Revocation immediately invalidates this token, stops this account's active tasks and connections, and propagates to other service instances.",
   "确认撤销": "Confirm revocation",
   "已复制": "Copied",
   "已过期": "Expired",

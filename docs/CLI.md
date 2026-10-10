@@ -90,7 +90,7 @@ moleapi-cli --server https://api.example.com --token-file ./ci-token.txt list wo
 moleapi-cli --server https://api.example.com --token-file ./session.txt tokens revoke --id TOKEN_ID
 ```
 
-Created plaintext is written only to the private output file; stdout is metadata. An API token cannot manage other tokens. Revocation stops this account's active tasks/connections on the current instance and invalidates future token requests. See [exact behavior and evidence](ACCESS-TOKEN-COVERAGE.md).
+Created plaintext is written only to the private output file; stdout is metadata. An API token cannot manage other tokens. Revocation invalidates future token requests, stops this account's active tasks/connections on the current instance and propagates to other hosted instances sharing its database. See [exact behavior and evidence](ACCESS-TOKEN-COVERAGE.md).
 
 Agent tooling can use the embedded standard skill without a database or service connection:
 

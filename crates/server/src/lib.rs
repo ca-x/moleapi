@@ -1,8 +1,9 @@
 mod a2a;
 mod access_tokens;
 mod auth;
-mod cookies;
 mod ci;
+mod cookies;
+mod credential_revocations;
 mod entities;
 mod execution;
 mod formats;
@@ -80,6 +81,7 @@ struct AppState {
     script_worker: PathBuf,
     protocol_sessions: Arc<moleapi_protocols::SessionManager>,
     protocol_admission: Arc<protocol_admission::AdmissionGates>,
+    credential_revisions: Arc<tokio::sync::Mutex<std::collections::HashMap<String, i64>>>,
     a2a_sources: Arc<a2a::Sources>,
     webhooks: Arc<webhooks::Hub>,
 }
@@ -201,7 +203,9 @@ async fn build(
         "Script worker executable must be an absolute path"
     );
     let db = storage::connect(&config.database_url).await?;
+    let credential_revisions = credential_revocations::revisions(&db).await?;
     let state = AppState {
+        credential_revisions: Arc::new(tokio::sync::Mutex::new(credential_revisions)),
         db,
         config,
         local,
@@ -224,6 +228,8 @@ async fn build(
         a2a_sources: Arc::new(a2a::Sources::default()),
         webhooks: Arc::new(webhooks::Hub::default()),
     };
+    let credential_lifetime =
+        (background && !local).then(|| credential_revocations::start(state.clone()));
     let schedule_lifetime = background.then(|| scheduling::start(state.clone()));
     let notification_lifetime = background.then(|| notifications::start(state.clone()));
     let protected = Router::new()
@@ -479,7 +485,8 @@ async fn build(
     let router = router.fallback(|| async { ApiError::not_found() });
     Ok(router
         .layer(axum::Extension(schedule_lifetime))
-        .layer(axum::Extension(notification_lifetime)))
+        .layer(axum::Extension(notification_lifetime))
+        .layer(axum::Extension(credential_lifetime)))
 }
 #[cfg(feature = "web")]
 #[derive(rust_embed::RustEmbed)]

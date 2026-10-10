@@ -126,14 +126,20 @@ pub async fn revoke(
     Path(id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     management(&state, session)?;
+    let gate = state.protocol_admission.owner(&owner.0)?;
+    let mut generation = gate.lock().await;
+    let tx = state.db.begin().await?;
     let deleted = access_token::Entity::delete_many()
         .filter(access_token::Column::Owner.eq(&owner.0))
         .filter(access_token::Column::Id.eq(id))
-        .exec(&state.db)
+        .exec(&tx)
         .await?;
     if deleted.rows_affected != 1 {
         return Err(ApiError::not_found());
     }
-    crate::auth::invalidate_owner(&state, &owner.0).await?;
+    let revision = crate::credential_revocations::publish(&tx, &owner.0).await?;
+    tx.commit().await?;
+    crate::credential_revocations::apply_locked(&state, &owner.0, revision, &mut generation)
+        .await?;
     Ok(Json(json!({"revoked":true})))
 }

@@ -63,7 +63,7 @@ Default snippets/workspace exports screen saved private values; do not add `--in
 
 ## Automation credentials and original Newman
 
-A hosted personal API token can call the account's existing owned-resource APIs. Token management requires a login session. `tokens create --name CI --days 90 --output ci-token.txt` writes the secret only to a private file; stdout is metadata. Use `tokens list` and `tokens revoke --id ID` for management. Revocation stops this account's active tasks/connections on the current server instance. Manage credentials only as part of the user's authorized task.
+A hosted personal API token can call the account's existing owned-resource APIs. Token management requires a login session. `tokens create --name CI --days 90 --output ci-token.txt` writes the secret only to a private file; stdout is metadata. Use `tokens list` and `tokens revoke --id ID` for management. Revocation stops this account's active tasks/connections locally and propagates to hosted instances sharing the database (one-second polling plus DB/cleanup latency). Manage credentials only as part of the user's authorized task.
 
 When a task needs original Newman behavior or third-party reporters, use an explicitly installed optional runtime:
 
