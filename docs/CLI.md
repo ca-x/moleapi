@@ -69,3 +69,16 @@ moleapi-cli --server https://api.example.com --token-file ./session.txt tokens r
 ```
 
 Created plaintext is written only to the private output file; stdout is metadata. An API token cannot manage other tokens. Revocation stops this account's active tasks/connections on the current instance and invalidates future token requests. See [exact behavior and evidence](ACCESS-TOKEN-COVERAGE.md).
+
+Agent tooling can use the embedded standard skill without a database or service connection:
+
+```sh
+moleapi-cli skill
+moleapi-cli skill --format json --output moleapi-skill.json
+mkdir -p .agents/skills/moleapi
+moleapi-cli skill --output .agents/skills/moleapi/SKILL.md
+moleapi-cli schema
+moleapi-cli --database ./moleapi.db list requests --workspace Demo
+```
+
+The Markdown export is a standalone standard `SKILL.md`; the JSON bundle additionally contains optional Codex interface metadata at `agents/openai.yaml`. The repository's full source lives at [tools/skills/moleapi](../tools/skills/moleapi/SKILL.md). Export only to the caller's explicit destination; no global agent installation or service contact occurs automatically. Request metadata exposes identifiers/methods/collections without exporting request URL/body/auth values. Clap now rejects runs without either input/workspace and snippet calls with only one of workspace/request before any storage initialization. Schema includes actual option conflicts and value cardinality from Clap.

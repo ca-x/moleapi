@@ -24,6 +24,15 @@ pub struct Cli {
 pub enum Command {
     /// Inspect machine-readable Clap command metadata.
     Schema,
+    /// Read or export the embedded coding-agent skill without contacting a service.
+    Skill {
+        #[arg(long, value_enum, default_value = "markdown")]
+        format: SkillFormat,
+        #[arg(long)]
+        output: Option<PathBuf>,
+        #[arg(long)]
+        overwrite: bool,
+    },
     /// Run an explicitly installed official Newman CLI (optional Node runtime).
     Newman(Newman),
     /// Manage hosted personal API tokens using a login session.
@@ -90,9 +99,9 @@ pub enum Command {
     },
     /// List request-code adapters or generate one saved request snippet.
     Snippet {
-        #[arg(long)]
+        #[arg(long, requires = "request")]
         workspace: Option<String>,
-        #[arg(long)]
+        #[arg(long, requires = "workspace")]
         request: Option<String>,
         #[arg(long, default_value = "shell")]
         target: String,
@@ -109,6 +118,7 @@ pub enum Command {
 #[derive(Clone, ValueEnum)]
 pub enum Resource {
     Workspaces,
+    Requests,
     Collections,
     Environments,
     Scenarios,
@@ -116,9 +126,13 @@ pub enum Resource {
 }
 #[derive(Args)]
 pub struct Run {
-    #[arg(long, conflicts_with = "input")]
+    #[arg(long, conflicts_with = "input", required_unless_present = "input")]
     pub workspace: Option<String>,
-    #[arg(long, conflicts_with = "workspace")]
+    #[arg(
+        long,
+        conflicts_with = "workspace",
+        required_unless_present = "workspace"
+    )]
     pub input: Option<PathBuf>,
     #[arg(long, default_value = "moleapi")]
     pub input_format: String,
@@ -184,4 +198,10 @@ pub enum TokenCommand {
         #[arg(long)]
         id: String,
     },
+}
+
+#[derive(Clone, ValueEnum)]
+pub enum SkillFormat {
+    Markdown,
+    Json,
 }

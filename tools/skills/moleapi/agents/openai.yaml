@@ -1,0 +1,4 @@
+interface:
+  display_name: "MoleAPI"
+  short_description: "Run API workflows and generate request code"
+  default_prompt: "Use $moleapi to run an API collection and export its test report."

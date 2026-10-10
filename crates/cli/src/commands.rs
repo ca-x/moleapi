@@ -100,7 +100,7 @@ pub async fn execute(cli: &Cli, backend: &Backend) -> Result<u8> {
             );
             return crate::tokens::execute(backend, command).await;
         }
-        Command::Schema | Command::Newman(_) => unreachable!(),
+        Command::Schema | Command::Newman(_) | Command::Skill { .. } => unreachable!(),
         Command::Login {
             username,
             password_env,
@@ -137,7 +137,7 @@ pub async fn execute(cli: &Cli, backend: &Backend) -> Result<u8> {
                     .as_ref()
                     .context("This resource requires --workspace")?;
                 let data = workspace(backend, name).await?.data;
-                let items=match kind{Resource::Collections=>data.collections.iter().map(|value|json!({"id":value.id,"name":value.name,"requests":value.requests.len()})).collect::<Vec<_>>(),Resource::Environments=>data.environments.iter().map(|value|json!({"id":value.id,"name":value.name,"variables":value.variables.len()})).collect(),Resource::Scenarios=>data.scenarios.iter().map(|value|json!({"id":value.id,"name":value.name,"collection_id":value.collection_id,"steps":value.steps.len()})).collect(),Resource::Datasets=>data.datasets.iter().map(|value|json!({"id":value.id,"name":value.name,"has_source":value.source.is_some()})).collect(),Resource::Workspaces=>unreachable!()};
+                let items=match kind{Resource::Requests=>data.collections.iter().flat_map(|collection|collection.requests.iter().map(move |request|json!({"id":request.id,"name":request.name,"method":request.method,"collection_id":collection.id,"collection_name":collection.name}))).collect::<Vec<_>>(),Resource::Collections=>data.collections.iter().map(|value|json!({"id":value.id,"name":value.name,"requests":value.requests.len()})).collect::<Vec<_>>(),Resource::Environments=>data.environments.iter().map(|value|json!({"id":value.id,"name":value.name,"variables":value.variables.len()})).collect(),Resource::Scenarios=>data.scenarios.iter().map(|value|json!({"id":value.id,"name":value.name,"collection_id":value.collection_id,"steps":value.steps.len()})).collect(),Resource::Datasets=>data.datasets.iter().map(|value|json!({"id":value.id,"name":value.name,"has_source":value.source.is_some()})).collect(),Resource::Workspaces=>unreachable!()};
                 output(&json!(items))?;
             }
         }

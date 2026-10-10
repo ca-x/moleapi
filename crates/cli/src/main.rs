@@ -3,6 +3,7 @@ mod backend;
 mod commands;
 mod io;
 mod newman;
+mod skill;
 mod tokens;
 use args::{Cli, Command};
 use clap::{CommandFactory, Parser};
@@ -13,6 +14,9 @@ fn schema(command: &clap::Command) -> serde_json::Value {
         "arguments": command.get_arguments().map(|arg| serde_json::json!({
             "id": arg.get_id().as_str(), "long": arg.get_long(), "short": arg.get_short(),
             "required": arg.is_required_set(), "global": arg.is_global_set(),
+            "conflicts": command.get_arg_conflicts_with(arg).into_iter().map(|argument|argument.get_id().as_str()).collect::<Vec<_>>(),
+            "min_values": arg.get_num_args().map(|range|range.min_values()),
+            "max_values": arg.get_num_args().map(|range|range.max_values()),
             "action": format!("{:?}", arg.get_action()),
             "help": arg.get_help().map(ToString::to_string),
             "defaults": arg.get_default_values().iter().map(|value| value.to_string_lossy()).collect::<Vec<_>>(),
@@ -38,6 +42,18 @@ fn main() {
             "{}",
             serde_json::to_string_pretty(&schema(&command)).unwrap()
         );
+        return;
+    }
+    if let Command::Skill {
+        format,
+        output,
+        overwrite,
+    } = &cli.command
+    {
+        if let Err(error) = skill::execute(format, output.as_deref(), *overwrite) {
+            eprintln!("{error}");
+            std::process::exit(2);
+        }
         return;
     }
     if let Command::Newman(options) = &cli.command {
