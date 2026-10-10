@@ -241,6 +241,11 @@ pub async fn execute(cli: &Cli, backend: &Backend) -> Result<u8> {
                 } else {
                     println!("{code}");
                 }
+                if let Some(warnings) = snippet["warnings"].as_array() {
+                    for warning in warnings.iter().filter_map(Value::as_str) {
+                        eprintln!("Warning: {warning}");
+                    }
+                }
             }
         }
     }

@@ -121,6 +121,25 @@ fn request_metadata_supports_exact_agent_selection_without_saved_urls_or_bodies(
     assert!(requests[0]["id"].is_string());
     assert!(requests[0]["collection_id"].is_string());
     assert_eq!(requests[0]["method"], "POST");
+    let snippet = cli(&[
+        "--database",
+        database.to_str().unwrap(),
+        "snippet",
+        "--workspace",
+        workspace["id"].as_str().unwrap(),
+        "--request",
+        requests[0]["id"].as_str().unwrap(),
+        "--target",
+        "go",
+        "--client",
+        "native",
+    ]);
+    assert!(snippet.status.success());
+    let warnings = String::from_utf8(snippet.stderr).unwrap();
+    assert!(warnings.contains("TLS"));
+    let code = String::from_utf8(snippet.stdout).unwrap();
+    assert!(!code.contains("Warning:"));
+    assert!(!warnings.contains("secret-auth") && !warnings.contains("secret-body"));
     let text = String::from_utf8(output).unwrap();
     for secret in [
         "private.example.com",
