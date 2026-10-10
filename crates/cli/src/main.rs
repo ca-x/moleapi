@@ -2,6 +2,7 @@ mod args;
 mod backend;
 mod commands;
 mod io;
+mod newman;
 use args::{Cli, Command};
 use clap::{CommandFactory, Parser};
 fn schema(command: &clap::Command) -> serde_json::Value {
@@ -37,6 +38,26 @@ fn main() {
             serde_json::to_string_pretty(&schema(&command)).unwrap()
         );
         return;
+    }
+    if let Command::Newman(options) = &cli.command {
+        let result = if cli.server.is_some()
+            || cli.database.is_some()
+            || cli.token_env.is_some()
+            || cli.token_file.is_some()
+        {
+            Err(anyhow::anyhow!(
+                "Newman uses its own arguments; native server/database/token options cannot be combined"
+            ))
+        } else {
+            newman::execute(options)
+        };
+        match result {
+            Ok(code) => std::process::exit(i32::from(code)),
+            Err(error) => {
+                eprintln!("{error}");
+                std::process::exit(2);
+            }
+        }
     }
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

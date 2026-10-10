@@ -56,3 +56,5 @@ GitHub Actions can invoke an installed CLI without Docker:
 ```
 
 GitLab CI can run the same command and attach `report.xml` under `artifacts:reports:junit`. Jenkins can run it in a shell stage and publish `junit 'report.xml'` in an always/post step. Supply credentials through the CI secret store. CLI installation/packaging is deferred until functionality is complete. These commands do not claim complete Newman compatibility, external custom reporters or full matrix completion.
+
+An optional original Newman CLI/runtime now uses explicit installed Node/Newman paths, forwarding upstream arguments and custom reporter behavior. Programmatic original SDK/runtime/transformer APIs are exposed too. See [setup and actual fixture evidence](../tools/newman/README.md). This requires that optional runtime; native commands remain independent of it. Newman reports follow upstream credential behavior rather than native redacted-report rules. Docker/platform/package integration remains pending.

@@ -93,7 +93,7 @@ async fn report_file(
 }
 pub async fn execute(cli: &Cli, backend: &Backend) -> Result<u8> {
     match &cli.command {
-        Command::Schema => unreachable!(),
+        Command::Schema | Command::Newman(_) => unreachable!(),
         Command::Login {
             username,
             password_env,

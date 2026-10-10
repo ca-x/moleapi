@@ -23,3 +23,5 @@ __pycache__/
 /tools/models/node_modules
 
 /vendor/openapi-generator/engine.jar
+
+/tools/newman/node_modules

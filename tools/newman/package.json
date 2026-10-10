@@ -1,0 +1,15 @@
+{
+  "name": "@moleapi/newman-compat",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Optional upstream Newman CLI and SDK/runtime entrypoints for MoleAPI",
+  "main": "index.cjs",
+  "license": "MIT",
+  "engines": {"node": ">=18"},
+  "dependencies": {
+    "newman": "6.2.3",
+    "postman-collection": "4.4.0",
+    "postman-runtime": "7.39.1",
+    "postman-collection-transformer": "4.1.8"
+  }
+}

@@ -24,6 +24,8 @@ pub struct Cli {
 pub enum Command {
     /// Inspect machine-readable Clap command metadata.
     Schema,
+    /// Run an explicitly installed official Newman CLI (optional Node runtime).
+    Newman(Newman),
     /// Log into a remote service and save its token privately.
     Login {
         #[arg(long)]
@@ -146,4 +148,16 @@ pub struct Run {
     pub language: String,
     #[arg(long)]
     pub overwrite: bool,
+}
+
+#[derive(Args)]
+#[command(trailing_var_arg = true)]
+pub struct Newman {
+    #[arg(long)]
+    pub node: PathBuf,
+    #[arg(long)]
+    pub entrypoint: PathBuf,
+    /// Official Newman arguments, e.g. -- run collection.json --reporters cli,junit
+    #[arg(required = true, allow_hyphen_values = true)]
+    pub arguments: Vec<std::ffi::OsString>,
 }
