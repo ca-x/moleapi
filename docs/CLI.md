@@ -136,3 +136,7 @@ Add `"variables_secret": "API_RUN_VARIABLES_JSON"` to the preset JSON to bind pr
 Place the GitHub file under `.github/workflows/`; the default job uses a self-hosted Linux runner with `moleapi-cli` already installed. Use the GitLab file as `.gitlab-ci.yml` or include it and retain a `test` stage. Set Jenkins's Pipeline from SCM script path to `Jenkinsfile.moleapi`; exact branch selection requires a multibranch job, and credential/artifact/JUnit plugins must be present. Reports are archived after failures, with native failure status retained. Configuration generation contacts no services and executes no requests. Source/native report privacy and external CI integration limits are recorded in [CI-PRESET-COVERAGE.md](CI-PRESET-COVERAGE.md).
 
 设置界面也可以选择集合或场景、环境、数据集、接口筛选、通知、报告和触发分支，预览并下载三种平台的配置。先保存工作区；本地文件模式可以另行导出隐藏私密值的原生集合快照。生成不会执行请求、注册远程任务或安装执行器。CI 执行器需先安装 CLI，敏感凭据通过平台密钥配置。
+
+Self-hosted Runner commands now register/list/configure owned execution slots, queue/list/cancel collection/scenario tasks and run a native local `runner agent`. The agent executes through an isolated offline router and returns hosted redacted reports. See [English/Chinese setup, retry and cancellation behavior](SELF-HOSTED-RUNNERS.md). Scheduled targeting, UI management and packaging remain in scope.
+
+自托管 Runner 已提供注册、列表、配置、任务排队和取消命令，原生 Agent 在本机执行并回传托管报告。操作步骤和租约、重试、取消行为见上述中英文文档；定时任务绑定、界面管理和发布打包仍待补齐。

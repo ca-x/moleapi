@@ -200,8 +200,18 @@ pub(crate) async fn record(
     source: &Source<'_>,
     live: &Value,
 ) -> Result<Option<String>, ApiError> {
-    let report = projection::project(source, live)?;
     let tx = state.db.begin().await?;
+    let result = record_in(&tx, owner, source, live).await?;
+    tx.commit().await?;
+    Ok(result)
+}
+pub(crate) async fn record_in<C: ConnectionTrait>(
+    db: &C,
+    owner: &str,
+    source: &Source<'_>,
+    live: &Value,
+) -> Result<Option<String>, ApiError> {
+    let report = projection::project(source, live)?;
     // A no-op workspace update acquires the database's write/row lock without changing its revision or data.
     document::Entity::update_many()
         .col_expr(
@@ -211,14 +221,14 @@ pub(crate) async fn record(
         .filter(document::Column::Id.eq(storage::workspace_key(owner, &source.workspace.id)))
         .filter(document::Column::Owner.eq(owner))
         .filter(document::Column::Kind.eq("workspace"))
-        .exec(&tx)
+        .exec(db)
         .await?;
-    if !source_exists(&tx, owner, source.workspace).await? {
+    if !source_exists(db, owner, source.workspace).await? {
         return Ok(None);
     }
 
     storage::insert_doc(
-        &tx,
+        db,
         report.id.clone(),
         owner,
         KIND,
@@ -228,7 +238,7 @@ pub(crate) async fn record(
     )
     .await?;
     storage::insert_doc(
-        &tx,
+        db,
         brief_key(&report.id),
         owner,
         BRIEF,
@@ -245,7 +255,7 @@ pub(crate) async fn record(
         .order_by_desc(document::Column::Id)
         .offset(100)
         .limit(1000)
-        .all(&tx)
+        .all(db)
         .await?;
     if !old.is_empty() {
         document::Entity::delete_many()
@@ -259,11 +269,10 @@ pub(crate) async fn record(
                     .to_string();
                 [id, row.id]
             })))
-            .exec(&tx)
+            .exec(db)
             .await?;
     }
-    crate::notifications::enqueue_run(&tx, owner, source, &report).await?;
-    tx.commit().await?;
+    crate::notifications::enqueue_run(db, owner, source, &report).await?;
     Ok(Some(report.id))
 }
 

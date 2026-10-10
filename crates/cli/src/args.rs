@@ -49,6 +49,11 @@ pub enum Command {
         #[command(subcommand)]
         command: TokenCommand,
     },
+    /// Register self-hosted runners, queue tasks or run a local execution agent.
+    Runner {
+        #[command(subcommand)]
+        command: RunnerCommand,
+    },
     /// Log into a remote service and save its token privately.
     Login {
         #[arg(long)]
@@ -219,4 +224,49 @@ pub enum TokenCommand {
 pub enum SkillFormat {
     Markdown,
     Json,
+}
+
+#[derive(Subcommand)]
+pub enum RunnerCommand {
+    Register {
+        #[arg(long)]
+        name: String,
+    },
+    List,
+    Set {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        name: String,
+        #[arg(long, action = clap::ArgAction::Set)]
+        enabled: bool,
+        #[arg(long)]
+        revision: i64,
+    },
+    Queue {
+        #[arg(long)]
+        workspace: String,
+        #[arg(long)]
+        config: PathBuf,
+    },
+    Tasks {
+        #[arg(long)]
+        workspace: String,
+    },
+    Cancel {
+        #[arg(long)]
+        workspace: String,
+        #[arg(long)]
+        id: String,
+    },
+    Agent {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        once: bool,
+        #[arg(long, conflicts_with = "variables_env")]
+        variables_file: Option<PathBuf>,
+        #[arg(long, conflicts_with = "variables_file")]
+        variables_env: Option<String>,
+    },
 }

@@ -21,6 +21,7 @@ mod protocol_admission;
 mod protocols;
 mod run_reports;
 mod runner;
+mod runners;
 mod scheduling;
 mod soap;
 mod storage;
@@ -362,6 +363,25 @@ async fn build(
         .route("/workspaces/{id}/run", post(runner::run))
         .route("/workspaces/{id}/run/cancel", post(runner::cancel))
         .route("/testing/dataset/preview", post(runner::preview))
+        .route("/runners", get(runners::list).post(runners::register))
+        .route("/runners/{id}", axum::routing::patch(runners::update))
+        .route("/runners/{id}/claim", post(runners::claim))
+        .route(
+            "/runners/{runner}/tasks/{task}/heartbeat",
+            post(runners::heartbeat),
+        )
+        .route(
+            "/runners/{runner}/tasks/{task}/complete",
+            post(runners::complete),
+        )
+        .route(
+            "/workspaces/{workspace}/runner-tasks",
+            get(runners::tasks).post(runners::queue),
+        )
+        .route(
+            "/workspaces/{workspace}/runner-tasks/{task}/cancel",
+            post(runners::cancel),
+        )
         .route("/workspaces/{id}/export", post(formats::export))
         .route("/oauth2/flows", post(oauth2::flows::begin))
         .route("/oauth2/flows/{id}", get(oauth2::flows::status))

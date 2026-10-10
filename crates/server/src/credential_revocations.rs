@@ -22,6 +22,16 @@ pub(crate) async fn revisions<C: ConnectionTrait>(
         .collect())
 }
 
+pub(crate) async fn current<C: ConnectionTrait>(
+    db: &C,
+    owner: &str,
+) -> Result<i64, sea_orm::DbErr> {
+    Ok(setting::Entity::find_by_id(format!("{PREFIX}{owner}"))
+        .one(db)
+        .await?
+        .map_or(0, |row| row.revision))
+}
+
 /// Call inside the credential-deletion transaction. The account row serializes publishers.
 pub(crate) async fn publish<C: ConnectionTrait>(db: &C, owner: &str) -> Result<i64, ApiError> {
     account::Entity::update_many()

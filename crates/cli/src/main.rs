@@ -4,6 +4,7 @@ mod ci;
 mod commands;
 mod io;
 mod newman;
+mod runners;
 mod skill;
 mod tokens;
 mod variables;
@@ -89,6 +90,10 @@ fn main() {
                 std::process::exit(2);
             }
         }
+    }
+    if matches!(cli.command, Command::Runner { .. }) && cli.server.is_none() {
+        eprintln!("Runner commands require --server and an authenticated hosted service");
+        std::process::exit(2);
     }
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

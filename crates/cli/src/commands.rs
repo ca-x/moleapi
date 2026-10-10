@@ -103,6 +103,7 @@ pub async fn execute(cli: &Cli, backend: &Backend) -> Result<u8> {
         Command::Schema | Command::Newman(_) | Command::Skill { .. } | Command::Ci { .. } => {
             unreachable!()
         }
+        Command::Runner { command } => return crate::runners::execute(backend, command).await,
         Command::Login {
             username,
             password_env,

@@ -12,7 +12,7 @@ struct Inputs {
     collection: BTreeMap<String, Option<String>>,
     environment: BTreeMap<String, Option<String>>,
 }
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Overrides {
     pub temporary: Vec<Pair>,
     pub locals: Vec<VariableUpdate>,
