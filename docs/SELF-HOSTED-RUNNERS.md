@@ -69,6 +69,12 @@ A task marked `completed` means its result was accepted; inspect report assertio
 
 ## Current boundary / 当前边界
 
-API/CLI task execution is implemented. Scheduled-run targeting, bilingual desktop/web runner management, labels/group scheduling, workspace-scoped credentials, service installation, history-response uploads, packaging and PostgreSQL/MySQL/platform deployment verification remain active requirements. Binary and Docker releases will use GitHub Actions after functional completion; no local Docker build was used. This module is not evidence of complete395-capability parity or a published release.
+API/CLI execution and bilingual hosted web management are implemented. In Collection tests, open Self-hosted runners to register/rename/enable/disable runners, queue a saved collection or scenario, cancel tasks and open reports. Dispatch saves dirty workspace changes first and uses that returned revision; browser local variable overrides are excluded. Offline desktop management directs users to the hosted website while retaining direct local execution.
 
-已实现 API/CLI 任务执行。定时任务选择 Runner、中英文桌面和网页管理、标签分组调度、工作区级凭据、服务安装、响应历史回传及数据库和平台验证仍在后续范围内。功能完成后使用 GitHub Actions 发布二进制和 Docker，本地不构建 Docker；当前不代表完整功能矩阵或新版已发布。
+Schedules can select Current server or an owned enabled runner. `runner_id` is optional in schedule definitions; absent/null preserves existing local/server execution. Each due occurrence atomically queues one single-attempt task at the current saved workspace revision and persists `running.runner_task_id`. Offline runners leave tasks queued without falling back to the server. Server restart preserves dispatches. Schedule cancellation, edits and deletion cancel the associated task; lease expiry fails without replay. Completed tasks populate schedule history and report links through the existing notification path. Cancellation still takes effect on an agent at its next heartbeat.
+
+Labels/group scheduling, workspace-scoped credentials, service installation, history-response uploads, native hosted management, packaging and PostgreSQL/MySQL/platform deployment verification remain active requirements. Binary and Docker releases will use GitHub Actions after functional completion; no local Docker build was used. This module is not evidence of complete395-capability parity or a published release.
+
+已实现 API/CLI 执行、中英文托管网页管理和定时任务选择 Runner。集合测试页可注册、重命名、启停执行器，派发保存的集合或场景、取消任务并查看报告。派发前保存工作区，使用返回的修订，不附加浏览器本地覆盖。离线桌面继续直接执行集合，Runner 管理通过托管网页进行。
+
+每次计划以当前保存修订原子生成一个单次任务并持久记录任务 ID，等待离线机器连接，不退回服务端执行。重启后继续协调，取消、修改和删除计划会取消关联任务；租约到期记为失败，不重放请求。完成结果写回计划记录和报告入口，通知沿用现有模块。标签分组、工作区级凭据、服务安装、响应历史回传、原生托管管理和数据库及平台验证仍在范围内。功能完成后使用 GitHub Actions 发布，本地不构建 Docker；当前不代表完整功能矩阵或新版已发布。

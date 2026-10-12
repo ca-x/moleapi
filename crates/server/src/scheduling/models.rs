@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 #[serde(deny_unknown_fields)]
 pub struct Definition {
     #[serde(default)]
+    pub runner_id: Option<String>,
+    #[serde(default)]
     pub notification_ids: Vec<String>,
     pub name: String,
     pub cron: String,
@@ -26,6 +28,8 @@ pub struct Definition {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Job {
+    #[serde(default)]
+    pub runner_task_id: Option<String>,
     #[serde(default)]
     pub cancel_requested: bool,
     pub id: String,
@@ -182,6 +186,7 @@ mod tests {
     use super::*;
     fn definition(cron: &str, timezone: &str) -> Definition {
         Definition {
+            runner_id: None,
             notification_ids: vec![],
             name: "Time".into(),
             cron: cron.into(),

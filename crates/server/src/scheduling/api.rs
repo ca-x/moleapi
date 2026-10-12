@@ -32,7 +32,9 @@ pub(crate) async fn create(
     let now = Utc::now();
     let next = definition.next(now)?;
     let tx = state.db.begin().await?;
+    crate::runners::account_lock(&tx, &state, &owner.0).await?;
     let data = workspace_lock(&tx, &owner.0, &workspace).await?;
+    crate::runners::validate_target(&tx, &state, &owner.0, definition.runner_id.as_deref()).await?;
     definition.validate_refs(&data)?;
     crate::notifications::validate_targets(&tx, &owner.0, &workspace, &definition.notification_ids)
         .await?;
@@ -84,7 +86,10 @@ pub(crate) async fn update(
 ) -> Result<Json<Schedule>, ApiError> {
     let next = input.definition.next(Utc::now())?;
     let tx = state.db.begin().await?;
+    crate::runners::account_lock(&tx, &state, &owner.0).await?;
     let data = workspace_lock(&tx, &owner.0, &workspace).await?;
+    crate::runners::validate_target(&tx, &state, &owner.0, input.definition.runner_id.as_deref())
+        .await?;
     input.definition.validate_refs(&data)?;
     crate::notifications::validate_targets(
         &tx,
@@ -109,6 +114,9 @@ pub(crate) async fn update(
     }
     if let Some(job) = &mut schedule.running {
         job.cancel_requested = true;
+        if let Some(id) = &job.runner_task_id {
+            crate::runners::cancel_in(&tx, &owner.0, id).await?;
+        }
     }
     schedule.definition = input.definition;
     schedule.revision = schedule
@@ -143,10 +151,18 @@ pub(crate) async fn remove(
     Json(input): Json<Revision>,
 ) -> Result<Json<Value>, ApiError> {
     let tx = state.db.begin().await?;
+    crate::runners::account_lock(&tx, &state, &owner.0).await?;
     workspace_lock(&tx, &owner.0, &workspace).await?;
     let schedule = locked(&tx, &owner.0, &workspace, &id).await?;
     if schedule.revision != input.expected_revision {
         return Err(ApiError::conflict("Schedule revision changed"));
+    }
+    if let Some(id) = schedule
+        .running
+        .as_ref()
+        .and_then(|job| job.runner_task_id.as_ref())
+    {
+        crate::runners::cancel_in(&tx, &owner.0, id).await?;
     }
     document::Entity::delete_many()
         .filter(document::Column::Id.eq(&id))
@@ -188,6 +204,7 @@ pub(crate) async fn preview(
 ) -> Result<Json<Value>, ApiError> {
     owned(&state, &owner.0, &workspace).await?;
     let definition = Definition {
+        runner_id: None,
         notification_ids: vec![],
         name: "Preview".into(),
         cron: input.cron,
@@ -213,8 +230,16 @@ pub(crate) async fn queue(
     Path((workspace, id)): Path<(String, String)>,
 ) -> Result<Json<Schedule>, ApiError> {
     let tx = state.db.begin().await?;
+    crate::runners::account_lock(&tx, &state, &owner.0).await?;
     workspace_lock(&tx, &owner.0, &workspace).await?;
     let mut schedule = locked(&tx, &owner.0, &workspace, &id).await?;
+    crate::runners::validate_target(
+        &tx,
+        &state,
+        &owner.0,
+        schedule.definition.runner_id.as_deref(),
+    )
+    .await?;
     if schedule.queued.is_some() {
         return Err(ApiError::conflict(
             "Schedule already has a queued manual run",
@@ -243,6 +268,7 @@ pub(crate) async fn cancel(
     Path((workspace, id)): Path<(String, String)>,
 ) -> Result<Json<Schedule>, ApiError> {
     let tx = state.db.begin().await?;
+    crate::runners::account_lock(&tx, &state, &owner.0).await?;
     workspace_lock(&tx, &owner.0, &workspace).await?;
     let mut schedule = locked(&tx, &owner.0, &workspace, &id).await?;
     let pending = schedule.queued.take();
@@ -257,6 +283,9 @@ pub(crate) async fn cancel(
     }
     if let Some(job) = &mut schedule.running {
         job.cancel_requested = true;
+        if let Some(id) = &job.runner_task_id {
+            crate::runners::cancel_in(&tx, &owner.0, id).await?;
+        }
     }
     save(&tx, &owner.0, &schedule).await?;
     tx.commit().await?;

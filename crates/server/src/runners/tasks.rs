@@ -11,16 +11,16 @@ use axum::{
 use moleapi_core::{
     ExecutionRunner, RunnerSelection, RunnerTaskStatus as Status, RunnerTaskSummary,
 };
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, TransactionTrait};
+use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, TransactionTrait};
 use serde::Deserialize;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Queue {
-    runner_id: String,
-    expected_revision: i64,
-    selection: RunnerSelection,
+    pub(crate) runner_id: String,
+    pub(crate) expected_revision: i64,
+    pub(crate) selection: RunnerSelection,
     #[serde(default = "one")]
-    max_attempts: usize,
+    pub(crate) max_attempts: usize,
 }
 fn one() -> usize {
     1
@@ -38,35 +38,52 @@ pub(crate) async fn queue(
     let tx = state.db.begin().await?;
     account_lock(&tx, &owner.0).await?;
     let source = workspace_lock(&tx, &owner.0, &workspace).await?;
+    let task = queue_in(
+        &tx,
+        &owner.0,
+        &source,
+        input,
+        uuid::Uuid::new_v4().to_string(),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(Json(task))
+}
+pub(crate) async fn queue_in<C: ConnectionTrait>(
+    tx: &C,
+    owner: &str,
+    source: &moleapi_core::Workspace,
+    input: Queue,
+    id: String,
+) -> Result<RunnerTaskSummary, ApiError> {
+    if !(1..=3).contains(&input.max_attempts) {
+        return Err(ApiError::bad("Task allows 1 to 3 attempts"));
+    }
+    let workspace = source.id.as_str();
     if source.revision != input.expected_revision {
         return Err(ApiError::conflict("Workspace revision changed"));
     }
-    validate(&source, &input.selection)?;
-    crate::notifications::validate_targets(
-        &tx,
-        &owner.0,
-        &workspace,
-        &input.selection.notification_ids,
-    )
-    .await?;
-    let runner: ExecutionRunner = get(&tx, &owner.0, RUNNER, &input.runner_id).await?;
+    validate(source, &input.selection)?;
+    crate::notifications::validate_targets(tx, owner, workspace, &input.selection.notification_ids)
+        .await?;
+    let runner: ExecutionRunner = get(tx, owner, RUNNER, &input.runner_id).await?;
     if !runner.enabled {
         return Err(ApiError::bad("Runner is disabled"));
     }
     let pending = document::Entity::find()
-        .filter(document::Column::Owner.eq(&owner.0))
+        .filter(document::Column::Owner.eq(owner))
         .filter(document::Column::Kind.eq(TASK))
-        .filter(document::Column::RefId.eq(&workspace))
+        .filter(document::Column::RefId.eq(workspace))
         .filter(document::Column::Revision.lt(i64::MAX))
-        .all(&tx)
+        .all(tx)
         .await?;
     if pending.len() >= 100 {
         return Err(ApiError::bad("Workspace exceeds 100 pending runner tasks"));
     }
     let task = Task {
         summary: RunnerTaskSummary {
-            id: uuid::Uuid::new_v4().to_string(),
-            workspace_id: workspace.clone(),
+            id,
+            workspace_id: workspace.to_string(),
             runner_id: input.runner_id,
             selection: input.selection,
             source_revision: source.revision,
@@ -79,23 +96,22 @@ pub(crate) async fn queue(
             finished_at: None,
             report_id: None,
         },
-        credential_revision: crate::credential_revocations::current(&tx, &owner.0).await?,
+        credential_revision: crate::credential_revocations::current(tx, owner).await?,
         lease_digest: None,
         snapshot: None,
     };
     store::insert_doc(
-        &tx,
+        tx,
         task.summary.id.clone(),
-        &owner.0,
+        owner,
         TASK,
-        &workspace,
+        workspace,
         0,
         &task,
     )
     .await?;
-    prune(&tx, &owner.0, &workspace).await?;
-    tx.commit().await?;
-    Ok(Json(task.summary))
+    prune(tx, owner, workspace).await?;
+    Ok(task.summary)
 }
 pub(crate) async fn tasks(
     State(state): State<AppState>,

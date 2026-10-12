@@ -10,6 +10,7 @@ import SavedScenarios from "./SavedScenarios";
 import NotificationPicker from "../notifications/NotificationPicker";
 import NotificationsPanel from "../notifications/NotificationsPanel";
 import SchedulesPanel from "../monitoring/SchedulesPanel";
+import RunnersPanel from "../runners/RunnersPanel";
 import SavedReports from "./SavedReports";
 export default function TestingPage(){
  useLanguage();const state=useWorkbench();const {draft,runCollection,setRunCollection,runResult,runnerBusy,run,stopRunner}=state;
@@ -43,6 +44,7 @@ export default function TestingPage(){
  {invalid&&<Callout.Root color="red"><Callout.Text role="alert">{t("测试数据无效，请检查格式、迭代次数和大小限制。")}</Callout.Text></Callout.Root>}
  <NotificationsPanel key={"notifications:"+scope}/>
  <SchedulesPanel key={"schedules:"+scope} onReport={id=>setScheduleReport({scope,id,ticket:(scheduleReport?.ticket??0)+1})}/>
+ <RunnersPanel key={"runners:"+scope} onReport={id=>setScheduleReport({scope,id,ticket:(scheduleReport?.ticket??0)+1})}/>
  <SavedReports key={"reports:"+scope} disabled={runnerBusy} externalSelection={scheduleReport?.scope===scope?scheduleReport:undefined}/>
  {runResult?.report_save_error&&<Callout.Root color="orange"><Callout.Text>{t("即时结果已保留，但报告未能保存。请检查存储或工作区状态。")}</Callout.Text></Callout.Root>}
  {runResult?.report_id&&<Text size="1" color="gray">{t("已保存脱敏报告")} · {runResult.report_id}</Text>}

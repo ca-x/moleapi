@@ -10,6 +10,7 @@ vi.mock("../workbench/context",()=>({useWorkbench:()=>({accountId:"owner",draft:
 vi.mock("../../shared/ui",()=>({Choice:({label,value,options,onChange}:{label:string;value:string;options:{value:string;label:string}[];onChange:(value:string)=>void})=><select aria-label={label} value={value} onChange={event=>onChange(event.target.value)}>{options.map(option=><option key={option.value} value={option.value}>{option.label}</option>)}</select>}));
 vi.mock("./RunnerDataset",()=>({default:()=>null,runnerOptions:()=>({iterations:2})}));vi.mock("./SavedDatasets",()=>({default:()=>null}));vi.mock("../notifications/NotificationsPanel",()=>({default:()=>null}));
 vi.mock("../monitoring/SchedulesPanel",()=>({default:()=>null}));
+vi.mock("../runners/RunnersPanel",()=>({default:()=>null}));
 vi.mock("./SavedReports",()=>({default:()=>null}));
 vi.mock("./SavedScenarios",()=>({default:()=>null}));
 afterEach(cleanup);

@@ -1,5 +1,6 @@
 mod agent;
 mod registry;
+mod schedules;
 mod selection;
 mod storage;
 mod tasks;
@@ -8,6 +9,8 @@ use crate::{ApiError, AppState};
 pub(crate) use agent::{claim, complete, heartbeat};
 use moleapi_core::RunnerTaskStatus as Status;
 pub(crate) use registry::{list, register, update};
+pub(crate) use schedules::{account_lock, cancel_in, reconcile, validate_target};
+pub(crate) use tasks::{Queue, queue_in};
 pub(crate) use tasks::{cancel, queue, tasks};
 fn hosted(state: &AppState) -> Result<(), ApiError> {
     if state.local {

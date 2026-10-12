@@ -87,11 +87,23 @@ async fn tick(
         .all(&state.db)
         .await?;
     for row in rows {
-        if state.project_slots.available_permits() == 0 {
-            break;
-        }
-        let Ok(permit) = slots.clone().try_acquire_owned() else {
-            break;
+        let schedule: super::models::Schedule =
+            serde_json::from_str(&row.payload).map_err(|_| ApiError::internal())?;
+        let remote = schedule.definition.runner_id.is_some()
+            || schedule
+                .running
+                .as_ref()
+                .is_some_and(|job| job.runner_task_id.is_some());
+        let permit = if remote {
+            None
+        } else {
+            if state.project_slots.available_permits() == 0 {
+                continue;
+            }
+            let Ok(permit) = slots.clone().try_acquire_owned() else {
+                continue;
+            };
+            Some(permit)
         };
         if let Some(claim) = claim(state, &row.owner, &row.ref_id, &row.id).await? {
             let state = state.clone();
@@ -114,8 +126,44 @@ async fn claim(
 ) -> Result<Option<Claim>, ApiError> {
     let now = Utc::now();
     let tx = state.db.begin().await?;
+    crate::runners::account_lock(&tx, state, owner).await?;
     let workspace_data = workspace_lock(&tx, owner, workspace).await?;
     let mut schedule = locked(&tx, owner, workspace, id).await?;
+    if let Some(job) = schedule.running.clone()
+        && let Some(task_id) = &job.runner_task_id
+    {
+        if job.cancel_requested {
+            crate::runners::cancel_in(&tx, owner, task_id).await?;
+        }
+        if let Some(mut record) = crate::runners::reconcile(&tx, owner, workspace, task_id).await? {
+            record.schedule_id = schedule.id.clone();
+            record.config_revision = job.config_revision;
+            record.manual = job.manual;
+            record.started_at = job.started_at;
+            let stats = crate::notifications::enqueue(
+                &tx,
+                owner,
+                &workspace_data,
+                &schedule.definition.notification_ids,
+                &schedule.definition.name,
+                schedule.last_run.as_ref().map(|run| run.status.as_str()),
+                &record,
+            )
+            .await?;
+            record.notification_queued = stats.0;
+            record.notification_skipped = stats.1;
+            save_run(&tx, owner, workspace, &record).await?;
+            schedule.last_run = Some(record);
+            schedule.running = None;
+        } else {
+            if let Some(active) = &mut schedule.running {
+                active.lease_until = (now + chrono::Duration::seconds(1)).to_rfc3339();
+            }
+            save(&tx, owner, &schedule).await?;
+            tx.commit().await?;
+            return Ok(None);
+        }
+    }
     if let Some(job) = &schedule.running {
         if DateTime::parse_from_rfc3339(&job.lease_until)
             .map(|time| time.with_timezone(&Utc) > now)
@@ -179,7 +227,8 @@ async fn claim(
         return Ok(None);
     }
     let manual = queued.is_some();
-    let job = Job {
+    let mut job = Job {
+        runner_task_id: None,
         cancel_requested: false,
         id: queued
             .map(|job| job.id)
@@ -197,6 +246,70 @@ async fn claim(
                 schedule.next_run_at = None;
             }
         }
+    }
+    if let Some(runner_id) = &schedule.definition.runner_id {
+        let input = crate::runners::Queue {
+            runner_id: runner_id.clone(),
+            expected_revision: workspace_data.revision,
+            selection: moleapi_core::RunnerSelection {
+                collection_id: schedule.definition.collection_id.clone(),
+                scenario_id: schedule.definition.scenario_id.clone(),
+                environment_id: schedule.definition.environment_id.clone(),
+                dataset_id: schedule.definition.dataset_id.clone(),
+                iterations: schedule.definition.iterations,
+                request_ids: None,
+                notification_ids: vec![],
+            },
+            max_attempts: 1,
+        };
+        let mut record = Occurrence {
+            notification_queued: 0,
+            notification_skipped: 0,
+            id: job.id.clone(),
+            schedule_id: schedule.id.clone(),
+            config_revision: job.config_revision,
+            manual,
+            status: "queued".into(),
+            started_at: job.started_at.clone(),
+            finished_at: None,
+            report_id: None,
+            passed: 0,
+            failed: 0,
+            skipped: 0,
+            error: None,
+        };
+        match crate::runners::queue_in(&tx, owner, &workspace_data, input, job.id.clone()).await {
+            Ok(task) => {
+                job.runner_task_id = Some(task.id);
+                job.lease_until = (now + chrono::Duration::seconds(1)).to_rfc3339();
+                schedule.running = Some(job);
+            }
+            Err(error) if error.status.is_server_error() => return Err(error),
+            Err(_) => {
+                record.status = "failed".into();
+                record.finished_at = Some(now.to_rfc3339());
+                record.error = Some(
+                    "Runner dispatch could not start; check target, references and capacity".into(),
+                );
+                let stats = crate::notifications::enqueue(
+                    &tx,
+                    owner,
+                    &workspace_data,
+                    &schedule.definition.notification_ids,
+                    &schedule.definition.name,
+                    schedule.last_run.as_ref().map(|run| run.status.as_str()),
+                    &record,
+                )
+                .await?;
+                record.notification_queued = stats.0;
+                record.notification_skipped = stats.1;
+                schedule.last_run = Some(record.clone());
+            }
+        }
+        save(&tx, owner, &schedule).await?;
+        save_run(&tx, owner, workspace, &record).await?;
+        tx.commit().await?;
+        return Ok(None);
     }
     schedule.running = Some(job.clone());
     let claim = Claim {
