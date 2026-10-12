@@ -17,9 +17,14 @@ pub async fn execute(backend: &Backend, command: &RunnerCommand) -> Result<u8> {
         "Runner commands require a hosted service"
     );
     let value = match command {
-        RunnerCommand::Register { name } => {
+        RunnerCommand::Register { name, labels } => {
             backend
-                .request("POST", &["runners"], &[], Some(json!({"name":name})))
+                .request(
+                    "POST",
+                    &["runners"],
+                    &[],
+                    Some(json!({"name":name,"labels":labels})),
+                )
                 .await?
         }
         RunnerCommand::List => backend.request("GET", &["runners"], &[], None).await?,
@@ -28,14 +33,17 @@ pub async fn execute(backend: &Backend, command: &RunnerCommand) -> Result<u8> {
             name,
             enabled,
             revision,
+            labels,
+            clear_labels,
         } => {
+            let mut body = json!({"name":name,"enabled":enabled,"expected_revision":revision});
+            if *clear_labels {
+                body["labels"] = json!([]);
+            } else if !labels.is_empty() {
+                body["labels"] = json!(labels);
+            }
             backend
-                .request(
-                    "PATCH",
-                    &["runners", id],
-                    &[],
-                    Some(json!({"name":name,"enabled":enabled,"expected_revision":revision})),
-                )
+                .request("PATCH", &["runners", id], &[], Some(body))
                 .await?
         }
         RunnerCommand::Queue { workspace, config } => {

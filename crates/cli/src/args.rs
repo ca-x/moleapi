@@ -231,6 +231,8 @@ pub enum RunnerCommand {
     Register {
         #[arg(long)]
         name: String,
+        #[arg(long = "label", value_name = "LABEL")]
+        labels: Vec<String>,
     },
     List,
     Set {
@@ -242,6 +244,10 @@ pub enum RunnerCommand {
         enabled: bool,
         #[arg(long)]
         revision: i64,
+        #[arg(long = "label", value_name = "LABEL", conflicts_with = "clear_labels")]
+        labels: Vec<String>,
+        #[arg(long)]
+        clear_labels: bool,
     },
     Queue {
         #[arg(long)]

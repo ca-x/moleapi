@@ -1,6 +1,7 @@
 export interface ExecutionRunner {
   id: string;
   name: string;
+  labels: string[];
   enabled: boolean;
   revision: number;
   last_seen_at: string | null;

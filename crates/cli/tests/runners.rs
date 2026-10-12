@@ -27,6 +27,166 @@ async fn api(
         .await
         .unwrap()
 }
+fn runner_args<'a>(auth: &[&'a str], command: &[&'a str]) -> Vec<&'a str> {
+    auth.iter().chain(command).copied().collect()
+}
+#[tokio::test]
+async fn cli_manages_runner_labels_without_changing_omitted_labels() {
+    let temporary = tempfile::tempdir().unwrap();
+    let hosted = moleapi_server::hosted_with_worker(
+        moleapi_server::Config {
+            database_url: format!(
+                "sqlite://{}?mode=rwc",
+                temporary.path().join("labels.db").display()
+            ),
+            setup_token: "runner-label-setup".into(),
+            allow_registration: true,
+            allow_private_network: true,
+        },
+        std::path::Path::new(env!("CARGO_BIN_EXE_moleapi-cli")),
+    )
+    .await
+    .unwrap();
+    let (server, service) = serve(hosted).await;
+    let http = reqwest::Client::new();
+    let login = api(&http, &server, None, reqwest::Method::POST, "auth/register", Some(json!({"username":"labelowner","password":"fixture-password-123","setup_token":"runner-label-setup"}))).await;
+    let token_path = temporary.path().join("session.txt");
+    std::fs::write(&token_path, login["token"].as_str().unwrap()).unwrap();
+    let auth = [
+        "--server",
+        server.as_str(),
+        "--token-file",
+        token_path.to_str().unwrap(),
+        "runner",
+    ];
+    let registered = result(
+        cli(&runner_args(
+            &auth,
+            &[
+                "register", "--name", "LAN", "--label", "linux", "--label", "ci",
+            ],
+        ))
+        .await,
+        0,
+    );
+    assert_eq!(registered["labels"], json!(["linux", "ci"]));
+    let id = registered["id"].as_str().unwrap();
+    let listed = result(cli(&runner_args(&auth, &["list"])).await, 0);
+    assert_eq!(listed[0]["labels"], json!(["linux", "ci"]));
+
+    let replaced = result(
+        cli(&runner_args(
+            &auth,
+            &[
+                "set",
+                "--id",
+                id,
+                "--name",
+                "LAN",
+                "--enabled",
+                "true",
+                "--revision",
+                "1",
+                "--label",
+                "staging",
+            ],
+        ))
+        .await,
+        0,
+    );
+    assert_eq!(replaced["labels"], json!(["staging"]));
+    let preserved = result(
+        cli(&runner_args(
+            &auth,
+            &[
+                "set",
+                "--id",
+                id,
+                "--name",
+                "LAN 2",
+                "--enabled",
+                "true",
+                "--revision",
+                "2",
+            ],
+        ))
+        .await,
+        0,
+    );
+    assert_eq!(preserved["labels"], json!(["staging"]));
+
+    for command in [
+        vec![
+            "register",
+            "--name",
+            "bad",
+            "--label",
+            "duplicate",
+            "--label",
+            "duplicate",
+        ],
+        vec![
+            "set",
+            "--id",
+            id,
+            "--name",
+            "LAN 2",
+            "--enabled",
+            "true",
+            "--revision",
+            "3",
+            "--label",
+            "Invalid",
+        ],
+        vec![
+            "set",
+            "--id",
+            id,
+            "--name",
+            "LAN 2",
+            "--enabled",
+            "true",
+            "--revision",
+            "3",
+            "--label",
+            "valid",
+            "--clear-labels",
+        ],
+    ] {
+        let failed = cli(&runner_args(&auth, &command)).await;
+        assert_eq!(
+            failed.status.code(),
+            Some(2),
+            "{}",
+            String::from_utf8_lossy(&failed.stderr)
+        );
+    }
+    let still = result(cli(&runner_args(&auth, &["list"])).await, 0);
+    assert_eq!(still[0]["revision"], 3);
+    assert_eq!(still[0]["labels"], json!(["staging"]));
+
+    let cleared = result(
+        cli(&runner_args(
+            &auth,
+            &[
+                "set",
+                "--id",
+                id,
+                "--name",
+                "LAN 2",
+                "--enabled",
+                "true",
+                "--revision",
+                "3",
+                "--clear-labels",
+            ],
+        ))
+        .await,
+        0,
+    );
+    assert_eq!(cleared["labels"], json!([]));
+    service.abort();
+}
 #[tokio::test]
 async fn real_agent_executes_private_local_request_and_returns_owned_redacted_report() {
     let (endpoint, fixture) = serve(Router::new().route(

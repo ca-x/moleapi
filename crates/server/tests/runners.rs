@@ -84,6 +84,107 @@ async fn expire(db: &sea_orm::DatabaseConnection, id: &str) {
     .unwrap();
 }
 #[tokio::test]
+async fn runner_labels_are_owned_validated_and_backward_compatible() {
+    let (_temp, _url, first, second, owner, stranger, runner_id, _workspace) = setup().await;
+    let path = format!("/api/runners/{runner_id}");
+    let (_, listed) = call(&first, "GET", "/api/runners", Some(&owner), None).await;
+    assert_eq!(listed[0]["labels"], json!([]));
+    let mut legacy = listed[0].clone();
+    legacy.as_object_mut().unwrap().remove("labels");
+    let legacy: moleapi_core::ExecutionRunner = serde_json::from_value(legacy).unwrap();
+    assert!(legacy.labels.is_empty());
+
+    for labels in [
+        json!([""]),
+        json!(["Linux"]),
+        json!(["two words"]),
+        json!(["a", "a"]),
+        json!(["-invalid"]),
+        json!(["a".repeat(33)]),
+        json!(vec!["a"; 11]),
+    ] {
+        assert_eq!(
+            call(
+                &first,
+                "POST",
+                "/api/runners",
+                Some(&owner),
+                Some(json!({"name":"invalid","labels":labels}))
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(call(&first, "PATCH", &path, Some(&owner), Some(json!({"expected_revision":1,"name":"Private LAN","enabled":true,"labels":labels}))).await.0, StatusCode::BAD_REQUEST);
+    }
+    let (status, updated) = call(&first, "PATCH", &path, Some(&owner), Some(json!({"expected_revision":1,"name":"Private LAN","enabled":true,"labels":["linux","lan"]}))).await;
+    assert_eq!(status, StatusCode::OK, "{updated}");
+    assert_eq!(updated["labels"], json!(["linux", "lan"]));
+    assert_eq!(
+        call(
+            &first,
+            "PATCH",
+            &path,
+            Some(&stranger),
+            Some(json!({"expected_revision":2,"name":"Private LAN","enabled":true,"labels":[]}))
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    let (status, renamed) = call(
+        &second,
+        "PATCH",
+        &path,
+        Some(&owner),
+        Some(json!({"expected_revision":2,"name":"Renamed","enabled":true})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{renamed}");
+    assert_eq!(renamed["labels"], json!(["linux", "lan"]));
+    let (_, listed) = call(&first, "GET", "/api/runners", Some(&owner), None).await;
+    assert_eq!(listed[0]["labels"], json!(["linux", "lan"]));
+    let (status, created) = call(
+        &first,
+        "POST",
+        "/api/runners",
+        Some(&owner),
+        Some(json!({"name":"CI","labels":["linux","ci"]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{created}");
+    let (_, listed) = call(&second, "GET", "/api/runners", Some(&owner), None).await;
+    assert!(
+        listed
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["id"] == created["id"] && item["labels"] == json!(["linux", "ci"]))
+    );
+    assert_eq!(
+        call(
+            &first,
+            "PATCH",
+            &path,
+            Some(&owner),
+            Some(json!({"expected_revision":2,"name":"Renamed","enabled":true,"labels":[]}))
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    let (status, cleared) = call(
+        &first,
+        "PATCH",
+        &path,
+        Some(&owner),
+        Some(json!({"expected_revision":3,"name":"Renamed","enabled":true,"labels":[]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{cleared}");
+    assert_eq!(cleared["labels"], json!([]));
+}
+#[tokio::test]
 async fn claims_are_exclusive_owned_private_and_completion_is_atomic_idempotent() {
     let (_temp, _url, a, b, owner, stranger, runner, w) = setup().await;
     let task = queue(&a, &owner, &runner, &w["revision"], 1).await;

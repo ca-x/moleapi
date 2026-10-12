@@ -10,8 +10,12 @@ Use a login session or owned personal API token through the existing credential 
 
 通过现有文件或系统环境变量选项传入登录凭据或个人 API 令牌。执行器会收到所选工作区的请求凭据，因此应部署在可信机器上；需要账户隔离时使用独立账户。目前继承账户的资源权限，工作区级 Runner 凭据和团队角色仍待补齐。
 
+Hosted runner management accepts optional `labels` on `POST /api/runners` and `PATCH /api/runners/{id}`. Labels are unique lowercase letters/digits/hyphens, 1–32 characters each, at most 10 per runner. Omitting labels on an update preserves existing labels; `[]` clears them. Existing runner records without labels read as an empty list. In the hosted UI, enter comma-separated labels when registering or editing a runner; the dispatch selector can filter runners by label. Labels are organizational only: queued and scheduled jobs still target a specific runner ID, not a label pool. In the CLI, repeat `--label` on `runner register` or `runner set`; omit it on `set` to preserve labels, or use `--clear-labels` to remove all labels. The server rejects invalid and duplicate labels.
+
+托管执行器可通过注册/修改 API 的 `labels` 字段添加标签，也可在网页端用逗号分隔输入和筛选。CLI 注册和修改命令可重复使用 `--label`；修改时省略表示保留现有标签，`--clear-labels` 表示清空。标签仅供整理与选择，计划和队列仍绑定具体执行器 ID，不会自动调度到同标签的其他机器。
+
 ```sh
-moleapi-cli --server https://api.example.com --token-env MOLEAPI_TOKEN runner register --name "LAN worker"
+moleapi-cli --server https://api.example.com --token-env MOLEAPI_TOKEN runner register --name "LAN worker" --label lan --label linux
 moleapi-cli --server https://api.example.com --token-env MOLEAPI_TOKEN runner list
 moleapi-cli --server https://api.example.com --token-env MOLEAPI_TOKEN list workspaces
 moleapi-cli --server https://api.example.com --token-env MOLEAPI_TOKEN list collections --workspace WORKSPACE_ID
@@ -52,6 +56,8 @@ moleapi-cli --server https://api.example.com --token-env MOLEAPI_TOKEN runner ag
 ```sh
 moleapi-cli --server https://api.example.com --token-env MOLEAPI_TOKEN runner cancel --workspace WORKSPACE_ID --id TASK_ID
 moleapi-cli --server https://api.example.com --token-env MOLEAPI_TOKEN runner set --id REGISTERED_RUNNER_ID --name "LAN worker" --enabled false --revision RUNNER_REVISION
+moleapi-cli --server https://api.example.com --token-env MOLEAPI_TOKEN runner set --id REGISTERED_RUNNER_ID --name "LAN worker" --enabled true --revision RUNNER_REVISION --label lan --label ci
+moleapi-cli --server https://api.example.com --token-env MOLEAPI_TOKEN runner set --id REGISTERED_RUNNER_ID --name "LAN worker" --enabled true --revision RUNNER_REVISION --clear-labels
 moleapi-cli --server https://api.example.com --token-env MOLEAPI_TOKEN report --workspace WORKSPACE_ID --id REPORT_ID --format junit --output report.xml
 ```
 

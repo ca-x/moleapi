@@ -18,10 +18,34 @@ fn name(value: &str) -> Result<(), ApiError> {
     }
     Ok(())
 }
+fn validate_labels(values: &[String]) -> Result<(), ApiError> {
+    if values.len() > 10 {
+        return Err(ApiError::bad("Runner accepts at most 10 labels"));
+    }
+    let mut seen = std::collections::HashSet::new();
+    for value in values {
+        if value.is_empty()
+            || value.len() > 32
+            || value.starts_with('-')
+            || value.ends_with('-')
+            || !value
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+            || !seen.insert(value)
+        {
+            return Err(ApiError::bad(
+                "Runner labels must be unique lowercase letters, digits or hyphens (1-32 characters)",
+            ));
+        }
+    }
+    Ok(())
+}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Register {
     name: String,
+    #[serde(default)]
+    labels: Vec<String>,
 }
 pub(crate) async fn register(
     State(state): State<AppState>,
@@ -30,6 +54,7 @@ pub(crate) async fn register(
 ) -> Result<Json<ExecutionRunner>, ApiError> {
     hosted(&state)?;
     name(&input.name)?;
+    validate_labels(&input.labels)?;
     let tx = state.db.begin().await?;
     account_lock(&tx, &owner.0).await?;
     let rows = document::Entity::find()
@@ -43,6 +68,7 @@ pub(crate) async fn register(
     let runner = ExecutionRunner {
         id: uuid::Uuid::new_v4().to_string(),
         name: input.name,
+        labels: input.labels,
         enabled: true,
         revision: 1,
         last_seen_at: None,
@@ -77,6 +103,7 @@ pub(crate) struct Update {
     expected_revision: i64,
     name: String,
     enabled: bool,
+    labels: Option<Vec<String>>,
 }
 pub(crate) async fn update(
     State(state): State<AppState>,
@@ -86,6 +113,9 @@ pub(crate) async fn update(
 ) -> Result<Json<ExecutionRunner>, ApiError> {
     hosted(&state)?;
     name(&input.name)?;
+    if let Some(labels) = &input.labels {
+        validate_labels(labels)?;
+    }
     let tx = state.db.begin().await?;
     account_lock(&tx, &owner.0).await?;
     let mut runner: ExecutionRunner = get(&tx, &owner.0, RUNNER, &id).await?;
@@ -93,6 +123,9 @@ pub(crate) async fn update(
         return Err(ApiError::conflict("Runner revision changed"));
     }
     runner.name = input.name;
+    if let Some(labels) = input.labels {
+        runner.labels = labels;
+    }
     runner.enabled = input.enabled;
     runner.revision = runner
         .revision

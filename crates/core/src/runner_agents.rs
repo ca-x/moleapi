@@ -16,6 +16,8 @@ pub struct RunnerSelection {
 pub struct ExecutionRunner {
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub labels: Vec<String>,
     pub enabled: bool,
     pub revision: i64,
     pub last_seen_at: Option<String>,
