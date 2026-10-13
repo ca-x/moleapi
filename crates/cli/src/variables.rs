@@ -61,11 +61,13 @@ pub fn read(path: Option<&Path>, environment: Option<&str>) -> Result<Overrides>
     }
     // Shared count/key/value/privacy limits apply before any run/import API request.
     moleapi_core::validate_variables(&temporary).context("Invalid private temporary variables")?;
-    let mut scopes = VariableScopes::default();
-    scopes.temporary = temporary
-        .iter()
-        .map(|pair| (pair.key.clone(), pair.value.clone()))
-        .collect();
+    let mut scopes = VariableScopes {
+        temporary: temporary
+            .iter()
+            .map(|pair| (pair.key.clone(), pair.value.clone()))
+            .collect(),
+        ..Default::default()
+    };
     scopes
         .private_values
         .extend(temporary.iter().map(|pair| pair.value.clone()));

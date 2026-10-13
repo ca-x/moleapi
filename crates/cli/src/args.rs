@@ -95,7 +95,7 @@ pub enum Command {
         include_secrets: bool,
     },
     /// Execute an owned collection or scenario with the shared runtime.
-    Run(Run),
+    Run(Box<Run>),
     /// Read/export a previously saved redacted report.
     Report {
         #[arg(long)]

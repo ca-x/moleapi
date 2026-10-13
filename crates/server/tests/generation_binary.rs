@@ -69,7 +69,12 @@ async fn binary_snippets_preserve_mime_and_ownership_without_exporting_saved_byt
                     .contains("application/x-header-file")
         );
         assert!(!result.to_string().contains("AP+AClg="));
-        assert!(!result["code"].as_str().unwrap().contains("application/x-moleapi-file"));
+        assert!(
+            !result["code"]
+                .as_str()
+                .unwrap()
+                .contains("application/x-moleapi-file")
+        );
     }
     assert_eq!(
         call(&router, "GET", "/api/workspaces/w", Some(&owner), None)

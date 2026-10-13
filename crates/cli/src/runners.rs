@@ -127,16 +127,15 @@ async fn credentials(backend: &Backend, command: &RunnerCredentialCommand) -> Re
                 .context("Credential response missing its secret")?;
             let secret = secret.as_str().context("Invalid credential secret")?;
             if let Err(error) = file.save(secret.as_bytes()) {
-                if let Some(id) = value["id"].as_str() {
-                    if backend
+                if let Some(id) = value["id"].as_str()
+                    && backend
                         .request("DELETE", &["runners", runner, "credentials", id], &[], None)
                         .await
                         .is_err()
-                    {
-                        eprintln!(
-                            "Output failed and credential cleanup failed; revoke credential {id} explicitly"
-                        );
-                    }
+                {
+                    eprintln!(
+                        "Output failed and credential cleanup failed; revoke credential {id} explicitly"
+                    );
                 }
                 return Err(error);
             }

@@ -31,16 +31,15 @@ pub async fn execute(backend: &Backend, command: &TokenCommand) -> Result<u8> {
                 .context("Token response missing its secret")?;
             let secret = token.as_str().context("Invalid token secret")?;
             if let Err(error) = file.save(secret.as_bytes()) {
-                if let Some(id) = value["id"].as_str() {
-                    if backend
+                if let Some(id) = value["id"].as_str()
+                    && backend
                         .request("DELETE", &["auth", "tokens", id], &[], None)
                         .await
                         .is_err()
-                    {
-                        eprintln!(
-                            "Output failed and token cleanup failed; revoke token {id} explicitly"
-                        );
-                    }
+                {
+                    eprintln!(
+                        "Output failed and token cleanup failed; revoke token {id} explicitly"
+                    );
                 }
                 return Err(error);
             }

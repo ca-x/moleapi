@@ -30,7 +30,7 @@ fn selectors<'a>(
         (Some(_), Some(_)) => Err(ApiError::bad(
             "Choose a runner ID or a runner label, not both",
         )),
-        (Some(id), None) if id.is_empty() => Err(ApiError::bad("Runner ID cannot be empty")),
+        (Some(""), None) => Err(ApiError::bad("Runner ID cannot be empty")),
         (None, Some(label)) => {
             validate_labels(&[label.to_owned()])?;
             Ok(Some(label))
