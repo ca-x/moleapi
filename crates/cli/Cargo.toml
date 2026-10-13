@@ -13,6 +13,8 @@ serde_json.workspace = true
 tokio.workspace = true
 reqwest.workspace = true
 uuid.workspace = true
+sha2 = "0.10"
+hex = "0.4"
 axum.workspace = true
 tower = { version = "0.5", features = ["util"] }
 tempfile = "3"

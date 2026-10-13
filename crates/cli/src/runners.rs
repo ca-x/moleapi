@@ -34,6 +34,9 @@ pub async fn execute(backend: &Backend, command: &RunnerCommand) -> Result<u8> {
         }
         RunnerCommand::List => backend.request("GET", &["runners"], &[], None).await?,
         RunnerCommand::Credentials { command } => return credentials(backend, command).await,
+        RunnerCommand::Service { .. } => {
+            anyhow::bail!("Service commands are handled before backend initialization")
+        }
         RunnerCommand::Set {
             id,
             name,

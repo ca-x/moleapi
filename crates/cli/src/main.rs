@@ -5,10 +5,11 @@ mod commands;
 mod io;
 mod newman;
 mod runners;
+mod service;
 mod skill;
 mod tokens;
 mod variables;
-use args::{Cli, Command};
+use args::{Cli, Command, RunnerCommand};
 use clap::{CommandFactory, Parser};
 fn schema(command: &clap::Command) -> serde_json::Value {
     serde_json::json!({
@@ -84,6 +85,18 @@ fn main() {
             newman::execute(options)
         };
         match result {
+            Ok(code) => std::process::exit(i32::from(code)),
+            Err(error) => {
+                eprintln!("{error}");
+                std::process::exit(2);
+            }
+        }
+    }
+    if let Command::Runner {
+        command: RunnerCommand::Service { command },
+    } = &cli.command
+    {
+        match service::execute(&cli, command) {
             Ok(code) => std::process::exit(i32::from(code)),
             Err(error) => {
                 eprintln!("{error}");

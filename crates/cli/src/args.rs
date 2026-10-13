@@ -280,6 +280,37 @@ pub enum RunnerCommand {
         #[arg(long, conflicts_with = "variables_file")]
         variables_env: Option<String>,
     },
+    /// Install, inspect or remove a supervised native runner service.
+    Service {
+        #[command(subcommand)]
+        command: RunnerServiceCommand,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum RunnerServiceCommand {
+    Print {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        variables_file: Option<PathBuf>,
+    },
+    Install {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        variables_file: Option<PathBuf>,
+        #[arg(long)]
+        replace: bool,
+    },
+    Status {
+        #[arg(long)]
+        id: String,
+    },
+    Uninstall {
+        #[arg(long)]
+        id: String,
+    },
 }
 
 #[derive(Subcommand)]

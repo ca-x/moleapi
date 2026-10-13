@@ -63,6 +63,21 @@ moleapi-cli --server https://api.example.com --token-file agent-token.txt runner
 
 `--once` 处理一个任务，无任务时返回0；常驻模式每2秒领取任务、每20秒发送心跳，租约有效期90秒，控制请求超时10秒。私密变量可通过现有 `--variables-file` 或 `--variables-env` 注入，格式见命令行文档；它们不写回托管工作区。每次执行使用独立的临时 SQLite 数据库，执行后清理。
 
+## Supervised Linux user service / Linux 用户级服务
+
+After saving the scoped agent credential in a regular `0600` file, preview the user unit, then install it. An optional `--variables-file` must also deny group and other access. The service restarts on failure, uses the existing outbound agent loop and has no listening port. Installation writes only file paths to the unit, never the bearer contents. `install --replace` updates a MoleAPI-managed unit and restarts it; modified or foreign units are refused. Service commands do not contact the hosted API.
+
+将执行器专用凭据保存为普通 `0600` 文件后，先预览 user unit，再安装。可选的 `--variables-file` 也必须拒绝组和其他用户访问。服务异常退出会重新启动，仅运行现有主动连接的 Agent，不监听端口。unit 中只有文件路径，没有凭据原文。`install --replace` 仅更新本工具管理的 unit 并重启；被修改或非本工具的 unit 会被拒绝。服务命令本身不访问托管 API。
+
+```sh
+moleapi-cli --server https://api.example.com --token-file agent-token.txt runner service print --id REGISTERED_RUNNER_ID
+moleapi-cli --server https://api.example.com --token-file agent-token.txt runner service install --id REGISTERED_RUNNER_ID
+moleapi-cli runner service status --id REGISTERED_RUNNER_ID
+moleapi-cli runner service uninstall --id REGISTERED_RUNNER_ID
+```
+
+These commands target Linux systemd user services. macOS launchd and Windows supervision remain separate platform work; this implementation and its test code have not yet been run through the final verification gate.
+
 ## Cancellation, recovery and reports / 取消、恢复和报告
 
 ```sh
@@ -91,8 +106,8 @@ API/CLI execution and bilingual hosted web management are implemented. In Collec
 
 Schedules can select Current server or an owned enabled runner. `runner_id` is optional in schedule definitions; absent/null preserves existing local/server execution. Each due occurrence atomically queues one single-attempt task at the current saved workspace revision and persists `running.runner_task_id`. Offline runners leave tasks queued without falling back to the server. Server restart preserves dispatches. Schedule cancellation, edits and deletion cancel the associated task; lease expiry fails without replay. Completed tasks populate schedule history and report links through the existing notification path. Cancellation still takes effect on an agent at its next heartbeat.
 
-Label-group dispatch and response-history upload implementations and tests are pending final execution verification. The native agent fetches its locally saved, privacy-screened response entries and uploads up to 8 MiB with the completion report. The hosted service screens them again, creates new owned history links atomically with the report, and drops links for entries not uploaded. CLI completion metadata includes `response_history_omitted`; it never prints response bodies. In the Tauri app, connect to the hosted account in Sync settings, sync the selected workspace, then open Settings > Hosted runner management. That panel uses the remote workspace revision and source, with runner/credential/task/schedule actions and report response preview through an IPC-only allowlisted gateway. It does not replace local collection execution or expose the stored login token to JavaScript. Native management is coded and awaits runtime tests. Service installation, packaging and PostgreSQL/MySQL/platform deployment verification remain active requirements. Binary and Docker releases will use GitHub Actions after functional completion; no local Docker build was used. This module is not evidence of complete395-capability parity or a published release.
+Label-group dispatch and response-history upload implementations and tests are pending final execution verification. The native agent fetches its locally saved, privacy-screened response entries and uploads up to 8 MiB with the completion report. The hosted service screens them again, creates new owned history links atomically with the report, and drops links for entries not uploaded. CLI completion metadata includes `response_history_omitted`; it never prints response bodies. In the Tauri app, connect to the hosted account in Sync settings, sync the selected workspace, then open Settings > Hosted runner management. That panel uses the remote workspace revision and source, with runner/credential/task/schedule actions and report response preview through an IPC-only allowlisted gateway. It does not replace local collection execution or expose the stored login token to JavaScript. Native management and Linux service installation are coded and await runtime tests. macOS/Windows supervision, packaging and PostgreSQL/MySQL/platform deployment verification remain active requirements. Binary and Docker releases will use GitHub Actions after functional completion; no local Docker build was used. This module is not evidence of complete395-capability parity or a published release.
 
 已实现 API/CLI 执行、中英文托管网页管理和定时任务选择 Runner。集合测试页可注册、重命名、启停执行器，派发保存的集合或场景、取消任务并查看报告。派发前保存工作区，使用返回的修订，不附加浏览器本地覆盖。离线桌面继续直接执行集合，Runner 管理通过托管网页进行。
 
-每次计划以当前保存修订原子生成一个单次任务并持久记录任务 ID，等待离线机器连接，不退回服务端执行。重启后继续协调，取消、修改和删除计划会取消关联任务；租约到期记为失败，不重放请求。完成结果写回计划记录和报告入口，通知沿用现有模块。标签组派发、响应历史回传和 Tauri 原生托管管理均已写入代码、仍待最后执行测试。桌面端先通过同步设置连接账户并同步工作区，再在设置中打开“托管执行器管理”；此区域使用远端修订，不改动离线执行。服务安装、数据库和平台验证仍在范围内。功能完成后使用 GitHub Actions 发布，本地不构建 Docker；当前不代表完整功能矩阵或新版已发布。
+每次计划以当前保存修订原子生成一个单次任务并持久记录任务 ID，等待离线机器连接，不退回服务端执行。重启后继续协调，取消、修改和删除计划会取消关联任务；租约到期记为失败，不重放请求。完成结果写回计划记录和报告入口，通知沿用现有模块。标签组派发、响应历史回传、Tauri 原生托管管理及 Linux 用户级服务安装均已写入代码、仍待最后执行测试。桌面端先通过同步设置连接账户并同步工作区，再在设置中打开“托管执行器管理”；此区域使用远端修订，不改动离线执行。macOS/Windows 服务、数据库和平台验证仍在范围内。功能完成后使用 GitHub Actions 发布，本地不构建 Docker；当前不代表完整功能矩阵或新版已发布。
