@@ -2,7 +2,7 @@ mod agent;
 mod registry;
 mod schedules;
 mod selection;
-mod storage;
+pub(crate) mod storage;
 mod tasks;
 use self::storage::Task;
 use crate::{ApiError, AppState};
@@ -18,7 +18,7 @@ fn hosted(state: &AppState) -> Result<(), ApiError> {
     }
     Ok(())
 }
-fn terminal(task: &mut Task, status: Status) {
+pub(crate) fn terminal(task: &mut Task, status: Status) {
     task.summary.status = status;
     task.summary.finished_at = Some(crate::storage::now());
     task.snapshot = None;

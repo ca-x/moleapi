@@ -7,6 +7,7 @@ import { liveError } from "../../shared/i18n/errors";
 import { Choice, Field } from "../../shared/ui";
 import { useWorkbench } from "../workbench/context";
 import NotificationPicker from "../notifications/NotificationPicker";
+import RunnerCredentials from "./RunnerCredentials";
 import type { ExecutionRunner, RunnerSelection, RunnerTask } from "./types";
 
 const parseLabels = (value: string) => value.split(",").map(label => label.trim().toLowerCase()).filter(Boolean);
@@ -29,9 +30,10 @@ export default function RunnersPanel({ onReport }: { onReport: (id: string) => v
   const [disabling, setDisabling] = useState<ExecutionRunner | null>(null);
   const [selection, setSelection] = useState<RunnerSelection>({ collection_id: workspace?.data.collections[0]?.id ?? "", scenario_id: null, environment_id: null, dataset_id: null, iterations: null, notification_ids: [] });
   const [runnerId, setRunnerId] = useState("");
+  const [credentialRunnerId, setCredentialRunnerId] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<ReturnType<typeof liveError>>("");
-  useEffect(() => { setName(""); setNewLabels(""); setEditLabels(""); setFilterLabel(""); setEditing(null); setDisabling(null); setRunnerId(""); setError(""); setPending(null); setSelection({ collection_id: workspace?.data.collections[0]?.id ?? "", scenario_id: null, environment_id: null, dataset_id: null, iterations: null, notification_ids: [] }); }, [scope]);
+  useEffect(() => { setName(""); setNewLabels(""); setEditLabels(""); setFilterLabel(""); setEditing(null); setDisabling(null); setRunnerId(""); setCredentialRunnerId(null); setError(""); setPending(null); setSelection({ collection_id: workspace?.data.collections[0]?.id ?? "", scenario_id: null, environment_id: null, dataset_id: null, iterations: null, notification_ids: [] }); }, [scope]);
   const queryKey = ["execution-runners", state.accountId, instance, boundary.current.epoch];
   const taskKey = ["runner-tasks", state.accountId, workspace?.id, instance, boundary.current.epoch];
   const enabled = !native && state.authenticated && !!credential;
@@ -76,7 +78,8 @@ export default function RunnersPanel({ onReport }: { onReport: (id: string) => v
       {runners.data?.map(runner => <Flex key={runner.id} direction="column" gap="2" py="2" style={{ borderBottom: "1px solid var(--gray-5)", overflowWrap: "anywhere" }}>
         <Flex gap="3" wrap="wrap" align="center"><Text weight="medium">{runner.name}</Text><Text size="1" color="gray">{runner.enabled ? t("已启用") : t("已停用")} · {runner.active_task_id ? t("有活动任务") : t("无活动任务")}</Text>{(runner.labels ?? []).map(label => <Text key={label} size="1" color="cyan">#{label}</Text>)}</Flex>
         <Text size="1" color="gray">ID: {runner.id}</Text><Text size="1" color="gray">{t("最近联系")}: {runner.last_seen_at ? date(runner.last_seen_at) : t("尚未连接")}</Text>
-        <Flex gap="2" wrap="wrap"><Button variant="soft" disabled={busy} onClick={() => { setEditing({ ...runner }); setEditLabels((runner.labels ?? []).join(", ")); }}>{t("编辑执行器")}</Button><Button variant="soft" disabled={busy} onClick={() => runner.enabled ? setDisabling(runner) : void action(() => update(runner, true))}>{runner.enabled ? t("停用执行器") : t("启用执行器")}</Button></Flex>
+        <Flex gap="2" wrap="wrap"><Button variant="soft" disabled={busy} onClick={() => { setEditing({ ...runner }); setEditLabels((runner.labels ?? []).join(", ")); }}>{t("编辑执行器")}</Button><Button variant="soft" disabled={busy} onClick={() => runner.enabled ? setDisabling(runner) : void action(() => update(runner, true))}>{runner.enabled ? t("停用执行器") : t("启用执行器")}</Button>{workspace && <Button variant="soft" disabled={busy} onClick={() => setCredentialRunnerId(credentialRunnerId === runner.id ? null : runner.id)}>{t("管理执行器凭据")}</Button>}</Flex>
+        {workspace && credentialRunnerId === runner.id && <RunnerCredentials accountId={state.accountId} runnerId={runner.id} workspaceId={workspace.id} onClose={() => setCredentialRunnerId(null)} />}
         {editing?.id === runner.id && <Flex gap="2" wrap="wrap" align="end"><Field label={t("新的执行器名称")}><TextField.Root value={editing.name} maxLength={80} disabled={busy} onChange={event => setEditing({ ...editing, name: event.target.value })} /></Field><Field label={t("执行器标签（逗号分隔）")}><TextField.Root value={editLabels} maxLength={329} disabled={busy} onChange={event => setEditLabels(event.target.value)} /></Field><Button disabled={busy || !editing.name.trim()} onClick={() => void action(() => update(editing, editing.enabled, parseLabels(editLabels)))}>{t("保存执行器")}</Button><Button variant="soft" disabled={busy} onClick={() => setEditing(null)}>{t("取消")}</Button></Flex>}
       </Flex>)}
       {workspace && <><Text weight="medium">{t("派发保存的测试")}</Text><Flex gap="3" wrap="wrap"><Choice label={t("按标签筛选")} value={filterLabel || "__all__"} disabled={busy} options={[{ value: "__all__", label: t("所有执行器") }, ...[...new Set((runners.data ?? []).flatMap(runner => runner.labels ?? []))].sort().map(label => ({ value: label, label }))]} onChange={value => { setFilterLabel(value === "__all__" ? "" : value); setRunnerId(""); }} /><Choice label={t("目标执行器")} value={runnerId || "none"} disabled={busy} options={[{ value: "none", label: t("请选择") }, ...(runners.data ?? []).filter(runner => runner.enabled && (!filterLabel || (runner.labels ?? []).includes(filterLabel))).map(runner => ({ value: runner.id, label: runner.name }))]} onChange={value => setRunnerId(value === "none" ? "" : value)} /><Choice label={t("任务集合")} value={selection.collection_id || "none"} disabled={busy} options={workspace.data.collections.map(collection => ({ value: collection.id, label: collection.name }))} onChange={collection_id => change({ collection_id, scenario_id: null })} /></Flex>

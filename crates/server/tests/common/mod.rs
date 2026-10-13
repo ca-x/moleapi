@@ -66,6 +66,24 @@ pub async fn register(router: &Router, name: &str) -> String {
     body["token"].as_str().unwrap().into()
 }
 
+pub async fn runner_credential(
+    router: &Router,
+    owner: &str,
+    runner: &str,
+    workspace: &str,
+) -> String {
+    let (status, body) = call(
+        router,
+        "POST",
+        &format!("/api/runners/{runner}/credentials"),
+        Some(owner),
+        Some(json!({"workspace_id":workspace,"name":"Test agent"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    body["token"].as_str().unwrap().to_owned()
+}
+
 pub async fn serve(router: Router) -> (String, tokio::task::JoinHandle<()>) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());

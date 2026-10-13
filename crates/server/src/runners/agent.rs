@@ -1,8 +1,8 @@
 use super::storage::{RUNNER, TASK, Task, account_lock, get, save, save_task};
 use super::{hosted, selection::validate, terminal};
 use crate::{
-    ApiError, AppState, auth::Identity, entities::document, scheduling::workspace_lock,
-    storage as store,
+    ApiError, AppState, auth::Identity, entities::document, runner_credentials::AgentScope,
+    scheduling::workspace_lock, storage as store,
 };
 use axum::{
     Extension, Json,
@@ -27,11 +27,19 @@ fn lease_until() -> String {
 pub(crate) async fn claim(
     State(state): State<AppState>,
     Extension(owner): Extension<Identity>,
+    scope: Option<Extension<AgentScope>>,
     Path(id): Path<String>,
 ) -> Result<Json<Option<RunnerClaim>>, ApiError> {
     hosted(&state)?;
+    let scope = scope
+        .map(|Extension(scope)| scope)
+        .ok_or_else(|| ApiError::forbidden("Agent routes require a runner credential"))?;
     let tx = state.db.begin().await?;
     account_lock(&tx, &owner.0).await?;
+    if scope.runner_id != id {
+        return Err(ApiError::not_found());
+    }
+    crate::runner_credentials::validate(&tx, &owner.0, &scope).await?;
     let mut runner: ExecutionRunner = get(&tx, &owner.0, RUNNER, &id).await?;
     if !runner.enabled {
         return Err(ApiError::bad("Runner is disabled"));
@@ -42,6 +50,7 @@ pub(crate) async fn claim(
         match get::<_, Task>(&tx, &owner.0, TASK, active).await {
             Ok(task)
                 if task.summary.status == Status::Leased
+                    && task.agent_credential_id.is_some()
                     && task.credential_revision == epoch
                     && !expired(&task) =>
             {
@@ -50,7 +59,9 @@ pub(crate) async fn claim(
                 return Ok(Json(None));
             }
             Ok(mut task)
-                if task.summary.status == Status::Leased && task.credential_revision != epoch =>
+                if task.summary.status == Status::Leased
+                    && (task.credential_revision != epoch
+                        || task.agent_credential_id.is_none()) =>
             {
                 terminal(&mut task, Status::Cancelled);
                 save_task(&tx, &owner.0, &task).await?;
@@ -74,6 +85,9 @@ pub(crate) async fn claim(
         let mut task: Task =
             serde_json::from_str(&row.payload).map_err(|_| ApiError::internal())?;
         if task.summary.runner_id != id {
+            continue;
+        }
+        if task.summary.workspace_id != scope.workspace_id {
             continue;
         }
         if task.credential_revision != epoch {
@@ -112,6 +126,7 @@ pub(crate) async fn claim(
         rand::thread_rng().fill_bytes(&mut bytes);
         let token = hex::encode(bytes);
         task.lease_digest = Some(crate::auth::token_hash(&token));
+        task.agent_credential_id = Some(scope.credential_id.clone());
         task.snapshot = Some(workspace.clone());
         task.summary.status = Status::Leased;
         task.summary.attempt += 1;
@@ -145,6 +160,21 @@ fn check_token(task: &Task, runner: &str, token: &str) -> Result<(), ApiError> {
     }
     Ok(())
 }
+async fn check_scope<C: sea_orm::ConnectionTrait>(
+    db: &C,
+    owner: &str,
+    runner: &str,
+    task: &Task,
+    scope: &AgentScope,
+) -> Result<(), ApiError> {
+    if scope.runner_id != runner
+        || scope.workspace_id != task.summary.workspace_id
+        || task.agent_credential_id.as_deref() != Some(scope.credential_id.as_str())
+    {
+        return Err(ApiError::not_found());
+    }
+    crate::runner_credentials::validate(db, owner, scope).await
+}
 async fn live<C: sea_orm::ConnectionTrait>(
     db: &C,
     owner: &str,
@@ -166,15 +196,20 @@ async fn live<C: sea_orm::ConnectionTrait>(
 pub(crate) async fn heartbeat(
     State(state): State<AppState>,
     Extension(owner): Extension<Identity>,
+    scope: Option<Extension<AgentScope>>,
     Path((runner_id, id)): Path<(String, String)>,
     Json(input): Json<Lease>,
 ) -> Result<Json<Value>, ApiError> {
     hosted(&state)?;
+    let scope = scope
+        .map(|Extension(scope)| scope)
+        .ok_or_else(|| ApiError::forbidden("Agent routes require a runner credential"))?;
     let tx = state.db.begin().await?;
     account_lock(&tx, &owner.0).await?;
     let mut runner: ExecutionRunner = get(&tx, &owner.0, RUNNER, &runner_id).await?;
     let mut task: Task = get(&tx, &owner.0, TASK, &id).await?;
     check_token(&task, &runner_id, &input.lease_token)?;
+    check_scope(&tx, &owner.0, &runner_id, &task, &scope).await?;
     live(&tx, &owner.0, &runner, &task).await?;
     task.summary.lease_until = Some(lease_until());
     runner.last_seen_at = Some(store::now());
@@ -193,15 +228,20 @@ pub(crate) struct Completion {
 pub(crate) async fn complete(
     State(state): State<AppState>,
     Extension(owner): Extension<Identity>,
+    scope: Option<Extension<AgentScope>>,
     Path((runner_id, id)): Path<(String, String)>,
     Json(mut input): Json<Completion>,
 ) -> Result<Json<RunnerTaskSummary>, ApiError> {
     hosted(&state)?;
+    let scope = scope
+        .map(|Extension(scope)| scope)
+        .ok_or_else(|| ApiError::forbidden("Agent routes require a runner credential"))?;
     let tx = state.db.begin().await?;
     account_lock(&tx, &owner.0).await?;
     let mut runner: ExecutionRunner = get(&tx, &owner.0, RUNNER, &runner_id).await?;
     let mut task: Task = get(&tx, &owner.0, TASK, &id).await?;
     check_token(&task, &runner_id, &input.lease_token)?;
+    check_scope(&tx, &owner.0, &runner_id, &task, &scope).await?;
     if matches!(
         task.summary.status,
         Status::Completed | Status::Failed | Status::Cancelled

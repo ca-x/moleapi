@@ -187,6 +187,7 @@ async fn runner_labels_are_owned_validated_and_backward_compatible() {
 #[tokio::test]
 async fn claims_are_exclusive_owned_private_and_completion_is_atomic_idempotent() {
     let (_temp, _url, a, b, owner, stranger, runner, w) = setup().await;
+    let agent = runner_credential(&a, &owner, &runner, "w").await;
     let task = queue(&a, &owner, &runner, &w["revision"], 1).await;
     assert!(!task.to_string().contains("saved-runner-secret"));
     assert_eq!(
@@ -199,12 +200,12 @@ async fn claims_are_exclusive_owned_private_and_completion_is_atomic_idempotent(
         )
         .await
         .0,
-        StatusCode::NOT_FOUND
+        StatusCode::FORBIDDEN
     );
     let claim_path = format!("/api/runners/{runner}/claim");
     let (x, y) = tokio::join!(
-        call(&a, "POST", &claim_path, Some(&owner), None),
-        call(&b, "POST", &claim_path, Some(&owner), None)
+        call(&a, "POST", &claim_path, Some(&agent), None),
+        call(&b, "POST", &claim_path, Some(&agent), None)
     );
     assert_eq!(x.0, StatusCode::OK);
     assert_eq!(y.0, StatusCode::OK);
@@ -236,7 +237,7 @@ async fn claims_are_exclusive_owned_private_and_completion_is_atomic_idempotent(
             &b,
             "POST",
             &heartbeat,
-            Some(&owner),
+            Some(&agent),
             Some(json!({"lease_token":"bad"}))
         )
         .await
@@ -248,7 +249,7 @@ async fn claims_are_exclusive_owned_private_and_completion_is_atomic_idempotent(
             &b,
             "POST",
             &heartbeat,
-            Some(&owner),
+            Some(&agent),
             Some(json!({"lease_token":claim["lease_token"]}))
         )
         .await
@@ -261,13 +262,13 @@ async fn claims_are_exclusive_owned_private_and_completion_is_atomic_idempotent(
         &b,
         "POST",
         &complete_path,
-        Some(&owner),
+        Some(&agent),
         Some(completion.clone()),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{completed}");
     assert_eq!(completed["status"], "completed");
-    let (status, replayed) = call(&a, "POST", &complete_path, Some(&owner), Some(completion)).await;
+    let (status, replayed) = call(&a, "POST", &complete_path, Some(&agent), Some(completion)).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(completed, replayed);
     let (_, reports) = call(&a, "GET", "/api/workspaces/w/reports", Some(&owner), None).await;
@@ -301,13 +302,14 @@ async fn claims_are_exclusive_owned_private_and_completion_is_atomic_idempotent(
 #[tokio::test]
 async fn leases_retry_only_when_configured_and_cancel_disable_or_revoke_stops_work() {
     let (_temp, url, a, b, owner, _stranger, runner, w) = setup().await;
+    let agent = runner_credential(&a, &owner, &runner, "w").await;
     let task = queue(&a, &owner, &runner, &w["revision"], 2).await;
     let path = format!("/api/runners/{runner}/claim");
-    let (_, first) = call(&a, "POST", &path, Some(&owner), None).await;
+    let (_, first) = call(&a, "POST", &path, Some(&agent), None).await;
     let id = task["id"].as_str().unwrap();
     let db = Database::connect(&url).await.unwrap();
     expire(&db, id).await;
-    let (_, second) = call(&b, "POST", &path, Some(&owner), None).await;
+    let (_, second) = call(&b, "POST", &path, Some(&agent), None).await;
     assert_eq!(second["task"]["attempt"], 2);
     assert_ne!(first["lease_token"], second["lease_token"]);
     let heartbeat = format!("/api/runners/{runner}/tasks/{id}/heartbeat");
@@ -316,7 +318,7 @@ async fn leases_retry_only_when_configured_and_cancel_disable_or_revoke_stops_wo
             &a,
             "POST",
             &heartbeat,
-            Some(&owner),
+            Some(&agent),
             Some(json!({"lease_token":first["lease_token"]}))
         )
         .await
@@ -340,7 +342,7 @@ async fn leases_retry_only_when_configured_and_cancel_disable_or_revoke_stops_wo
             &b,
             "POST",
             &heartbeat,
-            Some(&owner),
+            Some(&agent),
             Some(json!({"lease_token":second["lease_token"]}))
         )
         .await
@@ -348,9 +350,9 @@ async fn leases_retry_only_when_configured_and_cancel_disable_or_revoke_stops_wo
         StatusCode::CONFLICT
     );
     let default_task = queue(&a, &owner, &runner, &w["revision"], 1).await;
-    call(&a, "POST", &path, Some(&owner), None).await;
+    call(&a, "POST", &path, Some(&agent), None).await;
     expire(&db, default_task["id"].as_str().unwrap()).await;
-    let (_, empty) = call(&b, "POST", &path, Some(&owner), None).await;
+    let (_, empty) = call(&b, "POST", &path, Some(&agent), None).await;
     assert!(empty.is_null());
     let (_, tasks) = call(
         &a,
@@ -388,7 +390,7 @@ async fn leases_retry_only_when_configured_and_cancel_disable_or_revoke_stops_wo
         .0,
         StatusCode::OK
     );
-    let (_, empty) = call(&b, "POST", &path, Some(&owner), None).await;
+    let (_, empty) = call(&b, "POST", &path, Some(&agent), None).await;
     assert!(empty.is_null());
     let (_, tasks) = call(
         &a,
@@ -406,7 +408,7 @@ async fn leases_retry_only_when_configured_and_cancel_disable_or_revoke_stops_wo
             .any(|t| t["id"] == queued["id"] && t["status"] == "cancelled")
     );
     let queued = queue(&a, &owner, &runner, &w["revision"], 1).await;
-    let (_, claimed) = call(&b, "POST", &path, Some(&owner), None).await;
+    let (_, claimed) = call(&b, "POST", &path, Some(&agent), None).await;
     assert_eq!(
         call(
             &a,
@@ -428,7 +430,7 @@ async fn leases_retry_only_when_configured_and_cancel_disable_or_revoke_stops_wo
             &b,
             "POST",
             &heartbeat,
-            Some(&owner),
+            Some(&agent),
             Some(json!({"lease_token":claimed["lease_token"]}))
         )
         .await
@@ -440,6 +442,7 @@ async fn leases_retry_only_when_configured_and_cancel_disable_or_revoke_stops_wo
 #[tokio::test]
 async fn invalid_selection_source_changes_and_invalid_reports_leave_no_partial_records() {
     let (_temp, _url, a, _b, owner, _stranger, runner, w) = setup().await;
+    let agent = runner_credential(&a, &owner, &runner, "w").await;
     for selection in [
         json!({"collection_id":"missing"}),
         json!({"collection_id":"c","environment_id":"missing"}),
@@ -483,7 +486,7 @@ async fn invalid_selection_source_changes_and_invalid_reports_leave_no_partial_r
     .await;
     assert_eq!(status, StatusCode::OK, "{edited}");
     let claim_path = format!("/api/runners/{runner}/claim");
-    let (_, empty) = call(&a, "POST", &claim_path, Some(&owner), None).await;
+    let (_, empty) = call(&a, "POST", &claim_path, Some(&agent), None).await;
     assert!(empty.is_null());
     let (_, tasks) = call(
         &a,
@@ -501,7 +504,7 @@ async fn invalid_selection_source_changes_and_invalid_reports_leave_no_partial_r
             .any(|t| t["id"] == old["id"] && t["status"] == "cancelled")
     );
     let new = queue(&a, &owner, &runner, &edited["revision"], 1).await;
-    let (_, claimed) = call(&a, "POST", &claim_path, Some(&owner), None).await;
+    let (_, claimed) = call(&a, "POST", &claim_path, Some(&agent), None).await;
     let complete = format!(
         "/api/runners/{runner}/tasks/{}/complete",
         new["id"].as_str().unwrap()
@@ -515,7 +518,7 @@ async fn invalid_selection_source_changes_and_invalid_reports_leave_no_partial_r
             &a,
             "POST",
             &complete,
-            Some(&owner),
+            Some(&agent),
             Some(json!({"lease_token":claimed["lease_token"],"report":report})),
         )
         .await;
@@ -527,7 +530,7 @@ async fn invalid_selection_source_changes_and_invalid_reports_leave_no_partial_r
         &a,
         "POST",
         &complete,
-        Some(&owner),
+        Some(&agent),
         Some(json!({"lease_token":claimed["lease_token"],"status":"failed"})),
     )
     .await;

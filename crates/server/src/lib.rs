@@ -21,6 +21,7 @@ mod protocol_admission;
 mod protocols;
 mod run_reports;
 mod runner;
+mod runner_credentials;
 mod runners;
 mod scheduling;
 mod soap;
@@ -365,6 +366,14 @@ async fn build(
         .route("/testing/dataset/preview", post(runner::preview))
         .route("/runners", get(runners::list).post(runners::register))
         .route("/runners/{id}", axum::routing::patch(runners::update))
+        .route(
+            "/runners/{id}/credentials",
+            get(runner_credentials::list).post(runner_credentials::create),
+        )
+        .route(
+            "/runners/{id}/credentials/{credential}",
+            axum::routing::delete(runner_credentials::revoke),
+        )
         .route("/runners/{id}/claim", post(runners::claim))
         .route(
             "/runners/{runner}/tasks/{task}/heartbeat",

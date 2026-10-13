@@ -9,16 +9,18 @@ use sea_orm::{
     sea_query::Expr,
 };
 use serde::{Deserialize, Serialize};
-pub(super) const RUNNER: &str = "execution-runner";
-pub(super) const TASK: &str = "runner-task";
+pub(crate) const RUNNER: &str = "execution-runner";
+pub(crate) const TASK: &str = "runner-task";
 #[derive(Clone, Serialize, Deserialize)]
-pub(super) struct Task {
+pub(crate) struct Task {
     pub summary: RunnerTaskSummary,
     pub credential_revision: i64,
     pub lease_digest: Option<String>,
+    #[serde(default)]
+    pub agent_credential_id: Option<String>,
     pub snapshot: Option<Workspace>,
 }
-pub(super) async fn account_lock<C: ConnectionTrait>(db: &C, owner: &str) -> Result<(), ApiError> {
+pub(crate) async fn account_lock<C: ConnectionTrait>(db: &C, owner: &str) -> Result<(), ApiError> {
     account::Entity::update_many()
         .col_expr(
             account::Column::Username,
@@ -32,7 +34,7 @@ pub(super) async fn account_lock<C: ConnectionTrait>(db: &C, owner: &str) -> Res
     }
     Ok(())
 }
-pub(super) async fn get<C: ConnectionTrait, T: serde::de::DeserializeOwned>(
+pub(crate) async fn get<C: ConnectionTrait, T: serde::de::DeserializeOwned>(
     db: &C,
     owner: &str,
     kind: &str,
@@ -46,7 +48,7 @@ pub(super) async fn get<C: ConnectionTrait, T: serde::de::DeserializeOwned>(
         .ok_or_else(ApiError::not_found)?;
     serde_json::from_str(&row.payload).map_err(|_| ApiError::internal())
 }
-pub(super) async fn save<C: ConnectionTrait, T: Serialize>(
+pub(crate) async fn save<C: ConnectionTrait, T: Serialize>(
     db: &C,
     owner: &str,
     kind: &str,
@@ -68,7 +70,7 @@ pub(super) async fn save<C: ConnectionTrait, T: Serialize>(
         .await?;
     Ok(())
 }
-pub(super) async fn save_task<C: ConnectionTrait>(
+pub(crate) async fn save_task<C: ConnectionTrait>(
     db: &C,
     owner: &str,
     task: &Task,

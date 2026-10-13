@@ -253,6 +253,35 @@ async fn real_agent_executes_private_local_request_and_returns_owned_redacted_re
     args.extend(["runner", "register", "--name", "LAN worker"]);
     let runner = result(cli(&args).await, 0);
     let id = runner["id"].as_str().unwrap();
+    let agent_token_path = temporary.path().join("agent-token.txt");
+    let mut credential_args = auth.to_vec();
+    credential_args.extend([
+        "runner",
+        "credentials",
+        "create",
+        "--runner",
+        id,
+        "--workspace",
+        "w",
+        "--name",
+        "LAN workspace agent",
+        "--output",
+        agent_token_path.to_str().unwrap(),
+    ]);
+    let credential = result(cli(&credential_args).await, 0);
+    let agent_token = std::fs::read_to_string(&agent_token_path).unwrap();
+    assert!(agent_token.starts_with("moleapi_runner_"));
+    assert!(!credential.to_string().contains(&agent_token));
+    let listed = result(
+        cli(&[
+            auth.as_slice(),
+            &["runner", "credentials", "list", "--runner", id],
+        ]
+        .concat())
+        .await,
+        0,
+    );
+    assert_eq!(listed[0]["id"], credential["id"]);
     let config = temporary.path().join("task.json");
     write(
         &config,
@@ -273,7 +302,13 @@ async fn real_agent_executes_private_local_request_and_returns_owned_redacted_re
         &private,
         &json!({"temporary":{"secret":"runtime-agent-secret"}}),
     );
-    let mut args = auth.to_vec();
+    let agent_auth = [
+        "--server",
+        server.as_str(),
+        "--token-file",
+        agent_token_path.to_str().unwrap(),
+    ];
+    let mut args = agent_auth.to_vec();
     args.extend([
         "runner",
         "agent",
@@ -319,7 +354,12 @@ async fn real_agent_executes_private_local_request_and_returns_owned_redacted_re
     let tasks = result(cli(&args).await, 0);
     assert_eq!(tasks[0]["report_id"], executed["report_id"]);
     let empty = result(
-        cli(&[auth.as_slice(), &["runner", "agent", "--id", id, "--once"]].concat()).await,
+        cli(&[
+            agent_auth.as_slice(),
+            &["runner", "agent", "--id", id, "--once"],
+        ]
+        .concat())
+        .await,
         0,
     );
     assert_eq!(empty["claimed"], false);
@@ -394,6 +434,16 @@ async fn interrupt_cancels_local_execution_and_persists_cancelled_hosted_task() 
     )
     .await;
     let id = runner["id"].as_str().unwrap();
+    let credential = api(
+        &http,
+        &server,
+        Some(token),
+        reqwest::Method::POST,
+        &format!("runners/{id}/credentials"),
+        Some(json!({"workspace_id":"w","name":"Interrupt agent"})),
+    )
+    .await;
+    let agent_token = credential["token"].as_str().unwrap();
     let task = api(&http,&server,Some(token),reqwest::Method::POST,"workspaces/w/runner-tasks",Some(json!({"runner_id":id,"expected_revision":workspace["revision"],"selection":{"collection_id":"c"}}))).await;
     let child = tokio::process::Command::new(env!("CARGO_BIN_EXE_moleapi-cli"))
         .args([
@@ -407,7 +457,7 @@ async fn interrupt_cancels_local_execution_and_persists_cancelled_hosted_task() 
             id,
             "--once",
         ])
-        .env("MOLEAPI_AGENT_TOKEN", token)
+        .env("MOLEAPI_AGENT_TOKEN", agent_token)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .kill_on_drop(true)

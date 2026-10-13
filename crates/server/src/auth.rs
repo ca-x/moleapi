@@ -196,8 +196,34 @@ pub async fn guard(State(state): State<AppState>, mut request: Request, next: Ne
     let Some(token) = token else {
         return ApiError::unauthorized().into_response();
     };
+    if token.starts_with(crate::runner_credentials::PREFIX) {
+        return match crate::runner_credentials::lookup(&state, token).await {
+            Ok(Some((owner, scope)))
+                if crate::runner_credentials::allowed(
+                    request.method(),
+                    request.uri().path(),
+                    &scope,
+                ) =>
+            {
+                request.extensions_mut().insert(Identity(owner));
+                request.extensions_mut().insert(scope);
+                next.run(request).await
+            }
+            Ok(Some(_)) => {
+                ApiError::forbidden("Runner credential cannot access this route").into_response()
+            }
+            Ok(None) => ApiError::unauthorized().into_response(),
+            Err(_) => ApiError::internal().into_response(),
+        };
+    }
     match credential(&state, token).await {
         Ok(Some((owner, session))) => {
+            if crate::runner_credentials::agent_route(request.method(), request.uri().path())
+                .is_some()
+            {
+                return ApiError::forbidden("Agent routes require a runner credential")
+                    .into_response();
+            }
             request.extensions_mut().insert(Identity(owner));
             if session {
                 request.extensions_mut().insert(SessionAuthentication);

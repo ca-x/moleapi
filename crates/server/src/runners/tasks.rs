@@ -98,6 +98,7 @@ pub(crate) async fn queue_in<C: ConnectionTrait>(
         },
         credential_revision: crate::credential_revocations::current(tx, owner).await?,
         lease_digest: None,
+        agent_credential_id: None,
         snapshot: None,
     };
     store::insert_doc(

@@ -235,6 +235,11 @@ pub enum RunnerCommand {
         labels: Vec<String>,
     },
     List,
+    /// Issue, list or revoke a runner credential with an owner login session.
+    Credentials {
+        #[command(subcommand)]
+        command: RunnerCredentialCommand,
+    },
     Set {
         #[arg(long)]
         id: String,
@@ -274,5 +279,33 @@ pub enum RunnerCommand {
         variables_file: Option<PathBuf>,
         #[arg(long, conflicts_with = "variables_file")]
         variables_env: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum RunnerCredentialCommand {
+    List {
+        #[arg(long)]
+        runner: String,
+    },
+    Create {
+        #[arg(long)]
+        runner: String,
+        #[arg(long)]
+        workspace: String,
+        #[arg(long)]
+        name: String,
+        #[arg(long, default_value_t = 90, value_parser = clap::value_parser!(u16).range(1..=365))]
+        days: u16,
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long)]
+        overwrite: bool,
+    },
+    Revoke {
+        #[arg(long)]
+        runner: String,
+        #[arg(long)]
+        id: String,
     },
 }

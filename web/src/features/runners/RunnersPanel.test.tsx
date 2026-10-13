@@ -63,3 +63,35 @@ it("discards late mutation errors after switching accounts", async () => {
   const rendered = render(view()); fireEvent.click(screen.getByText("Self-hosted runners")); fireEvent.change(screen.getByLabelText("Runner name"), { target: { value: "Private runner" } }); fireEvent.change(screen.getByLabelText("Runner labels (comma-separated)"), { target: { value: "CI, lan" } }); fireEvent.click(screen.getByRole("button", { name: "Register runner" })); await waitFor(() => expect(mocks.api).toHaveBeenCalledWith("/api/runners", "POST", { name: "Private runner", labels: ["ci", "lan"] }));
   mocks.state.accountId = "other"; mocks.credential = "other-credential"; rendered.rerender(view()); await act(async () => reject(new Error("old-private-error"))); expect(document.body.textContent).not.toContain("old-private-error");
 });
+it("issues a workspace credential once and confirms revocation without retaining the secret", async () => {
+  const credential = { id: "cred", runner_id: "runner", workspace_id: "w", name: "Agent", created_at: 1, expires_at: 9999999999, expired: false };
+  mocks.api.mockImplementation(async (path, method) => path === "/api/runners" ? [runner] : path === "/api/runners/runner/credentials" && method === "POST" ? { ...credential, token: "moleapi_runner_secret" } : path === "/api/runners/runner/credentials" ? [credential] : []);
+  render(view()); fireEvent.click(screen.getByText("Self-hosted runners"));
+  fireEvent.click(await screen.findByRole("button", { name: "Manage credentials" }));
+  await screen.findByText("Agent");
+  fireEvent.change(screen.getByLabelText("Credential name"), { target: { value: "Agent" } });
+  fireEvent.click(screen.getByRole("button", { name: "Create runner credential" }));
+  await waitFor(() => expect(mocks.api).toHaveBeenCalledWith("/api/runners/runner/credentials", "POST", { workspace_id: "w", name: "Agent", expires_in_days: 90 }));
+  expect(await screen.findByLabelText("New runner credential")).toHaveProperty("value", "moleapi_runner_secret");
+  fireEvent.click(screen.getByRole("button", { name: "Close credential manager" }));
+  expect(screen.queryByText("moleapi_runner_secret")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Manage credentials" }));
+  await screen.findByText("Agent");
+  expect(screen.queryByLabelText("New runner credential")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Revoke runner credential" }));
+  expect(mocks.api).not.toHaveBeenCalledWith("/api/runners/runner/credentials/cred", "DELETE");
+  fireEvent.click(screen.getByRole("button", { name: "Confirm revocation" }));
+  await waitFor(() => expect(mocks.api).toHaveBeenCalledWith("/api/runners/runner/credentials/cred", "DELETE"));
+});
+it("discards late credential issuance after account changes", async () => {
+  let resolve!: (value: unknown) => void;
+  mocks.api.mockImplementation((path, method) => path === "/api/runners" ? Promise.resolve([runner]) : method === "POST" ? new Promise(done => { resolve = done; }) : Promise.resolve([]));
+  const rendered = render(view()); fireEvent.click(screen.getByText("Self-hosted runners"));
+  fireEvent.click(await screen.findByRole("button", { name: "Manage credentials" }));
+  fireEvent.change(screen.getByLabelText("Credential name"), { target: { value: "Private" } });
+  fireEvent.click(screen.getByRole("button", { name: "Create runner credential" }));
+  await waitFor(() => expect(mocks.api).toHaveBeenCalledWith("/api/runners/runner/credentials", "POST", expect.anything()));
+  mocks.state.accountId = "other"; mocks.credential = "new-session"; rendered.rerender(view());
+  await act(async () => resolve({ token: "moleapi_runner_old_secret" }));
+  expect(document.body.textContent).not.toContain("moleapi_runner_old_secret");
+});

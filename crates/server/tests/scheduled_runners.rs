@@ -60,6 +60,7 @@ async fn scheduled_runner_dispatch_is_atomic_across_instances_and_reconciles_rep
         Some(json!({"name":"LAN"})),
     )
     .await;
+    let agent = runner_credential(&first, &token, runner["id"].as_str().unwrap(), "w").await;
     let definition = json!({"name":"LAN schedule","cron":"0 9 * * *","timezone":"UTC","enabled":false,"collection_id":"c","runner_id":runner["id"]});
     let (status, schedule) = call(
         &first,
@@ -92,8 +93,8 @@ async fn scheduled_runner_dispatch_is_atomic_across_instances_and_reconciles_rep
     assert_eq!(tasks[0]["max_attempts"], 1);
     let claim_path = format!("/api/runners/{}/claim", runner["id"].as_str().unwrap());
     let (left, right) = tokio::join!(
-        call(&first, "POST", &claim_path, Some(&token), None),
-        call(&second, "POST", &claim_path, Some(&token), None)
+        call(&first, "POST", &claim_path, Some(&agent), None),
+        call(&second, "POST", &claim_path, Some(&agent), None)
     );
     assert!(left.1.is_null() != right.1.is_null());
     let claim = if left.1.is_null() { right.1 } else { left.1 };
@@ -106,7 +107,7 @@ async fn scheduled_runner_dispatch_is_atomic_across_instances_and_reconciles_rep
         &second,
         "POST",
         &complete_path,
-        Some(&token),
+        Some(&agent),
         Some(json!({"lease_token":claim["lease_token"],"report":report})),
     )
     .await;
@@ -326,6 +327,7 @@ async fn dispatched_jobs_survive_restart_and_expired_leases_fail_without_replay(
         Some(json!({"name":"LAN"})),
     )
     .await;
+    let agent = runner_credential(&router, &token, runner["id"].as_str().unwrap(), "w").await;
     let definition = json!({"name":"Task","cron":"0 9 * * *","timezone":"UTC","enabled":false,"collection_id":"c","runner_id":runner["id"]});
     let (_, schedule) = call(
         &router,
@@ -349,7 +351,7 @@ async fn dispatched_jobs_survive_restart_and_expired_leases_fail_without_replay(
     drop(router);
     let restarted = hosted(config(url.clone(), true)).await.unwrap();
     let claim_path = format!("/api/runners/{}/claim", runner["id"].as_str().unwrap());
-    let (_, claim) = call(&restarted, "POST", &claim_path, Some(&token), None).await;
+    let (_, claim) = call(&restarted, "POST", &claim_path, Some(&agent), None).await;
     assert_eq!(claim["task"]["id"], task_id);
     let db = Database::connect(&url).await.unwrap();
     let row = db
@@ -374,7 +376,7 @@ async fn dispatched_jobs_survive_restart_and_expired_leases_fail_without_replay(
     let terminal = wait_schedule(&restarted, &token, id, true).await;
     assert_eq!(terminal["last_run"]["status"], "failed", "{terminal}");
     assert_eq!(
-        call(&restarted, "POST", &claim_path, Some(&token), None)
+        call(&restarted, "POST", &claim_path, Some(&agent), None)
             .await
             .1,
         Value::Null
@@ -399,7 +401,7 @@ async fn dispatched_jobs_survive_restart_and_expired_leases_fail_without_replay(
             &restarted,
             "POST",
             &heartbeat,
-            Some(&token),
+            Some(&agent),
             Some(json!({"lease_token":claim["lease_token"]}))
         )
         .await
@@ -438,6 +440,7 @@ async fn cron_dispatches_remotely_and_edits_atomically_cancel_leased_work() {
         Some(json!({"name":"LAN"})),
     )
     .await;
+    let agent = runner_credential(&router, &token, runner["id"].as_str().unwrap(), "w").await;
     let (_, foreign_runner) = call(
         &router,
         "POST",
@@ -473,7 +476,7 @@ async fn cron_dispatches_remotely_and_edits_atomically_cancel_leased_work() {
     let active = wait_schedule(&router, &token, id, false).await;
     assert_eq!(active["running"]["manual"], false);
     let claim_path = format!("/api/runners/{}/claim", runner["id"].as_str().unwrap());
-    let (_, claim) = call(&router, "POST", &claim_path, Some(&token), None).await;
+    let (_, claim) = call(&router, "POST", &claim_path, Some(&agent), None).await;
     assert_eq!(claim["task"]["id"], active["running"]["runner_task_id"]);
     definition["enabled"] = false.into();
     definition["runner_id"] = Value::Null;
@@ -504,7 +507,7 @@ async fn cron_dispatches_remotely_and_edits_atomically_cancel_leased_work() {
         &router,
         "POST",
         &complete_path,
-        Some(&token),
+        Some(&agent),
         Some(json!({"lease_token":claim["lease_token"],"status":"failed"})),
     )
     .await;
@@ -513,4 +516,106 @@ async fn cron_dispatches_remotely_and_edits_atomically_cancel_leased_work() {
     assert_eq!(terminal["last_run"]["status"], "cancelled");
     assert_eq!(terminal["last_run"]["config_revision"], 1);
     assert_eq!(terminal["revision"], 2);
+}
+
+#[tokio::test]
+async fn revoking_a_scoped_agent_reconciles_its_scheduled_lease() {
+    let temporary = tempfile::tempdir().unwrap();
+    let url = format!(
+        "sqlite://{}?mode=rwc",
+        temporary.path().join("revoke-schedule.db").display()
+    );
+    let first = hosted(config(url.clone(), true)).await.unwrap();
+    let second = hosted(config(url, true)).await.unwrap();
+    let owner = register(&first, "schedulerevoke").await;
+    assert_eq!(
+        call(
+            &first,
+            "POST",
+            "/api/workspaces",
+            Some(&owner),
+            Some(json!({"id":"w","name":"Workspace","data":example_data()}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let (status, runner) = call(
+        &first,
+        "POST",
+        "/api/runners",
+        Some(&owner),
+        Some(json!({"name":"LAN"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{runner}");
+    let runner_id = runner["id"].as_str().unwrap();
+    let credential_path = format!("/api/runners/{runner_id}/credentials");
+    let (status, credential) = call(
+        &first,
+        "POST",
+        &credential_path,
+        Some(&owner),
+        Some(json!({"workspace_id":"w","name":"Scheduled agent"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{credential}");
+    let agent = credential["token"].as_str().unwrap();
+    let (status, schedule) = call(&first, "POST", "/api/workspaces/w/schedules", Some(&owner), Some(json!({"name":"LAN schedule","cron":"0 9 * * *","timezone":"UTC","enabled":false,"collection_id":"c","runner_id":runner_id}))).await;
+    assert_eq!(status, StatusCode::OK, "{schedule}");
+    let schedule_id = schedule["id"].as_str().unwrap();
+    assert_eq!(
+        call(
+            &first,
+            "POST",
+            &format!("/api/workspaces/w/schedules/{schedule_id}/run"),
+            Some(&owner),
+            None
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let running = wait_schedule(&second, &owner, schedule_id, false).await;
+    let task_id = running["running"]["runner_task_id"].as_str().unwrap();
+    let claim_path = format!("/api/runners/{runner_id}/claim");
+    let (status, claim) = call(&second, "POST", &claim_path, Some(agent), None).await;
+    assert_eq!(status, StatusCode::OK, "{claim}");
+    assert_eq!(claim["task"]["id"], task_id);
+    assert_eq!(
+        call(
+            &first,
+            "DELETE",
+            &format!("{credential_path}/{}", credential["id"].as_str().unwrap()),
+            Some(&owner),
+            None
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let (_, tasks) = call(
+        &second,
+        "GET",
+        "/api/workspaces/w/runner-tasks",
+        Some(&owner),
+        None,
+    )
+    .await;
+    assert_eq!(tasks[0]["status"], "cancelled");
+    let heartbeat_path = format!("/api/runners/{runner_id}/tasks/{task_id}/heartbeat");
+    assert_eq!(
+        call(
+            &second,
+            "POST",
+            &heartbeat_path,
+            Some(agent),
+            Some(json!({"lease_token":claim["lease_token"]}))
+        )
+        .await
+        .0,
+        StatusCode::UNAUTHORIZED
+    );
+    let finished = wait_schedule(&first, &owner, schedule_id, true).await;
+    assert_eq!(finished["last_run"]["status"], "cancelled", "{finished}");
 }

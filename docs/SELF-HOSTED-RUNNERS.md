@@ -6,9 +6,9 @@ A registered native CLI agent pulls owned jobs from a hosted MoleAPI service, ex
 
 ## Register and queue / 注册与排队
 
-Use a login session or owned personal API token through the existing credential file/environment options. Registered agents are trusted with selected workspace request credentials; use a dedicated account when isolating runner access. Workspace-scoped runner credentials and team roles remain outstanding.
+Use an owner login session to create a runner credential for exactly one runner and workspace. Queueing and runner management use the owner session or PAT; `runner agent` requires the scoped credential through its own private `--token-file` or `--token-env`. Registered agents receive the selected workspace request credentials when they claim a task, so deploy them only on trusted machines. Team roles remain outstanding.
 
-通过现有文件或系统环境变量选项传入登录凭据或个人 API 令牌。执行器会收到所选工作区的请求凭据，因此应部署在可信机器上；需要账户隔离时使用独立账户。目前继承账户的资源权限，工作区级 Runner 凭据和团队角色仍待补齐。
+先用账户登录会话为指定执行器和工作区创建专用凭据。排队及执行器管理可使用账户会话或 PAT；`runner agent` 必须通过独立的私有 `--token-file` 或 `--token-env` 使用该专用凭据。执行器领取任务时仍会收到所选工作区的请求凭据，应只部署在可信机器上。团队角色仍待补齐。
 
 Hosted runner management accepts optional `labels` on `POST /api/runners` and `PATCH /api/runners/{id}`. Labels are unique lowercase letters/digits/hyphens, 1–32 characters each, at most 10 per runner. Omitting labels on an update preserves existing labels; `[]` clears them. Existing runner records without labels read as an empty list. In the hosted UI, enter comma-separated labels when registering or editing a runner; the dispatch selector can filter runners by label. Labels are organizational only: queued and scheduled jobs still target a specific runner ID, not a label pool. In the CLI, repeat `--label` on `runner register` or `runner set`; omit it on `set` to preserve labels, or use `--clear-labels` to remove all labels. The server rejects invalid and duplicate labels.
 
@@ -19,6 +19,16 @@ moleapi-cli --server https://api.example.com --token-env MOLEAPI_TOKEN runner re
 moleapi-cli --server https://api.example.com --token-env MOLEAPI_TOKEN runner list
 moleapi-cli --server https://api.example.com --token-env MOLEAPI_TOKEN list workspaces
 moleapi-cli --server https://api.example.com --token-env MOLEAPI_TOKEN list collections --workspace WORKSPACE_ID
+```
+
+Issue the agent credential with a login session. The CLI writes its secret to a private file and prints metadata only. `list` never reveals the secret; rotate by creating a replacement and revoking the old credential. The hosted Collection tests runner panel offers the same one-time issue and confirmed revoke flow for the current workspace. A PAT cannot manage runner credentials. Do not pass bearer values as command arguments.
+
+使用登录会话签发 Agent 凭据。CLI 将原文写入私有文件，标准输出只打印元数据；列表不会再次显示原文。轮换时先创建新凭据，再撤销旧凭据。托管网页的集合测试执行器面板也支持对当前工作区一次性签发和确认撤销。PAT 不能管理执行器凭据。不要把令牌原文放入命令参数。
+
+```sh
+moleapi-cli --server https://api.example.com --token-env MOLEAPI_TOKEN runner credentials create --runner REGISTERED_RUNNER_ID --workspace WORKSPACE_ID --name "LAN workspace" --output agent-token.txt
+moleapi-cli --server https://api.example.com --token-env MOLEAPI_TOKEN runner credentials list --runner REGISTERED_RUNNER_ID
+moleapi-cli --server https://api.example.com --token-env MOLEAPI_TOKEN runner credentials revoke --runner REGISTERED_RUNNER_ID --id CREDENTIAL_ID
 ```
 
 Create `task.json` with actual runner/resource IDs and the saved workspace revision:
@@ -44,7 +54,7 @@ Selection also accepts `scenario_id`, `dataset_id` and `request_ids`. Use a scen
 ```sh
 moleapi-cli --server https://api.example.com --token-env MOLEAPI_TOKEN runner queue --workspace WORKSPACE_ID --config task.json
 moleapi-cli --server https://api.example.com --token-env MOLEAPI_TOKEN runner tasks --workspace WORKSPACE_ID
-moleapi-cli --server https://api.example.com --token-env MOLEAPI_TOKEN runner agent --id REGISTERED_RUNNER_ID
+moleapi-cli --server https://api.example.com --token-file agent-token.txt runner agent --id REGISTERED_RUNNER_ID
 ```
 
 `--once` handles one task or exits0 if the queue is empty. Continuous agents poll every2seconds, heartbeat every20seconds and renew a90second lease. Control requests time out after10seconds. Use `--variables-file` or `--variables-env` to provide existing private temporary/project/collection/environment overrides; the JSON envelope is documented in [CLI.md](CLI.md). These values do not change canonical hosted workspace variables. Each task uses a private temporary SQLite database removed when execution finishes.
@@ -61,9 +71,9 @@ moleapi-cli --server https://api.example.com --token-env MOLEAPI_TOKEN runner se
 moleapi-cli --server https://api.example.com --token-env MOLEAPI_TOKEN report --workspace WORKSPACE_ID --id REPORT_ID --format junit --output report.xml
 ```
 
-Ctrl-C cancels current local execution, submits cancellation when the service is available, then exits130. Lost/denied heartbeat also cancels local execution; server-side cancellation or revocation is observed at the next heartbeat. A cancelled/disabled/revoked task cannot extend or complete its live lease. Explicit token revoke/logout invalidates queued owner jobs; subsequent jobs use the new credential revision. Future agent calls still require a valid credential.
+Ctrl-C cancels current local execution, submits cancellation when the service is available, then exits130. Lost/denied heartbeat also cancels local execution; server-side cancellation or revocation is observed at the next heartbeat. Revoking a runner credential immediately cancels its active lease across hosted instances without cancelling unrelated credentials or queued tasks. A cancelled/disabled/revoked task cannot extend or complete its live lease. Explicit owner token revoke/logout still invalidates queued owner jobs through the account credential revision.
 
-按 Ctrl-C 会取消本地运行，服务端可用时回传取消结果，并以130退出。续租失败同样停止本地任务；服务端取消或撤销通常在下一次心跳时被 Agent 发现。禁用、取消或撤销后不能续租或提交活动任务。令牌撤销和退出登录使此前排队的账户任务失效，新任务使用新的凭据修订；Agent 的后续调用仍需要有效凭据。
+按 Ctrl-C 会取消本地运行，服务端可用时回传取消结果，并以130退出。续租失败同样停止本地任务；服务端取消或撤销通常在下一次心跳时被 Agent 发现。撤销执行器凭据会跨托管实例立即取消其活动租约，不影响其他凭据或排队任务。禁用、取消或撤销后不能续租或提交活动任务。撤销账户令牌及退出登录仍会通过账户凭据修订使此前排队的账户任务失效。
 
 The default `max_attempts: 1` does not automatically replay a lost task. Explicit values2–3 allow another claim after lease expiry; requests can run more than once, including requests with side effects. Expired attempts are reconciled when the agent claims work. Retry completion acknowledgements are idempotent and retain one report/notification transaction. If acknowledgement still fails, the CLI reports it and exits2; inspect task metadata before creating a replacement task.
 
@@ -79,8 +89,8 @@ API/CLI execution and bilingual hosted web management are implemented. In Collec
 
 Schedules can select Current server or an owned enabled runner. `runner_id` is optional in schedule definitions; absent/null preserves existing local/server execution. Each due occurrence atomically queues one single-attempt task at the current saved workspace revision and persists `running.runner_task_id`. Offline runners leave tasks queued without falling back to the server. Server restart preserves dispatches. Schedule cancellation, edits and deletion cancel the associated task; lease expiry fails without replay. Completed tasks populate schedule history and report links through the existing notification path. Cancellation still takes effect on an agent at its next heartbeat.
 
-Labels/group scheduling, workspace-scoped credentials, service installation, history-response uploads, native hosted management, packaging and PostgreSQL/MySQL/platform deployment verification remain active requirements. Binary and Docker releases will use GitHub Actions after functional completion; no local Docker build was used. This module is not evidence of complete395-capability parity or a published release.
+Label/group scheduling, service installation, history-response uploads, native hosted management, packaging and PostgreSQL/MySQL/platform deployment verification remain active requirements. Binary and Docker releases will use GitHub Actions after functional completion; no local Docker build was used. This module is not evidence of complete395-capability parity or a published release.
 
 已实现 API/CLI 执行、中英文托管网页管理和定时任务选择 Runner。集合测试页可注册、重命名、启停执行器，派发保存的集合或场景、取消任务并查看报告。派发前保存工作区，使用返回的修订，不附加浏览器本地覆盖。离线桌面继续直接执行集合，Runner 管理通过托管网页进行。
 
-每次计划以当前保存修订原子生成一个单次任务并持久记录任务 ID，等待离线机器连接，不退回服务端执行。重启后继续协调，取消、修改和删除计划会取消关联任务；租约到期记为失败，不重放请求。完成结果写回计划记录和报告入口，通知沿用现有模块。标签分组、工作区级凭据、服务安装、响应历史回传、原生托管管理和数据库及平台验证仍在范围内。功能完成后使用 GitHub Actions 发布，本地不构建 Docker；当前不代表完整功能矩阵或新版已发布。
+每次计划以当前保存修订原子生成一个单次任务并持久记录任务 ID，等待离线机器连接，不退回服务端执行。重启后继续协调，取消、修改和删除计划会取消关联任务；租约到期记为失败，不重放请求。完成结果写回计划记录和报告入口，通知沿用现有模块。标签分组、服务安装、响应历史回传、原生托管管理和数据库及平台验证仍在范围内。功能完成后使用 GitHub Actions 发布，本地不构建 Docker；当前不代表完整功能矩阵或新版已发布。

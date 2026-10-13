@@ -1,4 +1,9 @@
-use crate::{args::RunnerCommand, backend::Backend, commands::output, io, variables};
+use crate::{
+    args::{RunnerCommand, RunnerCredentialCommand},
+    backend::Backend,
+    commands::output,
+    io, variables,
+};
 use anyhow::{Context, Result, ensure};
 use moleapi_core::RunnerClaim;
 use serde_json::{Value, json};
@@ -28,6 +33,7 @@ pub async fn execute(backend: &Backend, command: &RunnerCommand) -> Result<u8> {
                 .await?
         }
         RunnerCommand::List => backend.request("GET", &["runners"], &[], None).await?,
+        RunnerCommand::Credentials { command } => return credentials(backend, command).await,
         RunnerCommand::Set {
             id,
             name,
@@ -84,6 +90,61 @@ pub async fn execute(backend: &Backend, command: &RunnerCommand) -> Result<u8> {
         }
     };
     output(&value)?;
+    Ok(0)
+}
+
+async fn credentials(backend: &Backend, command: &RunnerCredentialCommand) -> Result<u8> {
+    match command {
+        RunnerCredentialCommand::List { runner } => output(
+            &backend
+                .request("GET", &["runners", runner, "credentials"], &[], None)
+                .await?,
+        )?,
+        RunnerCredentialCommand::Create {
+            runner,
+            workspace,
+            name,
+            days,
+            output: path,
+            overwrite,
+        } => {
+            let file = io::OutputFile::prepare(path, *overwrite)?;
+            let mut value = backend
+                .request(
+                    "POST",
+                    &["runners", runner, "credentials"],
+                    &[],
+                    Some(json!({"workspace_id":workspace,"name":name,"expires_in_days":days})),
+                )
+                .await?;
+            let secret = value
+                .as_object_mut()
+                .context("Invalid credential response")?
+                .remove("token")
+                .context("Credential response missing its secret")?;
+            let secret = secret.as_str().context("Invalid credential secret")?;
+            if let Err(error) = file.save(secret.as_bytes()) {
+                if let Some(id) = value["id"].as_str() {
+                    if backend
+                        .request("DELETE", &["runners", runner, "credentials", id], &[], None)
+                        .await
+                        .is_err()
+                    {
+                        eprintln!(
+                            "Output failed and credential cleanup failed; revoke credential {id} explicitly"
+                        );
+                    }
+                }
+                return Err(error);
+            }
+            output(&value)?;
+        }
+        RunnerCredentialCommand::Revoke { runner, id } => output(
+            &backend
+                .request("DELETE", &["runners", runner, "credentials", id], &[], None)
+                .await?,
+        )?,
+    }
     Ok(0)
 }
 async fn agent(
