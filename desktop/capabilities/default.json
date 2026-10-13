@@ -16,7 +16,7 @@
     "fs:allow-read-dir",
     "fs:allow-open",
     "fs:allow-read",
-    "fs:allow-close",
+    "core:resources:allow-close",
     "fs:allow-write-text-file",
     "fs:allow-write-file",
     "dialog:allow-message",

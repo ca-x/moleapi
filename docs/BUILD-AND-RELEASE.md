@@ -1,6 +1,8 @@
 # MoleAPI 构建与发行要求
 
-状态：用户已要求 GitHub Actions 自动构建服务端、PC 客户端和 Docker。当前完成的是调研阶段与发行目标定义；已提交 Application CI、Server/Desktop Builds 和 Docker Multi-platform 三个工作流。检测到应用 manifest/lockfile/Dockerfile 后运行对应任务；目前应用未发布，各任务明确跳过。只有 Research integrity 会验证调研产物，因此本文不是产品构建成功记录。
+状态：应用代码已进入 main，GitHub Actions 实际执行服务端、桌面和 Docker 构建。2026-10-13 的 a8eeb65：Application CI、Research integrity 和 Docker 多架构构建成功；Linux x64/arm64、macOS arm64 服务端及 worker 检查成功。桌面与其余服务端平台仍须下述修复后的真实构建证据。
+
+2026-10-14 构建修复：桌面 FileHandle 继承 Tauri Resource，关闭权限应为 `core:resources:allow-close`；模型生成器的固定哈希要求 `vendor/model-engine/engine.js` 在 Windows 保持 LF（CRLF 哈希与失败日志完全一致）；macOS x64 使用官方 `macos-15-intel` runner，避免 ARM runner 的首次 Rosetta 翻译超过 worker 启动预算。Windows 桌面前次任务因 hosted runner 失联而终止，缺失日志不视作代码成功或失败证明。actionlint 和模拟 core.autocrlf Windows checkout 的模型哈希检查通过；本机缺少 JavaScriptCore/WebKitGTK 4.1，完整桌面验证由新的原生平台 Actions 任务执行。
 
 | 产物 | 目标平台/架构 | 安装/分发形式 |
 | --- | --- | --- |
