@@ -4,8 +4,9 @@ use common::*;
 async fn source_bundle_generation_uses_capped_worker_and_screens_referenced_and_unused_documents() {
     let temp = tempfile::tempdir().unwrap();
     let router = local(&temp.path().join("source-bundle.db")).await.unwrap();
-    let root = json!({"openapi":"3.0.3","info":{"title":"Source bundle","version":"1"},"components":{"schemas":{"Health":{"$ref":"models/health.json"}}},"paths":{"/health":{"get":{"operationId":"health","responses":{"200":{"description":"Healthy","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Health"}}}}}}}}});
+    let root = json!({"openapi":"3.0.3","info":{"title":"Source bundle","version":"1"},"components":{"schemas":{"Health":{"$ref":"models/health.json#%2Fdefinitions%2FHealth%20%25"}}},"paths":{"/health":{"get":{"operationId":"health","responses":{"200":{"description":"Healthy","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Health"}}}}}}}}});
     let model = json!({"type":"object","properties":{"password":{"type":"string","format":"password","example":"referenced_bundle_secret"},"ok":{"type":"boolean"}}});
+    let model = json!({"definitions":{"Health %":model}});
     let unused = json!({"type":"string","format":"password","example":"unused_bundle_secret"});
     let source = json!({"format":"moleapi-openapi-source-v1","entry_file":"api.json","files":[{"path":"api.json","content":root.to_string()},{"path":"models/health.json","content":model.to_string()},{"path":"unused.json","content":unused.to_string()}]}).to_string();
     let mut data = example_data();

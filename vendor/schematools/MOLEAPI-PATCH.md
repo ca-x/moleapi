@@ -13,3 +13,5 @@ or target-generator limits must be documented rather than silently ignored.
 Make tera-contrib optional under codegen and enable JSON Schema TLS only under http; in-memory dereferencing does not require either dependency.
 
 Expose upstream first-use reference locations via process_with_references for relocation of operation links, and retain permitted summary/description annotations on repeated-reference fast paths. URI resolution and reference graph traversal remain upstream.
+
+Decode URI-fragment JSON Pointers exactly once through percent-encoding 2.3 before resolver lookup; reject malformed percent/UTF8/RFC6901 tilde escapes. Canonicalize equivalent pointer URI encodings in reference URLs and encode generated internal-reference pointers. No resource loader or separate graph resolver is added.

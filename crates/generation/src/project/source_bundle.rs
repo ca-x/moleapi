@@ -154,14 +154,8 @@ fn references(
                     .get(&target)
                     .context("Reference is outside the supplied source bundle")?;
                 if let Some(pointer) = fragment {
-                    ensure!(
-                        pointer.is_empty() || pointer.starts_with('/'),
-                        "Named source anchors are unsupported"
-                    );
-                    ensure!(
-                        !pointer.contains('%'),
-                        "Encoded source fragments require a supported resolver"
-                    );
+                    let pointer = schematools::storage::decode_pointer_fragment(&pointer)
+                        .context("Invalid URI-fragment JSON Pointer or unsupported named anchor")?;
                     ensure!(
                         document.pointer(&pointer).is_some(),
                         "Source reference pointer not found"
@@ -172,11 +166,9 @@ fn references(
                 let reference = reference.as_str().context("Invalid operation reference")?;
                 let mut uri = schematools::storage::ref_to_url(base, reference)
                     .context("Invalid operation reference URI")?;
-                let pointer = uri.fragment().unwrap_or("").to_owned();
-                ensure!(
-                    !pointer.contains('%') && (pointer.is_empty() || pointer.starts_with('/')),
-                    "Unsupported operation reference fragment"
-                );
+                let pointer =
+                    schematools::storage::decode_pointer_fragment(uri.fragment().unwrap_or(""))
+                        .context("Invalid operation reference fragment")?;
                 uri.set_fragment(None);
                 let target = documents
                     .get(&uri)
@@ -263,7 +255,13 @@ fn relocate_operations(
                     .unwrap()
                     .strip_prefix('#')
                     .unwrap_or_else(|| uri.strip_prefix(source).unwrap());
-                *reference = format!("#{location}{tail}").into();
+                let tail = schematools::storage::decode_pointer_fragment(tail)
+                    .context("Invalid assembled operation reference fragment")?;
+                *reference = format!(
+                    "#{}",
+                    schematools::storage::encode_pointer_fragment(&format!("{location}{tail}"))
+                )
+                .into();
             }
             for (key, value) in object {
                 if !super::reference_policy::literal_member(key, value, dictionary) {
@@ -348,7 +346,9 @@ pub fn bundle_openapi(input: OpenapiSourceBundle) -> Result<BundledOpenapi> {
         }
         let mut pointer = entry.clone();
         let encoded = name.replace('~', "~0").replace('/', "~1");
-        pointer.set_fragment(Some(&format!("/components/schemas/{encoded}")));
+        pointer.set_fragment(Some(&schematools::storage::encode_pointer_fragment(
+            &format!("/components/schemas/{encoded}"),
+        )));
         aliases.insert(pointer, name.clone());
     }
     let original_documents = documents.values().cloned().collect::<Vec<_>>();
@@ -536,5 +536,86 @@ mod tests {
             result.specification["components"]["schemas"]["Second"]["summary"],
             "second summary"
         );
+    }
+
+    #[test]
+    fn encoded_source_pointers_resolve_unicode_percent_slash_and_equivalent_aliases() {
+        let reference = "types.json#%2Fdefinitions%2FA%20caf%C3%A9~1%25";
+        let root = serde_json::json!({"openapi":"3.0.3","info":{"title":"Encoded","version":"1"},"paths":{"/thing":{"get":{"operationId":"thing","responses":{"200":{"description":"OK","content":{"application/json":{"schema":{"$ref":"types.json#/definitions/A%20caf%c3%a9~1%25"}}}}}}}},"components":{"schemas":{"Thing":{"$ref":reference}}}});
+        let types = serde_json::json!({"definitions":{"A café/%":{"type":"object","properties":{"literal%2F":{"type":"string"},"tilde~value":{"type":"integer"}}}}});
+        let input = OpenapiSourceBundle {
+            format: SOURCE_BUNDLE_FORMAT.into(),
+            entry_file: "root.json".into(),
+            files: vec![source("root.json", root), source("types.json", types)],
+        };
+        let original = serde_json::to_value(&input).unwrap();
+        let result = bundle_openapi(input.clone()).unwrap();
+        assert_eq!(
+            result.specification["components"]["schemas"]["Thing"]["properties"]["literal%2F"]["type"],
+            "string"
+        );
+        assert_eq!(
+            result.specification["paths"]["/thing"]["get"]["responses"]["200"]["content"]["application/json"]
+                ["schema"]["$ref"],
+            "#/components/schemas/Thing"
+        );
+        assert_eq!(original, serde_json::to_value(input).unwrap());
+        let spec: openapiv3::OpenAPI = serde_json::from_value(result.specification).unwrap();
+        progenitor::Generator::default()
+            .generate_tokens(&spec)
+            .unwrap();
+    }
+
+    #[test]
+    fn encoded_operation_links_relocate_with_uri_fragment_semantics() {
+        let root = serde_json::json!({"openapi":"3.0.3","info":{"title":"Links","version":"1"},"paths":{"/café /%":{"$ref":"path.json#%2Froute%20~1%25"}}});
+        let path = serde_json::json!({"route /%":{"get":{"responses":{"200":{"description":"OK","links":{"self":{"operationRef":"#%2Froute%20~1%25/get"}}}}}}});
+        let result = bundle_openapi(OpenapiSourceBundle {
+            format: SOURCE_BUNDLE_FORMAT.into(),
+            entry_file: "root.json".into(),
+            files: vec![source("root.json", root), source("path.json", path)],
+        })
+        .unwrap();
+        let reference = result.specification["paths"]["/café /%"]["get"]["responses"]["200"]["links"]["self"]["operationRef"].as_str().unwrap();
+        let pointer =
+            schematools::storage::decode_pointer_fragment(reference.strip_prefix('#').unwrap())
+                .unwrap();
+        assert_eq!(pointer, "/paths/~1café ~1%/get");
+        assert!(result.specification.pointer(&pointer).is_some());
+    }
+
+    #[test]
+    fn source_pointer_decoding_is_single_pass_and_rejects_invalid_uri_or_pointer_escapes() {
+        let root = serde_json::json!({"openapi":"3.0.3","info":{"title":"Percent","version":"1"},"paths":{},"components":{"schemas":{"Thing":{"$ref":"types.json#/literal%252F"}}}});
+        let mut input = OpenapiSourceBundle {
+            format: SOURCE_BUNDLE_FORMAT.into(),
+            entry_file: "root.json".into(),
+            files: vec![
+                source("root.json", root.clone()),
+                source(
+                    "types.json",
+                    serde_json::json!({"literal%2F":{"type":"string"},"literal/":{"type":"integer"}}),
+                ),
+            ],
+        };
+        assert_eq!(
+            bundle_openapi(input.clone()).unwrap().specification["components"]["schemas"]["Thing"]
+                ["type"],
+            "string"
+        );
+        for fragment in [
+            "/literal%",
+            "/literal%GG",
+            "/literal%FF",
+            "/literal~2",
+            "/literal%7E2",
+            "/missing%252F",
+        ] {
+            let mut changed = root.clone();
+            changed["components"]["schemas"]["Thing"]["$ref"] =
+                format!("types.json#{fragment}").into();
+            input.files[0].content = changed.to_string();
+            assert!(bundle_openapi(input.clone()).is_err(), "{fragment}");
+        }
     }
 }

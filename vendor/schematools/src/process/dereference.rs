@@ -4,7 +4,7 @@ use crate::error::Error;
 use crate::resolver::SchemaResolver;
 use crate::schema::Schema;
 use crate::scope::SchemaScope;
-use crate::storage::{ref_to_url, SchemaStorage};
+use crate::storage::{decode_pointer_fragment, encode_pointer_fragment, ref_to_url, SchemaStorage};
 
 use serde_json::Value;
 use url::Url;
@@ -132,7 +132,7 @@ fn process_ref(
                         if let Some(internal_path) = ctx.resolved.get(&reference) {
                             log::debug!("{}: referencing to -> #{}", ctx.scope, internal_path);
 
-                            let mut result = serde_json::json!({ "$ref": format!("#{internal_path}") });
+                            let mut result = serde_json::json!({ "$ref": format!("#{}", encode_pointer_fragment(internal_path)) });
                             for key in ["description", "summary"] {
                                 if let Some(value) = root.as_object().and_then(|object| object.get(key)) {
                                     result[key] = value.clone();
@@ -195,9 +195,10 @@ fn process_node(
                 let parted_reference = reference.as_str().split("#").collect::<Vec<&str>>();
                 if parted_reference.len() == 2 && ctx.resolved.contains_key(parted_reference[0]) {
                     let new_reference = format!(
-                        "#{}{}",
-                        ctx.resolved.get(parted_reference[0]).unwrap(),
-                        parted_reference[1]
+                        "#{}",
+                        encode_pointer_fragment(&format!("{}{}",
+                            ctx.resolved.get(parted_reference[0]).unwrap(),
+                            decode_pointer_fragment(parted_reference[1]).unwrap_or_else(|| parted_reference[1].to_owned())))
                     );
                     *map.entry("$ref").or_insert("$ref".into()) = Value::String(new_reference);
                 } else {
@@ -243,7 +244,7 @@ fn process_discriminator(root: &mut Value, ctx: &DereferencerContext) {
                     let plain = url.to_string();
 
                     if let Some(d) = ctx.resolved.get(&plain) {
-                        *reference = format!("#{}", d.clone());
+                        *reference = format!("#{}", encode_pointer_fragment(d));
                     } else {
                         for i in (0..=plain.len()).rev() {
                             if plain.chars().nth(i) == Some('/') {

@@ -57,7 +57,10 @@ pub fn validate_project_specification(value: &Value) -> Result<()> {
                         ensure!(
                             named
                                 || reference.starts_with("#/")
-                                    && value.pointer(&reference[1..]).is_some(),
+                                    && schematools::storage::decode_pointer_fragment(
+                                        &reference[1..]
+                                    )
+                                    .is_some_and(|pointer| value.pointer(&pointer).is_some()),
                             "External or unresolved discriminator mappings require an explicit source bundle"
                         );
                     }
@@ -76,9 +79,12 @@ pub fn validate_project_specification(value: &Value) -> Result<()> {
                         );
                         if key == "operationRef" {
                             let reference = child.as_str().unwrap();
+                            let pointer =
+                                schematools::storage::decode_pointer_fragment(&reference[1..])
+                                    .context("Invalid operation URI-fragment pointer")?;
                             ensure!(
                                 value
-                                    .pointer(&reference[1..])
+                                    .pointer(&pointer)
                                     .and_then(|target| target.get("responses"))
                                     .is_some_and(Value::is_object),
                                 "Operation reference target is missing or is not an operation"

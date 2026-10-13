@@ -147,13 +147,44 @@ fn process_discriminator(current: &Url, data: &mut Value) {
 }
 
 pub fn ref_to_url(base: &Url, reference: &str) -> Option<Url> {
-    if reference.find("://").map(|p| p > 0).unwrap_or(false)
+    let mut url = if reference.find("://").map(|p| p > 0).unwrap_or(false)
         || reference.find("//").map(|p| p == 0).unwrap_or(false)
     {
         Url::parse(reference).ok()
     } else {
         base.join(reference).ok()
+    }?;
+    if let Some(pointer) = url.fragment().and_then(decode_pointer_fragment) {
+        url.set_fragment(Some(&encode_pointer_fragment(&pointer)));
     }
+    Some(url)
+}
+
+/// URI-fragment form of an RFC6901 pointer. Percent escapes are decoded once.
+pub fn decode_pointer_fragment(fragment: &str) -> Option<String> {
+    let bytes = fragment.as_bytes();
+    for (position, byte) in bytes.iter().enumerate() {
+        if *byte == b'%' && (position + 2 >= bytes.len()
+            || !bytes[position + 1].is_ascii_hexdigit()
+            || !bytes[position + 2].is_ascii_hexdigit()) {
+            return None;
+        }
+    }
+    let pointer = percent_encoding::percent_decode_str(fragment).decode_utf8().ok()?.into_owned();
+    if !pointer.is_empty() && !pointer.starts_with('/') { return None; }
+    let bytes = pointer.as_bytes();
+    for (position, byte) in bytes.iter().enumerate() {
+        if *byte == b'~' && !matches!(bytes.get(position + 1), Some(b'0' | b'1')) {
+            return None;
+        }
+    }
+    Some(pointer)
+}
+
+pub fn encode_pointer_fragment(pointer: &str) -> String {
+    const POINTER: &percent_encoding::AsciiSet = &percent_encoding::NON_ALPHANUMERIC
+        .remove(b'/').remove(b'~').remove(b'-').remove(b'_').remove(b'.');
+    percent_encoding::utf8_percent_encode(pointer, POINTER).to_string()
 }
 
 fn ref_to_file_url(base: &Url, reference: &str) -> Option<Url> {

@@ -86,6 +86,9 @@ default-features = false
 [dependencies.log]
 version = "0.4"
 
+[dependencies.percent-encoding]
+version = "2.3"
+
 [dependencies.md5]
 version = "0.11"
 package = "md-5"

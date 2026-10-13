@@ -32,6 +32,8 @@ Milestones 1–4 each require a separate decision-complete slice plan before cod
 
 **Checkpoint:** Runner governance source and local tests are implemented, including scoped credentials, label groups, response history, native hosted management and Linux/macOS/Windows supervision. The final local batch gate passed 555 Rust tests, 274 frontend tests, strict Clippy, formatting and frontend/server/CLI builds. macOS arm64 and Windows GNU CLI cross-checks pass. Native installation and database deployment evidence remain open. The user authorizes merging and pushing this verified batch to main; continue with milestone 2 generation afterward.
 
+Milestone 2 is active: encoded source URI-fragment pointers now resolve through the shared schematools adapter. The generation suite passed 41 cases (6 explicit external-tool cases ignored), five project API cases passed, and scoped strict Clippy/formatting/compilation passed. Remaining generation work includes resource IDs/named/dynamic anchors, validation siblings, mainstream SDK/server runtime fixtures and packaged runtime/platform evidence.
+
 ## Slice 1: CLI runner labels
 
 **Files:** `crates/cli/src/args.rs` owns flags; `crates/cli/src/runners.rs` owns request payloads; `crates/cli/tests/runners.rs` owns real process/API fixtures; `docs/SELF-HOSTED-RUNNERS.md`, `docs/SELF-HOSTED-RUNNER-COVERAGE.md` and `docs/IMPLEMENTATION-STATUS.md` own usage/status.

@@ -41,13 +41,16 @@ impl<'a> SchemaResolver<'a> {
                     let mut url = super::storage::ref_to_url(&self.url, reference).unwrap();
 
                     let copy = url.clone();
-                    let pointer = copy.fragment();
+                    let pointer = copy.fragment().map(|fragment| {
+                        super::storage::decode_pointer_fragment(fragment)
+                            .ok_or_else(|| Error::DereferenceError("Invalid URI-fragment JSON Pointer".into()))
+                    }).transpose()?;
 
                     url.set_fragment(None);
                     let referenced_schema = storage.schemas.get(&url);
 
                     match referenced_schema {
-                        Some(schema) => match pointer {
+                        Some(schema) => match pointer.as_deref() {
                             Some(p) => {
                                 if let Some(s) = schema.get_body().pointer(p) {
                                     scope.reference(p);
@@ -98,13 +101,16 @@ impl<'a> SchemaResolver<'a> {
                     let mut url = super::storage::ref_to_url(&self.url, reference).unwrap();
 
                     let copy = url.clone();
-                    let pointer = copy.fragment();
+                    let pointer = copy.fragment().map(|fragment| {
+                        super::storage::decode_pointer_fragment(fragment)
+                            .ok_or_else(|| Error::DereferenceError("Invalid URI-fragment JSON Pointer".into()))
+                    }).transpose()?;
 
                     url.set_fragment(None);
                     let referenced_schema = storage.schemas.get(&url);
 
                     match referenced_schema {
-                        Some(schema) => match pointer {
+                        Some(schema) => match pointer.as_deref() {
                             Some(p) => {
                                 if let Some(s) = schema.get_body().pointer(p) {
                                     scope.reference(p);
