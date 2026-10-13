@@ -1,11 +1,21 @@
 use crate::args::{Cli, RunnerServiceCommand};
 use anyhow::Result;
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 use anyhow::bail;
 
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 pub fn execute(_: &Cli, _: &RunnerServiceCommand) -> Result<u8> {
     bail!("Runner service installation is not implemented for this platform yet")
+}
+
+#[cfg(target_os = "windows")]
+mod windows;
+#[cfg(any(target_os = "windows", test))]
+mod windows_xml;
+
+#[cfg(target_os = "windows")]
+pub fn execute(cli: &Cli, command: &RunnerServiceCommand) -> Result<u8> {
+    windows::execute(cli, command)
 }
 
 #[cfg(target_os = "macos")]
@@ -233,14 +243,9 @@ mod linux {
                 let id = runner_id(id)?;
                 let path = installed_path(&id)?;
                 let existing = fs::symlink_metadata(&path).ok();
-                if existing.is_none() {
-                    println!(
-                        "{}",
-                        json!({"runner_id":id,"installed":false,"active":false})
-                    );
-                } else {
+                if let Some(metadata) = existing {
                     ensure!(
-                        existing.unwrap().file_type().is_file(),
+                        metadata.file_type().is_file(),
                         "Runner unit must be a regular file, not a symlink"
                     );
                     owned(
@@ -263,6 +268,11 @@ mod linux {
                     println!(
                         "{}",
                         json!({"runner_id":id,"installed":true,"active":state=="active","state":state})
+                    );
+                } else {
+                    println!(
+                        "{}",
+                        json!({"runner_id":id,"installed":false,"active":false})
                     );
                 }
             }

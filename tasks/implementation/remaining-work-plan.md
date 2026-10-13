@@ -15,7 +15,7 @@
 - Status is **open** unless the relevant coverage file has real endpoint/UI/CLI/native evidence and regression tests. A prior run only proves its exact commit and platform.
 - Preserve offline desktop and standalone hosted server behavior; no hosted third-party service or runtime download as an implicit dependency.
 - Protect source fidelity, owner boundaries, credentials, cancellation and resource budgets in every slice.
-- Keep the existing untracked draft files untouched. No merge, push, release or claim of parity before the final gates.
+- Preserve existing untracked drafts. The user authorizes merging and pushing verified feature batches to main; the full release and parity claims still require the final gates.
 - Recheck the feature matrix after each milestone and record supported target combinations separately from catalog availability.
 
 ## Ordered milestones
@@ -30,7 +30,7 @@
 
 Milestones 1–4 each require a separate decision-complete slice plan before coding; the matrix is too large to safely implement as one undifferentiated task. The first slice is CLI label management, which closes the gap left by the existing hosted UI/API label work without changing scheduling semantics.
 
-**Checkpoint:** Milestone 1 is in progress. CLI labels, workspace-scoped credentials, label-group targeting, response-history upload, native hosted management and Linux systemd installation are committed. macOS launchd installation is written against `docs/specs/runner-service-installation.md`; arm64 Rust cross-compilation passes with a temporary Zig C-compiler wrapper, but runtime tests have not run under the user's test-last instruction. Windows supervision, native installation validation and later milestones remain.
+**Checkpoint:** Runner governance source and local tests are implemented, including scoped credentials, label groups, response history, native hosted management and Linux/macOS/Windows supervision. The final local batch gate passed 555 Rust tests, 274 frontend tests, strict Clippy, formatting and frontend/server/CLI builds. macOS arm64 and Windows GNU CLI cross-checks pass. Native installation and database deployment evidence remain open. The user authorizes merging and pushing this verified batch to main; continue with milestone 2 generation afterward.
 
 ## Slice 1: CLI runner labels
 

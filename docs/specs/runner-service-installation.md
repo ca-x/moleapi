@@ -13,7 +13,11 @@ Install the native `runner agent` as a supervised per-user service, using a priv
 
 The same CLI commands install `com.moleapi.runner.UUID.plist` under the current user's `~/Library/LaunchAgents`. The plist uses an argument array, XML escaping, a managed marker and checksum, private atomic writes, RunAtLoad, KeepAlive and a five-second restart throttle. Install bootstraps the current GUI user domain; replacement first boots out a loaded agent; status reports installed/loaded, and uninstall boots out before removing only a verified owned plist. Credential and variables files use the same private regular-file requirement. The CLI never places their contents in the plist.
 
-Windows service/task supervision still requires platform-specific implementation and verification. Linux and macOS source compilation do not establish native installation gates.
+## Windows per-user scheduled task
+
+The same commands use Task Scheduler with an interactive logon trigger, current-user SID, a single running instance, no execution time limit, and up to 999 restart attempts at one-minute intervals. `install` registers and starts a task under `\\MoleAPI\\Runner-UUID`; `status` reports installed/registered, and `uninstall` ends and removes only a verified managed task. The XML manifest stays under `%LOCALAPPDATA%\\MoleAPI\\runner-services`, with a managed marker and checksum. The token and optional variables files must be regular non-symlink files inside the current user's `%LOCALAPPDATA%` tree, inheriting its private ACL; bearer contents never enter the XML or command line. This task runs while the user is logged in, not as a machine-wide Windows Service.
+
+Linux/macOS cross-compilation and Windows XML generation do not establish native installation gates; each manager requires actual platform verification.
 
 ## Acceptance
 

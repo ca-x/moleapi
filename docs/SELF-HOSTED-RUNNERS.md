@@ -76,7 +76,7 @@ moleapi-cli runner service status --id REGISTERED_RUNNER_ID
 moleapi-cli runner service uninstall --id REGISTERED_RUNNER_ID
 ```
 
-On macOS the same commands manage a per-user launchd agent in `~/Library/LaunchAgents`, with RunAtLoad/KeepAlive and a five-second restart throttle. Linux and macOS installation flows and test code have not yet passed the final runtime verification gate. Windows supervision remains separate platform work.
+On macOS the same commands manage a per-user launchd agent in `~/Library/LaunchAgents`, with RunAtLoad/KeepAlive and a five-second restart throttle. On Windows they manage a current-user Task Scheduler logon task with restart-on-failure; the token and optional variables files must be inside that user's `%LOCALAPPDATA%` tree. The Windows task runs only while the user is logged in, not as a machine-wide service. All three platform implementations still require their native runtime verification gate.
 
 ## Cancellation, recovery and reports / 取消、恢复和报告
 
