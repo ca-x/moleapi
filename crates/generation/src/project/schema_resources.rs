@@ -246,15 +246,40 @@ fn target(
         format!("{}#{fragment}", location.document)
     })
 }
+struct RewriteContext<'a> {
+    locations: &'a HashMap<usize, Location>,
+    names: &'a BTreeSet<String>,
+    schemas: &'a HashSet<usize>,
+}
+
+// Keep evaluation-dependent siblings on the outer schema. Appending leaves
+// pointers into authored allOf branches stable while including the ref's annotations.
+fn compose_reference_siblings(object: &mut serde_json::Map<String, Value>) -> Result<()> {
+    if object.contains_key("$ref")
+        && object
+            .keys()
+            .any(|key| !["$ref", "summary", "description"].contains(&key.as_str()))
+    {
+        let reference = object.remove("$ref").unwrap();
+        let branches = object
+            .entry("allOf")
+            .or_insert_with(|| Value::Array(Vec::new()))
+            .as_array_mut()
+            .context("Schema allOf must be an array")?;
+        branches.push(serde_json::json!({"$ref": reference}));
+    }
+    Ok(())
+}
+
 fn rewrite(
     original: &Value,
     value: &mut Value,
     resolver: &Resolver<'_>,
     document: &Url,
     dictionary: bool,
-    locations: &HashMap<usize, Location>,
-    names: &BTreeSet<String>,
+    context: &RewriteContext<'_>,
 ) -> Result<()> {
+    let is_schema = context.schemas.contains(&address(original));
     match (original, value) {
         (Value::Object(original), Value::Object(object)) => {
             // Enter the original declaration before rewriting its references and descendants.
@@ -275,7 +300,7 @@ fn rewrite(
                                 .context("Schema reference must be a string")?,
                             &resolver,
                             document,
-                            locations,
+                            context.locations,
                         )?
                         .into(),
                     );
@@ -288,8 +313,9 @@ fn rewrite(
                     for value in mapping.values_mut() {
                         let reference =
                             value.as_str().context("Invalid discriminator reference")?;
-                        if !names.contains(reference) {
-                            *value = target(reference, &resolver, document, locations)?.into();
+                        if !context.names.contains(reference) {
+                            *value =
+                                target(reference, &resolver, document, context.locations)?.into();
                         }
                     }
                 }
@@ -306,15 +332,17 @@ fn rewrite(
                         &resolver,
                         document,
                         !dictionary && reference_policy::dictionary_member(key),
-                        locations,
-                        names,
+                        context,
                     )?;
                 }
+            }
+            if is_schema {
+                compose_reference_siblings(object)?;
             }
         }
         (Value::Array(original), Value::Array(array)) => {
             for (original, value) in original.iter().zip(array) {
-                rewrite(original, value, resolver, document, false, locations, names)?;
+                rewrite(original, value, resolver, document, false, context)?;
             }
         }
         _ => {}
@@ -453,6 +481,11 @@ pub(super) fn normalize(
         .into_iter()
         .flat_map(|object| object.keys().cloned())
         .collect();
+    let context = RewriteContext {
+        locations: &locations,
+        names: &names,
+        schemas: &nodes,
+    };
     let mut normalized = documents.clone();
     for (url, value) in &mut normalized {
         let resolver = registry.resolver(referencing::uri::from_str(url.as_str())?);
@@ -462,8 +495,7 @@ pub(super) fn normalize(
             &resolver,
             url,
             reference_policy::root_dictionary(&documents[url]),
-            &locations,
-            &names,
+            &context,
         )?;
     }
     Ok(normalized)
@@ -623,5 +655,40 @@ mod tests {
             &normalized[&entry()]["components"]["schemas"]["Union"]["discriminator"]["mapping"];
         assert_eq!(mapping["node"], "moleapi://source-bundle/model.json#");
         assert_eq!(mapping["named"], "Node");
+    }
+    #[test]
+    fn composed_siblings_leave_authored_allof_pointer_indices_stable() {
+        let input = documents(
+            json!({
+                "Restricted":{"$ref":"model.json","allOf":[{"type":"string","maxLength":3}],"minLength":1},
+                "FirstBranch":{"$ref":"#/components/schemas/Restricted/allOf/0"}
+            }),
+            json!({"type":"string"}),
+        );
+        let normalized = normalize(&input, &entry()).unwrap();
+        let schemas = &normalized[&entry()]["components"]["schemas"];
+        assert_eq!(
+            schemas["Restricted"]["allOf"][0],
+            json!({"type":"string","maxLength":3})
+        );
+        assert_eq!(
+            schemas["Restricted"]["allOf"][1]["$ref"],
+            "moleapi://source-bundle/model.json#"
+        );
+        assert_eq!(
+            schemas["FirstBranch"]["$ref"],
+            "#/components/schemas/Restricted/allOf/0"
+        );
+    }
+
+    #[test]
+    fn composed_siblings_reject_invalid_allof_arrays() {
+        for allof in [json!({"type":"string"}), json!(false), json!("bad")] {
+            let input = documents(
+                json!({"Restricted":{"$ref":"model.json","allOf":allof}}),
+                json!({"type":"string"}),
+            );
+            assert!(normalize(&input, &entry()).is_err());
+        }
     }
 }

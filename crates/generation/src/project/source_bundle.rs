@@ -660,11 +660,9 @@ mod tests {
     }
 
     #[test]
-    fn static_resources_keep_validation_siblings_and_30_metadata_explicitly_unsupported() {
-        for schema in [
-            serde_json::json!({"$ref":"model.json","maxLength":4}),
-            serde_json::json!({"$dynamicRef":"#node"}),
-        ] {
+    fn static_resources_keep_dynamic_and_30_metadata_explicitly_unsupported() {
+        {
+            let schema = serde_json::json!({"$dynamicRef":"#node"});
             let root = serde_json::json!({"openapi":"3.1.0","info":{"title":"Unsupported","version":"1"},"paths":{},"components":{"schemas":{"Node":schema}}});
             let input = OpenapiSourceBundle {
                 format: SOURCE_BUNDLE_FORMAT.into(),
@@ -685,5 +683,167 @@ mod tests {
             })
             .is_err()
         );
+    }
+    fn assert_sibling_validation_equivalent(
+        model: Value,
+        restriction: Value,
+        instances: &[(Value, bool)],
+    ) -> BundledOpenapi {
+        let root = serde_json::json!({"openapi":"3.1.0","info":{"title":"Sibling constraints","version":"1"},"paths":{},"components":{"schemas":{
+            "Base":{"$ref":"moleapi://source-bundle/model.json"}, "Restricted":restriction
+        }}});
+        let input = OpenapiSourceBundle {
+            format: SOURCE_BUNDLE_FORMAT.into(),
+            entry_file: "root.json".into(),
+            files: vec![
+                source("root.json", root.clone()),
+                source("model.json", model.clone()),
+            ],
+        };
+        let registry = jsonschema::Registry::new()
+            .draft(jsonschema::Draft::Draft202012)
+            .retriever(referencing::DefaultRetriever)
+            .extend([(
+                "moleapi://source-bundle/model.json",
+                jsonschema::Resource::from_contents(model.clone()),
+            )])
+            .unwrap()
+            .prepare()
+            .unwrap();
+        let original = jsonschema::options()
+            .with_draft(jsonschema::Draft::Draft202012)
+            .with_registry(&registry)
+            .build(&restriction)
+            .unwrap();
+        let result = bundle_openapi(input).unwrap();
+        let wrapper = serde_json::json!({"$ref":"#/components/schemas/Restricted","components":result.specification["components"]});
+        let projected = jsonschema::options()
+            .with_draft(jsonschema::Draft::Draft202012)
+            .build(&wrapper)
+            .unwrap();
+        for (instance, accepted) in instances {
+            assert_eq!(
+                original.is_valid(instance),
+                *accepted,
+                "original: {instance}"
+            );
+            assert_eq!(
+                projected.is_valid(instance),
+                *accepted,
+                "projection: {instance}"
+            );
+        }
+        assert!(result.documents.contains(&root));
+        assert!(result.documents.contains(&model));
+        result
+    }
+
+    #[test]
+    fn reference_siblings_preserve_external_string_constraints_annotations_and_literals() {
+        let literal = serde_json::json!({"$ref":"outside.json","$id":"literal"});
+        let result = assert_sibling_validation_equivalent(
+            serde_json::json!({"$id":"https://schemas.test/model","type":"string","minLength":1}),
+            serde_json::json!({"$ref":"https://schemas.test/model","maxLength":3,"pattern":"^[a-z]+$","description":"narrow string","example":literal,"x-literal":literal}),
+            &[
+                (serde_json::json!("abc"), true),
+                (serde_json::json!(""), false),
+                (serde_json::json!("abcd"), false),
+                (serde_json::json!("AB"), false),
+                (serde_json::json!(12), false),
+            ],
+        );
+        let restricted = &result.specification["components"]["schemas"]["Restricted"];
+        assert_eq!(restricted["description"], "narrow string");
+        assert_eq!(restricted["example"], literal);
+        assert_eq!(restricted["x-literal"], literal);
+        assert!(restricted.get("$ref").is_none());
+        assert_eq!(restricted["allOf"][0]["$ref"], "#/components/schemas/Base");
+    }
+
+    #[test]
+    fn reference_siblings_keep_evaluated_properties_on_the_outer_schema() {
+        assert_sibling_validation_equivalent(
+            serde_json::json!({"$id":"https://schemas.test/model","type":"object","properties":{"id":{"type":"integer"}},"required":["id"]}),
+            serde_json::json!({"$ref":"https://schemas.test/model","properties":{"name":{"type":"string"}},"required":["name"],"unevaluatedProperties":false}),
+            &[
+                (serde_json::json!({"id":1,"name":"ok"}), true),
+                (serde_json::json!({"id":1}), false),
+                (serde_json::json!({"name":"ok"}), false),
+                (serde_json::json!({"id":1,"name":"ok","extra":1}), false),
+                (serde_json::json!({"id":"bad","name":"ok"}), false),
+            ],
+        );
+    }
+
+    #[test]
+    fn reference_siblings_keep_evaluated_items_and_existing_allof_branches() {
+        let result = assert_sibling_validation_equivalent(
+            serde_json::json!({"$id":"https://schemas.test/model","type":"array","prefixItems":[{"type":"string"}]}),
+            serde_json::json!({"$ref":"https://schemas.test/model","allOf":[{"minItems":1}],"unevaluatedItems":false}),
+            &[
+                (serde_json::json!(["ok"]), true),
+                (serde_json::json!([]), false),
+                (serde_json::json!(["ok", 1]), false),
+                (serde_json::json!([1]), false),
+            ],
+        );
+        assert_eq!(
+            result.specification["components"]["schemas"]["Restricted"]["allOf"][0]["minItems"],
+            1
+        );
+        assert_eq!(
+            result.specification["components"]["schemas"]["Restricted"]["allOf"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+    }
+
+    #[test]
+    fn reference_siblings_preserve_recursion_and_boolean_schema_targets() {
+        assert_sibling_validation_equivalent(
+            serde_json::json!({"$id":"https://schemas.test/model","$anchor":"node","type":"object","properties":{"next":{"$ref":"#node"},"name":{"type":"string"}}}),
+            serde_json::json!({"$ref":"https://schemas.test/model#node","maxProperties":1}),
+            &[
+                (serde_json::json!({"name":"ok"}), true),
+                (serde_json::json!({"next":{"name":"ok"}}), true),
+                (serde_json::json!({"next":{"name":1}}), false),
+                (serde_json::json!({"name":"ok","next":{}}), false),
+            ],
+        );
+        for accepted in [true, false] {
+            assert_sibling_validation_equivalent(
+                Value::Bool(accepted),
+                serde_json::json!({"$ref":"moleapi://source-bundle/model.json","type":"string"}),
+                &[
+                    (serde_json::json!("ok"), accepted),
+                    (serde_json::json!(1), false),
+                ],
+            );
+        }
+    }
+
+    #[test]
+    fn non_schema_reference_objects_and_30_siblings_still_reject_unsupported_constraints() {
+        for version in ["3.0.3", "3.1.0"] {
+            let mut root = serde_json::json!({"openapi":version,"info":{"title":"Reference objects","version":"1"},"paths":{},"components":{"schemas":{"Restricted":{"$ref":"model.json","maxLength":3}}}});
+            if version == "3.1.0" {
+                root["components"] = serde_json::json!({"responses":{"Response":{"$ref":"responses.json#/Response","content":{"application/json":{}}}}});
+            }
+            let input = OpenapiSourceBundle {
+                format: SOURCE_BUNDLE_FORMAT.into(),
+                entry_file: "root.json".into(),
+                files: vec![
+                    source("root.json", root),
+                    source("model.json", serde_json::json!({"type":"string"})),
+                    source(
+                        "responses.json",
+                        serde_json::json!({"Response":{"description":"OK"}}),
+                    ),
+                ],
+            };
+            assert!(bundle_openapi(input).is_err(), "{version}");
+        }
     }
 }

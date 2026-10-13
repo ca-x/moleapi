@@ -2,13 +2,17 @@ mod common;
 use common::*;
 #[tokio::test]
 async fn source_bundle_generation_uses_capped_worker_and_screens_referenced_and_unused_documents() {
-    source_bundle_worker_case(false).await;
+    source_bundle_worker_case(false, false).await;
 }
 #[tokio::test]
 async fn static_schema_resources_use_owned_worker_and_preserve_source_privacy() {
-    source_bundle_worker_case(true).await;
+    source_bundle_worker_case(true, false).await;
 }
-async fn source_bundle_worker_case(static_resources: bool) {
+#[tokio::test]
+async fn schema_reference_siblings_survive_owned_worker_model_generation_and_privacy() {
+    source_bundle_worker_case(true, true).await;
+}
+async fn source_bundle_worker_case(static_resources: bool, schema_siblings: bool) {
     let temp = tempfile::tempdir().unwrap();
     let router = local(&temp.path().join("source-bundle.db")).await.unwrap();
     let root = json!({"openapi":"3.0.3","info":{"title":"Source bundle","version":"1"},"components":{"schemas":{"Health":{"$ref":"models/health.json#%2Fdefinitions%2FHealth%20%25"}}},"paths":{"/health":{"get":{"operationId":"health","responses":{"200":{"description":"Healthy","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Health"}}}}}}}}});
@@ -28,6 +32,10 @@ async fn source_bundle_worker_case(static_resources: bool) {
             .unwrap();
         model["$defs"]["Health %"]["$id"] = "https://schemas.example.test/health".into();
         model["$defs"]["Health %"]["$anchor"] = "health".into();
+    }
+    if schema_siblings {
+        root["components"]["schemas"]["Health"]["properties"] = json!({"status":{"type":"string"}});
+        root["components"]["schemas"]["Health"]["required"] = json!(["status"]);
     }
     let source = json!({"format":"moleapi-openapi-source-v1","entry_file":"api.json","files":[{"path":"api.json","content":root.to_string()},{"path":"models/health.json","content":model.to_string()},{"path":"unused.json","content":unused.to_string()}]}).to_string();
     let mut data = example_data();
@@ -66,6 +74,15 @@ async fn source_bundle_worker_case(static_resources: bool) {
             file["path"] == "src/lib.rs" && content.contains("pub async fn health")
         }
     }));
+    if schema_siblings {
+        assert!(safe["files"].as_array().unwrap().iter().any(|file| {
+            file["path"] != "moleapi-generation.json"
+                && file["content"]
+                    .as_str()
+                    .unwrap()
+                    .contains("json:\"status\"")
+        }));
+    }
     let mut options = input.clone();
     options["job_id"] = "bundle-private-option".into();
     options["options"] = if static_resources {

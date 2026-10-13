@@ -6687,6 +6687,7 @@ dependencies = [
  "anyhow",
  "base64 0.22.1",
  "diffy",
+ "jsonschema 0.49.9",
  "moleapi-core",
  "moleapi-formats",
  "mustache",
