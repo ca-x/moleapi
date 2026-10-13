@@ -34,7 +34,14 @@ pub(crate) async fn create(
     let tx = state.db.begin().await?;
     crate::runners::account_lock(&tx, &state, &owner.0).await?;
     let data = workspace_lock(&tx, &owner.0, &workspace).await?;
-    crate::runners::validate_target(&tx, &state, &owner.0, definition.runner_id.as_deref()).await?;
+    crate::runners::validate_target(
+        &tx,
+        &state,
+        &owner.0,
+        definition.runner_id.as_deref(),
+        definition.runner_label.as_deref(),
+    )
+    .await?;
     definition.validate_refs(&data)?;
     crate::notifications::validate_targets(&tx, &owner.0, &workspace, &definition.notification_ids)
         .await?;
@@ -88,8 +95,14 @@ pub(crate) async fn update(
     let tx = state.db.begin().await?;
     crate::runners::account_lock(&tx, &state, &owner.0).await?;
     let data = workspace_lock(&tx, &owner.0, &workspace).await?;
-    crate::runners::validate_target(&tx, &state, &owner.0, input.definition.runner_id.as_deref())
-        .await?;
+    crate::runners::validate_target(
+        &tx,
+        &state,
+        &owner.0,
+        input.definition.runner_id.as_deref(),
+        input.definition.runner_label.as_deref(),
+    )
+    .await?;
     input.definition.validate_refs(&data)?;
     crate::notifications::validate_targets(
         &tx,
@@ -205,6 +218,7 @@ pub(crate) async fn preview(
     owned(&state, &owner.0, &workspace).await?;
     let definition = Definition {
         runner_id: None,
+        runner_label: None,
         notification_ids: vec![],
         name: "Preview".into(),
         cron: input.cron,
@@ -238,6 +252,7 @@ pub(crate) async fn queue(
         &state,
         &owner.0,
         schedule.definition.runner_id.as_deref(),
+        schedule.definition.runner_label.as_deref(),
     )
     .await?;
     if schedule.queued.is_some() {

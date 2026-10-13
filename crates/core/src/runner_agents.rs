@@ -38,6 +38,8 @@ pub struct RunnerTaskSummary {
     pub id: String,
     pub workspace_id: String,
     pub runner_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_label: Option<String>,
     pub selection: RunnerSelection,
     pub source_revision: i64,
     pub status: RunnerTaskStatus,

@@ -13,21 +13,6 @@ pub(crate) async fn account_lock<C: ConnectionTrait>(
     }
     Ok(())
 }
-pub(crate) async fn validate_target<C: ConnectionTrait>(
-    db: &C,
-    state: &AppState,
-    owner: &str,
-    target: Option<&str>,
-) -> Result<(), ApiError> {
-    if let Some(id) = target {
-        super::hosted(state)?;
-        let runner: ExecutionRunner = get(db, owner, RUNNER, id).await?;
-        if !runner.enabled {
-            return Err(ApiError::bad("Runner is disabled"));
-        }
-    }
-    Ok(())
-}
 pub(crate) async fn cancel_in<C: ConnectionTrait>(
     db: &C,
     owner: &str,

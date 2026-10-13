@@ -1,4 +1,4 @@
-use super::storage::{RUNNER, TASK, Task, account_lock, get, prune, save_task};
+use super::storage::{TASK, Task, account_lock, get, prune, save_task};
 use super::{hosted, selection::validate, terminal};
 use crate::{
     ApiError, AppState, auth::Identity, entities::document, scheduling::workspace_lock,
@@ -16,7 +16,10 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Queue {
-    pub(crate) runner_id: String,
+    #[serde(default)]
+    pub(crate) runner_id: Option<String>,
+    #[serde(default)]
+    pub(crate) runner_label: Option<String>,
     pub(crate) expected_revision: i64,
     pub(crate) selection: RunnerSelection,
     #[serde(default = "one")]
@@ -66,10 +69,13 @@ pub(crate) async fn queue_in<C: ConnectionTrait>(
     validate(source, &input.selection)?;
     crate::notifications::validate_targets(tx, owner, workspace, &input.selection.notification_ids)
         .await?;
-    let runner: ExecutionRunner = get(tx, owner, RUNNER, &input.runner_id).await?;
-    if !runner.enabled {
-        return Err(ApiError::bad("Runner is disabled"));
-    }
+    let runner: ExecutionRunner = super::targets::resolve(
+        tx,
+        owner,
+        input.runner_id.as_deref(),
+        input.runner_label.as_deref(),
+    )
+    .await?;
     let pending = document::Entity::find()
         .filter(document::Column::Owner.eq(owner))
         .filter(document::Column::Kind.eq(TASK))
@@ -84,7 +90,8 @@ pub(crate) async fn queue_in<C: ConnectionTrait>(
         summary: RunnerTaskSummary {
             id,
             workspace_id: workspace.to_string(),
-            runner_id: input.runner_id,
+            runner_id: runner.id,
+            target_label: input.runner_label,
             selection: input.selection,
             source_revision: source.revision,
             status: Status::Queued,

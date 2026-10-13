@@ -11,6 +11,8 @@ pub struct Definition {
     #[serde(default)]
     pub runner_id: Option<String>,
     #[serde(default)]
+    pub runner_label: Option<String>,
+    #[serde(default)]
     pub notification_ids: Vec<String>,
     pub name: String,
     pub cron: String,
@@ -187,6 +189,7 @@ mod tests {
     fn definition(cron: &str, timezone: &str) -> Definition {
         Definition {
             runner_id: None,
+            runner_label: None,
             notification_ids: vec![],
             name: "Time".into(),
             cron: cron.into(),

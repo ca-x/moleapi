@@ -30,7 +30,7 @@
 
 Milestones 1–4 each require a separate decision-complete slice plan before coding; the matrix is too large to safely implement as one undifferentiated task. The first slice is CLI label management, which closes the gap left by the existing hosted UI/API label work without changing scheduling semantics.
 
-**Checkpoint:** Milestone 1 is in progress. CLI label management and workspace-scoped agent credentials are implemented in this worktree. The remaining runner work is label/group target selection, response-history upload, native hosted management and supervised service installation; each needs a separate decision-complete slice plan.
+**Checkpoint:** Milestone 1 is in progress. CLI label management and workspace-scoped agent credentials are committed in this worktree. Label-group target selection is being implemented against `docs/specs/runner-label-targets.md`; its new tests have been written but not run under the user's test-last instruction. Response-history upload, native hosted management and supervised service installation remain afterward, each with a separate slice plan.
 
 ## Slice 1: CLI runner labels
 

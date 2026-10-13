@@ -18,7 +18,7 @@ fn name(value: &str) -> Result<(), ApiError> {
     }
     Ok(())
 }
-fn validate_labels(values: &[String]) -> Result<(), ApiError> {
+pub(super) fn validate_labels(values: &[String]) -> Result<(), ApiError> {
     if values.len() > 10 {
         return Err(ApiError::bad("Runner accepts at most 10 labels"));
     }
@@ -141,6 +141,23 @@ pub(crate) async fn update(
             }
             Err(error) if error.status == axum::http::StatusCode::NOT_FOUND => {}
             Err(error) => return Err(error),
+        }
+    }
+
+    if !runner.enabled {
+        let queued = document::Entity::find()
+            .filter(document::Column::Owner.eq(&owner.0))
+            .filter(document::Column::Kind.eq(TASK))
+            .filter(document::Column::Revision.eq(0))
+            .all(&tx)
+            .await?;
+        for row in queued {
+            let mut task: Task =
+                serde_json::from_str(&row.payload).map_err(|_| ApiError::internal())?;
+            if task.summary.runner_id == id && task.summary.status == Status::Queued {
+                terminal(&mut task, Status::Cancelled);
+                save_task(&tx, &owner.0, &task).await?;
+            }
         }
     }
 

@@ -250,7 +250,14 @@ async fn real_agent_executes_private_local_request_and_returns_owned_redacted_re
         token_path.to_str().unwrap(),
     ];
     let mut args = auth.to_vec();
-    args.extend(["runner", "register", "--name", "LAN worker"]);
+    args.extend([
+        "runner",
+        "register",
+        "--name",
+        "LAN worker",
+        "--label",
+        "lan",
+    ]);
     let runner = result(cli(&args).await, 0);
     let id = runner["id"].as_str().unwrap();
     let agent_token_path = temporary.path().join("agent-token.txt");
@@ -282,6 +289,45 @@ async fn real_agent_executes_private_local_request_and_returns_owned_redacted_re
         0,
     );
     assert_eq!(listed[0]["id"], credential["id"]);
+    let group_config = temporary.path().join("group-task.json");
+    write(
+        &group_config,
+        &json!({"runner_label":"lan","expected_revision":original["revision"],"selection":{"collection_id":"c"}}),
+    );
+    let grouped = result(
+        cli(&[
+            auth.as_slice(),
+            &[
+                "runner",
+                "queue",
+                "--workspace",
+                "w",
+                "--config",
+                group_config.to_str().unwrap(),
+            ],
+        ]
+        .concat())
+        .await,
+        0,
+    );
+    assert_eq!(grouped["runner_id"], id);
+    assert_eq!(grouped["target_label"], "lan");
+    result(
+        cli(&[
+            auth.as_slice(),
+            &[
+                "runner",
+                "cancel",
+                "--workspace",
+                "w",
+                "--id",
+                grouped["id"].as_str().unwrap(),
+            ],
+        ]
+        .concat())
+        .await,
+        0,
+    );
     let config = temporary.path().join("task.json");
     write(
         &config,

@@ -20,6 +20,7 @@ export interface RunnerTask {
   id: string;
   workspace_id: string;
   runner_id: string;
+  target_label?: string | null;
   selection: RunnerSelection;
   source_revision: number;
   status: "queued" | "leased" | "completed" | "failed" | "cancelled";

@@ -25,6 +25,17 @@ it("saves dirty sources before queueing the canonical revision and selected refe
   await waitFor(() => expect(mocks.api).toHaveBeenCalledWith("/api/workspaces/w/runner-tasks", "POST", { runner_id: "runner", expected_revision: 7, max_attempts: 1, selection: { collection_id: "c", scenario_id: "s", environment_id: "dev", dataset_id: "data", iterations: null, notification_ids: [] } }));
   expect(mocks.save).toHaveBeenCalledWith(true);
 });
+it("submits a label group without a runner ID and shows the bound runner in task history", async () => {
+  mocks.api.mockImplementation(async path => path === "/api/runners" ? [runner] : path.endsWith("/runner-tasks") ? [{ id: "group-task", runner_id: "runner", target_label: "lan", source_revision: 1, status: "queued", queued_at: runner.created_at, attempt: 0, max_attempts: 1 }] : []);
+  render(view()); fireEvent.click(screen.getByText("Self-hosted runners"));
+  await screen.findByRole("option", { name: "Label group #lan" });
+  expect(screen.getAllByText("Label group #lan").length).toBeGreaterThan(0);
+  fireEvent.change(screen.getByRole("combobox", { name: "Target runner" }), { target: { value: "label:lan" } });
+  fireEvent.click(screen.getByRole("button", { name: "Dispatch to runner" }));
+  await waitFor(() => expect(mocks.api).toHaveBeenCalledWith("/api/workspaces/w/runner-tasks", "POST", expect.objectContaining({ runner_label: "lan", expected_revision: 7 })));
+  const payload = mocks.api.mock.calls.find(([path, method]) => path === "/api/workspaces/w/runner-tasks" && method === "POST")?.[2];
+  expect(payload).not.toHaveProperty("runner_id");
+});
 it("never dispatches after a failed save or a credential change while saving", async () => {
   mocks.save.mockResolvedValueOnce(null); const rendered = render(view()); fireEvent.click(screen.getByText("Self-hosted runners")); await screen.findByRole("button", { name: "Edit runner" });
   fireEvent.change(screen.getByRole("combobox", { name: "Target runner" }), { target: { value: "runner" } }); fireEvent.click(screen.getByRole("button", { name: "Dispatch to runner" }));

@@ -90,6 +90,7 @@ async fn tick(
         let schedule: super::models::Schedule =
             serde_json::from_str(&row.payload).map_err(|_| ApiError::internal())?;
         let remote = schedule.definition.runner_id.is_some()
+            || schedule.definition.runner_label.is_some()
             || schedule
                 .running
                 .as_ref()
@@ -247,9 +248,10 @@ async fn claim(
             }
         }
     }
-    if let Some(runner_id) = &schedule.definition.runner_id {
+    if schedule.definition.runner_id.is_some() || schedule.definition.runner_label.is_some() {
         let input = crate::runners::Queue {
-            runner_id: runner_id.clone(),
+            runner_id: schedule.definition.runner_id.clone(),
+            runner_label: schedule.definition.runner_label.clone(),
             expected_revision: workspace_data.revision,
             selection: moleapi_core::RunnerSelection {
                 collection_id: schedule.definition.collection_id.clone(),
