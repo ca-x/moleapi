@@ -166,10 +166,11 @@ describe("frontend async controllers", () => {
     expect(mockedApi).toHaveBeenCalledWith(
       `/api/workspaces/${original.id}/run`,
       "POST",
-      {
+      expect.objectContaining({
         collection_id: original.data.collections[0].id,
         environment_id: "local",
-      },
+        job_id: expect.any(String),
+      }),
     );
     expect(result.current.runResult).toEqual(value);
   });
