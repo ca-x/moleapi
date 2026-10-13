@@ -208,14 +208,17 @@ async fn idle_limit_and_explicit_close_reap_waiting_peer() {
 async fn declared_oversize_length_is_rejected_before_payload_arrives() {
     let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("tcp://{}", l.local_addr().unwrap());
+    let ready = std::sync::Arc::new(tokio::sync::Notify::new());
+    let fixture_ready = ready.clone();
     let fixture = tokio::spawn(async move {
         let (mut s, _) = l.accept().await.unwrap();
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        fixture_ready.notified().await;
         s.write_all(b"\x00\x10\x00\x01").await.unwrap();
         let mut b = [0; 1];
         assert_eq!(s.read(&mut b).await.unwrap(), 0);
     });
     let (_temp, router, id) = setup(&url, "length_be", 0).await;
+    ready.notify_one();
     let summary = state(&router, &id, "error").await;
     assert!(
         summary["reason"].as_str().unwrap().contains("frame size"),
@@ -228,12 +231,15 @@ async fn declared_oversize_length_is_rejected_before_payload_arrives() {
 async fn empty_frame_flood_is_bounded_by_receive_count_not_only_bytes() {
     let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("tcp://{}", l.local_addr().unwrap());
+    let ready = std::sync::Arc::new(tokio::sync::Notify::new());
+    let fixture_ready = ready.clone();
     let fixture = tokio::spawn(async move {
         let (mut s, _) = l.accept().await.unwrap();
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        fixture_ready.notified().await;
         let _ = s.write_all(&vec![0; 4 * 5000]).await;
     });
     let (_temp, router, id) = setup(&url, "length_be", 0).await;
+    ready.notify_one();
     let summary = state(&router, &id, "error").await;
     assert!(
         summary["reason"]
