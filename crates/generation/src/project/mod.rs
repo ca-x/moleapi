@@ -11,6 +11,7 @@ mod regeneration;
 pub use regeneration::*;
 mod reference_policy;
 mod runtime;
+mod schema_resources;
 mod source;
 mod source_bundle;
 mod templates;

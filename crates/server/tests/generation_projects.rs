@@ -2,15 +2,36 @@ mod common;
 use common::*;
 #[tokio::test]
 async fn source_bundle_generation_uses_capped_worker_and_screens_referenced_and_unused_documents() {
+    source_bundle_worker_case(false).await;
+}
+#[tokio::test]
+async fn static_schema_resources_use_owned_worker_and_preserve_source_privacy() {
+    source_bundle_worker_case(true).await;
+}
+async fn source_bundle_worker_case(static_resources: bool) {
     let temp = tempfile::tempdir().unwrap();
     let router = local(&temp.path().join("source-bundle.db")).await.unwrap();
     let root = json!({"openapi":"3.0.3","info":{"title":"Source bundle","version":"1"},"components":{"schemas":{"Health":{"$ref":"models/health.json#%2Fdefinitions%2FHealth%20%25"}}},"paths":{"/health":{"get":{"operationId":"health","responses":{"200":{"description":"Healthy","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Health"}}}}}}}}});
     let model = json!({"type":"object","properties":{"password":{"type":"string","format":"password","example":"referenced_bundle_secret"},"ok":{"type":"boolean"}}});
     let model = json!({"definitions":{"Health %":model}});
     let unused = json!({"type":"string","format":"password","example":"unused_bundle_secret"});
+    let mut root = root;
+    let mut model = model;
+    if static_resources {
+        root["openapi"] = "3.1.0".into();
+        root["components"]["schemas"]["Health"]["$ref"] =
+            "https://schemas.example.test/health#health".into();
+        model["$defs"] = model
+            .as_object_mut()
+            .unwrap()
+            .remove("definitions")
+            .unwrap();
+        model["$defs"]["Health %"]["$id"] = "https://schemas.example.test/health".into();
+        model["$defs"]["Health %"]["$anchor"] = "health".into();
+    }
     let source = json!({"format":"moleapi-openapi-source-v1","entry_file":"api.json","files":[{"path":"api.json","content":root.to_string()},{"path":"models/health.json","content":model.to_string()},{"path":"unused.json","content":unused.to_string()}]}).to_string();
     let mut data = example_data();
-    data["specifications"] = json!([{"id":"bundle","name":"Source bundle","kind":"openapi","dialect":"3.0.3","source":source}]);
+    data["specifications"] = json!([{"id":"bundle","name":"Source bundle","kind":"openapi","dialect":if static_resources {"3.1.0"} else {"3.0.3"},"source":source}]);
     let (status, _) = call(
         &router,
         "POST",
@@ -20,7 +41,7 @@ async fn source_bundle_generation_uses_capped_worker_and_screens_referenced_and_
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let input = json!({"workspace_id":"bundle","specification_id":"bundle","job_id":"bundle-safe","target":"rust-progenitor"});
+    let input = json!({"workspace_id":"bundle","specification_id":"bundle","job_id":"bundle-safe","target":if static_resources {"model-go"} else {"rust-progenitor"}});
     let (status, safe) = call(
         &router,
         "POST",
@@ -38,15 +59,20 @@ async fn source_bundle_generation_uses_capped_worker_and_screens_referenced_and_
             .contains("x-moleapi-source-bundle-privacy-documents")
     );
     assert!(safe["files"].as_array().unwrap().iter().any(|file| {
-        file["path"] == "src/lib.rs"
-            && file["content"]
-                .as_str()
-                .unwrap()
-                .contains("pub async fn health")
+        let content = file["content"].as_str().unwrap();
+        if static_resources {
+            file["path"] != "moleapi-generation.json" && content.contains("type Health struct")
+        } else {
+            file["path"] == "src/lib.rs" && content.contains("pub async fn health")
+        }
     }));
     let mut options = input.clone();
     options["job_id"] = "bundle-private-option".into();
-    options["options"] = json!({"packageName":"unused_bundle_secret"});
+    options["options"] = if static_resources {
+        json!({"package":"unused_bundle_secret"})
+    } else {
+        json!({"packageName":"unused_bundle_secret"})
+    };
     let (status, _) = call(
         &router,
         "POST",
@@ -59,6 +85,9 @@ async fn source_bundle_generation_uses_capped_worker_and_screens_referenced_and_
     let mut explicit = input;
     explicit["job_id"] = "bundle-explicit".into();
     explicit["include_secrets"] = true.into();
+    if static_resources {
+        explicit["options"] = json!({"package":"unused_bundle_secret"});
+    }
     let (status, included) = call(
         &router,
         "POST",
@@ -68,7 +97,11 @@ async fn source_bundle_generation_uses_capped_worker_and_screens_referenced_and_
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{included}");
-    assert!(included.to_string().contains("referenced_bundle_secret"));
+    assert!(included.to_string().contains(if static_resources {
+        "unused_bundle_secret"
+    } else {
+        "referenced_bundle_secret"
+    }));
     let (_, stored) = call(&router, "GET", "/api/workspaces/bundle", None, None).await;
     assert_eq!(stored["data"]["specifications"][0]["source"], source);
     let workspace: moleapi_core::Workspace = serde_json::from_value(stored).unwrap();

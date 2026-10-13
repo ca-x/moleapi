@@ -308,6 +308,14 @@ pub fn bundle_openapi(input: OpenapiSourceBundle) -> Result<BundledOpenapi> {
         serde_json::to_vec(&documents.values().collect::<Vec<_>>())?.len() <= SPEC_LIMIT,
         "Parsed source bundle exceeds 1 MiB"
     );
+    let original_documents = documents.values().cloned().collect::<Vec<_>>();
+    if documents
+        .get(&entry)
+        .and_then(|root| root["openapi"].as_str())
+        .is_some_and(|version| version.starts_with("3.1."))
+    {
+        documents = super::schema_resources::normalize(&documents, &entry)?;
+    }
     for (url, document) in &documents {
         references(
             document,
@@ -351,7 +359,6 @@ pub fn bundle_openapi(input: OpenapiSourceBundle) -> Result<BundledOpenapi> {
         )));
         aliases.insert(pointer, name.clone());
     }
-    let original_documents = documents.values().cloned().collect::<Vec<_>>();
     for (url, value) in &mut documents {
         let dictionary = super::reference_policy::root_dictionary(value);
         discriminator_mappings(value, url, &names, &aliases, dictionary)?;
@@ -617,5 +624,66 @@ mod tests {
             input.files[0].content = changed.to_string();
             assert!(bundle_openapi(input.clone()).is_err(), "{fragment}");
         }
+    }
+    #[test]
+    fn static_resource_anchor_recursion_bundles_and_keeps_original_documents() {
+        let root = serde_json::json!({"openapi":"3.1.0","info":{"title":"Resources","version":"1"},"paths":{},"components":{"schemas":{"Node":{"$ref":"https://schemas.test/node#node"},"Other":{"$ref":"model.json","description":"retrieval alias"}}}});
+        let model = serde_json::json!({"$id":"https://schemas.test/node","$anchor":"node","type":"object","properties":{"next":{"$ref":"#node"},"name":{"type":"string"}},"example":{"$id":"literal","$ref":"outside.json"}});
+        let input = OpenapiSourceBundle {
+            format: SOURCE_BUNDLE_FORMAT.into(),
+            entry_file: "root.json".into(),
+            files: vec![
+                source("root.json", root.clone()),
+                source("model.json", model.clone()),
+            ],
+        };
+        let result = bundle_openapi(input).unwrap();
+        assert_eq!(
+            result.specification["components"]["schemas"]["Node"]["properties"]["next"]["$ref"],
+            "#/components/schemas/Node"
+        );
+        assert_eq!(
+            result.specification["components"]["schemas"]["Other"]["description"],
+            "retrieval alias"
+        );
+        assert_eq!(
+            result.specification["components"]["schemas"]["Node"]["example"],
+            model["example"]
+        );
+        assert!(result.documents.contains(&root));
+        assert!(result.documents.contains(&model));
+        assert!(
+            result.specification["components"]["schemas"]["Node"]
+                .get("$id")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn static_resources_keep_validation_siblings_and_30_metadata_explicitly_unsupported() {
+        for schema in [
+            serde_json::json!({"$ref":"model.json","maxLength":4}),
+            serde_json::json!({"$dynamicRef":"#node"}),
+        ] {
+            let root = serde_json::json!({"openapi":"3.1.0","info":{"title":"Unsupported","version":"1"},"paths":{},"components":{"schemas":{"Node":schema}}});
+            let input = OpenapiSourceBundle {
+                format: SOURCE_BUNDLE_FORMAT.into(),
+                entry_file: "root.json".into(),
+                files: vec![
+                    source("root.json", root),
+                    source("model.json", serde_json::json!({"type":"string"})),
+                ],
+            };
+            assert!(bundle_openapi(input).is_err());
+        }
+        let root = serde_json::json!({"openapi":"3.0.3","info":{"title":"Unsupported","version":"1"},"paths":{},"components":{"schemas":{"Node":{"$id":"https://schemas.test/node","type":"string"}}}});
+        assert!(
+            bundle_openapi(OpenapiSourceBundle {
+                format: SOURCE_BUNDLE_FORMAT.into(),
+                entry_file: "root.json".into(),
+                files: vec![source("root.json", root)]
+            })
+            .is_err()
+        );
     }
 }

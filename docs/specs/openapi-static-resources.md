@@ -1,0 +1,7 @@
+# OpenAPI 3.1 static schema resources
+
+For explicit OpenAPI3.1 source bundles, resolve JSON Schema2020-12 `$id` and `$anchor` using the mature referencing registry. Register only caller-supplied parsed documents; explicitly use its non-fetching retriever. OpenAPI schema fields/components become temporary registry schema roots so the library can discover schema subresources. Relative resource IDs use their enclosing schema resource URI. Retrieval URIs and declared absolute IDs alias the same supplied resource, including declared HTTPS IDs without network access.
+
+Rebase resolved `$ref` and discriminator mapping targets to their original supplied-file JSON Pointers before the existing schematools bundler runs. Remove static resource metadata only from this derived generation projection; canonical source and privacy documents remain byte-for-byte/semantically unchanged. Preserve cycles, annotations, owner/worker limits and literal example/default/extension payloads. Reject duplicate IDs/anchors, invalid IDs/anchor names, unsupported dialects and references outside the registry. Dynamic/recursive references and validation-bearing ref siblings remain separate required slices and must still fail explicitly.
+
+Write nested-resource, retrieval/ID alias, anchor recursion, duplicate/invalid/outside-source, literal-preservation and owned worker/API cases. Finish implementation and test authoring before running this slice's checks. Per-language emitter support still requires its own compile/run evidence.

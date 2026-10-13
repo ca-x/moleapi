@@ -6698,6 +6698,7 @@ dependencies = [
  "prost",
  "prost-types",
  "rawzip",
+ "referencing 0.49.9",
  "rquickjs",
  "schematools",
  "semver",
