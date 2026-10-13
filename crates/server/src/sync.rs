@@ -1,7 +1,9 @@
 use crate::{ApiError, AppState, auth::Identity, entities::document, storage, workspaces};
 use axum::{
     Extension, Json,
+    body::Bytes,
     extract::{Path, State},
+    http::Uri,
 };
 use futures_util::StreamExt;
 use moleapi_core::Workspace;
@@ -17,6 +19,8 @@ struct Connection {
     username: String,
     token: String,
     identity: String,
+    #[serde(default)]
+    session_id: String,
 }
 #[derive(Serialize, Deserialize)]
 struct Base {
@@ -57,10 +61,117 @@ async fn connection(s: &AppState) -> Result<Option<Connection>, ApiError> {
 fn public(c: Option<&Connection>) -> serde_json::Value {
     match c {
         Some(c) => {
-            serde_json::json!({"connected":true,"server_url":c.server_url,"username":c.username})
+            serde_json::json!({"connected":true,"server_url":c.server_url,"username":c.username,"session_id":c.session_id})
         }
         None => serde_json::json!({"connected":false}),
     }
+}
+
+fn hosted_route(method: &Method, parts: &[&str]) -> bool {
+    match parts {
+        ["runners"] => matches!(*method, Method::GET | Method::POST),
+        ["runners", _] => *method == Method::PATCH,
+        ["runners", _, "credentials"] => matches!(*method, Method::GET | Method::POST),
+        ["runners", _, "credentials", _] => *method == Method::DELETE,
+        ["workspaces", _] => *method == Method::GET,
+        ["workspaces", _, "runner-tasks"] => matches!(*method, Method::GET | Method::POST),
+        ["workspaces", _, "runner-tasks", _, "cancel"] => *method == Method::POST,
+        ["workspaces", _, "schedules"] => matches!(*method, Method::GET | Method::POST),
+        ["workspaces", _, "schedules", _] => matches!(*method, Method::PUT | Method::DELETE),
+        ["workspaces", _, "schedules", _, "run" | "cancel"] => *method == Method::POST,
+        ["workspaces", _, "schedules", _, "runs"] => *method == Method::GET,
+        ["workspaces", _, "reports"] => *method == Method::GET,
+        ["workspaces", _, "reports", _] => *method == Method::GET,
+        ["workspaces", _, "reports", _, "steps", position, "response"] => {
+            *method == Method::GET && position.bytes().all(|byte| byte.is_ascii_digit())
+        }
+        _ => false,
+    }
+}
+
+pub async fn hosted(
+    State(s): State<AppState>,
+    method: Method,
+    uri: Uri,
+    Path(path): Path<String>,
+    body: Bytes,
+) -> Result<(axum::http::StatusCode, Json<serde_json::Value>), ApiError> {
+    native(&s)?;
+    let parts: Vec<_> = path.split('/').collect();
+    if uri.query().is_some()
+        || parts.iter().any(|part| {
+            part.is_empty()
+                || part.len() > 256
+                || matches!(*part, "." | "..")
+                || part
+                    .chars()
+                    .any(|character| character.is_control() || character == '\\')
+        })
+        || !hosted_route(&method, &parts)
+    {
+        return Err(ApiError::not_found());
+    }
+    if body.len() > 1024 * 1024
+        || (matches!(method, Method::GET | Method::DELETE) && !body.is_empty())
+    {
+        return Err(ApiError::bad(
+            "Hosted management request body is invalid or too large",
+        ));
+    }
+    let payload: Option<serde_json::Value> = if body.is_empty() {
+        None
+    } else {
+        Some(
+            serde_json::from_slice(&body)
+                .map_err(|_| ApiError::bad("Invalid hosted management JSON"))?,
+        )
+    };
+    let _guard = s.sync_lock.lock().await;
+    let connection = connection(&s)
+        .await?
+        .ok_or_else(|| ApiError::bad("Connect to a hosted service first"))?;
+    let (client, mut url) = client(&connection.server_url).await?;
+    {
+        let mut segments = url.path_segments_mut().map_err(|_| ApiError::internal())?;
+        segments.pop_if_empty().push("api");
+        for part in parts {
+            segments.push(part);
+        }
+    }
+    let mut request = client.request(method, url).bearer_auth(&connection.token);
+    if let Some(payload) = payload {
+        request = request.json(&payload);
+    }
+    let response = request
+        .send()
+        .await
+        .map_err(|_| ApiError::bad("Hosted service request failed"))?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(ApiError {
+            status,
+            message: if status == reqwest::StatusCode::UNAUTHORIZED {
+                "Hosted session expired; reconnect to the service".into()
+            } else {
+                format!(
+                    "Hosted service rejected management request ({})",
+                    status.as_u16()
+                )
+            },
+        });
+    }
+    let mut bytes = vec![];
+    let mut stream = response.bytes_stream();
+    while let Some(part) = stream.next().await {
+        let part = part.map_err(|_| ApiError::bad("Reading hosted response failed"))?;
+        if bytes.len().saturating_add(part.len()) > 20 * 1024 * 1024 {
+            return Err(ApiError::bad("Hosted response exceeds 20 MiB"));
+        }
+        bytes.extend_from_slice(&part);
+    }
+    let data = serde_json::from_slice(&bytes)
+        .map_err(|_| ApiError::bad("Invalid hosted JSON response"))?;
+    Ok((status, Json(data)))
 }
 pub async fn status(State(s): State<AppState>) -> Result<Json<serde_json::Value>, ApiError> {
     native(&s)?;
@@ -213,6 +324,7 @@ pub async fn connect(
         } else {
             uuid::Uuid::new_v4().to_string()
         },
+        session_id: uuid::Uuid::new_v4().to_string(),
     };
     let tx = s.db.begin().await?;
     document::Entity::delete_many()

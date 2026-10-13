@@ -235,6 +235,7 @@ async fn build(
     let schedule_lifetime = background.then(|| scheduling::start(state.clone()));
     let notification_lifetime = background.then(|| notifications::start(state.clone()));
     let protected = Router::new()
+        .route("/hosted/{*path}", axum::routing::any(sync::hosted))
         .route("/oauth1/flows", post(oauth1::flows::begin))
         .route("/oauth1/flows/{id}", get(oauth1::flows::status))
         .route("/oauth1/flows/{id}/cancel", post(oauth1::flows::cancel))

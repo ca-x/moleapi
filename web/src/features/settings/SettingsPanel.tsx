@@ -1,4 +1,5 @@
 import CiPanel from "../ci/CiPanel";
+import HostedRunnerManagement from "../runners/HostedRunnerManagement";
 import AccessTokensPanel from "./AccessTokensPanel";
 import RequestAuthEditor from "../authentication/RequestAuthEditor";
 import LanguageSelector from "../../shared/i18n/LanguageSelector";
@@ -60,6 +61,7 @@ export default function SettingsPanel() {
           > {t("断开同步")} </Button>
         </Card>
       )}
+      {native && sync.data?.connected && draft && <HostedRunnerManagement key={`${sync.data.session_id}:${draft.id}`} connectionId={sync.data.session_id ?? "legacy"} workspaceId={draft.id} />}
       {draft && (
         <Button
           color="red"

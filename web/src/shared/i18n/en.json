@@ -1710,5 +1710,16 @@
   "计划执行位置": "Scheduled execution target",
   "当前服务端": "Current server",
   "执行器不可用": "Runner unavailable",
+  "托管执行器管理": "Hosted runner management",
+  "此区域操作已连接服务端的工作区；离线工作区不会随执行器操作而修改。": "These actions use the connected service workspace. They do not change your offline workspace.",
+  "正在加载托管工作区": "Loading hosted workspace",
+  "托管端没有此工作区；请先同步当前工作区。": "This workspace is missing on the hosted service. Sync it before dispatching.",
+  "托管工作区版本": "Hosted workspace revision",
+  "派发托管测试": "Dispatch hosted tests",
+  "托管计划任务": "Hosted schedules",
+  "托管任务报告": "Hosted task report",
+  "托管响应预览": "Hosted response preview",
+  "删除托管计划任务及其待执行任务。": "Delete this hosted schedule and cancel its pending task.",
+  "确认删除": "Confirm delete",
   "自托管目标通过执行器队列派发，等待机器连接；不会退回服务端运行。每次计划只尝试一次。": "Self-hosted targets dispatch through the runner queue and wait for the machine to connect. They never fall back to server execution. Each occurrence attempts execution once."
 }

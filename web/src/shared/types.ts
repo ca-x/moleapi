@@ -231,6 +231,7 @@ export interface SyncStatus {
   connected: boolean;
   server_url?: string;
   username?: string;
+  session_id?: string;
 }
 export interface SyncResult {
   status: "synced" | "conflict";

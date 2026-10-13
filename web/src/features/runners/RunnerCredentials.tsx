@@ -7,14 +7,15 @@ import { liveError } from "../../shared/i18n/errors";
 import { Choice, Field } from "../../shared/ui";
 
 interface Credential { id: string; runner_id: string; workspace_id: string; name: string; created_at: number; expires_at: number; expired: boolean }
+type Request = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
 
-export default function RunnerCredentials({ accountId, runnerId, workspaceId, onClose }: { accountId: string; runnerId: string; workspaceId: string; onClose: () => void }) {
+export default function RunnerCredentials({ accountId, runnerId, workspaceId, onClose, request = api, connectionKey }: { accountId: string; runnerId: string; workspaceId: string; onClose: () => void; request?: Request; connectionKey?: string }) {
   const instance = useId(), { language } = useLanguage(), client = useQueryClient();
-  const bearer = token(), scope = JSON.stringify([accountId, runnerId, workspaceId, bearer]);
+  const bearer = connectionKey ?? token(), scope = JSON.stringify([accountId, runnerId, workspaceId, bearer]);
   const latest = useRef(scope); latest.current = scope;
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  const current = (origin: string) => mounted.current && latest.current === origin && token() === bearer;
+  const current = (origin: string) => mounted.current && latest.current === origin && (connectionKey ?? token()) === bearer;
   const [name, setName] = useState(""), [days, setDays] = useState("90"), [pending, setPending] = useState(false);
   const [error, setError] = useState<ReturnType<typeof liveError>>("");
   const [secret, setSecret] = useState<{ scope: string; value: string } | null>(null);
@@ -22,12 +23,12 @@ export default function RunnerCredentials({ accountId, runnerId, workspaceId, on
   useEffect(() => { setName(""); setSecret(null); setCopied(false); setSelected(null); setError(""); setPending(false); }, [scope]);
   const path = `/api/runners/${encodeURIComponent(runnerId)}/credentials`;
   const queryKey = ["runner-credentials", accountId, runnerId, instance, scope];
-  const credentials = useQuery({ queryKey, queryFn: () => current(scope) ? api<Credential[]>(path) : [], enabled: !!bearer, retry: false });
+  const credentials = useQuery({ queryKey, queryFn: () => current(scope) ? request<Credential[]>(path) : [], enabled: !!bearer, retry: false });
   async function create(event: React.FormEvent) {
     event.preventDefault(); if (pending || !current(scope)) return;
     const origin = scope; setPending(true); setError(""); setSecret(null); setCopied(false);
     try {
-      const value = await api<Credential & { token: string }>(path, "POST", { workspace_id: workspaceId, name: name.trim(), expires_in_days: Number(days) });
+      const value = await request<Credential & { token: string }>(path, "POST", { workspace_id: workspaceId, name: name.trim(), expires_in_days: Number(days) });
       if (current(origin)) { setSecret({ scope: origin, value: value.token }); setName(""); void client.invalidateQueries({ queryKey }); }
     } catch (error) { if (current(origin)) setError(liveError(error)); }
     finally { if (current(origin)) setPending(false); }
@@ -36,7 +37,7 @@ export default function RunnerCredentials({ accountId, runnerId, workspaceId, on
     if (!selected || pending || !current(scope)) return;
     const origin = scope; setPending(true); setError("");
     try {
-      await api(`${path}/${encodeURIComponent(selected.id)}`, "DELETE");
+      await request(`${path}/${encodeURIComponent(selected.id)}`, "DELETE");
       if (current(origin)) { setSelected(null); setSecret(null); setCopied(false); void client.invalidateQueries({ queryKey }); }
     } catch (error) { if (current(origin)) setError(liveError(error)); }
     finally { if (current(origin)) setPending(false); }
