@@ -5,7 +5,7 @@ use axum::{
     extract::{Path, State},
 };
 use moleapi_core::HistoryEntry;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter};
 pub async fn history(
     State(s): State<AppState>,
     Extension(owner): Extension<Identity>,
@@ -40,6 +40,40 @@ pub(crate) async fn record(
     response: &moleapi_core::Response,
     privacy: crate::privacy::HistoryPrivacy<'_>,
 ) -> Result<Option<String>, ApiError> {
+    let entry = project(w, r, environment, response, privacy)?;
+    // The workspace may have been deleted while the endpoint was running.
+    if storage::get(&s.db, owner, &w.id).await?.is_some() {
+        insert_in(&s.db, owner, &entry).await?;
+        return Ok(Some(entry.id));
+    }
+    Ok(None)
+}
+
+pub(crate) async fn insert_in<C: ConnectionTrait>(
+    db: &C,
+    owner: &str,
+    entry: &HistoryEntry,
+) -> Result<(), ApiError> {
+    storage::insert_doc(
+        db,
+        entry.id.clone(),
+        owner,
+        "history",
+        &entry.workspace_id,
+        0,
+        entry,
+    )
+    .await?;
+    Ok(())
+}
+
+pub(crate) fn project(
+    w: &moleapi_core::Workspace,
+    r: &moleapi_core::RequestSpec,
+    environment: Option<&moleapi_core::Environment>,
+    response: &moleapi_core::Response,
+    privacy: crate::privacy::HistoryPrivacy<'_>,
+) -> Result<HistoryEntry, ApiError> {
     let mut stored = response.clone();
     stored.url = moleapi_core::redact_url(&response.url, environment);
     // Logs and variable diffs are for the active execution view only.
@@ -174,10 +208,5 @@ pub(crate) async fn record(
     // Generated identifiers are storage handles, not user-controlled diagnostic text.
     value["id"] = entry.id.clone().into();
     let entry: HistoryEntry = serde_json::from_value(value).map_err(|_| ApiError::internal())?;
-    // The workspace may have been deleted while the endpoint was running.
-    if storage::get(&s.db, owner, &w.id).await?.is_some() {
-        storage::insert_doc(&s.db, entry.id.clone(), owner, "history", &w.id, 0, &entry).await?;
-        return Ok(Some(entry.id));
-    }
-    Ok(None)
+    Ok(entry)
 }

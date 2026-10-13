@@ -1,9 +1,10 @@
 mod agent;
+mod history_upload;
 mod registry;
 mod schedules;
 mod selection;
-mod targets;
 pub(crate) mod storage;
+mod targets;
 mod tasks;
 use self::storage::Task;
 use crate::{ApiError, AppState};

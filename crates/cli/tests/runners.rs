@@ -368,6 +368,7 @@ async fn real_agent_executes_private_local_request_and_returns_owned_redacted_re
     assert_eq!(executed["task_id"], queued["id"]);
     assert_eq!(executed["status"], "completed");
     assert_eq!(executed["completion_acknowledged"], true);
+    assert_eq!(executed["response_history_omitted"], 0);
     let report = api(
         &http,
         &server,
@@ -381,9 +382,25 @@ async fn real_agent_executes_private_local_request_and_returns_owned_redacted_re
     )
     .await;
     assert_eq!(report["summary"]["passed"], 1, "{report}");
+    let history_id = report["results"][0]["history_id"].as_str().unwrap();
+    let response = api(
+        &http,
+        &server,
+        Some(token),
+        reqwest::Method::GET,
+        &format!(
+            "workspaces/w/reports/{}/steps/0/response",
+            executed["report_id"].as_str().unwrap()
+        ),
+        None,
+    )
+    .await;
+    assert_eq!(response["id"], history_id);
+    assert_eq!(response["response"]["status"], 200);
     for secret in ["runtime-agent-secret", "saved-host-secret"] {
         assert!(!report.to_string().contains(secret));
         assert!(!executed.to_string().contains(secret));
+        assert!(!response.to_string().contains(secret));
     }
     let after = api(
         &http,

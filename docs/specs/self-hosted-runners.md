@@ -14,7 +14,7 @@ Tasks are queued, leased, completed, failed or cancelled. Queue stores validated
 
 ## Reports and privacy
 
-Completion locks the same durable job and writes a redacted report through the shared report projector/storage/notification path in the same transaction. Repeated completion returns the existing result; stale leases cannot complete a newer attempt. The snapshot supplies source revision, environment and private scopes. Worker-local history IDs are discarded. Raw result payloads are never stored in task metadata or stdout. Agent-private overlays use the existing CLI variables parser; runner output is metadata only. The hosted service trusts registered runner execution results, and retains canonical report privacy rules.
+Completion locks the same durable job and writes a redacted report through the shared report projector/storage/notification path in the same transaction. Repeated completion returns the existing result; stale leases cannot complete a newer attempt. The snapshot supplies source revision, environment and private scopes. `runner-response-history.md` defines bounded upload of locally redacted response entries and replacement of worker-local history IDs with newly owned hosted IDs. Unuploaded worker-local IDs are discarded. Raw result payloads are never stored in task metadata or stdout. Agent-private overlays use the existing CLI variables parser; runner output is metadata only. The hosted service trusts registered runner execution results, and retains canonical report privacy rules.
 
 ## CLI and operation
 

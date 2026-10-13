@@ -254,7 +254,7 @@ pub(crate) async fn complete(
             || serde_json::to_vec(report)
                 .map_err(|_| ApiError::internal())?
                 .len()
-                > 8 * 1024 * 1024
+                > 17 * 1024 * 1024
         {
             return Err(ApiError::bad(
                 "Completion requires one bounded report or terminal status",
@@ -323,9 +323,17 @@ pub(crate) async fn complete(
                         .map_err(|_| ApiError::bad("Report contains an invalid test result"))?;
                 }
             }
-            item.as_object_mut()
-                .ok_or_else(|| ApiError::bad("Report result must be an object"))?
-                .remove("history_id");
+        }
+        super::history_upload::persist(
+            &tx, &owner.0, workspace, selection, &scopes, report, &allowed,
+        )
+        .await?;
+        if serde_json::to_vec(report)
+            .map_err(|_| ApiError::internal())?
+            .len()
+            > 8 * 1024 * 1024
+        {
+            return Err(ApiError::bad("Runner report exceeds 8 MiB"));
         }
         let source = crate::run_reports::Source {
             workspace,
