@@ -76,7 +76,7 @@ moleapi-cli runner service status --id REGISTERED_RUNNER_ID
 moleapi-cli runner service uninstall --id REGISTERED_RUNNER_ID
 ```
 
-These commands target Linux systemd user services. macOS launchd and Windows supervision remain separate platform work; this implementation and its test code have not yet been run through the final verification gate.
+On macOS the same commands manage a per-user launchd agent in `~/Library/LaunchAgents`, with RunAtLoad/KeepAlive and a five-second restart throttle. Linux and macOS installation flows and test code have not yet passed the final runtime verification gate. Windows supervision remains separate platform work.
 
 ## Cancellation, recovery and reports / 取消、恢复和报告
 

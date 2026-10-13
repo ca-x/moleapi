@@ -30,7 +30,7 @@
 
 Milestones 1–4 each require a separate decision-complete slice plan before coding; the matrix is too large to safely implement as one undifferentiated task. The first slice is CLI label management, which closes the gap left by the existing hosted UI/API label work without changing scheduling semantics.
 
-**Checkpoint:** Milestone 1 is in progress. CLI labels, workspace-scoped credentials, label-group targeting, response-history upload and native hosted management are committed. Linux supervised service installation is being implemented against `docs/specs/runner-service-installation.md`; its code and tests compile but have not been executed under the user's test-last instruction. macOS launchd and Windows supervision, runtime validation and the later milestones remain.
+**Checkpoint:** Milestone 1 is in progress. CLI labels, workspace-scoped credentials, label-group targeting, response-history upload, native hosted management and Linux systemd installation are committed. macOS launchd installation is written against `docs/specs/runner-service-installation.md`; arm64 Rust cross-compilation passes with a temporary Zig C-compiler wrapper, but runtime tests have not run under the user's test-last instruction. Windows supervision, native installation validation and later milestones remain.
 
 ## Slice 1: CLI runner labels
 

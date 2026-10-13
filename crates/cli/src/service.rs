@@ -1,13 +1,19 @@
 use crate::args::{Cli, RunnerServiceCommand};
 use anyhow::Result;
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 use anyhow::bail;
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 pub fn execute(_: &Cli, _: &RunnerServiceCommand) -> Result<u8> {
-    bail!(
-        "Runner service installation is currently implemented for Linux systemd user services only"
-    )
+    bail!("Runner service installation is not implemented for this platform yet")
+}
+
+#[cfg(target_os = "macos")]
+mod macos;
+
+#[cfg(target_os = "macos")]
+pub fn execute(cli: &Cli, command: &RunnerServiceCommand) -> Result<u8> {
+    macos::execute(cli, command)
 }
 
 #[cfg(target_os = "linux")]
