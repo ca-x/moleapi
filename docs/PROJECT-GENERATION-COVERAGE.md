@@ -1015,3 +1015,35 @@ The actual Ruby plugin emission test passed; Python default regression passed8 R
 parser tests and scoped strict Clippy/format passed. Catalog evidence names the configured
 Ruby-plugin four-mode fixture. Other Ruby/platform/plugin/gem ranges, TLS/auth/advanced
 schemas/options and remaining plugins remain full-module work.
+
+
+## Explicit C++ protobuf/gRPC four-mode consumers
+
+Official Arch grpc1.84.0-1 and RE2 2:2025.11.05-6 packages were downloaded/extracted only
+into /tmp QA. Both detached PGP signatures verified against the existing trusted Arch
+keyring, converted from its armored public representation for gpgv; signer fingerprint
+`F00B96D15228013FFC9C9D0393B11DAA4C197E3D`. Package SHA256s:
+grpc `72d83a69f878bad5a861566ed1fbdacdb130b5689576a5d04b9ef0d323893e00`,
+RE2 `f055975eadd1916f1952c5caefcaaf32ef60f1e4461b2f4ac079b0e3c42d61d4`.
+Source/package metadata: https://archlinux.org/packages/extra/x86_64/grpc/ and
+https://archlinux.org/packages/extra/x86_64/re2/. A trusted explicit launcher selects the
+verified grpc_cpp_plugin and isolated library path under the normal cleared process
+environment; no system installation/compiler/plugin discovery was introduced.
+
+Both original source/descriptor C++ artifacts compiled with GCC16.2.1/C++17 and explicit
+pkg-config against gRPC1.84.0/protobuf36.1.0, then passed real synchronous loopback unary/
+server-stream/client-stream/bidirectional RPCs (8 calls). Imported enum/repeated fields,
+Unicode/non-UTF8 bytes, oneof-zero presence and Timestamp retain native protobuf meaning;
+standard MessageDifferencer compares actual decoded messages. All streams finish and
+channels/server shut down. Original generated hashes match across inputs and remain
+unchanged. Build commands, compiler/package/descriptor/source hashes and actual dynamic
+link maps are retained in isolated QA output. gRPC/RE2 and their packaged sublibraries
+load from the isolated prefix; existing host protobuf36.1, abseil20260817.0-2,
+c-ares1.34.8-1, OpenSSL3.6.5-1 and zlib1:1.3.2-4 remain recorded host dependencies.
+
+The actual C++ plugin emission test passed; Python default regression passed8 RPCs.
+79 generation cases (40 external-tool cases ignored),11 owned API cases, fixture parser
+tests and scoped strict Clippy/format passed. Catalog validation names the configured
+C++-plugin fixture. No model/service/transport emitter repair was needed. This is Linux/
+GCC/shared-library evidence; other compilers/ABIs/static/dependency ranges/platforms,
+TLS/auth/advanced schema/options and remaining plugins stay full-module work.

@@ -390,3 +390,24 @@ googleapis-common-protos-types1.23.0/rake13.4.2/bigdecimal3.1.8 with source/pack
 verified. Python regression passed8 further RPCs. No generated sources or serializers were
 replaced. Other runtime/plugin/platform/schema/transport options need separate evidence;
 product preview/export never acquires or executes these QA dependencies.
+
+
+## Explicit C++ protobuf/gRPC consumer
+
+Use an explicitly selected official C++ plugin (with a trusted absolute-library-path
+launcher if its shared libraries are isolated), then compile/call original outputs:
+
+```sh
+cargo run -p moleapi-generation --example fixture_protobuf -- /absolute/cpp-qa-output /absolute/moleapi-server /absolute/protoc /absolute/protoc-gen-grpc-cpp cpp
+python3 tools/projects/verify-protobuf-cpp.py /absolute/cpp-qa-output/source --cxx /absolute/g++ --pkg-config /absolute/pkg-config --prefix /absolute/qa-prefix/usr
+python3 tools/projects/verify-protobuf-cpp.py /absolute/cpp-qa-output/descriptor --cxx /absolute/g++ --pkg-config /absolute/pkg-config --prefix /absolute/qa-prefix/usr
+```
+
+The separate consumer uses the prefix's relocatable pkg-config data and shared-library
+path, recording actual compile commands/linkage, package/tool/descriptor/hash and runtime
+evidence. Original headers/sources remain unchanged. Both inputs passed8 synchronous
+RPCs with native protobuf fields and four-mode stream/server cleanup on GCC16.2.1/C++17,
+gRPC1.84.0/protobuf36.1.0/Linux. Official gRPC/RE2 package signatures verified before
+execution; system packages stayed unchanged. Python regression passed8 further RPCs.
+Other compiler/ABI/library/platform/options/range cases need separate evidence; product
+preview/export never downloads or executes these QA dependencies.

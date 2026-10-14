@@ -1475,3 +1475,55 @@ async fn official_ruby_plugin_emits_imported_models_and_four_rpc_service_interfa
         assert!(service.content.contains(method), "Missing Ruby {method}");
     }
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured protoc and official C++ gRPC plugin"]
+async fn official_cpp_plugin_emits_imported_models_and_four_rpc_service_interfaces() {
+    let compiler =
+        PathBuf::from(std::env::var_os("MOLEAPI_CODEGEN_TEST_PROTOC").expect("explicit protoc"));
+    let plugin = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_GRPC_CPP").expect("explicit C++ plugin"),
+    );
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), None)
+        .unwrap()
+        .with_protoc(Some(compiler), BTreeMap::from([("cpp".into(), plugin)]))
+        .unwrap();
+    let specification = serde_json::from_str(include_str!(
+        "../../../tools/projects/fixtures/protobuf-imports.json"
+    ))
+    .unwrap();
+    let artifact = runtime
+        .generate(
+            ProjectInput {
+                target: "protobuf-cpp".into(),
+                specification,
+                options: BTreeMap::new(),
+                include_secrets: false,
+                templates: None,
+            },
+            CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert!(
+        artifact
+            .files
+            .iter()
+            .any(|file| file.path == "models/types.pb.h")
+    );
+    assert!(
+        artifact
+            .files
+            .iter()
+            .any(|file| file.path == "models/common.pb.cc")
+    );
+    let service = artifact
+        .files
+        .iter()
+        .find(|file| file.path == "fixture.grpc.pb.h")
+        .unwrap();
+    assert!(service.content.contains("EchoService") && service.content.contains("Service"));
+    for method in ["Call", "Watch", "Collect", "Chat"] {
+        assert!(service.content.contains(method), "Missing C++ {method}");
+    }
+}
