@@ -156,6 +156,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: objc-qa-${{ matrix.runner }}
+          save-if: 'true'
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
@@ -169,7 +170,15 @@ jobs:
           brew install grpc protobuf
           python -m pip install grpcio==1.84.0 grpcio-tools==1.76.0 protobuf==6.33.6
           mkdir -p "$RUNNER_TEMP/objc-tools"
-          printf '#!/bin/sh\nexec python -m grpc_tools.protoc "$@"\n' > "$RUNNER_TEMP/objc-tools/protoc"
+          python - <<'PY'
+          import os, sys
+          from pathlib import Path
+          import grpc_tools.protoc
+          target = Path(os.environ['RUNNER_TEMP']) / 'objc-tools/protoc'
+          target.write_text(f'#!{sys.executable}\nimport sys\nfrom grpc_tools.protoc import entrypoint\nsys.exit(entrypoint())\n')
+          with open(os.environ['GITHUB_ENV'], 'a') as environment:
+              environment.write(f'MOLEAPI_OBJC_QA_PYTHON={sys.executable}\n')
+          PY
           chmod +x "$RUNNER_TEMP/objc-tools/protoc"
           brew list --versions grpc protobuf > "$RUNNER_TEMP/objc-tools/versions.txt"
           protoc --version >> "$RUNNER_TEMP/objc-tools/versions.txt"
@@ -189,8 +198,8 @@ jobs:
         env:
           BUNDLE_GEMFILE: ${{ github.workspace }}/tools/projects/objc/Gemfile
         run: |
-          bundle exec python tools/projects/verify-protobuf-objc.py "$RUNNER_TEMP/objc-clients/source" --server-dir "$RUNNER_TEMP/objc-server/source"
-          bundle exec python tools/projects/verify-protobuf-objc.py "$RUNNER_TEMP/objc-clients/descriptor" --server-dir "$RUNNER_TEMP/objc-server/descriptor"
+          bundle exec "$MOLEAPI_OBJC_QA_PYTHON" tools/projects/verify-protobuf-objc.py "$RUNNER_TEMP/objc-clients/source" --server-dir "$RUNNER_TEMP/objc-server/source"
+          bundle exec "$MOLEAPI_OBJC_QA_PYTHON" tools/projects/verify-protobuf-objc.py "$RUNNER_TEMP/objc-clients/descriptor" --server-dir "$RUNNER_TEMP/objc-server/descriptor"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
