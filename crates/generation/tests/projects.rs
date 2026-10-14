@@ -440,3 +440,91 @@ async fn explicit_csharp_api_template_overrides_form_array_compatibility_default
             .contains("explicit CSharp API")
     );
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured Java17+ test runtime"]
+async fn explicit_javascript_union_partial_overrides_json_binding_compatibility_default() {
+    let java = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_JAVA").expect("explicit Java executable"),
+    );
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), Some(java)).unwrap();
+    let input = ProjectInput {
+        target: "javascript".into(),
+        options: BTreeMap::new(),
+        include_secrets: false,
+        specification: json!({"openapi":"3.0.3","info":{"title":"Union override","version":"1"},"paths":{},"components":{"schemas":{"Cat":{"type":"object","properties":{"name":{"type":"string"}}},"Dog":{"type":"object","properties":{"barks":{"type":"boolean"}}},"Animal":{"oneOf":[{"$ref":"#/components/schemas/Cat"},{"$ref":"#/components/schemas/Dog"}]}}}}),
+        templates: Some(TemplateBundle {
+            format: "moleapi-codegen-templates-v1".into(),
+            outputs: BTreeMap::new(),
+            files: vec![TemplateFile {
+                path: "partial_model_oneof.mustache".into(),
+                content: "// explicit union {{classname}}\n".into(),
+                encoding: None,
+            }],
+        }),
+    };
+    let result = runtime
+        .generate(input, CancellationToken::new())
+        .await
+        .unwrap();
+    let animal = result
+        .files
+        .iter()
+        .find(|file| file.path == "src/model/Animal.js")
+        .unwrap();
+    assert!(animal.content.contains("// explicit union Animal"));
+    assert!(!animal.content.contains("getActualInstance"));
+    assert!(
+        result
+            .files
+            .iter()
+            .find(|file| file.path == "moleapi-templates.json")
+            .unwrap()
+            .content
+            .contains("explicit union")
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires explicitly configured Java17+ test runtime"]
+async fn explicit_csharp_converter_template_overrides_discriminator_compatibility_default() {
+    let java = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_JAVA").expect("explicit Java executable"),
+    );
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), Some(java)).unwrap();
+    let input = ProjectInput {
+        target: "csharp".into(),
+        options: BTreeMap::new(),
+        include_secrets: false,
+        specification: json!({"openapi":"3.0.3","info":{"title":"Converter override","version":"1"},"paths":{},"components":{"schemas":{"Pet":{"type":"object","properties":{"name":{"type":"string"}}}}}}),
+        templates: Some(TemplateBundle {
+            format: "moleapi-codegen-templates-v1".into(),
+            outputs: BTreeMap::new(),
+            files: vec![TemplateFile {
+                path: "JsonConverter.mustache".into(),
+                content: "// explicit converter {{classname}}\n".into(),
+                encoding: None,
+            }],
+        }),
+    };
+    let result = runtime
+        .generate(input, CancellationToken::new())
+        .await
+        .unwrap();
+    let model = result
+        .files
+        .iter()
+        .find(|file| file.path.ends_with("/Model/Pet.cs"))
+        .unwrap();
+    assert!(model.content.contains("// explicit converter Pet"));
+    assert!(!model.content.contains("discriminatorValidatedLocalVar"));
+    assert!(
+        result
+            .files
+            .iter()
+            .find(|file| file.path == "moleapi-templates.json")
+            .unwrap()
+            .content
+            .contains("explicit converter")
+    );
+}

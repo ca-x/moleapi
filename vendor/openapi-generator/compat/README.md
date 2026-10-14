@@ -50,3 +50,34 @@ Apply only to the default generichost library; explicit API templates keep prior
 
 Original C# generichost API template SHA256:
 `7daa959c929f38288f5c4c639a08060dbc395c435462fb89cb7d3950c6a96fbd`.
+
+
+## JavaScript oneOf wrapper JSON binding
+
+Source: `Javascript/partial_model_oneof.mustache`, same7.26.0 JAR; Apache-2.0
+and upstream model/transport emitters remain intact. Original SHA256:
+`6ae1b96a475147b7ce4ce4400762e3b2e41d474dcece7f5785e47a9a427f990f`.
+
+A real typed union roundtrip sent SuperAgent's serialization-error string instead
+of the model JSON. The wrapper's own toJSON function was copied onto the transport's
+plain object, losing its prototype getActualInstance method through this binding.
+The compatibility partial makes that class-field function an arrow, retaining the
+original generated wrapper's lexical binding. Subtype selection/validation and JSON
+serialization remain the mature upstream implementation; no custom union emitter or
+transport serializer is added. Default JavaScript library only; explicit model/partial
+templates keep precedence. Broader nullable/nested/ambiguous union runtime stays open.
+
+
+## C# generichost selected discriminator parsing
+
+Source: `csharp/libraries/generichost/JsonConverter.mustache`, same7.26.0 JAR.
+Apache-2.0/upstream converter implementation and header are retained. Original SHA256:
+`81526ce1167774baf93881155683121d3bfb146d7ae71bdd7790a6f0fc7d6261`.
+
+A real Cat/Dog oneOf response selected/validated Cat, then failed by parsing the same
+kind value using a merged parent enum that contained only Dog. For discriminator fields,
+if the existing mapped-subtype pre-read produced a valid instance, the compatibility
+converter skips redundant parent parsing of that field. Other fields, unknown/failed
+subtype paths, constructor and serialization logic remain the upstream implementation.
+This is typed discriminator decoding, not a general JSON Schema constraint validator.
+Generichost only; explicit converter templates retain priority.

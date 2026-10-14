@@ -57,6 +57,18 @@ class Fixture(http.server.BaseHTTPRequestHandler):
                 assert self.command == "GET"
                 self.respond(400, {"message": "expected fixture failure"})
                 return
+            if parsed.path.startswith("/animals/"):
+                assert self.command == "GET"
+                assert parsed.path in {"/animals/cat","/animals/dog"}
+                self.respond(200,{"kind":"cat","name":NOTE} if parsed.path.endswith("cat") else {"kind":"dog","barks":True})
+                return
+            if parsed.path == "/animals":
+                assert self.command == "POST"
+                assert self.headers.get_content_type() == "application/json"
+                animal=json.loads(body)
+                assert animal in [{"kind":"cat","name":NOTE},{"kind":"dog","barks":True}], animal
+                self.respond(200,animal)
+                return
             if parsed.path == "/multipart":
                 assert self.command == "POST"
                 assert self.headers.get_content_type() == "multipart/form-data"
@@ -135,6 +147,7 @@ func TestRuntimeFixture(t *testing.T) {
     if err==nil || response==nil || response.StatusCode!=400 {t.Fatalf("error response lost: %v %v",response,err)}
     __GO_BINARY__
     __GO_MULTIPART__
+    __GO_UNION__
 }
 '''
 PYTHON = r'''import os
@@ -156,6 +169,7 @@ with ApiClient(Configuration(host=os.environ["FIXTURE_URL"], access_token="fixtu
         raise AssertionError("HTTP error was not exposed")
     __PYTHON_BINARY__
     __PYTHON_MULTIPART__
+    __PYTHON_UNION__
 print("PASS Python client")
 '''
 JAVASCRIPT = r'''const assert=require('node:assert/strict');
@@ -172,6 +186,7 @@ function call(name,...args) {return new Promise((resolve,reject)=>api[name](...a
   await assert.rejects(call('failGet'),error=>error.status===400 && error.response.body.message==='expected fixture failure');
   __JS_BINARY__
   __JS_MULTIPART__
+  __JS_UNION__
   console.log('PASS JavaScript client');
 })().catch(error=>{console.error(error);process.exit(1)});
 '''
@@ -186,6 +201,7 @@ const api=new sdk.DefaultApi(new sdk.Configuration({basePath:process.env.FIXTURE
   await assert.rejects(api.failGet(),error=>error instanceof sdk.ResponseError && error.response.status===400);
   __TS_BINARY__
   __TS_MULTIPART__
+  __TS_UNION__
   console.log('PASS TypeScript client');
 })().catch(error=>{console.error(error);process.exit(1)});
 '''
@@ -225,6 +241,7 @@ if (failure.StatusCode != HttpStatusCode.BadRequest || failure.BadRequest()!.Mes
     throw new Exception("HTTP400 model/status lost");
 __CS_BINARY__
 __CS_MULTIPART__
+__CS_UNION__
 Console.WriteLine("PASS C# generichost client");
 '''
 
@@ -311,6 +328,59 @@ if (receipt.StatusCode != HttpStatusCode.OK || receipt.Ok()!.Size != data.Length
 '''
 
 
+GO_UNION = r'''cat,response,err:=api.DefaultAPI.GetAnimal(ctx,"cat").Execute()
+    if err!=nil || response.StatusCode!=200 || cat.Cat==nil || cat.Dog!=nil || cat.Cat.GetKind()!="cat" || cat.Cat.GetName()!="鼹鼠 \"quotes\" & +" {t.Fatalf("cat union: %v %v",cat,err)}
+    dog,response,err:=api.DefaultAPI.GetAnimal(ctx,"dog").Execute()
+    if err!=nil || response.StatusCode!=200 || dog.Dog==nil || dog.Cat!=nil || dog.Dog.GetKind()!="dog" || !dog.Dog.GetBarks() {t.Fatalf("dog union: %v %v",dog,err)}
+    echo,response,err:=api.DefaultAPI.EchoAnimal(ctx).Animal(*cat).Execute()
+    if err!=nil || response.StatusCode!=200 || echo.Cat==nil || echo.Cat.GetName()!=cat.Cat.GetName() {t.Fatalf("cat roundtrip: %v %v",echo,err)}
+    echo,response,err=api.DefaultAPI.EchoAnimal(ctx).Animal(*dog).Execute()
+    if err!=nil || response.StatusCode!=200 || echo.Dog==nil || !echo.Dog.GetBarks() {t.Fatalf("dog roundtrip: %v %v",echo,err)}
+'''
+PYTHON_UNION = r'''from openapi_client import Cat, Dog
+    cat=api.get_animal(kind="cat")
+    dog=api.get_animal(kind="dog")
+    assert isinstance(cat.actual_instance,Cat) and cat.actual_instance.kind=="cat" and cat.actual_instance.name=='鼹鼠 "quotes" & +', cat
+    assert isinstance(dog.actual_instance,Dog) and dog.actual_instance.kind=="dog" and dog.actual_instance.barks is True, dog
+    echo=api.echo_animal(animal=cat)
+    assert isinstance(echo.actual_instance,Cat) and echo.actual_instance.name==cat.actual_instance.name, echo
+    echo=api.echo_animal(animal=dog)
+    assert isinstance(echo.actual_instance,Dog) and echo.actual_instance.barks is True, echo
+'''
+JS_UNION = r'''const cat=await call('getAnimal','cat');
+  const dog=await call('getAnimal','dog');
+  assert.ok(cat.getActualInstance() instanceof sdk.Cat); assert.equal(cat.getActualInstance().kind,'cat'); assert.equal(cat.getActualInstance().name,'鼹鼠 "quotes" & +');
+  assert.ok(dog.getActualInstance() instanceof sdk.Dog); assert.equal(dog.getActualInstance().kind,'dog'); assert.equal(dog.getActualInstance().barks,true);
+  let echo=await call('echoAnimal',cat);
+  assert.ok(echo.getActualInstance() instanceof sdk.Cat); assert.equal(echo.getActualInstance().name,cat.getActualInstance().name);
+  echo=await call('echoAnimal',dog);
+  assert.ok(echo.getActualInstance() instanceof sdk.Dog); assert.equal(echo.getActualInstance().barks,true);
+'''
+TS_UNION = r'''const cat=await api.getAnimal({kind:'cat'});
+  const dog=await api.getAnimal({kind:'dog'});
+  assert.equal(cat.kind,'cat'); assert.equal(cat.name,'鼹鼠 "quotes" & +'); assert.equal(cat.barks,undefined);
+  assert.equal(dog.kind,'dog'); assert.equal(dog.barks,true); assert.equal(dog.name,undefined);
+  let echo=await api.echoAnimal({animal:cat}); assert.equal(echo.kind,'cat'); assert.equal(echo.name,cat.name);
+  echo=await api.echoAnimal({animal:dog}); assert.equal(echo.kind,'dog'); assert.equal(echo.barks,true);
+'''
+CS_UNION = r'''var cat = (await api.GetAnimalAsync(kind:"cat", cancellationToken:cancel.Token)).Ok()!;
+var dog = (await api.GetAnimalAsync(kind:"dog", cancellationToken:cancel.Token)).Ok()!;
+if (cat.Cat==null || cat.Dog!=null || cat.Cat.Name!="鼹鼠 \"quotes\" & +" || cat.Cat.Kind!=Cat.KindEnum.Cat) throw new Exception("Cat union lost subtype/data");
+if (dog.Dog==null || dog.Cat!=null || !dog.Dog.Barks || dog.Dog.Kind!=Dog.KindEnum.Dog) throw new Exception("Dog union lost subtype/data");
+var catEcho = (await api.EchoAnimalAsync(animal:cat, cancellationToken:cancel.Token)).Ok()!;
+var dogEcho = (await api.EchoAnimalAsync(animal:dog, cancellationToken:cancel.Token)).Ok()!;
+if (catEcho.Cat?.Name != cat.Cat.Name || dogEcho.Dog?.Barks != true) throw new Exception("Union roundtrip lost data");
+var jsonOptions = host.Services.GetRequiredService<JsonSerializerOptionsProvider>().Options;
+foreach (var invalid in new[]{"{}", System.Text.Json.JsonSerializer.Serialize(new{kind="bird",name="bad"}), System.Text.Json.JsonSerializer.Serialize(new{kind="cat"})}) {
+    bool rejected = false;
+    try { System.Text.Json.JsonSerializer.Deserialize<Animal>(invalid,jsonOptions); }
+    catch (System.Text.Json.JsonException) { rejected = true; }
+    if (!rejected) throw new Exception("Invalid tagged union was accepted: " + invalid);
+}
+
+'''
+
+
 ASPNET_HOST = r'''using System;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
@@ -362,7 +432,7 @@ def csharp(directory, url, args):
     assert match, "Generated hosting extension missing"
     api_name = match.group(1)
     driver = CSHARP.replace("__CONFIGURE_API__", "Configure" + api_name).replace("__ADD_HTTP_CLIENTS__", "Add" + api_name + "HttpClients")
-    driver = driver.replace("__CS_BINARY__", CS_BINARY if args.profile=="binary" else "").replace("__CS_MULTIPART__", CS_MULTIPART if args.profile=="multipart" else "")
+    driver = driver.replace("__CS_BINARY__", CS_BINARY if args.profile=="binary" else "").replace("__CS_MULTIPART__", CS_MULTIPART if args.profile=="multipart" else "").replace("__CS_UNION__", CS_UNION if args.profile=="union" else "")
     consumer = directory / "runtime-consumer"
     consumer.mkdir(exist_ok=True)
     (consumer / "Program.cs").write_text(driver)
@@ -469,7 +539,7 @@ def python_environment(directory):
 def client(target, directory, url, args):
     env = dict(os.environ, FIXTURE_URL=url)
     if target == "go":
-        driver = GO.replace("__GO_BINARY__", GO_BINARY if args.profile=="binary" else "").replace("__GO_MULTIPART__", GO_MULTIPART if args.profile=="multipart" else "")
+        driver = GO.replace("__GO_BINARY__", GO_BINARY if args.profile=="binary" else "").replace("__GO_MULTIPART__", GO_MULTIPART if args.profile=="multipart" else "").replace("__GO_UNION__", GO_UNION if args.profile=="union" else "")
         if args.profile=="binary":
             driver=driver.replace('"context"', '"context"\n    "bytes"\n    "io"',1)
         if args.profile=="multipart":
@@ -481,7 +551,7 @@ def client(target, directory, url, args):
         csharp(directory, url, args)
     elif target == "python":
         python = python_environment(directory)
-        (directory / "runtime_fixture.py").write_text(PYTHON.replace("__PYTHON_BINARY__", PYTHON_BINARY if args.profile=="binary" else "").replace("__PYTHON_MULTIPART__", PYTHON_MULTIPART if args.profile=="multipart" else ""))
+        (directory / "runtime_fixture.py").write_text(PYTHON.replace("__PYTHON_BINARY__", PYTHON_BINARY if args.profile=="binary" else "").replace("__PYTHON_MULTIPART__", PYTHON_MULTIPART if args.profile=="multipart" else "").replace("__PYTHON_UNION__", PYTHON_UNION if args.profile=="union" else ""))
         run([str(python), "runtime_fixture.py"], directory, env)
     else:
         run([args.npm, "install", "--no-audit", "--no-fund"], directory)
@@ -505,6 +575,7 @@ def client(target, directory, url, args):
             values={'file':'fs.createReadStream(filename)','note':json.dumps(NOTE),'tags':json.dumps(['red','蓝']),'opts':json.dumps({'optionalTags':['red','蓝'],'packedTags':['red','蓝']})}
             js_multipart=JS_MULTIPART.replace('__MULTIPART_ARGS__',','.join(values[name] for name in names[:-1]))
         driver=driver.replace("__JS_MULTIPART__", js_multipart if args.profile=="multipart" else "").replace("__TS_MULTIPART__", TS_MULTIPART if args.profile=="multipart" else "")
+        driver=driver.replace("__JS_UNION__", JS_UNION if args.profile=="union" else "").replace("__TS_UNION__", TS_UNION if args.profile=="union" else "")
         (directory / "runtime_fixture.cjs").write_text(driver)
         run([args.node, "runtime_fixture.cjs"], directory, env)
 
@@ -557,7 +628,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--targets", default="javascript,python,go,typescript-fetch,python-fastapi")
     parser.add_argument("--versions", default="3.0.3,3.1.0")
-    parser.add_argument("--profile", choices=["core","binary","multipart"], default="core")
+    parser.add_argument("--profile", choices=["core","binary","multipart","union"], default="core")
     parser.add_argument("--node", default=shutil.which("node"))
     parser.add_argument("--npm", default=shutil.which("npm"))
     parser.add_argument("--go", default=shutil.which("go"))
@@ -571,8 +642,8 @@ def main():
     versions = args.versions.split(",")
     assert all(t in {"javascript", "python", "go", "typescript-fetch", "python-fastapi", "csharp", "aspnetcore"} for t in targets)
     assert all(v in {"3.0.3", "3.1.0"} for v in versions)
-    if args.profile in {"binary","multipart"}:
-        assert not {"python-fastapi","aspnetcore"}.intersection(targets), "File profiles currently validate clients"
+    if args.profile in {"binary","multipart","union"}:
+        assert not {"python-fastapi","aspnetcore"}.intersection(targets), "Extended profiles currently validate clients"
     if not args.reuse_generated:
         run(["cargo", "run", "-p", "moleapi-generation", "--example", "fixture_projects", "--", str(args.output), str(args.worker), str(args.java), args.targets, args.versions, args.profile], REPO, timeout=300)
     evidence_path = args.output / "runtime-evidence.json"
@@ -606,6 +677,7 @@ def main():
                     expected=[("GET", "/pets/7"), ("POST", "/pets/7"), ("GET", "/fail")]
                     if args.profile=="binary": expected += [("GET","/files"),("POST","/files")]
                     if args.profile=="multipart": expected += [("POST","/multipart")]
+                    if args.profile=="union": expected += [("GET","/animals/cat"),("GET","/animals/dog"),("POST","/animals"),("POST","/animals")]
                     assert Fixture.observations == expected, Fixture.observations
                 manifest = json.loads((directory / "moleapi-generation.json").read_text())
                 source_digest = hashlib.sha256((directory / "fixture-source.json").read_bytes()).hexdigest()

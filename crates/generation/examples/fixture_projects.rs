@@ -50,6 +50,13 @@ fn specification(version: &str, profile: &str) -> Value {
             }}},"responses":{"200":{"description":"Multipart receipt","content":{"application/json":{"schema":{"$ref":"#/components/schemas/UploadReceipt"}}}}}
         }});
     }
+    if profile == "union" {
+        specification["components"]["schemas"]["Cat"] = json!({"type":"object","required":["kind","name"],"properties":{"kind":{"type":"string","enum":["cat"]},"name":{"type":"string"}}});
+        specification["components"]["schemas"]["Dog"] = json!({"type":"object","required":["kind","barks"],"properties":{"kind":{"type":"string","enum":["dog"]},"barks":{"type":"boolean"}}});
+        specification["components"]["schemas"]["Animal"] = json!({"oneOf":[{"$ref":"#/components/schemas/Cat"},{"$ref":"#/components/schemas/Dog"}],"discriminator":{"propertyName":"kind","mapping":{"cat":"#/components/schemas/Cat","dog":"#/components/schemas/Dog"}}});
+        specification["paths"]["/animals/{kind}"] = json!({"get":{"operationId":"getAnimal","parameters":[{"name":"kind","in":"path","required":true,"schema":{"type":"string"}}],"responses":{"200":{"description":"Tagged animal","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Animal"}}}}}}});
+        specification["paths"]["/animals"] = json!({"post":{"operationId":"echoAnimal","requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/Animal"}}}},"responses":{"200":{"description":"Tagged echo","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Animal"}}}}}}});
+    }
     specification
 }
 
@@ -66,7 +73,7 @@ async fn main() -> Result<()> {
     let versions = args.next().unwrap_or_else(|| "3.0.3,3.1.0".into());
     let profile = args.next().unwrap_or_else(|| "core".into());
     ensure!(
-        matches!(profile.as_str(), "core" | "binary" | "multipart"),
+        matches!(profile.as_str(), "core" | "binary" | "multipart" | "union"),
         "Unknown fixture profile"
     );
     let runtime = ProjectRuntime::new(worker, Some(java))?;

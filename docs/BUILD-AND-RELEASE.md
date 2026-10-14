@@ -1,8 +1,10 @@
 # MoleAPI 构建与发行要求
 
-状态：应用代码已进入 main，GitHub Actions 实际执行服务端、桌面和 Docker 构建。2026-10-13 的 a8eeb65：Application CI、Research integrity 和 Docker 多架构构建成功；Linux x64/arm64、macOS arm64 服务端及 worker 检查成功。桌面与其余服务端平台仍须下述修复后的真实构建证据。
+状态：应用代码已进入 main，GitHub Actions 实际执行服务端、桌面和 Docker 构建。2026-10-13 的 a8eeb65：Application CI、Research integrity 和 Docker 多架构构建成功；Linux x64/arm64、macOS arm64 服务端及 worker 检查成功。修复后平台构建的新增证据见下文。
 
 2026-10-14 构建修复：桌面 FileHandle 继承 Tauri Resource，关闭权限应为 `core:resources:allow-close`；模型生成器的固定哈希要求 `vendor/model-engine/engine.js` 在 Windows 保持 LF（CRLF 哈希与失败日志完全一致）；macOS x64 使用官方 `macos-15-intel` runner，避免 ARM runner 的首次 Rosetta 翻译超过 worker 启动预算。Windows 桌面前次任务因 hosted runner 失联而终止，缺失日志不视作代码成功或失败证明。actionlint 和模拟 core.autocrlf Windows checkout 的模型哈希检查通过；本机缺少 JavaScriptCore/WebKitGTK 4.1，完整桌面验证由新的原生平台 Actions 任务执行。
+
+2026-10-14 原生平台结果：提交 `e9c14cd109ba2f0f0cc6c0e6353d312c8a2256ae` 的 [Server and desktop builds / 38483899443](https://github.com/ca-x/moleapi/actions/runs/38483899443) 已成功完成。独立服务端 Linux x64/arm64、macOS x64/arm64、Windows x64 共5个构建，以及桌面 Linux x64（deb/rpm/AppImage）、macOS x64/arm64（dmg）、Windows x64（NSIS/MSI）共4个打包构建全部成功；每个平台的 worker 检查和 artifact 上传步骤均成功。提交 `746e50a` 的 Application CI / 38487325358 与 Docker / 38487325380 也已成功。这些是对应历史提交的构建证据，不能替代当前主分支检查、实际安装验收、签名或公证；当前主分支的远程构建仍在队列中。
 
 | 产物 | 目标平台/架构 | 安装/分发形式 |
 | --- | --- | --- |

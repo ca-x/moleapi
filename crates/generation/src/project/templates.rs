@@ -6,11 +6,11 @@ pub const TEMPLATE_LIMIT: usize = 512 * 1024;
 
 /// Pinned upstream compatibility defaults; explicitly supplied templates override them.
 pub(super) fn write_builtin(input: &ProjectInput, root: &Path) -> Result<bool> {
-    let (name, content) = match input.target.as_str() {
-        "aspnetcore" => (
+    let files: &[(&str, &str)] = match input.target.as_str() {
+        "aspnetcore" => &[(
             "Startup.mustache",
             include_str!("../../../../vendor/openapi-generator/compat/aspnetcore/Startup.mustache"),
-        ),
+        )],
         "javascript"
             if input
                 .options
@@ -18,12 +18,20 @@ pub(super) fn write_builtin(input: &ProjectInput, root: &Path) -> Result<bool> {
                 .and_then(Value::as_str)
                 .is_none_or(|library| library == "javascript") =>
         {
-            (
-                "ApiClient.mustache",
-                include_str!(
-                    "../../../../vendor/openapi-generator/compat/javascript/ApiClient.mustache"
+            &[
+                (
+                    "ApiClient.mustache",
+                    include_str!(
+                        "../../../../vendor/openapi-generator/compat/javascript/ApiClient.mustache"
+                    ),
                 ),
-            )
+                (
+                    "partial_model_oneof.mustache",
+                    include_str!(
+                        "../../../../vendor/openapi-generator/compat/javascript/partial_model_oneof.mustache"
+                    ),
+                ),
+            ]
         }
         "csharp"
             if input
@@ -32,25 +40,35 @@ pub(super) fn write_builtin(input: &ProjectInput, root: &Path) -> Result<bool> {
                 .and_then(Value::as_str)
                 .is_none_or(|library| library == "generichost") =>
         {
-            (
-                "api.mustache",
-                include_str!(
-                    "../../../../vendor/openapi-generator/compat/csharp-generichost/api.mustache"
+            &[
+                (
+                    "api.mustache",
+                    include_str!(
+                        "../../../../vendor/openapi-generator/compat/csharp-generichost/api.mustache"
+                    ),
                 ),
-            )
+                (
+                    "JsonConverter.mustache",
+                    include_str!(
+                        "../../../../vendor/openapi-generator/compat/csharp-generichost/JsonConverter.mustache"
+                    ),
+                ),
+            ]
         }
         _ => return Ok(false),
     };
     std::fs::create_dir_all(root)?;
-    let path = root.join(name);
-    if path.exists() {
-        ensure!(
-            path.is_file(),
-            "Compatibility template must be a regular file"
-        );
-        return Ok(true);
+    for (name, content) in files {
+        let path = root.join(name);
+        if path.exists() {
+            ensure!(
+                path.is_file(),
+                "Compatibility template must be a regular file"
+            );
+        } else {
+            std::fs::write(path, content)?;
+        }
     }
-    std::fs::write(path, content)?;
     Ok(true)
 }
 
