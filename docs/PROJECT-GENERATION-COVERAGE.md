@@ -32,7 +32,7 @@ Remaining complete-module work includes broader per-language compile/run fixture
 
 ## Native generated CLI and regeneration
 
-`rust-progenitor-cli` uses Progenitor’s builder SDK and clap CLI emitter, not a custom operation/argument emitter. A small executable adapter supplies base URL/Bearer configuration and JSON output. Generated CLI projects compiled and called real HTTP fixtures for GET and POST with path/query/body parameters. CLI help exposes operation arguments, whole JSON-body files and nonzero API-error behavior. Finite raw responses now use a small, MPL-preserving Progenitor emitter patch (see `vendor/progenitor-impl/MOLEAPI-PATCH.md`): success bytes stream unchanged to stdout or `--output-file`, which uses create-new semantics and refuses overwrite. Raw error responses retain the SDK error and exit nonzero. `--body-file` reads binary/text request bodies into the upstream builder; upload input currently loads the file into memory. A generated standalone project compiled and passed real HTTP byte-identical stdout/download/upload, existing-file preservation and raw HTTP400-error checks. Upgrade and raw paginated response paths remain unsupported and explicitly rejected by the emitted-code guard; optional raw request bodies still inherit upstream’s required-body behavior. These gaps remain full-module work.
+`rust-progenitor-cli` uses Progenitor’s builder SDK and clap CLI emitter, not a custom operation/argument emitter. A small executable adapter supplies base URL/Bearer configuration and JSON output. Generated CLI projects compiled and called real HTTP fixtures for GET and POST with path/query/body parameters. CLI help exposes operation arguments, whole JSON-body files and nonzero API-error behavior. Finite raw responses now use a small, MPL-preserving Progenitor emitter patch (see `vendor/progenitor-impl/MOLEAPI-PATCH.md`): success bytes stream unchanged to stdout or `--output-file`, which uses create-new semantics and refuses overwrite. Raw error responses retain the SDK error and exit nonzero. `--body-file` reads binary/text request bodies into the upstream builder; upload input currently loads the file into memory. A generated standalone project compiled and passed real HTTP byte-identical stdout/download/upload, existing-file preservation and raw HTTP400-error checks. Raw paginated response paths remain unsupported and explicitly rejected by the emitted-code guard; upgraded CLI connections now have the separately verified transport slice below; optional raw request bodies still inherit upstream’s required-body behavior. These gaps remain full-module work.
 
 Save generated snapshot JSON from the project dialog. Regeneration compares the original snapshot, current edited snapshot and next generated files using diffy0.5.2 in a capped, cancellable application worker. Original/generated hashes, duplicate paths, file/aggregate/line/diff limits and owner/workspace admission are checked. Nonoverlapping changes merge, unchanged local files update, edited/deleted/authored files are preserved or become explicit conflicts. Conflicts block ZIP download until the user chooses working/generated/deletion; no filesystem overwrite occurs. Merged ZIPs include actual merged-content checksums in `moleapi-regeneration.json` and preserve safe executable flags. Snapshot import, conflict-choice and archive gating have frontend/API tests. Original `moleapi-generation.json` describes generator output; the regeneration manifest describes the edited/merged result.
 
@@ -231,3 +231,34 @@ including reuse runs, and fails explicitly for non-wrapper/unsupported configura
 Both Gson3.0/3.1 regression consumers also passed14 actual requests after this change.
 This adds two serializer/dialect cases; default Moshi and broader union/platform/keyword
 support remain open. No additional product runtime is downloaded or executed by preview.
+
+
+## Native CLI upgraded connections
+
+Progenitor's existing101 response classification and SDK upgrade transport now feed
+an async generated CLI output hook rather than `todo!()`. Generic upgraded connections
+stream `--upgrade-input FILE` bytes, half-close outgoing IO at file EOF and continue
+receiving byte-identical output to stdout or a create-new `--output-file`. Declared
+`x-dropshot-websocket` operations use tokio-tungstenite0.27 over the SDK's upgraded
+connection: file input becomes one binary message, text/binary payloads are concatenated
+to output until peer close; the library handles client masking/control frames.
+Handshake/request/error construction remains the upstream SDK implementation.
+
+A generated standalone project compiled and passed6 actual HTTP requests: generic
+duplex stdout and file output, existing-file preservation, WebSocket binary input plus
+Unicode text/binary output/Ping/Pong/close acknowledgement, typed400 rejection and
+unexpected200 instead of101 rejection. Bearer headers were asserted on every request.
+The prior5-request binary download/upload/error CLI fixture also passed after extending
+the hook. Local tools: Rust/Cargo1.99.0, Progenitor0.15.0, reqwest0.13.5,
+tokio-tungstenite/tungstenite0.27 on Linux. Generated projects use the published client
+crate and do not require the vendored emitter patch at runtime.
+
+Generation regression passed67 cases (15 external-tool cases ignored); explicit upgrade
+artifact/process tests passed2 cases. All11 owned project API cases passed, including
+capped-worker upgraded CLI generation, unauthorized/cross-owner rejection, original-source
+preservation, default credential-example exclusion and explicit inclusion. Scoped strict
+Clippy/formatting passed. This does not complete CLI parity: raw pagination, interactive
+stdin/terminal, WebSocket message-boundary-preserving output, subprotocol/extension and
+malformed-handshake coverage, optional raw-body semantics and broader/native-platform
+upgrade transports remain required work. File WebSocket input is buffered as one message;
+generic upgraded input/output and raw output use streaming IO.

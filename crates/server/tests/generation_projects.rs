@@ -535,3 +535,103 @@ async fn native_protobuf_project_route_generates_shared_client_server_artifact_f
     let (_, saved) = call(&router, "GET", "/api/workspaces/proto", None, None).await;
     assert_eq!(saved["data"]["specifications"][0]["source"], source);
 }
+
+#[tokio::test]
+async fn upgraded_cli_generation_uses_owned_worker_and_preserves_source_privacy() {
+    let temp = tempfile::tempdir().unwrap();
+    let router = hosted(config(
+        format!(
+            "sqlite://{}?mode=rwc",
+            temp.path().join("upgrade.db").display()
+        ),
+        true,
+    ))
+    .await
+    .unwrap();
+    let owner = register(&router, "upgrade-owner").await;
+    let other = register(&router, "upgrade-other").await;
+    let source = json!({"openapi":"3.0.3","info":{"title":"Owned upgrade","version":"1"},"paths":{
+        "/socket":{"get":{"operationId":"socket","x-dropshot-websocket":true,"responses":{
+            "101":{"description":"Upgraded"},
+            "400":{"description":"Rejected","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Failure"}}}}
+        }}}
+    },"components":{"schemas":{"Failure":{"type":"object","properties":{"password":{"type":"string","format":"password","example":"private-upgrade-fixture"}}}}}}).to_string();
+    let mut data = example_data();
+    data["specifications"] =
+        json!([{"id":"spec","name":"Upgrade","kind":"openapi","dialect":"3.0.3","source":source}]);
+    let (status, saved) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        Some(&owner),
+        Some(json!({"id":"upgrade","name":"Upgrade","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    let input = json!({"workspace_id":"upgrade","specification_id":"spec","job_id":"upgrade-fixture","target":"rust-progenitor-cli"});
+    let (status, _) = call(
+        &router,
+        "POST",
+        "/api/generation/projects",
+        Some(&other),
+        Some(input.clone()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = call(
+        &router,
+        "POST",
+        "/api/generation/projects",
+        None,
+        Some(input.clone()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    let (status, artifact) = call(
+        &router,
+        "POST",
+        "/api/generation/projects",
+        Some(&owner),
+        Some(input.clone()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{artifact}");
+    assert!(!artifact.to_string().contains("private-upgrade-fixture"));
+    let files = artifact["files"].as_array().unwrap();
+    assert!(files.iter().any(|f| {
+        f["path"] == "src/cli.rs"
+            && f["content"]
+                .as_str()
+                .unwrap()
+                .contains("self.config.success_upgrade(r, true).await")
+    }));
+    assert!(files.iter().any(|f| {
+        f["path"] == "src/main.rs"
+            && f["content"]
+                .as_str()
+                .unwrap()
+                .contains("WebSocketStream::from_raw_socket")
+    }));
+    let (_, saved) = call(
+        &router,
+        "GET",
+        "/api/workspaces/upgrade",
+        Some(&owner),
+        None,
+    )
+    .await;
+    assert_eq!(saved["data"]["specifications"][0]["source"], source);
+    let mut explicit = input;
+    explicit["job_id"] = "upgrade-explicit".into();
+    explicit["include_secrets"] = true.into();
+    let (status, included) = call(
+        &router,
+        "POST",
+        "/api/generation/projects",
+        Some(&owner),
+        Some(explicit),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{included}");
+    assert!(included.to_string().contains("private-upgrade-fixture"));
+}

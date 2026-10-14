@@ -139,6 +139,8 @@ impl Generator {
                 fn success_no_item(&self, value: &ResponseValue<()>);
                 fn success_raw(&self, value: ResponseValue<ByteStream>)
                     -> impl std::future::Future<Output = anyhow::Result<()>>;
+                fn success_upgrade(&self, value: ResponseValue<reqwest::Upgraded>, websocket: bool)
+                    -> impl std::future::Future<Output = anyhow::Result<()>>;
                 fn error<T>(&self, value: &Error<T>)
                 where
                     T: #(#cli_bounds+)* schemars::JsonSchema + serde::Serialize + std::fmt::Debug;
@@ -240,6 +242,7 @@ impl Generator {
         let (_, error_kind) =
             self.extract_responses(method, OperationResponseStatus::is_error_or_default);
 
+        let websocket = method.dropshot_websocket;
         let execute_and_output = match method.dropshot_paginated {
             // Normal, one-shot API calls.
             None => {
@@ -264,7 +267,7 @@ impl Generator {
                         quote! { { self.config.success_raw(r).await } }
                     }
                     crate::method::OperationResponseKind::Upgrade => {
-                        quote! { { todo!() } }
+                        quote! { { self.config.success_upgrade(r, #websocket).await } }
                     }
                 };
 
@@ -282,7 +285,7 @@ impl Generator {
                         quote! { { Err(anyhow::Error::new(r)) } }
                     }
                     crate::method::OperationResponseKind::Upgrade => {
-                        quote! { { todo!() } }
+                        quote! { { Err(anyhow::Error::new(r)) } }
                     }
                 };
 

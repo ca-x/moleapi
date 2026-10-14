@@ -1,6 +1,6 @@
 use __SDK_CRATE__::{Client, Error, ResponseValue};
 use __SDK_CRATE__::cli::{Cli, CliConfig, CliCommand};
-struct Output { file: Option<std::path::PathBuf> }
+struct Output { file: Option<std::path::PathBuf>, upgrade_input: Option<std::path::PathBuf> }
 impl CliConfig for Output {
     fn success_item<T>(&self, value: &ResponseValue<T>) where T: schemars::JsonSchema + serde::Serialize + std::fmt::Debug {
         println!("{}", serde_json::to_string(&**value).expect("Serialize typed response"));
@@ -19,6 +19,42 @@ impl CliConfig for Output {
         output.flush().await?;
         Ok(())
     }
+    async fn success_upgrade(&self, value: ResponseValue<reqwest::Upgraded>, websocket: bool) -> anyhow::Result<()> {
+        use tokio::io::AsyncWriteExt;
+        let mut output: Box<dyn tokio::io::AsyncWrite + Unpin + Send> = match &self.file {
+            Some(path) => Box::new(tokio::fs::OpenOptions::new().write(true).create_new(true).open(path).await?),
+            None => Box::new(tokio::io::stdout()),
+        };
+        if websocket {
+            use futures::{SinkExt, StreamExt};
+            use tokio_tungstenite::tungstenite::{protocol::Role, Message};
+            let mut stream = tokio_tungstenite::WebSocketStream::from_raw_socket(value.into_inner(), Role::Client, None).await;
+            if let Some(path) = &self.upgrade_input {
+                stream.send(Message::Binary(tokio::fs::read(path).await?.into())).await?;
+            }
+            while let Some(message) = stream.next().await {
+                match message? {
+                    Message::Text(text) => output.write_all(text.as_bytes()).await?,
+                    Message::Binary(bytes) => output.write_all(&bytes).await?,
+                    Message::Close(_) => { stream.flush().await?; break; }
+                    _ => {}
+                }
+            }
+        } else {
+            let (mut incoming, mut outgoing) = tokio::io::split(value.into_inner());
+            let send = async {
+                if let Some(path) = &self.upgrade_input {
+                    let mut input = tokio::fs::File::open(path).await?;
+                    tokio::io::copy(&mut input, &mut outgoing).await?;
+                }
+                outgoing.shutdown().await
+            };
+            let receive = tokio::io::copy(&mut incoming, &mut output);
+            tokio::try_join!(send, receive)?;
+        }
+        output.flush().await?;
+        Ok(())
+    }
     fn success_no_item(&self, _: &ResponseValue<()>) {}
     fn error<T>(&self, _: &Error<T>) where T: schemars::JsonSchema + serde::Serialize + std::fmt::Debug {}
     fn list_start<T>(&self) where T: schemars::JsonSchema + serde::Serialize + std::fmt::Debug {}
@@ -33,7 +69,8 @@ async fn main() -> anyhow::Result<()> {
     let mut command = clap::Command::new(env!("CARGO_PKG_NAME"))
         .subcommand_required(true).arg_required_else_help(true)
         .arg(clap::Arg::new("base-url").long("base-url").env("MOLEAPI_API_URL").hide_env_values(true).required(true))
-        .arg(clap::Arg::new("output-file").long("output-file").value_name("NEW_FILE").help("Stream binary responses to a new file; refuses overwrite"))
+        .arg(clap::Arg::new("output-file").long("output-file").value_name("NEW_FILE").help("Stream binary or upgraded response payloads to a new file; refuses overwrite"))
+        .arg(clap::Arg::new("upgrade-input").long("upgrade-input").value_name("FILE").help("Send file bytes on an upgraded connection; WebSocket sends one binary message"))
         .arg(clap::Arg::new("token").long("token").env("MOLEAPI_API_TOKEN").hide_env_values(true));
     for operation in CliCommand::iter() {
         command = command.subcommand(Cli::<Output>::get_command(operation).name(operation.operation_id()));
@@ -48,5 +85,5 @@ async fn main() -> anyhow::Result<()> {
     }
     let http = reqwest::Client::builder().default_headers(headers).build()?;
     let client = Client::new_with_client(matches.get_one::<String>("base-url").expect("Required URL"), http);
-    Cli::new(client, Output { file: matches.get_one::<String>("output-file").map(std::path::PathBuf::from) }).execute(operation, args).await
+    Cli::new(client, Output { file: matches.get_one::<String>("output-file").map(std::path::PathBuf::from), upgrade_input: matches.get_one::<String>("upgrade-input").map(std::path::PathBuf::from) }).execute(operation, args).await
 }

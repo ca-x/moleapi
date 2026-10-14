@@ -29,7 +29,7 @@ pub(crate) struct OperationMethod {
     pub params: Vec<OperationParameter>,
     pub responses: Vec<OperationResponse>,
     pub dropshot_paginated: Option<DropshotPagination>,
-    dropshot_websocket: bool,
+    pub(crate) dropshot_websocket: bool,
 }
 
 pub enum HttpMethod {
