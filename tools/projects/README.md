@@ -235,5 +235,16 @@ URLComponents percentEncodedQuery; custom API templates retain priority.
 
 QA may use a verified official toolchain and distro libraries in isolated directories;
 record signature/hash/source provenance. The application does not acquire Swift. Default
-URLSession only; Apple/other platform/toolchain/library, extended file/union/encoding and
+URLSession only; Apple/other platform/toolchain/library, advanced file/union/encoding and
 SDK behavior need their own consumers and remain separate gates.
+
+
+Swift --profile binary and --profile multipart use the same explicit tool paths and
+separate release consumers. Both dialects passed byte-identical file URL download/raw
+upload and typed receipts; multipart also checks filename/MIME/Unicode/repeated arrays/
+CSV and a second upload with optional arrays omitted. Four profiles passed20 HTTP calls,
+plus six core regression requests. A pinned parameter partial repairs non-multi primitive
+form arrays; explicit _param.mustache overrides retain priority. Generated URLSession,
+models and Package.swift remain upstream. Consumer and downloaded files are cleaned up;
+finite SDK buffering is unchanged. Streaming/nested/custom/multiple files, other encoding
+styles and platforms still require their own evidence.

@@ -129,7 +129,10 @@ class Fixture(http.server.BaseHTTPRequestHandler):
                     if name == "file":
                         assert part.get_filename() == "payload.bin", part.get_filename()
                         assert part.get_content_type() == "application/octet-stream", part.get_content_type()
-                assert fields == {"file":[BINARY],"note":[NOTE.encode()],"tags":[b"red","蓝".encode()],"optionalTags":[b"red","蓝".encode()],"packedTags":["red,蓝".encode()]}, fields
+                expected_fields={"file":[BINARY],"note":[NOTE.encode()],"tags":[b"red","蓝".encode()]}
+                if self.observations.count(("POST","/multipart"))==1:
+                    expected_fields.update({"optionalTags":[b"red","蓝".encode()],"packedTags":["red,蓝".encode()]})
+                assert fields == expected_fields, fields
                 self.respond(200,{"size":len(BINARY)})
                 return
             if parsed.path == "/files":
@@ -1197,17 +1200,45 @@ func ensureFixture(_ condition: Bool, _ message: String) throws { if !condition 
             }
         }
         try ensureFixture(rejected,"HTTP400 response/model lost")
+        __SWIFT_EXTENDED__
         print("PASS Swift6 default URLSession SDK")
     }
 }
 '''
 
 
+
+SWIFT_BINARY = r'''let bytes=Data([0,1,2,13,10,255,128,65])
+        let downloaded=try await DefaultAPI.downloadFile(apiConfiguration:config)
+        defer { try? FileManager.default.removeItem(at:downloaded) }
+        try ensureFixture(try Data(contentsOf:downloaded)==bytes,"Binary download changed bytes")
+        let upload=FileManager.default.temporaryDirectory.appendingPathComponent("moleapi-fixture-"+UUID().uuidString)
+        try FileManager.default.createDirectory(at:upload,withIntermediateDirectories:true)
+        defer { try? FileManager.default.removeItem(at:upload) }
+        let file=upload.appendingPathComponent("payload.bin")
+        try bytes.write(to:file)
+        let receipt=try await DefaultAPI.uploadFile(body:file,apiConfiguration:config)
+        try ensureFixture(receipt.size==bytes.count,"Binary upload receipt lost")
+'''
+
+SWIFT_MULTIPART = r'''let bytes=Data([0,1,2,13,10,255,128,65])
+        let upload=FileManager.default.temporaryDirectory.appendingPathComponent("moleapi-fixture-"+UUID().uuidString)
+        try FileManager.default.createDirectory(at:upload,withIntermediateDirectories:true)
+        defer { try? FileManager.default.removeItem(at:upload) }
+        let file=upload.appendingPathComponent("payload.bin")
+        try bytes.write(to:file)
+        let receipt=try await DefaultAPI.uploadMultipart(file:file,note:"鼹鼠 \"quotes\" & +",tags:["red","蓝"],optionalTags:["red","蓝"],packedTags:["red","蓝"],apiConfiguration:config)
+        try ensureFixture(receipt.size==bytes.count,"Multipart upload receipt lost")
+        let omitted=try await DefaultAPI.uploadMultipart(file:file,note:"鼹鼠 \"quotes\" & +",tags:["red","蓝"],apiConfiguration:config)
+        try ensureFixture(omitted.size==bytes.count,"Omitted optional multipart fields lost")
+'''
+
+
 def swift_client(directory,url,args):
-    assert args.profile=='core', "Swift extended profiles require dedicated consumers"
+    assert args.profile in {'core','binary','multipart'}, 'Swift union profiles require dedicated consumers'
     assert args.swift and args.swift.is_absolute() and args.swift.is_file(), "Configure explicit --swift executable"
     source=(directory/'Sources/OpenAPIClient/APIs/DefaultAPI.swift').read_text()
-    driver=SWIFT_CORE
+    driver=SWIFT_CORE.replace('__SWIFT_EXTENDED__',{'core':'','binary':SWIFT_BINARY,'multipart':SWIFT_MULTIPART}[args.profile])
     for method,placeholder,values in [('getPet','__SWIFT_GET_ARGS__',{'id':'id:7','q':'q:'+json.dumps(QUERY,ensure_ascii=False),'xTest':'xTest:'+json.dumps('moleapi-fixture'),'apiConfiguration':'apiConfiguration:config'}),('replacePet','__SWIFT_POST_ARGS__',{'id':'id:7','pet':'pet:body','apiConfiguration':'apiConfiguration:config'})]:
         match=re.search(r'open class func '+method+r'\(([^)]*)\) async',source)
         assert match, 'Generated Swift signature missing: '+method
@@ -1361,7 +1392,7 @@ def main():
     if 'dart' in targets:
         assert args.profile in {'core','binary','multipart','union'} and args.dart and args.dart.is_absolute() and args.dart.is_file()
     if 'swift6' in targets:
-        assert args.profile=='core' and args.swift and args.swift.is_absolute() and args.swift.is_file()
+        assert args.profile in {'core','binary','multipart'} and args.swift and args.swift.is_absolute() and args.swift.is_file()
     if not args.reuse_generated:
         run(["cargo", "run", "-p", "moleapi-generation", "--example", "fixture_projects", "--", str(args.output), str(args.worker), str(args.java), args.targets, args.versions, args.profile, args.generator_options, args.discriminator_property], REPO, timeout=300)
     evidence_path = args.output / "runtime-evidence.json"
@@ -1414,7 +1445,7 @@ def main():
                     expected=[("GET", "/pets/7"), ("POST", "/pets/7"), ("GET", "/fail")]
                     if target=='dart': expected += [("GET","/truncated")]
                     if args.profile=="binary": expected += [("GET","/files"),("POST","/files")]
-                    if args.profile=="multipart": expected += [("POST","/multipart")]
+                    if args.profile=="multipart": expected += [("POST","/multipart")] * (2 if target=='swift6' else 1)
                     if args.profile=="union": expected += [("GET","/animals/cat"),("GET","/animals/dog"),("POST","/animals"),("POST","/animals")]
                     if target=='dart' and args.profile=='union': expected += [("GET","/animal-list"),("POST","/animal-list")]
                     if target=='php' and args.php_async: expected += [("GET","/animals/cat"),("GET","/animals/dog"),("GET","/animals/cat"),("GET","/animal-list"),("POST","/animal-list"),("GET","/animal-list"),("GET","/animal-list")] + [("GET","/animals/cat"),("GET","/animals/dog"),("GET","/fail"),("GET","/fail"),("GET","/animals/cat"),("GET","/animals/dog")]

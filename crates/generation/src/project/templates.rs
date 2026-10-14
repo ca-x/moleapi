@@ -108,12 +108,20 @@ pub(super) fn write_builtin(input: &ProjectInput, root: &Path) -> Result<bool> {
                 .and_then(Value::as_str)
                 .is_none_or(|library| library == "urlsession") =>
         {
-            &[(
-                "api.mustache",
-                include_str!(
-                    "../../../../vendor/openapi-generator/compat/swift6-urlsession/api.mustache"
+            &[
+                (
+                    "api.mustache",
+                    include_str!(
+                        "../../../../vendor/openapi-generator/compat/swift6-urlsession/api.mustache"
+                    ),
                 ),
-            )]
+                (
+                    "_param.mustache",
+                    include_str!(
+                        "../../../../vendor/openapi-generator/compat/swift6-urlsession/_param.mustache"
+                    ),
+                ),
+            ]
         }
         "dart" => &[
             (

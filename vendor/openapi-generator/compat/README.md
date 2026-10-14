@@ -226,3 +226,16 @@ Actual Unicode/query fixture showed URLComponents preserving raw +, decoded as s
 standard query parsing. Escape raw + in percentEncodedQuery after upstream query-item
 construction, keeping existing encoding/serialization/model/transport. Default URLSession
 only; explicit API overrides retain priority. Broad path/form/other-library semantics remain open.
+
+
+## Swift6 URLSession primitive form arrays
+
+Source: swift6/_param.mustache, pinned7.26.0 JAR, SHA256
+`9e019c595fff861ae22b170b40fe5e456fab58ae8d1798e0338c37aeb3a1b033`;
+upstream Apache-2.0 license/notices retained in this vendor directory.
+Actual multipart request sent an explode=false array as repeated parts. The partial
+joins non-multi primitive form arrays with the existing APIHelper string converter,
+leaving multi arrays, scalars/files and non-form parameters on the upstream expression.
+Required/optional arrays preserve optional omission. Default URLSession only; explicit
+API/_param templates retain priority. Other collection styles/nested/custom/streaming
+parts and Apple/other-platform execution remain separate gates.

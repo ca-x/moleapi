@@ -15,7 +15,7 @@ Explicit Mustache overrides now reuse the embedded OpenAPI Generator and mature 
 | javascript, python, go, csharp | Generated3.0/3.1 clients installed/built and passed real GET/POST/Bearer/query/header/nullable/enum/error fixtures; Go also passed race checking; C# default generichost hosting/token/typed400 APIs were called | Broader union/file/dynamic-keyword and library-option compatibility remains required |
 | php | Default Guzzle3.0/3.1 core, binary/multipart and mapped Cat/Dog tagged-oneOf decode/echo passed; original wire discriminator names retained | Static parent annotations/inheritance, advanced unions/constraints/files, other libraries/platforms remain required |
 | dart | Default HTTP3.0/3.1 core/file and mapped Cat/Dog oneOf wrappers/array echoes passed with analysis/AOT | Untagged/advanced unions, files/abort/options, SDK ranges and platforms remain required |
-| swift6 | Default URLSession3.0/3.1 Swift6 release packages and actual core calls passed on Linux | Apple/other SDK platforms, files/unions, encoding/options remain required |
+| swift6 | Default URLSession3.0/3.1 Swift6 release packages and core/binary/multipart calls passed on Linux | Apple/other SDK platforms, advanced files/unions, encoding/options remain required |
 | python-fastapi | Generated3.0/3.1 packages installed; unchanged generated app started, exposed routes/OpenAPI and returned its explicit500 missing-business-handler response | Authentication/business implementations remain consumer work; broader framework/keyword compatibility remains required |
 | aspnetcore | Default .NET10 projects built and started for3.0/3.1; consumer-configured authentication reached generated sample handlers (200) and rejected anonymous requests (401) | Real authentication scheme/validation and business handlers remain consumer work; broader framework/keyword compatibility remains required |
 | kotlin | Default jvm-okhttp4 Gradle3.0/3.1 core/binary/multipart fixtures passed; explicit Retrofit/Gson and Retrofit/kotlinx typed tagged-oneOf cases passed both dialects | Default Moshi unions, advanced union shapes, other libraries/platforms and broader keyword/file coverage remain required |
@@ -771,5 +771,30 @@ All18 explicit override tests, generation78 cases (34 external-tool cases ignore
 owned project API regressions and scoped strict Clippy/formatting passed. Catalog labels
 representative core evidence; basic mainstream coverage is26 combinations across10 clients/
 3 server skeletons. Product preview/download never installs/executes Swift. Apple-device/
-Darwin, other toolchain/library/platform execution, files/unions/path/form/abort/keyword
+Darwin, other toolchain/library/platform execution, advanced files/unions/path/form/abort/keyword
 behavior and broad deployment support remain required work. This is Linux core evidence.
+
+
+## Default Swift6 finite binary and multipart files
+
+Default URLSession3.0.3/3.1.0 release consumers passed four binary/multipart cases with
+20 real requests, retaining core path/query/header/Bearer/Unicode/enum/null/400 checks.
+The original file URL APIs download byte-identical `00 01 02 0d 0a ff 80 41`, upload a
+local URL and decode the generated UploadReceipt. Multipart preserves payload.bin,
+octet-stream MIME, quoted Unicode note, repeated required/optional arrays and one CSV
+non-exploded array. A second upload omits both optional arrays and verifies absence on
+the wire. Temporary consumer files and downloaded cache files are removed after use.
+
+The initial multipart request reproduced packedTags as repeated parts. A pinned
+swift6/_param.mustache compatibility partial joins non-multi primitive form arrays
+through the existing conversion helper before the unchanged URLSession multipart
+transport; required/optional multi arrays and scalar/file/query/path/header parameters
+retain upstream behavior. Default URLSession only; explicit API and parameter partial
+bundles retain priority. Original SDK manifest, transport and model files remain intact.
+
+Core regression passed six more requests; all19 explicit overrides,78 generation cases
+(35 configured external-tool cases ignored),11 owned project API cases, the fixture
+parser tests and scoped strict Clippy/format checks passed. Tools are the isolated
+Swift6.4.1/Linux and pinned generator7.26.0/JRE21 recorded above. Finite buffering/cache
+behavior remains upstream; huge/nonseekable/streaming, nested/custom/multiple parts,
+other encoding/library/toolchain/platform and Apple/Darwin evidence remain open.

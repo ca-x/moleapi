@@ -1049,3 +1049,39 @@ async fn explicit_swift_api_template_retains_priority_over_query_encoding_defaul
     assert!(api.content.contains("explicit Swift API"));
     assert!(!api.content.contains("percentEncodedQuery"));
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured Java17+ test runtime"]
+async fn explicit_swift_parameter_partial_retains_priority_over_form_array_default() {
+    let java = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_JAVA").expect("explicit Java executable"),
+    );
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), Some(java)).unwrap();
+    let specification = json!({"openapi":"3.0.3","info":{"title":"Swift form override","version":"1"},"paths":{"/form":{"post":{"operationId":"uploadForm","requestBody":{"content":{"multipart/form-data":{"schema":{"type":"object","properties":{"tags":{"type":"array","items":{"type":"string"}}}},"encoding":{"tags":{"style":"form","explode":false}}}}},"responses":{"204":{"description":"OK"}}}}}});
+    let input = ProjectInput {
+        target: "swift6".into(),
+        options: BTreeMap::new(),
+        include_secrets: false,
+        specification,
+        templates: Some(TemplateBundle {
+            format: "moleapi-codegen-templates-v1".into(),
+            outputs: BTreeMap::new(),
+            files: vec![TemplateFile {
+                path: "_param.mustache".into(),
+                content: "\"{{baseName}}\": \"explicit Swift parameter\"".into(),
+                encoding: None,
+            }],
+        }),
+    };
+    let result = runtime
+        .generate(input, CancellationToken::new())
+        .await
+        .unwrap();
+    let api = result
+        .files
+        .iter()
+        .find(|file| file.path.ends_with("/APIs/DefaultAPI.swift"))
+        .unwrap();
+    assert!(api.content.contains("explicit Swift parameter"));
+    assert!(!api.content.contains("compactMap"));
+}
