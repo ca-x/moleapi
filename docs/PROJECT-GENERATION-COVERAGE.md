@@ -621,3 +621,26 @@ cases passed (28 external-tool cases ignored), all11 project API regressions and
 scoped Clippy/formatting passed. PHPStan direct synchronous contracts are verified;
 arrays/async/http-info tuples, Psalm/other analyzers, nominal hierarchy, advanced schemas/
 names and platforms remain required work. Standard PHPDoc alone is not full union typing.
+
+
+## PHP one-level model arrays, async waits and HTTP-info tuples
+
+The default Guzzle API annotations now retain mapped/ordinary model aliases for one-level
+model arrays and parameters of synchronous/http-info/async/request methods. HTTP-info
+uses explicit result/status/header tuples. Async return annotations use typed PromiseInterface
+with a shipped PHPStan-only generic wait stub and phpstan.neon. Those supporting files
+are emitted through the existing generator config; explicit source or destination overrides
+retain priority. Runtime Guzzle interfaces/implementations and SDK requirements are unchanged.
+
+PHPStan2.3.1 level7 passed both dialects for direct/array mapped results, promise wait and
+wait(false), status/header tuples, ordinary/mixed model behavior and six exact wrong-model
+argument.type failures per negative consumer. The QA config includes the delivered stub
+config. Actual list/decode/array model POST, async direct/array waits and sync/async HTTP-info
+calls passed28 requests across3.0/3.1. Core/binary/multipart regression passed24 requests.
+Generated PHP syntax, all13 explicit override tests, generation78 cases (29 external-tool
+cases ignored), all11 owned API regressions and scoped strict Clippy/formatting passed.
+
+This proves one-level arrays and wait-result PHPStan contracts, not nested/map containers,
+Promise callback/chaining/rejection generic inference, other analyzers, nominal parent
+inheritance or all-platform behavior. Those and broad generator semantics remain required.
+PHPStan is a QA/user analysis tool; preview/download never installs or executes it.

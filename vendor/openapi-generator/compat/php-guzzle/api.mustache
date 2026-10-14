@@ -44,8 +44,13 @@ use {{invokerPackage}}\ObjectSerializer;
 {{#operations}}{{#operation}}
 {{#returnProperty}}{{#isModel}}{{^isContainer}}
  * @phpstan-import-type ModelValue from {{{dataType}}} as Moleapi_{{operationId}}_Return
-{{/isContainer}}{{/isModel}}{{/returnProperty}}
-{{#allParams}}{{#isModel}}{{^isContainer}}
+{{/isContainer}}{{/isModel}}
+{{#isArray}}{{#items}}{{#isModel}}{{^isContainer}}
+ * @phpstan-import-type ModelValue from {{{dataType}}} as Moleapi_{{operationId}}_ReturnItem
+{{/isContainer}}{{/isModel}}{{/items}}{{/isArray}}{{/returnProperty}}
+{{#allParams}}{{#isArray}}{{#items}}{{#isModel}}{{^isContainer}}
+ * @phpstan-import-type ModelValue from {{{dataType}}} as Moleapi_{{operationId}}_Param_{{paramName}}Item
+{{/isContainer}}{{/isModel}}{{/items}}{{/isArray}}{{#isModel}}{{^isContainer}}
  * @phpstan-import-type ModelValue from {{{dataType}}} as Moleapi_{{operationId}}_Param_{{paramName}}
 {{/isContainer}}{{/isModel}}{{/allParams}}
 {{/operation}}{{/operations}}
@@ -181,11 +186,15 @@ use {{invokerPackage}}\ObjectSerializer;
      * @deprecated
     {{/isDeprecated}}
 {{#returnProperty}}{{#isModel}}{{^isContainer}}
-     * @phpstan-return Moleapi_{{operationId}}_Return
-{{/isContainer}}{{/isModel}}{{/returnProperty}}
+     * @phpstan-return {{#returnProperty}}{{#isModel}}{{^isContainer}}Moleapi_{{operationId}}_Return{{/isContainer}}{{/isModel}}{{#isArray}}{{#items}}{{#isModel}}{{^isContainer}}array<Moleapi_{{operationId}}_ReturnItem>{{/isContainer}}{{/isModel}}{{/items}}{{/isArray}}{{/returnProperty}}
+{{/isContainer}}{{/isModel}}{{#isArray}}{{#items}}{{#isModel}}{{^isContainer}}
+     * @phpstan-return {{#returnProperty}}{{#isModel}}{{^isContainer}}Moleapi_{{operationId}}_Return{{/isContainer}}{{/isModel}}{{#isArray}}{{#items}}{{#isModel}}{{^isContainer}}array<Moleapi_{{operationId}}_ReturnItem>{{/isContainer}}{{/isModel}}{{/items}}{{/isArray}}{{/returnProperty}}
+{{/isContainer}}{{/isModel}}{{/items}}{{/isArray}}{{/returnProperty}}
 {{#allParams}}{{#isModel}}{{^isContainer}}
      * @phpstan-param Moleapi_{{operationId}}_Param_{{paramName}}{{#notRequiredOrIsNullable}}|null{{/notRequiredOrIsNullable}} ${{paramName}}
-{{/isContainer}}{{/isModel}}{{/allParams}}
+{{/isContainer}}{{/isModel}}{{#isArray}}{{#items}}{{#isModel}}{{^isContainer}}
+     * @phpstan-param array<Moleapi_{{operationId}}_Param_{{paramName}}Item>{{#notRequiredOrIsNullable}}|null{{/notRequiredOrIsNullable}} ${{paramName}}
+{{/isContainer}}{{/isModel}}{{/items}}{{/isArray}}{{/allParams}}
      */
     public function {{operationId}}({{^exts.x-group-parameters}}{{#allParams}}${{paramName}}{{^required}} = {{#defaultValue}}{{{.}}}{{/defaultValue}}{{^defaultValue}}null{{/defaultValue}}{{/required}}, {{/allParams}}{{#servers}}{{#-first}}?int $hostIndex = null, array $variables = [], {{/-first}}{{/servers}}string $contentType = self::contentTypes['{{{operationId}}}'][0]{{/exts.x-group-parameters}}{{#exts.x-group-parameters}}$associative_array{{/exts.x-group-parameters}})
     {
@@ -245,6 +254,16 @@ use {{invokerPackage}}\ObjectSerializer;
     {{#isDeprecated}}
      * @deprecated
     {{/isDeprecated}}
+{{#returnProperty}}{{#isModel}}{{^isContainer}}
+     * @phpstan-return array{0:{{#returnProperty}}{{#isModel}}{{^isContainer}}Moleapi_{{operationId}}_Return{{/isContainer}}{{/isModel}}{{#isArray}}{{#items}}{{#isModel}}{{^isContainer}}array<Moleapi_{{operationId}}_ReturnItem>{{/isContainer}}{{/isModel}}{{/items}}{{/isArray}}{{/returnProperty}},1:int,2:array<string,list<string>>}
+{{/isContainer}}{{/isModel}}{{#isArray}}{{#items}}{{#isModel}}{{^isContainer}}
+     * @phpstan-return array{0:{{#returnProperty}}{{#isModel}}{{^isContainer}}Moleapi_{{operationId}}_Return{{/isContainer}}{{/isModel}}{{#isArray}}{{#items}}{{#isModel}}{{^isContainer}}array<Moleapi_{{operationId}}_ReturnItem>{{/isContainer}}{{/isModel}}{{/items}}{{/isArray}}{{/returnProperty}},1:int,2:array<string,list<string>>}
+{{/isContainer}}{{/isModel}}{{/items}}{{/isArray}}{{/returnProperty}}
+{{#allParams}}{{#isModel}}{{^isContainer}}
+     * @phpstan-param Moleapi_{{operationId}}_Param_{{paramName}}{{#notRequiredOrIsNullable}}|null{{/notRequiredOrIsNullable}} ${{paramName}}
+{{/isContainer}}{{/isModel}}{{#isArray}}{{#items}}{{#isModel}}{{^isContainer}}
+     * @phpstan-param array<Moleapi_{{operationId}}_Param_{{paramName}}Item>{{#notRequiredOrIsNullable}}|null{{/notRequiredOrIsNullable}} ${{paramName}}
+{{/isContainer}}{{/isModel}}{{/items}}{{/isArray}}{{/allParams}}
      */
     public function {{operationId}}WithHttpInfo({{^exts.x-group-parameters}}{{#allParams}}${{paramName}}{{^required}} = {{#defaultValue}}{{{.}}}{{/defaultValue}}{{^defaultValue}}null{{/defaultValue}}{{/required}}, {{/allParams}}{{#servers}}{{#-first}}?int $hostIndex = null, array $variables = [], {{/-first}}{{/servers}}string $contentType = self::contentTypes['{{{operationId}}}'][0]{{/exts.x-group-parameters}}{{#exts.x-group-parameters}}$associative_array{{/exts.x-group-parameters}})
     {
@@ -403,6 +422,16 @@ use {{invokerPackage}}\ObjectSerializer;
     {{#isDeprecated}}
      * @deprecated
     {{/isDeprecated}}
+{{#returnProperty}}{{#isModel}}{{^isContainer}}
+     * @phpstan-return \GuzzleHttp\Promise\PromiseInterface<{{#returnProperty}}{{#isModel}}{{^isContainer}}Moleapi_{{operationId}}_Return{{/isContainer}}{{/isModel}}{{#isArray}}{{#items}}{{#isModel}}{{^isContainer}}array<Moleapi_{{operationId}}_ReturnItem>{{/isContainer}}{{/isModel}}{{/items}}{{/isArray}}{{/returnProperty}}>
+{{/isContainer}}{{/isModel}}{{#isArray}}{{#items}}{{#isModel}}{{^isContainer}}
+     * @phpstan-return \GuzzleHttp\Promise\PromiseInterface<{{#returnProperty}}{{#isModel}}{{^isContainer}}Moleapi_{{operationId}}_Return{{/isContainer}}{{/isModel}}{{#isArray}}{{#items}}{{#isModel}}{{^isContainer}}array<Moleapi_{{operationId}}_ReturnItem>{{/isContainer}}{{/isModel}}{{/items}}{{/isArray}}{{/returnProperty}}>
+{{/isContainer}}{{/isModel}}{{/items}}{{/isArray}}{{/returnProperty}}
+{{#allParams}}{{#isModel}}{{^isContainer}}
+     * @phpstan-param Moleapi_{{operationId}}_Param_{{paramName}}{{#notRequiredOrIsNullable}}|null{{/notRequiredOrIsNullable}} ${{paramName}}
+{{/isContainer}}{{/isModel}}{{#isArray}}{{#items}}{{#isModel}}{{^isContainer}}
+     * @phpstan-param array<Moleapi_{{operationId}}_Param_{{paramName}}Item>{{#notRequiredOrIsNullable}}|null{{/notRequiredOrIsNullable}} ${{paramName}}
+{{/isContainer}}{{/isModel}}{{/items}}{{/isArray}}{{/allParams}}
      */
     public function {{operationId}}Async({{^exts.x-group-parameters}}{{#allParams}}${{paramName}}{{^required}} = {{#defaultValue}}{{{.}}}{{/defaultValue}}{{^defaultValue}}null{{/defaultValue}}{{/required}}, {{/allParams}}{{#servers}}{{#-first}}?int $hostIndex = null, array $variables = [], {{/-first}}{{/servers}}string $contentType = self::contentTypes['{{{operationId}}}'][0]{{/exts.x-group-parameters}}{{#exts.x-group-parameters}}$associative_array{{/exts.x-group-parameters}})
     {
@@ -465,6 +494,16 @@ use {{invokerPackage}}\ObjectSerializer;
     {{#isDeprecated}}
      * @deprecated
     {{/isDeprecated}}
+{{#returnProperty}}{{#isModel}}{{^isContainer}}
+     * @phpstan-return \GuzzleHttp\Promise\PromiseInterface<array{0:{{#returnProperty}}{{#isModel}}{{^isContainer}}Moleapi_{{operationId}}_Return{{/isContainer}}{{/isModel}}{{#isArray}}{{#items}}{{#isModel}}{{^isContainer}}array<Moleapi_{{operationId}}_ReturnItem>{{/isContainer}}{{/isModel}}{{/items}}{{/isArray}}{{/returnProperty}},1:int,2:array<string,list<string>>}>
+{{/isContainer}}{{/isModel}}{{#isArray}}{{#items}}{{#isModel}}{{^isContainer}}
+     * @phpstan-return \GuzzleHttp\Promise\PromiseInterface<array{0:{{#returnProperty}}{{#isModel}}{{^isContainer}}Moleapi_{{operationId}}_Return{{/isContainer}}{{/isModel}}{{#isArray}}{{#items}}{{#isModel}}{{^isContainer}}array<Moleapi_{{operationId}}_ReturnItem>{{/isContainer}}{{/isModel}}{{/items}}{{/isArray}}{{/returnProperty}},1:int,2:array<string,list<string>>}>
+{{/isContainer}}{{/isModel}}{{/items}}{{/isArray}}{{/returnProperty}}
+{{#allParams}}{{#isModel}}{{^isContainer}}
+     * @phpstan-param Moleapi_{{operationId}}_Param_{{paramName}}{{#notRequiredOrIsNullable}}|null{{/notRequiredOrIsNullable}} ${{paramName}}
+{{/isContainer}}{{/isModel}}{{#isArray}}{{#items}}{{#isModel}}{{^isContainer}}
+     * @phpstan-param array<Moleapi_{{operationId}}_Param_{{paramName}}Item>{{#notRequiredOrIsNullable}}|null{{/notRequiredOrIsNullable}} ${{paramName}}
+{{/isContainer}}{{/isModel}}{{/items}}{{/isArray}}{{/allParams}}
      */
     public function {{operationId}}AsyncWithHttpInfo({{^exts.x-group-parameters}}{{#allParams}}${{paramName}}{{^required}} = {{#defaultValue}}{{{.}}}{{/defaultValue}}{{^defaultValue}}null{{/defaultValue}}{{/required}}, {{/allParams}}{{#servers}}{{#-first}}?int $hostIndex = null, array $variables = [], {{/-first}}{{/servers}}string $contentType = self::contentTypes['{{{operationId}}}'][0]{{/exts.x-group-parameters}}{{#exts.x-group-parameters}}$associative_array{{/exts.x-group-parameters}})
     {
@@ -555,6 +594,11 @@ use {{invokerPackage}}\ObjectSerializer;
     {{#isDeprecated}}
      * @deprecated
     {{/isDeprecated}}
+{{#allParams}}{{#isModel}}{{^isContainer}}
+     * @phpstan-param Moleapi_{{operationId}}_Param_{{paramName}}{{#notRequiredOrIsNullable}}|null{{/notRequiredOrIsNullable}} ${{paramName}}
+{{/isContainer}}{{/isModel}}{{#isArray}}{{#items}}{{#isModel}}{{^isContainer}}
+     * @phpstan-param array<Moleapi_{{operationId}}_Param_{{paramName}}Item>{{#notRequiredOrIsNullable}}|null{{/notRequiredOrIsNullable}} ${{paramName}}
+{{/isContainer}}{{/isModel}}{{/items}}{{/isArray}}{{/allParams}}
      */
     public function {{operationId}}Request({{^exts.x-group-parameters}}{{#allParams}}${{paramName}}{{^required}} = {{#defaultValue}}{{{.}}}{{/defaultValue}}{{^defaultValue}}null{{/defaultValue}}{{/required}}, {{/allParams}}{{#servers}}{{#-first}}?int $hostIndex = null, array $variables = [], {{/-first}}{{/servers}}string $contentType = self::contentTypes['{{{operationId}}}'][0]{{/exts.x-group-parameters}}{{#exts.x-group-parameters}}$associative_array{{/exts.x-group-parameters}})
     {

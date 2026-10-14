@@ -116,6 +116,18 @@ pub(super) fn write_builtin(input: &ProjectInput, root: &Path) -> Result<bool> {
                     ),
                 ),
                 (
+                    "phpstan-guzzle.stub.mustache",
+                    include_str!(
+                        "../../../../vendor/openapi-generator/compat/php-guzzle/phpstan-guzzle.stub.mustache"
+                    ),
+                ),
+                (
+                    "phpstan.neon.mustache",
+                    include_str!(
+                        "../../../../vendor/openapi-generator/compat/php-guzzle/phpstan.neon.mustache"
+                    ),
+                ),
+                (
                     "model.mustache",
                     include_str!(
                         "../../../../vendor/openapi-generator/compat/php-guzzle/model.mustache"
@@ -150,6 +162,42 @@ pub(super) fn write_builtin(input: &ProjectInput, root: &Path) -> Result<bool> {
         }
     }
     Ok(true)
+}
+
+pub(super) fn builtin_outputs(input: &ProjectInput) -> BTreeMap<String, TemplateOutput> {
+    if input.target != "php"
+        || input
+            .options
+            .get("library")
+            .and_then(Value::as_str)
+            .is_some_and(|library| library != "guzzle")
+    {
+        return BTreeMap::new();
+    }
+    [
+        ("phpstan-guzzle.stub.mustache", "phpstan-guzzle.stub"),
+        ("phpstan.neon.mustache", "phpstan.neon"),
+    ]
+    .into_iter()
+    .filter(|(_, destination)| {
+        !input.templates.as_ref().is_some_and(|templates| {
+            templates.outputs.values().any(|output| {
+                output.template_type == TemplateKind::SupportingFiles
+                    && output.folder.is_empty()
+                    && output.destination_filename.as_deref() == Some(*destination)
+            })
+        })
+    })
+    .map(|(source, destination)| {
+        (
+            source.into(),
+            TemplateOutput {
+                destination_filename: Some(destination.into()),
+                ..TemplateOutput::default()
+            },
+        )
+    })
+    .collect()
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

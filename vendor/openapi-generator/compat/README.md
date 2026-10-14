@@ -167,3 +167,11 @@ ModelValue local aliases; API imports per-operation/model aliases rather than in
 request types from the operation's response discriminator. Runtime classes/transport
 remain upstream; PHPStan scoped annotation evidence is separate from nominal inheritance,
 array/async/other-analyzer contracts. Explicit model header/API templates retain priority.
+
+
+PHP aliases also cover one-level model arrays, all model request parameters, synchronous
+HTTP-info tuple results and async wait results. PHPStan-only PromiseInterface<T> wait
+stub/config are supporting files emitted by the existing generator, with user source/output
+priority retained. Runtime promise/code/model implementations are unchanged. PHPStan2.3.1
+positive/six-error negative consumers and28 async/list/tuple wire calls passed both dialects.
+Nested/map containers, callback generic inference and other analyzers remain separate scope.

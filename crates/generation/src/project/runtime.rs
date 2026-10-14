@@ -154,10 +154,12 @@ impl ProjectRuntime {
         let mut properties = input.options.clone();
         properties.insert("hideGenerationTimestamp".into(), Value::Bool(true));
         let mut configuration = serde_json::json!({"additionalProperties":properties});
-        if let Some(templates) = &input.templates
-            && !templates.outputs.is_empty()
-        {
-            configuration["files"] = serde_json::to_value(&templates.outputs)?;
+        let mut outputs = templates::builtin_outputs(&input);
+        if let Some(templates) = &input.templates {
+            outputs.extend(templates.outputs.clone());
+        }
+        if !outputs.is_empty() {
+            configuration["files"] = serde_json::to_value(outputs)?;
         }
         std::fs::write(&config, serde_json::to_vec(&configuration)?)?;
         let mut command = Command::new(java);

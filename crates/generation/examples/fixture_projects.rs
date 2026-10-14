@@ -56,6 +56,10 @@ fn specification(version: &str, profile: &str, discriminator_property: &str) -> 
         specification["components"]["schemas"]["Animal"] = json!({"oneOf":[{"$ref":"#/components/schemas/Cat"},{"$ref":"#/components/schemas/Dog"}],"discriminator":{"propertyName":"kind","mapping":{"cat":"#/components/schemas/Cat","dog":"#/components/schemas/Dog"}}});
         specification["paths"]["/animals/{kind}"] = json!({"get":{"operationId":"getAnimal","parameters":[{"name":"kind","in":"path","required":true,"schema":{"type":"string"}}],"responses":{"200":{"description":"Tagged animal","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Animal"}}}}}}});
         specification["paths"]["/animals"] = json!({"post":{"operationId":"echoAnimal","requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/Animal"}}}},"responses":{"200":{"description":"Tagged echo","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Animal"}}}}}}});
+        specification["paths"]["/animal-list"] = json!({
+            "get":{"operationId":"listAnimals","responses":{"200":{"description":"Animals","content":{"application/json":{"schema":{"type":"array","items":{"$ref":"#/components/schemas/Animal"}}}}}}},
+            "post":{"operationId":"echoAnimalArray","requestBody":{"required":true,"content":{"application/json":{"schema":{"type":"array","items":{"$ref":"#/components/schemas/Animal"}}}}},"responses":{"200":{"description":"Animals","content":{"application/json":{"schema":{"type":"array","items":{"$ref":"#/components/schemas/Animal"}}}}}}}
+        });
         specification["paths"]["/mixed"] = json!({"post":{"operationId":"mixedModel","requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/Pet"}}}},"responses":{"200":{"description":"Mapped response","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Animal"}}}}}}});
     }
     if profile == "union" && discriminator_property != "kind" {

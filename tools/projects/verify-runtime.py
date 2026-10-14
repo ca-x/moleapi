@@ -90,6 +90,14 @@ class Fixture(http.server.BaseHTTPRequestHandler):
                 assert parsed.path in {"/animals/cat","/animals/dog"}
                 self.respond(200,{self.discriminator_property:"cat","name":NOTE} if parsed.path.endswith("cat") else {self.discriminator_property:"dog","barks":True})
                 return
+            if parsed.path == "/animal-list":
+                animals=[{self.discriminator_property:"cat","name":NOTE},{self.discriminator_property:"dog","barks":True}]
+                if self.command=='POST':
+                    assert self.headers.get_content_type()=='application/json'
+                    assert json.loads(body)==animals, body
+                else: assert self.command=='GET'
+                self.respond(200,animals)
+                return
             if parsed.path == "/animals":
                 assert self.command == "POST"
                 assert self.headers.get_content_type() == "application/json"
@@ -931,6 +939,23 @@ foreach (['{}', json_encode([$tagProperty => 'bird', 'name' => 'bad']), json_enc
     try { OpenAPI\Client\ObjectSerializer::deserialize($malformed, '\\OpenAPI\\Client\\Model\\Animal', []); } catch (InvalidArgumentException $error) { $rejected = true; }
     ensureFixture($rejected, 'Invalid tagged variant was accepted');
 }
+__PHP_ASYNC__
+'''
+
+PHP_ASYNC = r'''$asyncCat = $api->getAnimalAsync(kind: 'cat')->wait();
+ensureFixture($asyncCat instanceof OpenAPI\Client\Model\Cat && $asyncCat->getName() === $note, 'Async mapped cat lost');
+$info = $api->getAnimalWithHttpInfo(kind: 'dog');
+ensureFixture($info[0] instanceof OpenAPI\Client\Model\Dog && $info[1] === 200 && isset($info[2]['Content-Type']), 'HTTP info tuple lost');
+$asyncInfo = $api->getAnimalAsyncWithHttpInfo(kind: 'cat')->wait();
+ensureFixture($asyncInfo[0] instanceof OpenAPI\Client\Model\Cat && $asyncInfo[1] === 200 && isset($asyncInfo[2]['Content-Type']), 'Async HTTP info tuple lost');
+$items = $api->listAnimals();
+ensureFixture(count($items) === 2 && $items[0] instanceof OpenAPI\Client\Model\Cat && $items[1] instanceof OpenAPI\Client\Model\Dog, 'Mapped model array lost');
+$echoed = $api->echoAnimalArray(animal: $items);
+ensureFixture($echoed[0] instanceof OpenAPI\Client\Model\Cat && $echoed[1] instanceof OpenAPI\Client\Model\Dog, 'Model array echo lost');
+$asyncItems = $api->listAnimalsAsync()->wait();
+ensureFixture($asyncItems[0] instanceof OpenAPI\Client\Model\Cat && $asyncItems[1] instanceof OpenAPI\Client\Model\Dog, 'Async array lost');
+$asyncListInfo = $api->listAnimalsAsyncWithHttpInfo()->wait();
+ensureFixture($asyncListInfo[0][0] instanceof OpenAPI\Client\Model\Cat && $asyncListInfo[0][1] instanceof OpenAPI\Client\Model\Dog && $asyncListInfo[1] === 200, 'Async list info lost');
 '''
 
 PHP_STATIC_UNION = r'''<?php
@@ -946,6 +971,20 @@ function verifyMappedTypes(DefaultApi $api, Cat $cat, Dog $dog, Pet $pet): void 
     assertType('OpenAPI\\Client\\Model\\Pet', $api->getPet(id: 7, q: 'x', x_test: 'header'));
     $api->replacePet(id: 7, pet: $pet);
     assertType('OpenAPI\\Client\\Model\\Cat|OpenAPI\\Client\\Model\\Dog', $api->mixedModel(pet: $pet));
+    assertType('OpenAPI\\Client\\Model\\Cat|OpenAPI\\Client\\Model\\Dog', $api->getAnimalAsync(kind: 'cat')->wait());
+    assertType('null', $api->getAnimalAsync(kind: 'cat')->wait(false));
+    $info = $api->getAnimalWithHttpInfo(kind: 'dog');
+    assertType('OpenAPI\\Client\\Model\\Cat|OpenAPI\\Client\\Model\\Dog', $info[0]);
+    assertType('int', $info[1]);
+    assertType('array<string, list<string>>', $info[2]);
+    $asyncInfo = $api->getAnimalAsyncWithHttpInfo(kind: 'cat')->wait();
+    assertType('OpenAPI\\Client\\Model\\Cat|OpenAPI\\Client\\Model\\Dog', $asyncInfo[0]);
+    assertType('array<OpenAPI\\Client\\Model\\Cat|OpenAPI\\Client\\Model\\Dog>', $api->listAnimals());
+    $api->echoAnimalArray(animal: [$cat,$dog]);
+    assertType('array<OpenAPI\\Client\\Model\\Cat|OpenAPI\\Client\\Model\\Dog>', $api->listAnimalsAsync()->wait());
+    $listInfo = $api->listAnimalsAsyncWithHttpInfo()->wait();
+    assertType('array<OpenAPI\\Client\\Model\\Cat|OpenAPI\\Client\\Model\\Dog>', $listInfo[0]);
+
 }
 '''
 
@@ -956,7 +995,7 @@ def php_static_types(directory, args):
     consumer=directory/'static_consumer.php'
     consumer.write_text(PHP_STATIC_UNION)
     config=directory/'runtime-phpstan.neon'
-    config.write_text('parameters:\n    level: 7\n    tmpDir: '+str(directory/'phpstan-cache')+'\n    bootstrapFiles:\n        - '+str(directory/'vendor/autoload.php')+'\n')
+    config.write_text('includes:\n    - '+str(directory/'phpstan.neon')+'\nparameters:\n    level: 7\n    tmpDir: '+str(directory/'phpstan-cache')+'\n    bootstrapFiles:\n        - '+str(directory/'vendor/autoload.php')+'\n')
     command=[str(args.php),str(args.phpstan),'analyse','--no-progress','--error-format=json','--configuration',str(config)]
     result=subprocess.run([*command,str(consumer)],cwd=directory,text=True,capture_output=True,timeout=300)
     (directory/'runtime-phpstan-positive.json').write_text(result.stdout)
@@ -969,13 +1008,17 @@ use OpenAPI\Client\Model\Cat;
 function rejectedModels(DefaultApi $api, Pet $pet, Cat $cat): void {
     $api->echoAnimal(animal: $pet);
     $api->mixedModel(pet: $cat);
+    $api->echoAnimalAsync(animal: $pet);
+    $api->echoAnimalWithHttpInfo(animal: $pet);
+    $api->echoAnimalRequest(animal: $pet);
+    $api->echoAnimalArray(animal: [$pet]);
 }
 ''')
     result=subprocess.run([*command,str(negative)],cwd=directory,text=True,capture_output=True,timeout=300)
     (directory/'runtime-phpstan-negative.json').write_text(result.stdout)
     report=json.loads(result.stdout)
     messages=[message for entry in report.get('files',{}).values() for message in entry.get('messages',[])]
-    assert result.returncode!=0 and len(messages)==2 and all(message.get('identifier')=='argument.type' for message in messages), result.stdout+result.stderr
+    assert result.returncode!=0 and len(messages)==6 and all(message.get('identifier')=='argument.type' for message in messages), result.stdout+result.stderr
     print('PASS PHPStan mapped/ordinary/mixed model contracts plus rejected wrong model arguments',flush=True)
 
 
@@ -987,7 +1030,7 @@ def php_client(directory, url, args):
     run([*composer,'install','--no-dev','--no-interaction','--no-plugins','--no-scripts','--prefer-dist'],directory,timeout=600)
     dependencies=subprocess.check_output([*composer,'show','--format=json','--no-plugins'],cwd=directory,text=True)
     (directory/'runtime-consumer-dependencies.json').write_text(dependencies)
-    (directory/'runtime_fixture.php').write_text(PHP_CORE.replace('__PHP_EXTENDED__', {'core':'','binary':PHP_BINARY,'multipart':PHP_MULTIPART,'union':PHP_UNION}[args.profile]))
+    (directory/'runtime_fixture.php').write_text(PHP_CORE.replace('__PHP_EXTENDED__', {'core':'','binary':PHP_BINARY,'multipart':PHP_MULTIPART,'union':PHP_UNION.replace('__PHP_ASYNC__',PHP_ASYNC if args.php_async else '')}[args.profile]))
     for source in sorted(directory.glob('lib/**/*.php')):
         result=subprocess.run([str(args.php),'-l',str(source)],cwd=directory,text=True,capture_output=True,check=True,timeout=30)
         assert 'No syntax errors detected' in result.stdout, result.stdout
@@ -1105,6 +1148,7 @@ def main():
     parser.add_argument("--php", type=Path)
     parser.add_argument("--composer", type=Path)
     parser.add_argument("--phpstan", type=Path)
+    parser.add_argument("--php-async", action="store_true")
     parser.add_argument("--discriminator-property", default="kind", help="PHP union fixture wire field (default kind)")
     parser.add_argument("--generator-options", default="{}", help="Explicit JSON object passed to the fixture generator")
     parser.add_argument("--reuse-generated", action="store_true", help="Use only previously generated isolated fixtures")
@@ -1124,6 +1168,7 @@ def main():
         assert args.composer and args.composer.is_absolute() and args.composer.is_file()
     assert args.discriminator_property and len(args.discriminator_property.encode())<=128
     assert args.discriminator_property=='kind' or (targets==['php'] and args.profile=='union'), "Alternate union wire fields currently have PHP consumers only"
+    assert not args.php_async or (targets==['php'] and args.profile=='union'), "Async PHP consumers require PHP union fixtures"
     if not args.reuse_generated:
         run(["cargo", "run", "-p", "moleapi-generation", "--example", "fixture_projects", "--", str(args.output), str(args.worker), str(args.java), args.targets, args.versions, args.profile, args.generator_options, args.discriminator_property], REPO, timeout=300)
     evidence_path = args.output / "runtime-evidence.json"
@@ -1173,10 +1218,11 @@ def main():
                     if args.profile=="binary": expected += [("GET","/files"),("POST","/files")]
                     if args.profile=="multipart": expected += [("POST","/multipart")]
                     if args.profile=="union": expected += [("GET","/animals/cat"),("GET","/animals/dog"),("POST","/animals"),("POST","/animals")]
+                    if target=='php' and args.php_async: expected += [("GET","/animals/cat"),("GET","/animals/dog"),("GET","/animals/cat"),("GET","/animal-list"),("POST","/animal-list"),("GET","/animal-list"),("GET","/animal-list")]
                     assert Fixture.observations == expected, Fixture.observations
                 manifest = json.loads((directory / "moleapi-generation.json").read_text())
                 source_digest = hashlib.sha256((directory / "fixture-source.json").read_bytes()).hexdigest()
-                evidence.append({"target": target, "dialect": version, "profile": args.profile, "discriminator_property": args.discriminator_property, "engine": manifest["engine"], "options": manifest["options"], "fixture_sha256": source_digest, "result": "passed"})
+                evidence.append({"target": target, "dialect": version, "profile": args.profile, "discriminator_property": args.discriminator_property, "php_async": args.php_async if target=='php' else False, "engine": manifest["engine"], "options": manifest["options"], "fixture_sha256": source_digest, "result": "passed"})
                 (args.output / "runtime-evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
                 print(f"PASS {target}/{version}", flush=True)
     finally:

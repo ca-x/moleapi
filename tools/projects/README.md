@@ -173,3 +173,13 @@ ModelValue aliases and per-operation imports cover direct synchronous model cont
 async/arrays/http-info/other analyzers and nominal parent inheritance remain separate.
 PHPStan is installed only in an isolated QA project; emitted SDK runtime requirements
 are unchanged. The mixed-model fixture endpoint is used for static analysis only.
+
+
+Add --php-async to PHP union profiles to execute direct/list async waits, array POSTs and
+sync/async HTTP-info tuples. Both dialect cases passed28 requests, plus24 core/file
+regression requests. With --phpstan, shipped phpstan.neon/phpstan-guzzle.stub provide
+Promise wait/result annotations and one-level mapped model arrays; six negative model
+argument errors are required, alongside positive type assertions. The stub is analysis-only
+and leaves the actual Guzzle runtime untouched. Source/destination supporting-file overrides
+retain priority. Nested containers/callback generic inference/other analyzers and nominal
+inheritance remain separate requirements. Async mode currently has PHP union consumers only.

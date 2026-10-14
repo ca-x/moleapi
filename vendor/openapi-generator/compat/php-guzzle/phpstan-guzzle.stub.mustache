@@ -1,0 +1,11 @@
+<?php
+// PHPStan-only stub. Guzzle runtime is unchanged.
+namespace GuzzleHttp\Promise;
+/** @template TValue = mixed */
+interface PromiseInterface
+{
+    /**
+     * @return ($unwrap is true ? TValue : null)
+     */
+    public function wait(bool $unwrap = true);
+}

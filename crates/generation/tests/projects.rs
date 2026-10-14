@@ -816,3 +816,62 @@ async fn explicit_php_model_header_overrides_static_type_alias_defaults() {
     assert!(model.content.contains("explicit PHP header Pet"));
     assert!(!model.content.contains("phpstan-type"));
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured Java17+ test runtime"]
+async fn explicit_php_supporting_output_retains_priority_over_static_analysis_defaults() {
+    let java = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_JAVA").expect("explicit Java executable"),
+    );
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), Some(java)).unwrap();
+    for alternate in [false, true] {
+        let path = if alternate {
+            "custom-analysis.mustache"
+        } else {
+            "phpstan.neon.mustache"
+        };
+        let outputs = if alternate {
+            BTreeMap::from([(
+                path.into(),
+                TemplateOutput {
+                    destination_filename: Some("phpstan.neon".into()),
+                    ..Default::default()
+                },
+            )])
+        } else {
+            BTreeMap::new()
+        };
+        let input = ProjectInput {
+            target: "php".into(),
+            options: BTreeMap::new(),
+            include_secrets: false,
+            specification: json!({"openapi":"3.0.3","info":{"title":"Analysis override","version":"1"},"paths":{}}),
+            templates: Some(TemplateBundle {
+                format: "moleapi-codegen-templates-v1".into(),
+                outputs,
+                files: vec![TemplateFile {
+                    path: path.into(),
+                    content: "# explicit user analysis config\n".into(),
+                    encoding: None,
+                }],
+            }),
+        };
+        let result = runtime
+            .generate(input, CancellationToken::new())
+            .await
+            .unwrap();
+        let config = result
+            .files
+            .iter()
+            .find(|file| file.path == "phpstan.neon")
+            .unwrap();
+        assert!(config.content.contains("explicit user analysis config"));
+        assert!(!config.content.contains("stubFiles"));
+        assert!(
+            result
+                .files
+                .iter()
+                .any(|file| file.path == "phpstan-guzzle.stub")
+        );
+    }
+}
