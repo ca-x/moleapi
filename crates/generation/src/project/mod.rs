@@ -65,6 +65,16 @@ pub fn project_catalog() -> Result<Vec<ProjectTarget>> {
     ))?;
     let mut targets: Vec<ProjectTarget> = serde_json::from_value(manifest["targets"].clone())?;
     for target in &mut targets {
+        // Representative runtime evidence is narrower than full target/dialect parity.
+        match target.id.as_str() {
+            "javascript" | "python" | "go" | "typescript-fetch" => {
+                target.validation = "representative-3.0-3.1-compile-call-fixture".into();
+            }
+            "python-fastapi" => {
+                target.validation = "representative-3.0-3.1-skeleton-start-fixture".into();
+            }
+            _ => {}
+        }
         if matches!(target.id.as_str(), "mysql-schema" | "postgresql-schema") {
             target.kind = "model".into();
             target.title = Some(
