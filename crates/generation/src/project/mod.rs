@@ -158,7 +158,12 @@ pub fn project_catalog() -> Result<Vec<ProjectTarget>> {
             model_options: Vec::new(),
             kind: "protobuf".into(),
             upstream_stability: "stable".into(),
-            validation: "compiler-integration-awaiting-fixtures".into(),
+            validation: if language == "python" {
+                "representative-python-four-mode-configured-plugin-fixture"
+            } else {
+                "representative-protoc-message-source-descriptor-fixture"
+            }
+            .into(),
             options: BTreeMap::new(),
         });
     }

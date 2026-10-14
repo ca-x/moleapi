@@ -13,6 +13,7 @@ process-wrap = {version="10",features=["tokio1"]}
 tonic-prost-build = "=0.14.6"
 prost = "0.14"
 prost-types = "0.14"
+protox.workspace = true
 diffy = {version="=0.5.2",features=["std"]}
 progenitor = {version="=0.15.0",default-features=false}
 openapiv3 = "2"

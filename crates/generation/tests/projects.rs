@@ -176,7 +176,10 @@ async fn official_protoc_generates_all_builtin_language_messages_from_checked_de
         .unwrap()
         .with_protoc(Some(compiler), BTreeMap::new())
         .unwrap();
-    let spec = json!({"kind":"proto","files":[{"path":"fixture.proto","content":"syntax=\"proto3\"; package fixture; message Echo {string text=1;} service EchoService {rpc Call(Echo) returns(Echo);}"}],"entry_files":["fixture.proto"]});
+    let spec: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../tools/projects/fixtures/protobuf-imports.json"
+    ))
+    .unwrap();
     for language in [
         "cpp", "csharp", "java", "kotlin", "objc", "php", "python", "ruby",
     ] {
@@ -193,7 +196,67 @@ async fn official_protoc_generates_all_builtin_language_messages_from_checked_de
             )
             .await
             .unwrap_or_else(|e| panic!("{language}: {e}"));
-        assert!(artifact.files.len() > 3);
+        let imported = match language {
+            "cpp" => "models/types.pb.h",
+            "csharp" => "Types.cs",
+            "java" => "fixture/Types.java",
+            "kotlin" => "fixture/EchoKt.kt",
+            "objc" => "models/Types.pbobjc.h",
+            "php" => "Fixture/PBEcho.php",
+            "python" => "models/types_pb2.py",
+            "ruby" => "models/types_pb.rb",
+            _ => unreachable!(),
+        };
+        assert!(
+            artifact.files.iter().any(|file| file.path == imported),
+            "{language}: missing imported model {imported}; paths: {:?}",
+            artifact.files.iter().map(|f| &f.path).collect::<Vec<_>>()
+        );
+        assert!(
+            !artifact
+                .files
+                .iter()
+                .any(|file| file.path.starts_with("google/protobuf/")
+                    || file.path.to_lowercase().contains("unused")
+                        && file.path != "protobuf-source.json")
+        );
+        let descriptor = artifact
+            .files
+            .iter()
+            .find(|file| file.path == "descriptor-set.bin")
+            .unwrap();
+        let regenerated = runtime.generate(ProjectInput {
+            target: format!("protobuf-{language}"),
+            specification: json!({"kind":"descriptor","descriptor_set_base64":descriptor.content}),
+            options: BTreeMap::new(), include_secrets: false, templates: None,
+        }, CancellationToken::new()).await.unwrap();
+        let generated_files = |artifact: &moleapi_generation::project::ProjectArtifact| {
+            artifact
+                .files
+                .iter()
+                .filter(|file| {
+                    ![
+                        "README.md",
+                        "protobuf-source.json",
+                        "moleapi-generation.json",
+                        "descriptor-set.bin",
+                    ]
+                    .contains(&file.path.as_str())
+                })
+                .map(|file| {
+                    (
+                        file.path.clone(),
+                        file.content.clone(),
+                        file.encoding.clone(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            generated_files(&artifact),
+            generated_files(&regenerated),
+            "{language}: source/descriptor emitted code differs"
+        );
         println!("{language}: {} generated files", artifact.files.len());
         if let Some(root) = std::env::var_os("MOLEAPI_CODEGEN_TEST_OUTPUT") {
             let root = PathBuf::from(root).join(language);
@@ -206,6 +269,51 @@ async fn official_protoc_generates_all_builtin_language_messages_from_checked_de
             }
         }
     }
+    // A namespace prefix is not evidence that a supplied file is a well-known type.
+    let custom = json!({"kind":"proto","files":[
+        {"path":"fixture.proto","content":"syntax=\"proto3\"; package fixture; import \"google/protobuf/custom.proto\"; message Envelope {Custom value=1;}"},
+        {"path":"google/protobuf/custom.proto","content":"syntax=\"proto3\"; package fixture; message Custom {string value=1;}"}
+    ],"entry_files":["fixture.proto"]});
+    let custom_artifact = runtime
+        .generate(
+            ProjectInput {
+                target: "protobuf-cpp".into(),
+                specification: custom,
+                options: BTreeMap::new(),
+                include_secrets: false,
+                templates: None,
+            },
+            CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert!(
+        custom_artifact
+            .files
+            .iter()
+            .any(|file| file.path == "google/protobuf/custom.pb.h")
+    );
+    let unsafe_import = json!({"kind":"proto","files":[
+        {"path":"fixture.proto","content":"syntax=\"proto3\"; package fixture; import \"-model.proto\"; message Envelope {Model value=1;}"},
+        {"path":"-model.proto","content":"syntax=\"proto3\"; package fixture; message Model {string value=1;}"}
+    ],"entry_files":["fixture.proto"]});
+    let error = runtime
+        .generate(
+            ProjectInput {
+                target: "protobuf-python".into(),
+                specification: unsafe_import,
+                options: BTreeMap::new(),
+                include_secrets: false,
+                templates: None,
+            },
+            CancellationToken::new(),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("cannot be command flags"),
+        "{error}"
+    );
 }
 #[tokio::test]
 #[ignore = "requires explicitly configured Python grpcio-tools compiler"]
@@ -221,7 +329,10 @@ async fn integrated_official_python_compiler_emits_message_and_grpc_service_code
             BTreeMap::from([("python".into(), compiler)]),
         )
         .unwrap();
-    let spec = json!({"kind":"proto","files":[{"path":"fixture.proto","content":"syntax=\"proto3\"; package fixture; message Echo {string text=1;} service EchoService {rpc Call(Echo) returns(Echo);}"}],"entry_files":["fixture.proto"]});
+    let spec: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../tools/projects/fixtures/protobuf-imports.json"
+    ))
+    .unwrap();
     let artifact = runtime
         .generate(
             ProjectInput {
@@ -236,6 +347,18 @@ async fn integrated_official_python_compiler_emits_message_and_grpc_service_code
         .await
         .unwrap();
     assert!(artifact.files.iter().any(|f| f.path == "fixture_pb2.py"));
+    assert!(
+        artifact
+            .files
+            .iter()
+            .any(|f| f.path == "models/types_pb2.py")
+    );
+    assert!(
+        artifact
+            .files
+            .iter()
+            .any(|f| f.path == "models/common_pb2.py")
+    );
     assert!(
         artifact
             .files

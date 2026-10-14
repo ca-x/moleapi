@@ -6698,6 +6698,7 @@ dependencies = [
  "progenitor",
  "prost",
  "prost-types",
+ "protox",
  "rawzip",
  "referencing 0.49.9",
  "rquickjs",

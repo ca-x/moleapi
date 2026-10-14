@@ -2,6 +2,7 @@
 use super::*;
 use anyhow::{Context, bail, ensure};
 use prost::Message;
+use protox::file::{FileResolver, GoogleFileResolver};
 use std::{process::Stdio, time::Duration};
 use tokio::{io::AsyncReadExt, process::Command};
 use tokio_util::sync::CancellationToken;
@@ -40,17 +41,16 @@ impl ProjectRuntime {
         let pool = moleapi_core::protobuf_pool(&specification)?;
         let bytes = pool.encode_to_vec();
         let descriptor = prost_types::FileDescriptorSet::decode(bytes.as_slice())?;
-        let source: moleapi_core::ProtobufSource =
-            serde_json::from_value(input.specification.clone())?;
-        let entries = match source {
-            moleapi_core::ProtobufSource::Proto { entry_files, .. } => entry_files,
-            moleapi_core::ProtobufSource::Descriptor { .. } => descriptor
-                .file
-                .iter()
-                .filter_map(|f| f.name.clone())
-                .filter(|name| !name.starts_with("google/protobuf/"))
-                .collect(),
-        };
+        // The checked pool contains entry files and their reachable imports. Generating
+        // only the source entries leaves SDKs referring to model files never emitted.
+        // Built-in well-known types come from the language runtime, as for descriptors.
+        let well_known = GoogleFileResolver::new();
+        let entries: Vec<_> = descriptor
+            .file
+            .iter()
+            .filter_map(|file| file.name.clone())
+            .filter(|name| well_known.open_file(name).is_err())
+            .collect();
         ensure!(
             !entries.is_empty() && entries.len() <= 32,
             "Protoc input entry count exceeded"

@@ -258,3 +258,25 @@ of malformed tags, required fields and wrong subtype property types. Original in
 labels are derived from model sources; no union template/codec replacement was needed.
 Core/file regression passed26 further requests. Untagged/anyOf/nested/nullable/ambiguous/
 advanced constraint and other platform/library/toolchain cases remain separate gates.
+
+
+## Imported protobuf Python gRPC fixture
+
+The shared fixtures/protobuf-imports.json includes a nested imported enum/model,
+well-known Timestamp and all four RPC modes. With explicit absolute paths, generate a
+fresh isolated source/descriptor pair:
+
+```sh
+cargo run -p moleapi-generation --example fixture_protobuf -- /absolute/qa-output /absolute/moleapi-server /absolute/python-grpc-tools-protoc /absolute/python-grpc-tools-protoc
+/absolute/python tools/projects/verify-protobuf-python.py /absolute/qa-output/source
+/absolute/python tools/projects/verify-protobuf-python.py /absolute/qa-output/descriptor
+```
+
+Use a Python environment containing the matching grpcio/protobuf runtime. The actual
+generated imports/stubs/services run against loopback; consumers preserve bytes/Unicode/
+enum/repeated/oneof/Timestamp data and record runtime versions, descriptor SHA256 and
+four-mode evidence. No model serializer or transport mock is substituted. Both source
+representations passed8 RPCs on grpcio1.84.0/protobuf6.33.6/integrated protoc31.1/Linux.
+Explicit builtin protoc36.1 tests also verified all8 language import outputs and source/
+descriptor code equivalence. Other language compilation/calls and plugin/platform cases
+remain independent gates. This QA tooling is never invoked by product preview/export.

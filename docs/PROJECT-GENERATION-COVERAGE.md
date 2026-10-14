@@ -820,3 +820,39 @@ project API cases, fixture parser tests and scoped strict Clippy/format checks p
 Tool/platform evidence remains the isolated official Swift6.4.1/Linux setup recorded above.
 Untyped/untagged/anyOf/nested/nullable/ambiguous unions, advanced keyword constraints,
 custom aliases/options, other libraries/toolchains and Apple/other platforms remain open.
+
+
+## Protoc reachable imported models and four-mode Python gRPC
+
+Non-Rust Proto inputs now emit every reachable non-well-known descriptor, matching the
+Descriptor input behavior. Previously only entry_files were generated: a real C++ project
+omitted models/types.pb.h, and Python imports failed with ModuleNotFoundError. The shared
+protox pool already contained the validated import graph; protoc now receives its complete
+bounded target list. Unused supplied files stay out of generated code. GoogleFileResolver
+identifies actual built-in types instead of dropping every google/protobuf path; a supplied
+custom path under that prefix retains its C++ model output. All generated target paths
+receive the original path/flag/32-file limits; a leading-dash imported filename rejects
+before compiler launch. Descriptor-only inputs, process group/deadline/output budgets and
+explicit compiler/plugin configuration remain in use.
+
+An imported enum/bytes/repeated/oneof/Timestamp model and four-mode service generated in
+all8 builtin languages with explicit protoc36.1 on Linux. For each language, source and
+descriptor regeneration produced identical code (16 graph-generation cases), including
+the imported models; standard Timestamp runtime sources were not copied into projects.
+Exact language filenames are asserted, including PHP's PBEcho keyword rename. This is
+all-language generation evidence; it does not claim all-language compilation or calls.
+
+Separate Python consumers use unchanged generated modules and actual grpcio1.84.0 /
+protobuf6.33.6 with grpcio-tools' integrated protoc31.1. Both source and descriptor outputs
+imported successfully and passed real unary/server-streaming/client-streaming/bidirectional
+calls over loopback (8 RPCs), preserving Unicode, non-UTF8 bytes, enum/repeated fields,
+oneof presence including code=0, and Timestamp values. QA tool hashes/versions and per-
+representation runtime evidence are retained in isolated output. Product preview never
+installs runtimes, runs consumers or acquires plugins.
+
+Both explicitly configured generation tests,78 normal generation cases (35 external-tool
+cases ignored),11 owned project API cases, fixture parser tests and scoped strict Clippy/
+format checks passed. Catalog evidence distinguishes builtin message generation from the
+configured Python-plugin four-mode fixture. Other-language compilation/gRPC plugins,
+advanced schema/options/dependency/runtime ranges, platform deployment and broader
+full-module scopes remain open.
