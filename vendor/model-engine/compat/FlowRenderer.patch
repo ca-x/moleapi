@@ -1,0 +1,11 @@
+--- a/dist/esm/language/TypeScriptFlow/FlowRenderer.js
++++ b/dist/esm/language/TypeScriptFlow/FlowRenderer.js
+@@ -4,7 +4,7 @@
+ import { tsFlowTypeAnnotations } from "./utils.js";
+ export class FlowRenderer extends TypeScriptFlowBaseRenderer {
+     anyType() {
+-        return this._tsFlowOptions.preferUnknown ? "mixed" : "any";
++        return this._tsFlowOptions.preferUnknown ? "unknown" : "any";
+     }
+     forbiddenNamesForGlobalNamespace() {
+         return ["Class", "Date", "Object", "String", "Array", "JSON", "Error"];

@@ -1,7 +1,9 @@
 import {build} from 'esbuild';
 import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
-import {catalog} from './entry.js';
+import {applyModelPatches} from './apply-patches.mjs';
+await applyModelPatches();
+const {catalog} = await import('./entry.js');
 const output = new URL('../../vendor/model-engine/', import.meta.url);
 await mkdir(output,{recursive:true});
 const built = await build({entryPoints:[new URL('./entry.js',import.meta.url).pathname],outfile:new URL('engine.js',output).pathname,bundle:true,platform:'browser',format:'iife',target:'es2022',minify:true,legalComments:'external',metafile:true});

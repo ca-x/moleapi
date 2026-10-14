@@ -13,7 +13,14 @@ async fn main() -> Result<()> {
     let runtime = ProjectRuntime::new(worker, args.next().map(PathBuf::from))?;
     let version = args.next().unwrap_or_else(|| "3.0.3".into());
     let selected = args.next().unwrap_or_else(|| "*".into());
+    let profile = args.next().unwrap_or_else(|| "core".into());
     ensure!(args.next().is_none(), "Unexpected fixture argument");
+    ensure!(
+        profile == "core"
+            || profile == "date" && selected == "model-flow"
+            || matches!(profile.as_str(), "flat" | "collision") && selected == "model-elm",
+        "Unknown model fixture profile"
+    );
     ensure!(
         matches!(version.as_str(), "3.0.3" | "3.1.0"),
         "Unknown fixture dialect"
@@ -31,7 +38,21 @@ async fn main() -> Result<()> {
     } else {
         json!({"type":["string","null"]})
     };
-    let specification = json!({"openapi":version,"info":{"title":"Trusted models","version":"1"},"paths":{},"components":{"schemas":{"Pet":{"type":"object","required":["id","status"],"properties":{"id":{"type":"integer"},"status":{"type":"string","enum":["ready","done"]},"note":note,"friend":{"$ref":"#/components/schemas/Pet"}}}}}});
+    let mut specification = json!({"openapi":version,"info":{"title":"Trusted models","version":"1"},"paths":{},"components":{"schemas":{"Pet":{"type":"object","required":["id","status"],"properties":{"id":{"type":"integer"},"status":{"type":"string","enum":["ready","done"]},"note":note,"friend":{"$ref":"#/components/schemas/Pet"}}}}}});
+    if profile == "date" {
+        specification["components"]["schemas"]["Pet"]["properties"]["observed"] =
+            json!({"type":"string","format":"date-time"});
+    }
+    if profile == "flat" {
+        specification["components"]["schemas"]["Pet"]["properties"]
+            .as_object_mut()
+            .unwrap()
+            .remove("friend");
+    }
+    if profile == "collision" {
+        specification["components"]["schemas"]["StatusValue"] =
+            json!({"type":"object","required":["value"],"properties":{"value":{"type":"integer"}}});
+    }
     for target in catalog.into_iter().filter(|target| {
         target.kind == "model" && (selected == "*" || selected.split(',').any(|id| id == target.id))
     }) {
