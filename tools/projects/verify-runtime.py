@@ -449,6 +449,48 @@ def java_arguments(source, method, values):
     return ','.join(values[name] for name in names)
 
 
+KOTLIN_CORE = r'''import org.openapitools.client.apis.DefaultApi
+import org.openapitools.client.infrastructure.ApiClient
+import org.openapitools.client.infrastructure.ClientException
+import org.openapitools.client.infrastructure.ClientError
+import org.openapitools.client.models.Pet
+
+fun main() {
+    ApiClient.accessToken = "fixture-token"
+    ApiClient.builder.connectTimeout(10,java.util.concurrent.TimeUnit.SECONDS).readTimeout(10,java.util.concurrent.TimeUnit.SECONDS)
+    val api = DefaultApi(System.getenv("FIXTURE_URL"))
+    val pet = api.getPet(id=7,q="space & + 鼹鼠",xTest="moleapi-fixture")
+    check(pet.id==7 && pet.status==Pet.Status.ready && pet.note==null) { "GET model or nullable value lost" }
+    val echoed = api.replacePet(id=7,pet=Pet(id=7,status=Pet.Status.ready,note="鼹鼠 \"quotes\" & +"))
+    check(echoed.note=="鼹鼠 \"quotes\" & +") { "POST Unicode JSON lost" }
+    var rejected=false
+    try {api.failGet()} catch (error:ClientException) {
+        rejected=error.statusCode==400 && (error.response as? ClientError<*>)?.body.toString().contains("expected fixture failure")
+    }
+    check(rejected) { "HTTP400 not exposed" }
+    ApiClient.defaultClient.connectionPool.evictAll()
+    ApiClient.defaultClient.dispatcher.executorService.shutdown()
+    println("PASS Kotlin jvm-okhttp4 client")
+}
+'''
+
+
+def kotlin_client(directory,url,args):
+    assert args.profile=='core', "Kotlin extended profiles require their own consumers"
+    assert args.gradle and args.gradle.is_file(), "Configure an explicit --gradle executable"
+    (directory/'src/main/kotlin/RuntimeFixture.kt').write_text(KOTLIN_CORE)
+    (directory/'runtime-fixture.init.gradle').write_text('''gradle.projectsEvaluated {
+    rootProject.tasks.register('runtimeFixture', JavaExec) {
+        dependsOn rootProject.tasks.named('classes')
+        classpath = rootProject.sourceSets.main.runtimeClasspath
+        mainClass = 'RuntimeFixtureKt'
+    }
+}
+''')
+    env=dict(java_environment(args),FIXTURE_URL=url)
+    run([str(args.gradle),'--no-daemon','--max-workers=2','-Pkotlin.compiler.execution.strategy=in-process','-I','runtime-fixture.init.gradle','build','-x','test','runtimeFixture'],directory,env,timeout=900)
+
+
 def java_environment(args):
     assert args.jdk and (args.jdk / "bin/javac").is_file(), "Configure an explicit --jdk directory"
     env=dict(os.environ)
@@ -688,6 +730,8 @@ def client(target, directory, url, args):
         (directory / "runtime_fixture_test.go").write_text(driver)
         run([args.go, "mod", "tidy"], directory)
         run([args.go, "test", "-run", "^TestRuntimeFixture$", "-count=1", "-race", "-v"], directory, env)
+    elif target == "kotlin":
+        kotlin_client(directory,url,args)
     elif target == "java":
         java_client(directory,url,args)
     elif target == "csharp":
@@ -778,6 +822,7 @@ def main():
     parser.add_argument("--dotnet", default=shutil.which("dotnet"))
     parser.add_argument("--jdk", type=Path)
     parser.add_argument("--maven", type=Path)
+    parser.add_argument("--gradle", type=Path)
     parser.add_argument("--reuse-generated", action="store_true", help="Use only previously generated isolated fixtures")
     args = parser.parse_args()
     assert args.worker.is_absolute() and args.worker.is_file()
@@ -785,10 +830,10 @@ def main():
     assert args.output.is_absolute()
     targets = args.targets.split(",")
     versions = args.versions.split(",")
-    assert all(t in {"javascript", "python", "go", "typescript-fetch", "python-fastapi", "csharp", "aspnetcore", "java", "spring"} for t in targets)
+    assert all(t in {"javascript", "python", "go", "typescript-fetch", "python-fastapi", "csharp", "aspnetcore", "java", "spring", "kotlin"} for t in targets)
     assert all(v in {"3.0.3", "3.1.0"} for v in versions)
     if args.profile in {"binary","multipart","union"}:
-        assert not {"python-fastapi","aspnetcore","spring"}.intersection(targets), "Extended profiles currently validate clients"
+        assert not {"python-fastapi","aspnetcore","spring","kotlin"}.intersection(targets), "Extended profiles currently validate clients"
     if not args.reuse_generated:
         run(["cargo", "run", "-p", "moleapi-generation", "--example", "fixture_projects", "--", str(args.output), str(args.worker), str(args.java), args.targets, args.versions, args.profile], REPO, timeout=300)
     evidence_path = args.output / "runtime-evidence.json"
@@ -801,6 +846,8 @@ def main():
             tools[name] = subprocess.check_output([command, "version" if name=="go" else "--version"], text=True).strip()
     if args.jdk:
         tools["jdk"]=subprocess.check_output([str(args.jdk / "bin/java"),"-version"],stderr=subprocess.STDOUT,text=True).strip()
+    if args.gradle:
+        tools["gradle"]=subprocess.check_output([str(args.gradle),'--version'],env=java_environment(args),text=True).strip()
     if args.maven:
         tools["maven"]=subprocess.check_output([str(args.maven),"--version"],env=java_environment(args),text=True).strip()
     if args.dotnet:

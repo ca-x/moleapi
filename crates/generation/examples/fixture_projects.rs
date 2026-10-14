@@ -93,7 +93,8 @@ async fn main() -> Result<()> {
                     "csharp",
                     "aspnetcore",
                     "java",
-                    "spring"
+                    "spring",
+                    "kotlin"
                 ]
                 .contains(&target),
                 "Unknown fixture target"
