@@ -411,3 +411,24 @@ gRPC1.84.0/protobuf36.1.0/Linux. Official gRPC/RE2 package signatures verified b
 execution; system packages stayed unchanged. Python regression passed8 further RPCs.
 Other compiler/ABI/library/platform/options/range cases need separate evidence; product
 preview/export never downloads or executes these QA dependencies.
+
+
+## Explicit PHP protobuf/gRPC clients
+
+Generate a PHP source/descriptor pair with a final php selector and explicit official
+plugin. Separately generate the standard Python fixture pair, then run this driver with
+a Python environment containing grpcio and explicit PHP/Composer/extension/library paths:
+
+```sh
+cargo run -p moleapi-generation --example fixture_protobuf -- /absolute/php-qa-output /absolute/moleapi-server /absolute/protoc /absolute/protoc-gen-grpc-php php
+/absolute/grpc-python tools/projects/verify-protobuf-php.py /absolute/php-qa-output/source --php /absolute/php --composer /absolute/composer --extension /absolute/grpc.so --library-dir /absolute/grpc-libraries --server-dir /absolute/python-qa-output/source
+/absolute/grpc-python tools/projects/verify-protobuf-php.py /absolute/php-qa-output/descriptor --php /absolute/php --composer /absolute/composer --extension /absolute/grpc.so --library-dir /absolute/grpc-libraries --server-dir /absolute/python-qa-output/descriptor
+```
+
+The driver checks matching descriptor hashes, installs explicit grpc/grpc1.82.0 and PHP
+Google/protobuf5.36.1 without Composer plugins/scripts, then calls a real generated Python
+server with original PHP models/stubs. Both inputs passed8 RPCs on PHP8.5.11 NTS /
+native grpc1.84.0/protoc36.1/Linux; Python regression passed8 further RPCs. Package/library/
+source/signature/tool/lock evidence is retained; original source hashes stay unchanged.
+This verifies PHP clients; PHP server frameworks and other ranges/options/platforms need
+separate evidence. Product preview/export never acquires or executes these QA dependencies.

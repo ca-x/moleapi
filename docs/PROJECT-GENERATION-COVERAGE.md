@@ -1047,3 +1047,40 @@ tests and scoped strict Clippy/format passed. Catalog validation names the confi
 C++-plugin fixture. No model/service/transport emitter repair was needed. This is Linux/
 GCC/shared-library evidence; other compilers/ABIs/static/dependency ranges/platforms,
 TLS/auth/advanced schema/options and remaining plugins stay full-module work.
+
+
+## Explicit PHP protobuf/gRPC client four-mode interoperability
+
+Official signed Arch grpc1.84.0 PHP protoc plugin and php-grpc1.84.0 extension are now
+validated with original generated PHP clients. The extension package's detached PGP
+signature verified against the existing Arch keyring, signer fingerprint
+`F00B96D15228013FFC9C9D0393B11DAA4C197E3D`; package SHA256
+`88b93577faa322787242f228efe2324f5ae3c433d0edcf9556874b66d17df190`.
+Extension/plugin/library paths are explicit and extracted only into isolated QA. Selected
+PHP8.5.11 NTS API20250925 loads the original1.84.0 extension. Package metadata:
+https://archlinux.org/packages/extra/x86_64/php-grpc/.
+
+PHP Composer library versions differ from native extension and other-language runtimes.
+Official Packagist metadata and resolved locks identify grpc/grpc1.82.0 and PHP
+Google/protobuf5.36.1; these are explicitly selected, with no runtime/transport fallback.
+Composer installs use no plugins/scripts and preserve package source references/locks.
+Generated PBEcho/Shade/metadata/EchoServiceClient files stay byte-identical, including
+PHP reserved Echo-to-PBEcho names in typed request and decoder contracts.
+
+Official PHP examples call non-PHP servers (https://grpc.io/docs/languages/php/quickstart/).
+Both source/descriptor PHP clients passed syntax/import and actual unary/server-stream/
+client-stream/bidirectional loopback calls against unchanged generated Python grpcio1.84.0
+server interfaces (8 RPCs). Client/server descriptor SHA256s match before calls; server
+asserts decoded Unicode/non-UTF8 bytes, enum/repeated fields, oneof-zero presence and
+Timestamp. PHP verifies typed decoded responses and terminal statuses; all streams,
+channels and Python server terminate. Original source hashes match across representations
+and remain unchanged. Package locks/resolved dependencies/tool/signature/descriptor/hash/
+runtime evidence remain in isolated QA. No custom codec/client or PHP-server substitute
+was needed. This is PHP client interoperability evidence, not PHP server-framework support.
+
+The actual PHP plugin emission test passed; Python default regression passed8 RPCs.
+79 generation cases (41 external-tool cases ignored),11 owned API cases, fixture parser
+tests and scoped strict Clippy/format passed. Catalog validation names representative
+configured PHP-client four-mode evidence. Product preview/export never installs or runs
+these tools. Other PHP/extension/package/platform ranges, server frameworks, TLS/auth/
+advanced schema/options and remaining language/plugin scope remain open.

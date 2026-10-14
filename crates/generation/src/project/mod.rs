@@ -165,6 +165,7 @@ pub fn project_catalog() -> Result<Vec<ProjectTarget>> {
                 "kotlin" => "representative-kotlin-java-four-mode-configured-plugins-fixture",
                 "ruby" => "representative-ruby-four-mode-configured-plugin-fixture",
                 "cpp" => "representative-cpp-four-mode-configured-plugin-fixture",
+                "php" => "representative-php-four-mode-client-configured-plugin-fixture",
                 _ => "representative-protoc-message-source-descriptor-fixture",
             }
             .into(),

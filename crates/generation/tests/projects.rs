@@ -1527,3 +1527,55 @@ async fn official_cpp_plugin_emits_imported_models_and_four_rpc_service_interfac
         assert!(service.content.contains(method), "Missing C++ {method}");
     }
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured protoc and official PHP gRPC plugin"]
+async fn official_php_plugin_emits_imported_models_and_four_rpc_client_interfaces() {
+    let compiler =
+        PathBuf::from(std::env::var_os("MOLEAPI_CODEGEN_TEST_PROTOC").expect("explicit protoc"));
+    let plugin = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_GRPC_PHP").expect("explicit PHP plugin"),
+    );
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), None)
+        .unwrap()
+        .with_protoc(Some(compiler), BTreeMap::from([("php".into(), plugin)]))
+        .unwrap();
+    let specification = serde_json::from_str(include_str!(
+        "../../../tools/projects/fixtures/protobuf-imports.json"
+    ))
+    .unwrap();
+    let artifact = runtime
+        .generate(
+            ProjectInput {
+                target: "protobuf-php".into(),
+                specification,
+                options: BTreeMap::new(),
+                include_secrets: false,
+                templates: None,
+            },
+            CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert!(
+        artifact
+            .files
+            .iter()
+            .any(|file| file.path == "Fixture/PBEcho.php")
+    );
+    assert!(
+        artifact
+            .files
+            .iter()
+            .any(|file| file.path == "Fixture/Shade.php")
+    );
+    let service = artifact
+        .files
+        .iter()
+        .find(|file| file.path == "Fixture/EchoServiceClient.php")
+        .unwrap();
+    assert!(service.content.contains("Grpc\\BaseStub"));
+    for method in ["Call", "Watch", "Collect", "Chat"] {
+        assert!(service.content.contains(method), "Missing PHP {method}");
+    }
+}
