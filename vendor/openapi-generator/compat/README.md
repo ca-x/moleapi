@@ -81,3 +81,22 @@ converter skips redundant parent parsing of that field. Other fields, unknown/fa
 subtype paths, constructor and serialization logic remain the upstream implementation.
 This is typed discriminator decoding, not a general JSON Schema constraint validator.
 Generichost only; explicit converter templates retain priority.
+
+
+## Java okhttp-gson multipart collection elements/formats
+
+Source: `Java/libraries/okhttp-gson/ApiClient.mustache` and `api.mustache`, same7.26.0
+JAR; Apache-2.0/upstream headers and renderer retained. Actual wire assertions found
+that the multipart loop emitted the entire list for each element, and non-multi
+arrays reached that loop without their declared collection format.
+
+The transport template now passes the current element to its existing part writer.
+The API template retains multi lists and uses the upstream collection-format joining
+helper for other arrays before transport. File/scalar parts and the JSON/transport
+implementation remain upstream. Default okhttp-gson only; explicit templates retain
+priority. This is the tested primitive string-array contract, not nested/custom part
+or all-language encoding parity.
+
+Original ApiClient.mustache SHA256: `605d3eac175edbd72231badd1dd8a1359d71a122cefe19881ec571602fe63330`.
+
+Original api.mustache SHA256: `a041e1c4af516bdbda4a6f3b118983aa9d2950c76768128ebbb57e4666a511de`.

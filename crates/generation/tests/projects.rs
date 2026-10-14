@@ -528,3 +528,61 @@ async fn explicit_csharp_converter_template_overrides_discriminator_compatibilit
             .contains("explicit converter")
     );
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured Java17+ test runtime"]
+async fn explicit_java_templates_override_okhttp_form_compatibility_defaults() {
+    let java = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_JAVA").expect("explicit Java executable"),
+    );
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), Some(java)).unwrap();
+    let input = ProjectInput {
+        target: "java".into(),
+        options: BTreeMap::new(),
+        include_secrets: false,
+        specification: json!({"openapi":"3.0.3","info":{"title":"Java overrides","version":"1"},"paths":{"/x":{"get":{"operationId":"x","responses":{"200":{"description":"OK"}}}}}}),
+        templates: Some(TemplateBundle {
+            format: "moleapi-codegen-templates-v1".into(),
+            outputs: BTreeMap::new(),
+            files: vec![
+                TemplateFile {
+                    path: "ApiClient.mustache".into(),
+                    content: "// explicit Java client {{invokerPackage}}\n".into(),
+                    encoding: None,
+                },
+                TemplateFile {
+                    path: "api.mustache".into(),
+                    content: "// explicit Java API {{classname}}\n".into(),
+                    encoding: None,
+                },
+            ],
+        }),
+    };
+    let result = runtime
+        .generate(input, CancellationToken::new())
+        .await
+        .unwrap();
+    let client = result
+        .files
+        .iter()
+        .find(|file| file.path.ends_with("/client/ApiClient.java"))
+        .unwrap();
+    assert!(client.content.contains("// explicit Java client"));
+    assert!(!client.content.contains("buildRequestBodyMultipart"));
+    let api = result
+        .files
+        .iter()
+        .find(|file| file.path.ends_with("/api/DefaultApi.java"))
+        .unwrap();
+    assert!(api.content.contains("// explicit Java API DefaultApi"));
+    assert!(!api.content.contains("localVarFormParams"));
+    assert!(
+        result
+            .files
+            .iter()
+            .find(|file| file.path == "moleapi-templates.json")
+            .unwrap()
+            .content
+            .contains("explicit Java client")
+    );
+}

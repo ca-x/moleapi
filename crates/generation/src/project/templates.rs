@@ -55,6 +55,28 @@ pub(super) fn write_builtin(input: &ProjectInput, root: &Path) -> Result<bool> {
                 ),
             ]
         }
+        "java"
+            if input
+                .options
+                .get("library")
+                .and_then(Value::as_str)
+                .is_none_or(|library| library == "okhttp-gson") =>
+        {
+            &[
+                (
+                    "ApiClient.mustache",
+                    include_str!(
+                        "../../../../vendor/openapi-generator/compat/java-okhttp-gson/ApiClient.mustache"
+                    ),
+                ),
+                (
+                    "api.mustache",
+                    include_str!(
+                        "../../../../vendor/openapi-generator/compat/java-okhttp-gson/api.mustache"
+                    ),
+                ),
+            ]
+        }
         _ => return Ok(false),
     };
     std::fs::create_dir_all(root)?;

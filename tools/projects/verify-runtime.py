@@ -402,10 +402,51 @@ public class RuntimeFixture {
         catch (ApiException error) {
             if (error.getCode()!=400 || !error.getResponseBody().contains("expected fixture failure")) throw error;
         }
+        __JAVA_EXTENDED__
         System.out.println("PASS Java okhttp-gson client");
     }
 }
 '''
+
+
+JAVA_BINARY = r'''byte[] data = {0,1,2,13,10,(byte)255,(byte)128,65};
+        java.io.File downloaded = api.downloadFile();
+        try {
+            if (!java.util.Arrays.equals(java.nio.file.Files.readAllBytes(downloaded.toPath()),data)) throw new IllegalStateException("Binary download changed bytes");
+        } finally {java.nio.file.Files.deleteIfExists(downloaded.toPath());}
+        java.nio.file.Path upload=java.nio.file.Files.createTempFile("java-upload", ".bin");
+        try {
+            java.nio.file.Files.write(upload,data);
+            UploadReceipt receipt=api.uploadFile(__JAVA_BINARY_ARGS__);
+            if (receipt.getSize()!=data.length) throw new IllegalStateException("Binary upload receipt lost");
+        } finally {java.nio.file.Files.deleteIfExists(upload);}
+'''
+JAVA_MULTIPART = r'''byte[] data = {0,1,2,13,10,(byte)255,(byte)128,65};
+        java.nio.file.Path temporary=java.nio.file.Files.createTempDirectory("java-multipart");
+        java.nio.file.Path upload=temporary.resolve("payload.bin");
+        try {
+            java.nio.file.Files.write(upload,data);
+            UploadReceipt receipt=api.uploadMultipart(__JAVA_MULTIPART_ARGS__);
+            if (receipt.getSize()!=data.length) throw new IllegalStateException("Multipart receipt lost");
+        } finally {java.nio.file.Files.deleteIfExists(upload);java.nio.file.Files.deleteIfExists(temporary);}
+'''
+JAVA_UNION = r'''Animal cat=api.getAnimal("cat");
+        Animal dog=api.getAnimal("dog");
+        if (!(cat.getActualInstance() instanceof Cat) || ((Cat)cat.getActualInstance()).getKind()!=Cat.KindEnum.CAT || !"鼹鼠 \"quotes\" & +".equals(((Cat)cat.getActualInstance()).getName())) throw new IllegalStateException("Cat subtype/data lost");
+        if (!(dog.getActualInstance() instanceof Dog) || ((Dog)dog.getActualInstance()).getKind()!=Dog.KindEnum.DOG || !((Dog)dog.getActualInstance()).getBarks()) throw new IllegalStateException("Dog subtype/data lost");
+        Animal catEcho=api.echoAnimal(cat);
+        Animal dogEcho=api.echoAnimal(dog);
+        if (!(catEcho.getActualInstance() instanceof Cat) || !((Cat)cat.getActualInstance()).getName().equals(((Cat)catEcho.getActualInstance()).getName())) throw new IllegalStateException("Cat roundtrip lost");
+        if (!(dogEcho.getActualInstance() instanceof Dog) || !((Dog)dogEcho.getActualInstance()).getBarks()) throw new IllegalStateException("Dog roundtrip lost");
+'''
+
+
+def java_arguments(source, method, values):
+    signature=re.search(r"public [\w.<>? \[\]]+ "+method+r"\(([^)]*)\)",source)
+    assert signature, "Generated Java signature missing: "+method
+    names=[parameter.strip().split()[-1] for parameter in signature.group(1).split(',')]
+    assert set(names)==set(values), names
+    return ','.join(values[name] for name in names)
 
 
 def java_environment(args):
@@ -422,18 +463,26 @@ def maven(args, directory, goals):
 
 
 def java_client(directory, url, args):
-    assert args.profile=="core", "Java extended profiles still require their own consumers"
     source=(directory / "src/main/java/org/openapitools/client/api/DefaultApi.java").read_text()
     driver=JAVA_CORE
     for method,placeholder,values in [
         ("getPet","__JAVA_GET_ARGS__",{"id":"7","q":json.dumps(QUERY,ensure_ascii=False),"xTest":json.dumps("moleapi-fixture")}),
         ("replacePet","__JAVA_POST_ARGS__",{"id":"7","pet":"input"}),
     ]:
-        signature=re.search(r"public Pet "+method+r"\(([^)]*)\)",source)
-        assert signature, "Generated Java signature missing: "+method
-        names=[parameter.strip().split()[-1] for parameter in signature.group(1).split(',')]
-        assert set(names)==set(values), names
-        driver=driver.replace(placeholder,','.join(values[name] for name in names))
+        driver=driver.replace(placeholder,java_arguments(source,method,values))
+    extended=""
+    if args.profile=="binary":
+        extended=JAVA_BINARY.replace("__JAVA_BINARY_ARGS__",java_arguments(source,"uploadFile",{"body":"upload.toFile()"}))
+    elif args.profile=="multipart":
+        extended=JAVA_MULTIPART.replace("__JAVA_MULTIPART_ARGS__",java_arguments(source,"uploadMultipart",{
+            "_file":"upload.toFile()","note":json.dumps(NOTE,ensure_ascii=False),"tags":"java.util.Arrays.asList(\"red\",\"蓝\")",
+            "optionalTags":"java.util.Arrays.asList(\"red\",\"蓝\")","packedTags":"java.util.Arrays.asList(\"red\",\"蓝\")",
+        }))
+    elif args.profile=="union":
+        extended=JAVA_UNION
+    driver=driver.replace("__JAVA_EXTENDED__",extended)
+    if args.profile!="core":
+        driver=driver.replace("import org.openapitools.client.model.Pet;","import org.openapitools.client.model.*;")
     (directory / "src/main/java/RuntimeFixture.java").write_text(driver)
     maven(args,directory,["package","dependency:build-classpath","-Dmdep.outputFile=runtime-classpath.txt"])
     classpath=str(directory / "target/classes")+os.pathsep+(directory / "runtime-classpath.txt").read_text().strip()
@@ -739,7 +788,7 @@ def main():
     assert all(t in {"javascript", "python", "go", "typescript-fetch", "python-fastapi", "csharp", "aspnetcore", "java", "spring"} for t in targets)
     assert all(v in {"3.0.3", "3.1.0"} for v in versions)
     if args.profile in {"binary","multipart","union"}:
-        assert not {"python-fastapi","aspnetcore","java","spring"}.intersection(targets), "Extended profiles currently validate clients"
+        assert not {"python-fastapi","aspnetcore","spring"}.intersection(targets), "Extended profiles currently validate clients"
     if not args.reuse_generated:
         run(["cargo", "run", "-p", "moleapi-generation", "--example", "fixture_projects", "--", str(args.output), str(args.worker), str(args.java), args.targets, args.versions, args.profile], REPO, timeout=300)
     evidence_path = args.output / "runtime-evidence.json"
