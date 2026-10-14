@@ -14,7 +14,7 @@ Explicit Mustache overrides now reuse the embedded OpenAPI Generator and mature 
 | go-server | Generated skeleton compiled after `go mod tidy`; generated router/service started on a controlled loopback test harness and returned its expected501 business-handler placeholder | A skeleton intentionally needs application handler implementations; dependency installation is a consumer build step |
 | javascript, python, go, csharp | Generated3.0/3.1 clients installed/built and passed real GET/POST/Bearer/query/header/nullable/enum/error fixtures; Go also passed race checking; C# default generichost hosting/token/typed400 APIs were called | Broader union/file/dynamic-keyword and library-option compatibility remains required |
 | php | Default Guzzle3.0/3.1 core, binary/multipart and mapped Cat/Dog tagged-oneOf decode/echo passed; original wire discriminator names retained | Static parent annotations/inheritance, advanced unions/constraints/files, other libraries/platforms remain required |
-| dart | Default HTTP3.0/3.1 analyze/AOT/core, raw binary and multipart arrays/files passed; truncated/no-response errors converted | Union, advanced files/abort/options, SDK ranges and platforms remain required |
+| dart | Default HTTP3.0/3.1 core/file and mapped Cat/Dog oneOf wrappers/array echoes passed with analysis/AOT | Untagged/advanced unions, files/abort/options, SDK ranges and platforms remain required |
 | swift6 | Actual multi-file engine artifact generation, bounded ZIP, checksums and output collection | Artifact evidence does not establish language compile/run coverage |
 | python-fastapi | Generated3.0/3.1 packages installed; unchanged generated app started, exposed routes/OpenAPI and returned its explicit500 missing-business-handler response | Authentication/business implementations remain consumer work; broader framework/keyword compatibility remains required |
 | aspnetcore | Default .NET10 projects built and started for3.0/3.1; consumer-configured authentication reached generated sample handlers (200) and rejected anonymous requests (401) | Real authentication scheme/validation and business handlers remain consumer work; broader framework/keyword compatibility remains required |
@@ -720,3 +720,28 @@ http1.6.0/Linux and Generator7.26.0 are the recorded tools. Finite MultipartFile
 don't establish zero/large/resume/custom/multiple/nested file/MIME/SDK-range/platform or
 union semantics; these remain required module work. Download filename/content-type
 metadata beyond the constructor's default contract is also separately unverified.
+
+
+## Default Dart mapped oneOf wrappers
+
+The default engine merged Cat/Dog into an Animal requiring both name and barks and a
+merged discriminator enum. Mapped oneOf models now use a small Animal(actualInstance:...)
+wrapper selected from the upstream discriminator metadata. Actual Cat/Dog fromJson/toJson
+codecs and upstream list/map helpers remain in use; API Animal argument/return types stay
+nominally consistent. The wrapper constructor rejects unsupported classes, decoder checks
+subtype required keys and converts invalid/unknown tagged input to FormatException in
+release builds. Ordinary/unmapped models retain native_class; explicit model/wrapper
+partials keep priority. Existing merged-field Animal construction is replaced by actual
+variant construction and regeneration should be reviewed for that model API change.
+
+Both3.0.3/3.1.0 projects passed warning-free analysis/AOT and20 real HTTP requests including
+core/truncated behavior, Cat/Dog model decode/echo and wrapper-array list/POST roundtrips.
+Unknown/missing tags, missing subtype fields and object-valued barks reject in release
+consumers. Core/binary/multipart regressions passed30 additional requests. All17 explicit
+override cases, generation78 cases (33 external-tool cases ignored), all11 owned API cases
+and strict scoped Clippy/formatting passed on Dart3.13.5/http1.6.0/Linux, Generator7.26.0.
+
+This proves referenced tagged mapped-object oneOf wrappers and simple arrays, not full
+JSON Schema validation. Untagged/anyOf/nullable/nested/ambiguous/duplicate-alias unions,
+custom field names, empty/large/advanced files, other serialization/libraries, SDK ranges
+and native/browser platforms remain required generation-module work.

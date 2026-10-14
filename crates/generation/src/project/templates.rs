@@ -112,6 +112,18 @@ pub(super) fn write_builtin(input: &ProjectInput, root: &Path) -> Result<bool> {
                 "api.mustache",
                 include_str!("../../../../vendor/openapi-generator/compat/dart-http/api.mustache"),
             ),
+            (
+                "model.mustache",
+                include_str!(
+                    "../../../../vendor/openapi-generator/compat/dart-http/model.mustache"
+                ),
+            ),
+            (
+                "mapped_oneof.mustache",
+                include_str!(
+                    "../../../../vendor/openapi-generator/compat/dart-http/mapped_oneof.mustache"
+                ),
+            ),
         ],
         "php"
             if input

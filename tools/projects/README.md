@@ -213,3 +213,12 @@ constructs file downloads from bytes, removes duplicate file text fields, and re
 _queryParams formatting plus filename-less multipart string parts for repeats. Required
 inputs don't emit nullable guards. CSV/repeat/name/MIME/Unicode assertions are retained.
 Core, advanced file/metadata/union/abort and SDK/platform scopes remain separate gates.
+
+
+Dart --profile union now consumes actual generated Animal wrappers whose actualInstance
+is Cat/Dog. Default API nominal types remain Animal; construct variants through
+Animal(actualInstance: Cat(...)) rather than merged parent fields. Two dialects passed
+analysis/AOT and20 core/union/array HTTP calls, release malformed subtype rejection and
+30 core/file regression requests. Pinned model/wrapper partials reuse engine mappings,
+subtype codecs and original list/map helpers; explicit overrides keep priority. Untagged/
+anyOf/advanced/custom-field/SDK/platform contracts remain separate scopes.

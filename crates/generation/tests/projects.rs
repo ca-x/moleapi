@@ -970,3 +970,46 @@ async fn explicit_dart_api_template_overrides_binary_and_multipart_defaults() {
     assert!(api.content.contains("explicit Dart API"));
     assert!(!api.content.contains("MultipartFile.fromBytes"));
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured Java17+ test runtime"]
+async fn explicit_dart_mapped_wrapper_partial_overrides_union_default() {
+    let java = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_JAVA").expect("explicit Java executable"),
+    );
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), Some(java)).unwrap();
+    let specification = json!({"openapi":"3.0.3","info":{"title":"Wrapper override","version":"1"},"paths":{},"components":{"schemas":{"Cat":{"type":"object","required":["kind"],"properties":{"kind":{"type":"string","enum":["cat"]}}},"Dog":{"type":"object","required":["kind"],"properties":{"kind":{"type":"string","enum":["dog"]}}},"Animal":{"oneOf":[{"$ref":"#/components/schemas/Cat"},{"$ref":"#/components/schemas/Dog"}],"discriminator":{"propertyName":"kind","mapping":{"cat":"#/components/schemas/Cat","dog":"#/components/schemas/Dog"}}}}}});
+    for path in ["model.mustache", "mapped_oneof.mustache"] {
+        let content = if path == "model.mustache" {
+            "{{#models}}{{#model}}// explicit Dart model {{classname}}{{/model}}{{/models}}"
+        } else {
+            "// explicit Dart wrapper {{classname}}"
+        };
+        let input = ProjectInput {
+            target: "dart".into(),
+            options: BTreeMap::new(),
+            include_secrets: false,
+            specification: specification.clone(),
+            templates: Some(TemplateBundle {
+                format: "moleapi-codegen-templates-v1".into(),
+                outputs: BTreeMap::new(),
+                files: vec![TemplateFile {
+                    path: path.into(),
+                    content: content.into(),
+                    encoding: None,
+                }],
+            }),
+        };
+        let result = runtime
+            .generate(input, CancellationToken::new())
+            .await
+            .unwrap();
+        let model = result
+            .files
+            .iter()
+            .find(|file| file.path == "lib/model/animal.dart")
+            .unwrap();
+        assert!(model.content.contains("explicit Dart"));
+        assert!(!model.content.contains("actualInstance"));
+    }
+}

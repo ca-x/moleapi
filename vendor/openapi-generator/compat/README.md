@@ -205,3 +205,14 @@ uses existing _queryParams formats, filename-less MultipartFile strings for repe
 fields, and map fields for joined values. Remove duplicate file.field text entries and
 only test nullable/optional parameters for null. Default Dart HTTP only; explicit API
 templates keep priority. Other libraries/nested/file/platform behavior remains separate.
+
+
+## Dart HTTP mapped oneOf wrappers
+
+Model source: dart2/model.mustache, pinned7.26.0, SHA256
+`a45a69025b8e34829c9279a5c1a36b735f17ba1d07c34381690aa4680a7d6d51`; Apache-2.0/upstream notices retained.
+Mapped oneOf models use a small typed actualInstance wrapper chosen from the existing
+engine discriminator mappings. Subtype fromJson/toJson and upstream list/map helpers
+remain in use; required subtype keys and unknown/missing tags reject in release builds.
+Unmapped/ordinary models retain native_class. Default Dart HTTP only; explicit model/
+wrapper partials retain priority. General constraints/untagged unions remain separate.

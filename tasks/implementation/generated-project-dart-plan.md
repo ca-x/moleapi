@@ -34,3 +34,17 @@ and multipart string parts preserve repeated/CSV values.4 analyze/AOT cases pass
 HTTP requests plus closed-port checks.16 overrides/78 generation/11 API cases and strict
 scoped Clippy/format passed. Advanced filename/MIME/empty/large/nested/multiple/resume,
 union/SDK-range/platform scope remains explicit in parent plan.
+
+
+Union continuation: default merged Animal requires both Cat/Dog fields. Emit mapped
+oneOf wrapper using mature model metadata, subtype codecs and existing list/map helpers;
+retain public Animal API types/default library. Write typed actualInstance Cat/Dog and
+wire roundtrip consumers plus release missing/unknown/required/type rejection before
+checks. Other models/unmapped/advanced schema/platform contracts stay explicit parent scope.
+
+
+Union verified: mapped object wrappers retain API Animal types and actual Cat/Dog codecs,
+release tag/required/type rejection, simple wrapper arrays.2 analyze/AOT cases passed20
+HTTP requests; core/file regressions passed30 more.17 overrides/78 generation/11 API cases
+and strict scoped Clippy/format passed. Constructor migration is explicit; untagged/anyOf/
+nested/nullable/ambiguous/aliases/custom tag fields/general validation/platforms stay open.

@@ -1132,12 +1132,35 @@ DART_MULTIPART = r'''final bytes=<int>[0,1,2,13,10,255,128,65];
     ensureFixture(receipt!=null && receipt.size==bytes.length,'Multipart receipt lost');
 '''
 
+DART_UNION = r'''final cat=await api.getAnimal('cat');
+    final dog=await api.getAnimal('dog');
+    ensureFixture(cat!=null && cat.actualInstance is Cat,'Cat wrapper lost');
+    ensureFixture(dog!=null && dog.actualInstance is Dog,'Dog wrapper lost');
+    final catValue=cat!.actualInstance as Cat;
+    final dogValue=dog!.actualInstance as Dog;
+    ensureFixture(catValue.name=='鼹鼠 "quotes" & +' && dogValue.barks,'Variant fields lost');
+    final echoedCat=await api.echoAnimal(cat);
+    final echoedDog=await api.echoAnimal(dog);
+    ensureFixture(echoedCat?.actualInstance is Cat && (echoedCat!.actualInstance as Cat).name==catValue.name,'Cat echo lost');
+    ensureFixture(echoedDog?.actualInstance is Dog && (echoedDog!.actualInstance as Dog).barks,'Dog echo lost');
+    final items=await api.listAnimals();
+    ensureFixture(items!=null && items.length==2 && items[0].actualInstance is Cat && items[1].actualInstance is Dog,'Union array decode lost');
+    final echoed=await api.echoAnimalArray(items!);
+    ensureFixture(echoed!=null && echoed.length==2 && echoed[0].actualInstance is Cat && echoed[1].actualInstance is Dog,'Union array echo lost');
+
+    for (final malformed in <Map<String,dynamic>>[{}, {'kind':'bird','name':'bad'}, {'kind':'cat'}, {'kind':'dog'}, {'kind':'dog','barks':{}}]) {
+      var rejected=false;
+      try { Animal.fromJson(malformed); } on FormatException { rejected=true; }
+      ensureFixture(rejected,'Malformed tagged object accepted');
+    }
+'''
+
 def dart_client(directory,url,args):
-    assert args.profile in {'core','binary','multipart'}, "Dart union profile requires a dedicated consumer"
+    assert args.profile in {'core','binary','multipart','union'}
     assert args.dart and args.dart.is_absolute() and args.dart.is_file(), "Configure explicit --dart executable"
     source=(directory/'lib/api/default_api.dart').read_text()
-    driver=DART_CORE.replace('__DART_EXTENDED__', {'core':'','binary':DART_BINARY,'multipart':DART_MULTIPART}[args.profile])
-    if args.profile=='core': driver=driver.replace("import 'package:http/http.dart' as http;\n",'')
+    driver=DART_CORE.replace('__DART_EXTENDED__', {'core':'','binary':DART_BINARY,'multipart':DART_MULTIPART,'union':DART_UNION}[args.profile])
+    if args.profile in {'core','union'}: driver=driver.replace("import 'package:http/http.dart' as http;\n",'')
     for method,placeholder,values in [('getPet','__DART_GET_ARGS__',{'id':'7','q':json.dumps(QUERY,ensure_ascii=False),'xTest':json.dumps('moleapi-fixture')}),('replacePet','__DART_POST_ARGS__',{'id':'7','pet':'body'})]:
         match=re.search(r'Future<[^\n]+> '+method+r'\(([^{}]*)',source)
         assert match, 'Generated Dart signature missing: '+method
@@ -1288,7 +1311,7 @@ def main():
     assert args.discriminator_property=='kind' or (targets==['php'] and args.profile=='union'), "Alternate union wire fields currently have PHP consumers only"
     assert not args.php_async or (targets==['php'] and args.profile=='union'), "Async PHP consumers require PHP union fixtures"
     if 'dart' in targets:
-        assert args.profile in {'core','binary','multipart'} and args.dart and args.dart.is_absolute() and args.dart.is_file()
+        assert args.profile in {'core','binary','multipart','union'} and args.dart and args.dart.is_absolute() and args.dart.is_file()
     if not args.reuse_generated:
         run(["cargo", "run", "-p", "moleapi-generation", "--example", "fixture_projects", "--", str(args.output), str(args.worker), str(args.java), args.targets, args.versions, args.profile, args.generator_options, args.discriminator_property], REPO, timeout=300)
     evidence_path = args.output / "runtime-evidence.json"
@@ -1341,6 +1364,7 @@ def main():
                     if args.profile=="binary": expected += [("GET","/files"),("POST","/files")]
                     if args.profile=="multipart": expected += [("POST","/multipart")]
                     if args.profile=="union": expected += [("GET","/animals/cat"),("GET","/animals/dog"),("POST","/animals"),("POST","/animals")]
+                    if target=='dart' and args.profile=='union': expected += [("GET","/animal-list"),("POST","/animal-list")]
                     if target=='php' and args.php_async: expected += [("GET","/animals/cat"),("GET","/animals/dog"),("GET","/animals/cat"),("GET","/animal-list"),("POST","/animal-list"),("GET","/animal-list"),("GET","/animal-list")] + [("GET","/animals/cat"),("GET","/animals/dog"),("GET","/fail"),("GET","/fail"),("GET","/animals/cat"),("GET","/animals/dog")]
                     assert Fixture.observations == expected, Fixture.observations
                 manifest = json.loads((directory / "moleapi-generation.json").read_text())
