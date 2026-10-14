@@ -4,6 +4,11 @@ on:
     branches: [main]
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      objc_qa:
+        description: Run only native Objective-C protobuf interoperability QA
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -23,7 +28,7 @@ jobs:
           fi
   server:
     needs: source
-    if: needs.source.outputs.available == 'true'
+    if: needs.source.outputs.available == 'true' && inputs.objc_qa != true
     strategy:
       fail-fast: false
       matrix:
@@ -83,7 +88,7 @@ jobs:
           if-no-files-found: error
   desktop:
     needs: source
-    if: needs.source.outputs.available == 'true'
+    if: needs.source.outputs.available == 'true' && inputs.objc_qa != true
     strategy:
       fail-fast: false
       matrix:
@@ -148,3 +153,64 @@ jobs:
             target/${{ matrix.target }}/release/bundle/**/*.exe
             target/${{ matrix.target }}/release/bundle/**/*.msi
           if-no-files-found: error
+  objc-qa:
+    if: github.event_name == 'workflow_dispatch' && inputs.objc_qa == true
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15-intel, macos-latest]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: objc-qa-${{ matrix.runner }}
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true
+          working-directory: tools/projects/objc
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install explicit official QA compilers and server libraries
+        run: |
+          brew install grpc protobuf
+          python -m pip install grpcio==1.84.0 grpcio-tools==1.84.0 protobuf==6.33.6
+          mkdir -p "$RUNNER_TEMP/objc-tools"
+          printf '#!/bin/sh\nexec python -m grpc_tools.protoc "$@"\n' > "$RUNNER_TEMP/objc-tools/protoc"
+          chmod +x "$RUNNER_TEMP/objc-tools/protoc"
+          brew list --versions grpc protobuf > "$RUNNER_TEMP/objc-tools/versions.txt"
+          protoc --version >> "$RUNNER_TEMP/objc-tools/versions.txt"
+          shasum -a 256 "$(command -v protoc)" "$(command -v grpc_objective_c_plugin)" >> "$RUNNER_TEMP/objc-tools/versions.txt"
+      - run: npm --prefix web ci
+      - run: npm --prefix web run build
+      - run: python scripts/prepare_openapi_generator.py
+      - run: cargo build --locked -p moleapi-server
+      - name: Generate original source and descriptor clients and server
+        shell: bash
+        run: |
+          cargo run --locked -p moleapi-generation --example fixture_protobuf -- "$RUNNER_TEMP/objc-clients" "$PWD/target/debug/moleapi-server" "$(command -v protoc)" "$(command -v grpc_objective_c_plugin)" objc
+          cargo run --locked -p moleapi-generation --example fixture_protobuf -- "$RUNNER_TEMP/objc-server" "$PWD/target/debug/moleapi-server" "$RUNNER_TEMP/objc-tools/protoc" "$RUNNER_TEMP/objc-tools/protoc" python
+          MOLEAPI_CODEGEN_TEST_PROTOC="$(command -v protoc)" MOLEAPI_CODEGEN_TEST_GRPC_OBJC="$(command -v grpc_objective_c_plugin)" cargo test --locked -p moleapi-generation --test projects official_objc_plugin_emits_original_apple_models_and_four_rpc_interfaces -- --ignored
+      - name: Compile and call all four RPC modes from both representations
+        env:
+          BUNDLE_GEMFILE: ${{ github.workspace }}/tools/projects/objc/Gemfile
+        run: |
+          bundle exec python tools/projects/verify-protobuf-objc.py "$RUNNER_TEMP/objc-clients/source" --server-dir "$RUNNER_TEMP/objc-server/source"
+          bundle exec python tools/projects/verify-protobuf-objc.py "$RUNNER_TEMP/objc-clients/descriptor" --server-dir "$RUNNER_TEMP/objc-server/descriptor"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: objc-qa-${{ matrix.runner }}
+          path: |
+            ${{ runner.temp }}/objc-clients/**/runtime-evidence.json
+            ${{ runner.temp }}/objc-clients/**/Podfile.lock
+            ${{ runner.temp }}/objc-clients/**/moleapi-generation.json
+            ${{ runner.temp }}/objc-tools/versions.txt
+          if-no-files-found: warn
