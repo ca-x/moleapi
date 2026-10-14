@@ -10,20 +10,28 @@ async fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
     let output = PathBuf::from(args.next().context("Absolute output root required")?);
     let worker = PathBuf::from(args.next().context("Absolute worker required")?);
-    let compiler = PathBuf::from(args.next().context("Absolute protoc required")?);
-    let plugin = PathBuf::from(args.next().context("Absolute gRPC plugin required")?);
-    let language = args.next().unwrap_or_else(|| "python".into());
-    ensure!(
-        matches!(language.as_str(), "python" | "java"),
-        "Unsupported QA consumer language"
-    );
+    let selector = args
+        .next()
+        .context("Explicit protoc or rust-tonic selector required")?;
+    let (runtime, target) = if selector == "rust-tonic" {
+        (ProjectRuntime::new(worker, None)?, "rust-tonic".to_owned())
+    } else {
+        let compiler = PathBuf::from(selector);
+        let plugin = PathBuf::from(args.next().context("Absolute gRPC plugin required")?);
+        let language = args.next().unwrap_or_else(|| "python".into());
+        ensure!(
+            matches!(language.as_str(), "python" | "java"),
+            "Unsupported QA consumer language"
+        );
+        let runtime = ProjectRuntime::new(worker, None)?
+            .with_protoc(Some(compiler), BTreeMap::from([(language.clone(), plugin)]))?;
+        (runtime, format!("protobuf-{language}"))
+    };
     ensure!(args.next().is_none(), "Unexpected argument");
     ensure!(
         output.is_absolute() && !output.exists(),
         "Use a fresh absolute QA output root"
     );
-    let runtime = ProjectRuntime::new(worker, None)?
-        .with_protoc(Some(compiler), BTreeMap::from([(language.clone(), plugin)]))?;
     let mut specification = serde_json::from_str(include_str!(
         "../../../tools/projects/fixtures/protobuf-imports.json"
     ))?;
@@ -31,7 +39,7 @@ async fn main() -> Result<()> {
         let artifact = runtime
             .generate(
                 ProjectInput {
-                    target: format!("protobuf-{language}"),
+                    target: target.clone(),
                     specification,
                     options: BTreeMap::new(),
                     include_secrets: false,
@@ -62,7 +70,7 @@ async fn main() -> Result<()> {
         );
         specification =
             serde_json::json!({"kind":"descriptor","descriptor_set_base64":descriptor.content});
-        println!("GENERATED {language} protobuf {representation}");
+        println!("GENERATED {target} {representation}");
     }
     Ok(())
 }

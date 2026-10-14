@@ -102,16 +102,21 @@ mod tests {
     }
     #[test]
     fn native_compiler_emits_client_server_and_repeatable_descriptor_from_bundled_imports() {
-        let artifact = native_protobuf(&input()).unwrap();
+        let mut original = input();
+        original.specification = serde_json::from_str(include_str!(
+            "../../../../tools/projects/fixtures/protobuf-imports.json"
+        ))
+        .unwrap();
+        let artifact = native_protobuf(&original).unwrap();
         assert!(artifact.files.iter().any(|f| f.path.ends_with("fixture.rs")
-            && f.content.contains("EchoClient")
-            && f.content.contains("EchoServer")));
+            && f.content.contains("EchoServiceClient")
+            && f.content.contains("EchoServiceServer")));
         let descriptor = artifact
             .files
             .iter()
             .find(|f| f.path == "descriptor-set.base64.txt")
             .unwrap();
-        let mut second = input();
+        let mut second = original;
         second.specification =
             serde_json::json!({"kind":"descriptor","descriptor_set_base64":descriptor.content});
         let repeated = native_protobuf(&second).unwrap();
@@ -119,8 +124,30 @@ mod tests {
             repeated
                 .files
                 .iter()
-                .any(|f| f.path.ends_with("fixture.rs") && f.content.contains("EchoClient"))
+                .any(|f| f.path.ends_with("fixture.rs") && f.content.contains("EchoServiceClient"))
         );
+        let source = artifact
+            .files
+            .iter()
+            .find(|f| f.path.ends_with("fixture.rs"))
+            .unwrap();
+        let regenerated = repeated
+            .files
+            .iter()
+            .find(|f| f.path == source.path)
+            .unwrap();
+        assert_eq!(source.content, regenerated.content);
+        for method in [
+            "async fn call",
+            "async fn watch",
+            "async fn collect",
+            "async fn chat",
+        ] {
+            assert!(
+                source.content.contains(method),
+                "Missing generated Rust {method}"
+            );
+        }
     }
     #[test]
     fn unbundled_and_traversal_imports_do_not_fall_back_to_host_filesystem() {

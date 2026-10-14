@@ -305,3 +305,23 @@ Verified Java tools: official plugin1.84.1 (published SHA256 checked), explicit 
 Temurin21.0.12.1+1/Maven3.9.11 on Linux. Source and descriptor consumers passed8 RPCs;
 original generated hashes match across both representations and remain unchanged.
 Python's original default invocation passed8 further four-mode regression RPCs.
+
+
+## Native Rust Tonic four-mode consumer
+
+Generate a fresh isolated source/descriptor pair without protoc/Java/plugins, then build
+separate path-dependent consumers using explicit Cargo and QA target directories:
+
+```sh
+cargo run -p moleapi-generation --example fixture_protobuf -- /absolute/rust-qa-output /absolute/moleapi-server rust-tonic
+python3 tools/projects/verify-protobuf-rust.py /absolute/rust-qa-output/source --cargo /absolute/cargo --target-dir /absolute/qa-target
+python3 tools/projects/verify-protobuf-rust.py /absolute/rust-qa-output/descriptor --cargo /absolute/cargo --target-dir /absolute/qa-target
+```
+
+Original SDK Cargo.toml/source remain unchanged. The consumer records Cargo.lock,
+dependency tree, tool/descriptor/source hashes and actual four-mode runtime evidence.
+Both inputs passed8 Tonic loopback RPCs with typed enum/repeated/bytes/Unicode/oneof-zero/
+Timestamp data and complete streams/server shutdown. Recorded QA: Cargo1.99.0/Linux,
+Tonic/tonic-prost0.14.6, Prost/prost-types0.14.4, Tokio1.53.3/tokio-stream0.1.19. Python
+regression passed8 further RPCs. Other toolchain/dependency/schema/platform/transport
+options remain their own gates; this tooling never executes from product preview.

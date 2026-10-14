@@ -886,3 +886,30 @@ passed. Catalog validation names the configured Java-plugin fixture separately f
 message-only compiler integration. Product preview/export does not install dependencies,
 execute consumers or acquire plugins. Other Java plugin/runtime/library/platform ranges,
 TLS/auth/advanced schemas/options and remaining languages/plugins stay full-module work.
+
+
+## Native Rust Tonic four-mode source/descriptor consumers
+
+The trusted fixture generator now has a rust-tonic selector that needs only the existing
+application worker, with no protoc/Java/language plugin configuration. The native
+protox/tonic-prost-build0.14.6 route emits unchanged SDK packages from both the multi-file
+source and descriptor representations. The upgraded bundled-import regression verifies
+all four client/server method interfaces and identical generated fixture code.
+
+Separate SDK-path consumers compiled the original Cargo.toml and generated modules, then
+passed actual Tonic loopback unary/server-streaming/client-streaming/bidirectional calls
+for both inputs (8 RPCs). Imported enum/repeated fields, Unicode/non-UTF8 bytes, oneof
+presence including code=0 and Timestamp values survive request/response serialization.
+The server observes the four modes, all streams complete and the listener shuts down.
+Original SDK source and manifest hashes match across inputs and remain unchanged after
+build/calls. The consumer Cargo.lock, resolved dependency tree, tool/descriptor/hash and
+runtime evidence are retained in isolated QA output.
+
+Recorded Linux QA uses Cargo1.99.0, Tonic/tonic-prost0.14.6, Prost/prost-types0.14.4,
+Tokio1.53.3 and tokio-stream0.1.19. Python's default fixture invocation passed8 further
+four-mode regression RPCs;78 generation cases (36 external-tool cases ignored),11 owned
+project API cases, fixture parser tests and scoped strict Clippy/format checks passed.
+Catalog validation now names representative native four-mode source/descriptor evidence.
+Product preview/export does not build or run target code. Rust toolchain/dependency
+ranges, broader schemas/options/auth/TLS/cancellation/platform deployment and other
+language plugins remain full-module requirements.

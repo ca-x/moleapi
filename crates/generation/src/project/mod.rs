@@ -142,7 +142,7 @@ pub fn project_catalog() -> Result<Vec<ProjectTarget>> {
             model_options: Vec::new(),
             kind: "protobuf".into(),
             upstream_stability: "stable".into(),
-            validation: "awaiting-protobuf-fixtures".into(),
+            validation: "representative-tonic-four-mode-source-descriptor-fixture".into(),
             options: BTreeMap::from([
                 ("packageName".into(), Value::String("moleapi_grpc".into())),
                 ("packageVersion".into(), Value::String("0.1.0".into())),
