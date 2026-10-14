@@ -37,3 +37,16 @@ the browser transport supplies Blob. Binary browser runtime remains separately t
 Apply only to the default `javascript` library, not `apollo`. Explicit ApiClient template
 overrides retain priority. The original JAR remains unchanged and generated output is
 not rewritten after rendering.
+
+## C# generichost repeated form arrays
+
+Source: `csharp/libraries/generichost/api.mustache` in the same7.26.0 JAR.
+Apache-2.0/upstream headers and renderer are retained. A real multipart request
+encoded an explicitly exploded string array as one comma-separated field.
+The compatibility copy emits one field per element for required/optional arrays
+whose upstream collection format is multi. Other arrays and scalars retain the
+upstream serialization. FileParameter handling and the transport stay unchanged.
+Apply only to the default generichost library; explicit API templates keep priority.
+
+Original C# generichost API template SHA256:
+`7daa959c929f38288f5c4c639a08060dbc395c435462fb89cb7d3950c6a96fbd`.

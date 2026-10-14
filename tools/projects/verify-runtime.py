@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Compile/call trusted generated SDKs and start skeletons; never invoked by the app."""
 import argparse
+from email.parser import BytesParser
+from email.policy import default as mime_policy
 import hashlib
 import http.server
 import json
@@ -55,6 +57,23 @@ class Fixture(http.server.BaseHTTPRequestHandler):
                 assert self.command == "GET"
                 self.respond(400, {"message": "expected fixture failure"})
                 return
+            if parsed.path == "/multipart":
+                assert self.command == "POST"
+                assert self.headers.get_content_type() == "multipart/form-data"
+                mime = BytesParser(policy=mime_policy).parsebytes(
+                    ("Content-Type: " + self.headers["Content-Type"] + "\r\nMIME-Version: 1.0\r\n\r\n").encode() + body)
+                assert mime.is_multipart(), "Missing multipart boundary/body"
+                fields = {}
+                for part in mime.iter_parts():
+                    name = part.get_param("name", header="Content-Disposition")
+                    value = part.get_payload(decode=True)
+                    fields.setdefault(name, []).append(value)
+                    if name == "file":
+                        assert part.get_filename() == "payload.bin", part.get_filename()
+                        assert part.get_content_type() == "application/octet-stream", part.get_content_type()
+                assert fields == {"file":[BINARY],"note":[NOTE.encode()],"tags":[b"red","蓝".encode()],"optionalTags":[b"red","蓝".encode()],"packedTags":["red,蓝".encode()]}, fields
+                self.respond(200,{"size":len(BINARY)})
+                return
             if parsed.path == "/files":
                 if self.command == "GET":
                     self.send_response(200)
@@ -81,6 +100,7 @@ class Fixture(http.server.BaseHTTPRequestHandler):
                 self.respond(200, PET)
         except Exception as error:
             self.errors.append(repr(error))
+            print("WIRE ASSERTION", self.command, parsed.path, repr(error), flush=True)
             self.respond(422, {"message": repr(error)})
 
     do_GET = request
@@ -114,6 +134,7 @@ func TestRuntimeFixture(t *testing.T) {
     response,err=api.DefaultAPI.FailGet(ctx).Execute()
     if err==nil || response==nil || response.StatusCode!=400 {t.Fatalf("error response lost: %v %v",response,err)}
     __GO_BINARY__
+    __GO_MULTIPART__
 }
 '''
 PYTHON = r'''import os
@@ -134,6 +155,7 @@ with ApiClient(Configuration(host=os.environ["FIXTURE_URL"], access_token="fixtu
     else:
         raise AssertionError("HTTP error was not exposed")
     __PYTHON_BINARY__
+    __PYTHON_MULTIPART__
 print("PASS Python client")
 '''
 JAVASCRIPT = r'''const assert=require('node:assert/strict');
@@ -149,6 +171,7 @@ function call(name,...args) {return new Promise((resolve,reject)=>api[name](...a
   assert.equal(pet.note,'鼹鼠 "quotes" & +');
   await assert.rejects(call('failGet'),error=>error.status===400 && error.response.body.message==='expected fixture failure');
   __JS_BINARY__
+  __JS_MULTIPART__
   console.log('PASS JavaScript client');
 })().catch(error=>{console.error(error);process.exit(1)});
 '''
@@ -162,6 +185,7 @@ const api=new sdk.DefaultApi(new sdk.Configuration({basePath:process.env.FIXTURE
   assert.equal(pet.note,'鼹鼠 "quotes" & +');
   await assert.rejects(api.failGet(),error=>error instanceof sdk.ResponseError && error.response.status===400);
   __TS_BINARY__
+  __TS_MULTIPART__
   console.log('PASS TypeScript client');
 })().catch(error=>{console.error(error);process.exit(1)});
 '''
@@ -200,6 +224,7 @@ var failure = await api.FailGetAsync(cancellationToken: cancel.Token);
 if (failure.StatusCode != HttpStatusCode.BadRequest || failure.BadRequest()!.Message != "expected fixture failure")
     throw new Exception("HTTP400 model/status lost");
 __CS_BINARY__
+__CS_MULTIPART__
 Console.WriteLine("PASS C# generichost client");
 '''
 
@@ -255,6 +280,37 @@ if (receipt.StatusCode != HttpStatusCode.OK || receipt.Ok()!.Size != data.Length
 '''
 
 
+GO_MULTIPART = r'''data:=[]byte{0,1,2,13,10,255,128,65}
+    upload,err:=os.Create(filepath.Join(t.TempDir(),"payload.bin")); if err!=nil {t.Fatal(err)}
+    defer upload.Close()
+    if _,err=upload.Write(data); err!=nil {t.Fatal(err)}
+    if _,err=upload.Seek(0,0); err!=nil {t.Fatal(err)}
+    receipt,response,err:=api.DefaultAPI.UploadMultipart(ctx).File(upload).Note("鼹鼠 \"quotes\" & +").Tags([]string{"red","蓝"}).OptionalTags([]string{"red","蓝"}).PackedTags([]string{"red","蓝"}).Execute()
+    if err!=nil || response.StatusCode!=200 || receipt.GetSize()!=int32(len(data)) {t.Fatalf("multipart: %v %v %v",receipt,response,err)}
+'''
+PYTHON_MULTIPART = r'''data=bytes([0,1,2,13,10,255,128,65])
+    receipt=api.upload_multipart(file=("payload.bin",data),note='鼹鼠 "quotes" & +',tags=["red","蓝"],optional_tags=["red","蓝"],packed_tags=["red","蓝"])
+    assert receipt.size==len(data), receipt
+'''
+JS_MULTIPART = r'''const fs=require('node:fs');
+  const path=require('node:path');
+  const data=Buffer.from([0,1,2,13,10,255,128,65]);
+  const filename=path.join(__dirname,'payload.bin');
+  fs.writeFileSync(filename,data);
+  const receipt=await call('uploadMultipart',__MULTIPART_ARGS__);
+  assert.equal(receipt.size,data.length);
+'''
+TS_MULTIPART = r'''const data=Buffer.from([0,1,2,13,10,255,128,65]);
+  const receipt=await api.uploadMultipart({file:new File([data],'payload.bin',{type:'application/octet-stream'}),note:'鼹鼠 "quotes" & +',tags:['red','蓝'],optionalTags:['red','蓝'],packedTags:['red','蓝']});
+  assert.equal(receipt.size,data.length);
+'''
+CS_MULTIPART = r'''byte[] data = {0,1,2,13,10,255,128,65};
+using var upload = new System.IO.MemoryStream(data);
+var receipt = await api.UploadMultipartAsync(file: new FileParameter(upload,"payload.bin"), note: "鼹鼠 \"quotes\" & +", tags: new System.Collections.Generic.List<string>{"red","蓝"}, optionalTags: new System.Collections.Generic.List<string>{"red","蓝"}, packedTags: new System.Collections.Generic.List<string>{"red","蓝"}, cancellationToken: cancel.Token);
+if (receipt.StatusCode != HttpStatusCode.OK || receipt.Ok()!.Size != data.Length) throw new Exception("Multipart upload receipt failed");
+'''
+
+
 ASPNET_HOST = r'''using System;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
@@ -306,7 +362,7 @@ def csharp(directory, url, args):
     assert match, "Generated hosting extension missing"
     api_name = match.group(1)
     driver = CSHARP.replace("__CONFIGURE_API__", "Configure" + api_name).replace("__ADD_HTTP_CLIENTS__", "Add" + api_name + "HttpClients")
-    driver = driver.replace("__CS_BINARY__", CS_BINARY if args.profile=="binary" else "")
+    driver = driver.replace("__CS_BINARY__", CS_BINARY if args.profile=="binary" else "").replace("__CS_MULTIPART__", CS_MULTIPART if args.profile=="multipart" else "")
     consumer = directory / "runtime-consumer"
     consumer.mkdir(exist_ok=True)
     (consumer / "Program.cs").write_text(driver)
@@ -413,9 +469,11 @@ def python_environment(directory):
 def client(target, directory, url, args):
     env = dict(os.environ, FIXTURE_URL=url)
     if target == "go":
-        driver = GO.replace("__GO_BINARY__", GO_BINARY if args.profile=="binary" else "")
+        driver = GO.replace("__GO_BINARY__", GO_BINARY if args.profile=="binary" else "").replace("__GO_MULTIPART__", GO_MULTIPART if args.profile=="multipart" else "")
         if args.profile=="binary":
             driver=driver.replace('"context"', '"context"\n    "bytes"\n    "io"',1)
+        if args.profile=="multipart":
+            driver=driver.replace('"context"', '"context"\n    "path/filepath"',1)
         (directory / "runtime_fixture_test.go").write_text(driver)
         run([args.go, "mod", "tidy"], directory)
         run([args.go, "test", "-run", "^TestRuntimeFixture$", "-count=1", "-race", "-v"], directory, env)
@@ -423,7 +481,7 @@ def client(target, directory, url, args):
         csharp(directory, url, args)
     elif target == "python":
         python = python_environment(directory)
-        (directory / "runtime_fixture.py").write_text(PYTHON.replace("__PYTHON_BINARY__", PYTHON_BINARY if args.profile=="binary" else ""))
+        (directory / "runtime_fixture.py").write_text(PYTHON.replace("__PYTHON_BINARY__", PYTHON_BINARY if args.profile=="binary" else "").replace("__PYTHON_MULTIPART__", PYTHON_MULTIPART if args.profile=="multipart" else ""))
         run([str(python), "runtime_fixture.py"], directory, env)
     else:
         run([args.npm, "install", "--no-audit", "--no-fund"], directory)
@@ -438,6 +496,15 @@ def client(target, directory, url, args):
             values = {"id": "7", "q": json.dumps(QUERY), "xTest": json.dumps("moleapi-fixture")}
             driver = JAVASCRIPT.replace("__GET_PET_ARGS__", ",".join(values[name] for name in names[:-1]))
         driver=driver.replace("__JS_BINARY__", JS_BINARY if args.profile=="binary" else "").replace("__TS_BINARY__", TS_BINARY if args.profile=="binary" else "")
+        js_multipart = JS_MULTIPART
+        if target=="javascript" and args.profile=="multipart":
+            signature = re.search(r"uploadMultipart\(([^)]+)\)", source)
+            assert signature, "Generated uploadMultipart signature missing"
+            names=[name.strip() for name in signature.group(1).split(',')]
+            assert names[-1]=='callback' and set(names[:-1])=={'file','note','tags','opts'}, names
+            values={'file':'fs.createReadStream(filename)','note':json.dumps(NOTE),'tags':json.dumps(['red','蓝']),'opts':json.dumps({'optionalTags':['red','蓝'],'packedTags':['red','蓝']})}
+            js_multipart=JS_MULTIPART.replace('__MULTIPART_ARGS__',','.join(values[name] for name in names[:-1]))
+        driver=driver.replace("__JS_MULTIPART__", js_multipart if args.profile=="multipart" else "").replace("__TS_MULTIPART__", TS_MULTIPART if args.profile=="multipart" else "")
         (directory / "runtime_fixture.cjs").write_text(driver)
         run([args.node, "runtime_fixture.cjs"], directory, env)
 
@@ -490,7 +557,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--targets", default="javascript,python,go,typescript-fetch,python-fastapi")
     parser.add_argument("--versions", default="3.0.3,3.1.0")
-    parser.add_argument("--profile", choices=["core","binary"], default="core")
+    parser.add_argument("--profile", choices=["core","binary","multipart"], default="core")
     parser.add_argument("--node", default=shutil.which("node"))
     parser.add_argument("--npm", default=shutil.which("npm"))
     parser.add_argument("--go", default=shutil.which("go"))
@@ -504,8 +571,8 @@ def main():
     versions = args.versions.split(",")
     assert all(t in {"javascript", "python", "go", "typescript-fetch", "python-fastapi", "csharp", "aspnetcore"} for t in targets)
     assert all(v in {"3.0.3", "3.1.0"} for v in versions)
-    if args.profile=="binary":
-        assert not {"python-fastapi","aspnetcore"}.intersection(targets), "Binary profile currently validates clients"
+    if args.profile in {"binary","multipart"}:
+        assert not {"python-fastapi","aspnetcore"}.intersection(targets), "File profiles currently validate clients"
     if not args.reuse_generated:
         run(["cargo", "run", "-p", "moleapi-generation", "--example", "fixture_projects", "--", str(args.output), str(args.worker), str(args.java), args.targets, args.versions, args.profile], REPO, timeout=300)
     evidence_path = args.output / "runtime-evidence.json"
@@ -538,6 +605,7 @@ def main():
                     assert not Fixture.errors, Fixture.errors
                     expected=[("GET", "/pets/7"), ("POST", "/pets/7"), ("GET", "/fail")]
                     if args.profile=="binary": expected += [("GET","/files"),("POST","/files")]
+                    if args.profile=="multipart": expected += [("POST","/multipart")]
                     assert Fixture.observations == expected, Fixture.observations
                 manifest = json.loads((directory / "moleapi-generation.json").read_text())
                 source_digest = hashlib.sha256((directory / "fixture-source.json").read_bytes()).hexdigest()

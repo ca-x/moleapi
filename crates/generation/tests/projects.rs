@@ -396,3 +396,47 @@ async fn explicit_javascript_client_template_overrides_binary_compatibility_defa
             .contains("explicit client")
     );
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured Java17+ test runtime"]
+async fn explicit_csharp_api_template_overrides_form_array_compatibility_default() {
+    let java = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_JAVA").expect("explicit Java executable"),
+    );
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), Some(java)).unwrap();
+    let input = ProjectInput {
+        target: "csharp".into(),
+        options: BTreeMap::new(),
+        include_secrets: false,
+        specification: json!({"openapi":"3.0.3","info":{"title":"API override","version":"1"},"paths":{"/x":{"get":{"operationId":"x","responses":{"200":{"description":"OK"}}}}}}),
+        templates: Some(TemplateBundle {
+            format: "moleapi-codegen-templates-v1".into(),
+            outputs: BTreeMap::new(),
+            files: vec![TemplateFile {
+                path: "api.mustache".into(),
+                content: "// explicit CSharp API {{classname}}\n".into(),
+                encoding: None,
+            }],
+        }),
+    };
+    let result = runtime
+        .generate(input, CancellationToken::new())
+        .await
+        .unwrap();
+    let api = result
+        .files
+        .iter()
+        .find(|file| file.path.ends_with("/Api/DefaultApi.cs"))
+        .unwrap();
+    assert!(api.content.contains("// explicit CSharp API"));
+    assert!(!api.content.contains("formParameterLocalVars"));
+    assert!(
+        result
+            .files
+            .iter()
+            .find(|file| file.path == "moleapi-templates.json")
+            .unwrap()
+            .content
+            .contains("explicit CSharp API")
+    );
+}

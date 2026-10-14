@@ -29,12 +29,26 @@ fn specification(version: &str, profile: &str) -> Value {
         "Pet":{"type":"object","required":["id","status"],"properties":{"id":{"type":"integer","format":"int32"},"status":{"type":"string","enum":["ready","done"]},"note":note}},
         "Failure":{"type":"object","required":["message"],"properties":{"message":{"type":"string"}}}
     }}});
-    if profile == "binary" {
+    if matches!(profile, "binary" | "multipart") {
         specification["paths"]["/files"] = json!({
             "get":{"operationId":"downloadFile","responses":{"200":{"description":"Binary download","content":{"application/octet-stream":{"schema":{"type":"string","format":"binary"}}}}}},
             "post":{"operationId":"uploadFile","requestBody":{"required":true,"content":{"application/octet-stream":{"schema":{"type":"string","format":"binary"}}}},"responses":{"200":{"description":"Upload receipt","content":{"application/json":{"schema":{"$ref":"#/components/schemas/UploadReceipt"}}}}}}
         });
         specification["components"]["schemas"]["UploadReceipt"] = json!({"type":"object","required":["size"],"properties":{"size":{"type":"integer","format":"int32"}}});
+    }
+    if profile == "multipart" {
+        specification["paths"]
+            .as_object_mut()
+            .unwrap()
+            .remove("/files");
+        specification["paths"]["/multipart"] = json!({"post":{
+            "operationId":"uploadMultipart",
+            "requestBody":{"required":true,"content":{"multipart/form-data":{
+                "schema":{"type":"object","required":["file","note","tags"],"properties":{
+                    "file":{"type":"string","format":"binary"},"note":{"type":"string"},"tags":{"type":"array","items":{"type":"string"}},"optionalTags":{"type":"array","items":{"type":"string"}},"packedTags":{"type":"array","items":{"type":"string"}}
+                }},"encoding":{"file":{"contentType":"application/octet-stream"},"tags":{"style":"form","explode":true},"optionalTags":{"style":"form","explode":true},"packedTags":{"style":"form","explode":false}}
+            }}},"responses":{"200":{"description":"Multipart receipt","content":{"application/json":{"schema":{"$ref":"#/components/schemas/UploadReceipt"}}}}}
+        }});
     }
     specification
 }
@@ -52,7 +66,7 @@ async fn main() -> Result<()> {
     let versions = args.next().unwrap_or_else(|| "3.0.3,3.1.0".into());
     let profile = args.next().unwrap_or_else(|| "core".into());
     ensure!(
-        matches!(profile.as_str(), "core" | "binary"),
+        matches!(profile.as_str(), "core" | "binary" | "multipart"),
         "Unknown fixture profile"
     );
     let runtime = ProjectRuntime::new(worker, Some(java))?;

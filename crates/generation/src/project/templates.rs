@@ -25,6 +25,20 @@ pub(super) fn write_builtin(input: &ProjectInput, root: &Path) -> Result<bool> {
                 ),
             )
         }
+        "csharp"
+            if input
+                .options
+                .get("library")
+                .and_then(Value::as_str)
+                .is_none_or(|library| library == "generichost") =>
+        {
+            (
+                "api.mustache",
+                include_str!(
+                    "../../../../vendor/openapi-generator/compat/csharp-generichost/api.mustache"
+                ),
+            )
+        }
         _ => return Ok(false),
     };
     std::fs::create_dir_all(root)?;
