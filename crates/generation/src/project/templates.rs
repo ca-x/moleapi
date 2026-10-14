@@ -4,6 +4,24 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use std::{collections::BTreeSet, path::Path};
 pub const TEMPLATE_LIMIT: usize = 512 * 1024;
 
+/// Upstream skeleton compatibility defaults; explicitly supplied templates override them.
+pub(super) fn write_builtin(target: &str, root: &Path) -> Result<bool> {
+    if target != "aspnetcore" {
+        return Ok(false);
+    }
+    std::fs::create_dir_all(root)?;
+    let startup = root.join("Startup.mustache");
+    if startup.exists() {
+        ensure!(startup.is_file(), "Startup template must be a regular file");
+        return Ok(true);
+    }
+    std::fs::write(
+        startup,
+        include_str!("../../../../vendor/openapi-generator/compat/aspnetcore/Startup.mustache"),
+    )?;
+    Ok(true)
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TemplateFile {

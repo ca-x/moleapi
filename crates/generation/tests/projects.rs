@@ -308,3 +308,47 @@ async fn protoc_plugin_process_group_is_terminated_and_reaped_on_cancellation() 
             .success()
     );
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured Java17+ test runtime"]
+async fn explicit_startup_template_overrides_builtin_aspnet_compatibility_template() {
+    let java = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_JAVA").expect("explicit Java executable"),
+    );
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), Some(java)).unwrap();
+    let startup =
+        "// explicitly selected startup\nnamespace {{packageName}} { public class Startup { } }\n";
+    let input = ProjectInput {
+        specification: json!({"openapi":"3.0.3","info":{"title":"Startup override","version":"1"},"paths":{}}),
+        target: "aspnetcore".into(),
+        options: BTreeMap::new(),
+        include_secrets: false,
+        templates: Some(TemplateBundle {
+            format: "moleapi-codegen-templates-v1".into(),
+            files: vec![TemplateFile {
+                path: "Startup.mustache".into(),
+                content: startup.into(),
+                encoding: None,
+            }],
+            outputs: BTreeMap::new(),
+        }),
+    };
+    let artifact = runtime
+        .generate(input, CancellationToken::new())
+        .await
+        .unwrap();
+    let rendered = artifact
+        .files
+        .iter()
+        .find(|file| file.path.ends_with("/Startup.cs"))
+        .unwrap();
+    assert!(rendered.content.contains("// explicitly selected startup"));
+    assert!(rendered.content.contains("namespace Org.OpenAPITools"));
+    assert!(!rendered.content.contains("UseAuthorization"));
+    let source = artifact
+        .files
+        .iter()
+        .find(|file| file.path == "moleapi-templates.json")
+        .unwrap();
+    assert!(source.content.contains("explicitly selected startup"));
+}

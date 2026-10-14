@@ -148,6 +148,187 @@ const api=new sdk.DefaultApi(new sdk.Configuration({basePath:process.env.FIXTURE
 '''
 
 
+CSHARP = r'''using System;
+using System.Net;
+using System.Threading;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.DependencyInjection;
+using Org.OpenAPITools.Api;
+using Org.OpenAPITools.Client;
+using Org.OpenAPITools.Model;
+using Org.OpenAPITools.Extensions;
+
+using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+var builder = Host.CreateApplicationBuilder();
+builder.__CONFIGURE_API__(options => {
+    options.AddTokens(new BearerToken("fixture-token"));
+    options.__ADD_HTTP_CLIENTS__(client => {
+        client.BaseAddress = new Uri(Environment.GetEnvironmentVariable("FIXTURE_URL")!);
+        client.Timeout = TimeSpan.FromSeconds(10);
+    });
+});
+using var host = builder.Build();
+var api = host.Services.GetRequiredService<IDefaultApi>();
+var response = await api.GetPetAsync(id: 7, q: "space & + 鼹鼠", xTest: "moleapi-fixture", cancellationToken: cancel.Token);
+var pet = response.Ok()!;
+if (response.StatusCode != HttpStatusCode.OK || pet.Id != 7 || pet.Status != Pet.StatusEnum.Ready || pet.Note != null)
+    throw new Exception("GET model or nullable value lost");
+var input = new Pet(id: 7, status: Pet.StatusEnum.Ready) { Note = "鼹鼠 \"quotes\" & +" };
+var post = await api.ReplacePetAsync(id: 7, pet: input, cancellationToken: cancel.Token);
+if (post.StatusCode != HttpStatusCode.OK || post.Ok()!.Note != "鼹鼠 \"quotes\" & +")
+    throw new Exception("POST response/body lost");
+var failure = await api.FailGetAsync(cancellationToken: cancel.Token);
+if (failure.StatusCode != HttpStatusCode.BadRequest || failure.BadRequest()!.Message != "expected fixture failure")
+    throw new Exception("HTTP400 model/status lost");
+Console.WriteLine("PASS C# generichost client");
+'''
+
+
+ASPNET_HOST = r'''using System;
+using System.Security.Claims;
+using System.Text.Encodings.Web;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+
+await Host.CreateDefaultBuilder(args).ConfigureWebHostDefaults(web => web.UseStartup<FixtureStartup>()).Build().RunAsync();
+public class FixtureStartup {
+    readonly Org.OpenAPITools.Startup generated;
+    public FixtureStartup(IConfiguration config) { generated = new(config); }
+    public void ConfigureServices(IServiceCollection services) {
+        generated.ConfigureServices(services);
+        // Test-only consumer configuration. No generated source is changed.
+        services.AddAuthentication("Fixture").AddScheme<AuthenticationSchemeOptions, FixtureAuth>("Fixture", _ => {});
+    }
+    public void Configure(IApplicationBuilder app, IWebHostEnvironment env) { generated.Configure(app, env); }
+}
+public class FixtureAuth : AuthenticationHandler<AuthenticationSchemeOptions> {
+    public FixtureAuth(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder) : base(options,logger,encoder) {}
+    protected override Task<AuthenticateResult> HandleAuthenticateAsync() {
+        if (Request.Headers.Authorization != "Bearer fixture-token")
+            return Task.FromResult(AuthenticateResult.Fail("Missing fixture token"));
+        var identity = new ClaimsIdentity(new[]{new Claim(ClaimTypes.Name,"fixture")},Scheme.Name);
+        return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity),Scheme.Name)));
+    }
+}
+'''
+
+
+def dotnet_project(directory):
+    project = directory / "src/Org.OpenAPITools/Org.OpenAPITools.csproj"
+    assert project.is_file(), "Generated default project missing"
+    return project
+
+
+def csharp(directory, url, args):
+    assert args.dotnet, "Configure --dotnet for .NET validation"
+    project = dotnet_project(directory)
+    run([args.dotnet, "build", str(project), "-c", "Release"], directory)
+    extensions = "\n".join(path.read_text() for path in project.parent.glob("Extensions/*.cs"))
+    match = re.search(r"Configure(\w+)\(", extensions)
+    assert match, "Generated hosting extension missing"
+    api_name = match.group(1)
+    driver = CSHARP.replace("__CONFIGURE_API__", "Configure" + api_name).replace("__ADD_HTTP_CLIENTS__", "Add" + api_name + "HttpClients")
+    consumer = directory / "runtime-consumer"
+    consumer.mkdir(exist_ok=True)
+    (consumer / "Program.cs").write_text(driver)
+    (consumer / "RuntimeFixture.csproj").write_text(
+        '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><Nullable>enable</Nullable></PropertyGroup><ItemGroup><ProjectReference Include="'
+        + str(project) + '" /></ItemGroup></Project>')
+    run([args.dotnet, "build", "-c", "Release"], consumer)
+    run([args.dotnet, "run", "--no-build", "-c", "Release"], consumer, dict(os.environ, FIXTURE_URL=url))
+
+
+def stop(process):
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=5)
+
+
+def aspnetcore(directory, args):
+    assert args.dotnet, "Configure --dotnet for .NET validation"
+    project = dotnet_project(directory)
+    run([args.dotnet, "build", str(project), "-c", "Release"], directory)
+    assemblies = list((project.parent / "bin/Release").glob("*/Org.OpenAPITools.dll"))
+    assert len(assemblies) == 1, assemblies
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        port = listener.getsockname()[1]
+    url = f"http://127.0.0.1:{port}"
+    with (directory / "runtime-server.log").open("w") as log:
+        process = subprocess.Popen([args.dotnet, str(assemblies[0]), "--urls", url], cwd=project.parent, stdout=log, stderr=log)
+        try:
+            deadline = time.monotonic() + 30
+            while True:
+                if process.poll() is not None:
+                    raise AssertionError((directory / "runtime-server.log").read_text())
+                try:
+                    with urllib.request.urlopen(url + "/openapi/1/openapi.json", timeout=1) as reply:
+                        assert reply.status == 200
+                        definition = json.load(reply)
+                        assert "/pets/{id}" in definition["paths"] and "/fail" in definition["paths"]
+                    break
+                except (OSError, urllib.error.URLError):
+                    if time.monotonic() >= deadline:
+                        raise AssertionError((directory / "runtime-server.log").read_text())
+                    time.sleep(0.1)
+            request = urllib.request.Request(url + "/pets/7?" + urllib.parse.urlencode({"q": QUERY}), headers={"Authorization": f"Bearer {TOKEN}", "X-Test": "moleapi-fixture"})
+            try:
+                with urllib.request.urlopen(request, timeout=5) as reply:
+                    assert reply.status == 200
+                    body = json.load(reply)
+                    assert "id" in body and "status" in body
+            except urllib.error.HTTPError as error:
+                assert error.code == 500, error.code
+                log.flush()
+                assert "No authenticationScheme was specified" in (directory / "runtime-server.log").read_text()
+        finally:
+            stop(process)
+    consumer = directory / "runtime-host"
+    consumer.mkdir(exist_ok=True)
+    (consumer / "Program.cs").write_text(ASPNET_HOST)
+    (consumer / "RuntimeHost.csproj").write_text('<Project Sdk="Microsoft.NET.Sdk.Web"><PropertyGroup><TargetFramework>net10.0</TargetFramework><Nullable>enable</Nullable></PropertyGroup><ItemGroup><ProjectReference Include="' + str(project) + '" /></ItemGroup></Project>')
+    run([args.dotnet, "build", "-c", "Release"], consumer)
+    with (directory / "runtime-consumer-host.log").open("w") as log:
+        process = subprocess.Popen([args.dotnet, str(consumer / "bin/Release/net10.0/RuntimeHost.dll"), "--urls", url], cwd=project.parent, stdout=log, stderr=log)
+        try:
+            deadline = time.monotonic()+30
+            while True:
+                if process.poll() is not None:
+                    raise AssertionError((directory / "runtime-consumer-host.log").read_text())
+                try:
+                    urllib.request.urlopen(url + "/openapi/1/openapi.json", timeout=1).close()
+                    break
+                except (OSError, urllib.error.URLError):
+                    if time.monotonic() >= deadline:
+                        raise AssertionError("Consumer host did not start")
+                    time.sleep(0.1)
+            route = url + "/pets/7?" + urllib.parse.urlencode({"q": QUERY})
+            request = urllib.request.Request(route, headers={"Authorization":f"Bearer {TOKEN}", "X-Test":"moleapi-fixture"})
+            with urllib.request.urlopen(request, timeout=5) as reply:
+                assert reply.status == 200
+                body = json.load(reply)
+                assert "id" in body and "status" in body, body
+            try:
+                urllib.request.urlopen(urllib.request.Request(route, headers={"X-Test":"moleapi-fixture"}), timeout=5)
+            except urllib.error.HTTPError as error:
+                assert error.code == 401, error.code
+            else:
+                raise AssertionError("Protected generated route accepted anonymous request")
+        finally:
+            stop(process)
+    print("PASS ASP.NET Core default build/start/routes plus authenticated200/anonymous401 through consumer scheme", flush=True)
+
+
 def python_environment(directory):
     run([sys.executable, "-m", "venv", str(directory / ".venv")], directory)
     python = directory / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
@@ -163,6 +344,8 @@ def client(target, directory, url, args):
         (directory / "runtime_fixture_test.go").write_text(GO)
         run([args.go, "mod", "tidy"], directory)
         run([args.go, "test", "-run", "^TestRuntimeFixture$", "-count=1", "-race", "-v"], directory, env)
+    elif target == "csharp":
+        csharp(directory, url, args)
     elif target == "python":
         python = python_environment(directory)
         (directory / "runtime_fixture.py").write_text(PYTHON)
@@ -234,6 +417,7 @@ def main():
     parser.add_argument("--node", default=shutil.which("node"))
     parser.add_argument("--npm", default=shutil.which("npm"))
     parser.add_argument("--go", default=shutil.which("go"))
+    parser.add_argument("--dotnet", default=shutil.which("dotnet"))
     parser.add_argument("--reuse-generated", action="store_true", help="Use only previously generated isolated fixtures")
     args = parser.parse_args()
     assert args.worker.is_absolute() and args.worker.is_file()
@@ -241,7 +425,7 @@ def main():
     assert args.output.is_absolute()
     targets = args.targets.split(",")
     versions = args.versions.split(",")
-    assert all(t in {"javascript", "python", "go", "typescript-fetch", "python-fastapi"} for t in targets)
+    assert all(t in {"javascript", "python", "go", "typescript-fetch", "python-fastapi", "csharp", "aspnetcore"} for t in targets)
     assert all(v in {"3.0.3", "3.1.0"} for v in versions)
     if not args.reuse_generated:
         run(["cargo", "run", "-p", "moleapi-generation", "--example", "fixture_projects", "--", str(args.output), str(args.worker), str(args.java), args.targets, args.versions], REPO, timeout=300)
@@ -253,6 +437,8 @@ def main():
     for name, command in [("node", args.node), ("npm", args.npm), ("go", args.go)]:
         if command:
             tools[name] = subprocess.check_output([command, "version" if name=="go" else "--version"], text=True).strip()
+    if args.dotnet:
+        tools["dotnet"] = subprocess.check_output([args.dotnet, "--info"], text=True).strip()
     (args.output / "runtime-tools.json").write_text(json.dumps(tools, indent=2) + "\n")
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fixture)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -266,6 +452,8 @@ def main():
                 Fixture.errors.clear()
                 if target == "python-fastapi":
                     fastapi(directory)
+                elif target == "aspnetcore":
+                    aspnetcore(directory, args)
                 else:
                     client(target, directory, f"http://127.0.0.1:{server.server_port}", args)
                     assert not Fixture.errors, Fixture.errors

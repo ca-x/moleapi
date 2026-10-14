@@ -6,3 +6,5 @@ The Java executable is an explicit deployment/native configuration (`MOLEAPI_COD
 
 Upstream license: https://github.com/OpenAPITools/openapi-generator/blob/v7.26.0/LICENSE
 Upstream notices are also contained in the original shaded release JAR. Runtime/JRE distribution and platform packaging remain separately required work; testing a downloaded isolated JRE does not mean MoleAPI bundles one.
+
+A pinned compatibility override for the upstream ASP.NET Core Startup template registers and orders authentication/authorization middleware. It is rendered by the unchanged engine; generated output is not rewritten afterward. Explicit user templates take precedence. See `compat/README.md` for the source/license/digest and actual failure fixed. A consuming server still supplies its authentication scheme and business implementation.

@@ -55,7 +55,9 @@ async fn main() -> Result<()> {
                     "python",
                     "go",
                     "typescript-fetch",
-                    "python-fastapi"
+                    "python-fastapi",
+                    "csharp",
+                    "aspnetcore"
                 ]
                 .contains(&target),
                 "Unknown fixture target"
