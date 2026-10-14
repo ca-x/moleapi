@@ -13,3 +13,16 @@ input and actual Kotlin union consumers. Reproduced and repaired Retrofit3.1 pat
 ordering through a pinned upstream template; explicit overrides retain priority.
 Both dialects passed compile/call/typed roundtrip/malformed-variant checks (14 requests).
 Default Moshi union support and advanced shapes/other serializers remain open in the parent plan.
+
+
+Continuation: verify explicitly selected Retrofit/kotlinx_serialization using actual
+sealed Animal.CatWrapper/DogWrapper and Serializer.kotlinxSerializationJson. Extend
+the trusted driver to select consumers from the generated manifest (including reused
+projects). Preserve the exact core and union wire contract, malformed variant rejection,
+original emitted Gradle dependencies/build, and default-library limits. Write source and
+test consumers before running the batch. Diagnose and repair only reproduced defects,
+then document precise evidence, regression-check and merge/push the verified slice.
+
+Continuation verified: both kotlinx serializer/dialect cases passed original Gradle
+builds,14 real requests and malformed-variant checks. Actual sealed wrapper types and
+registered upstream serializers are exercised. Both Gson dispatch regressions passed.

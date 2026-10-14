@@ -498,7 +498,7 @@ KOTLIN_MULTIPART = r'''val bytes=byteArrayOf(0,1,2,13,10,255.toByte(),128.toByte
 '''
 
 
-KOTLIN_UNION = r'''import org.openapitools.client.apis.DefaultApi
+KOTLIN_UNION_GSON = r'''import org.openapitools.client.apis.DefaultApi
 import org.openapitools.client.infrastructure.ApiClient
 import org.openapitools.client.auth.HttpBearerAuth
 import org.openapitools.client.models.*
@@ -536,10 +536,56 @@ fun main() {
 }
 '''
 
+KOTLIN_UNION_KOTLINX = r'''import org.openapitools.client.apis.DefaultApi
+import org.openapitools.client.infrastructure.ApiClient
+import org.openapitools.client.auth.HttpBearerAuth
+import org.openapitools.client.infrastructure.Serializer
+import kotlinx.serialization.decodeFromString
+import org.openapitools.client.models.*
+import okhttp3.OkHttpClient
+
+fun main() {
+    val http=OkHttpClient.Builder().connectTimeout(10,java.util.concurrent.TimeUnit.SECONDS).readTimeout(10,java.util.concurrent.TimeUnit.SECONDS)
+    val client=ApiClient(baseUrl=System.getenv("FIXTURE_URL"),okHttpClientBuilder=http)
+    val auth=HttpBearerAuth("bearer")
+    auth.bearerToken="fixture-token"
+    client.addAuthorization("bearerAuth",auth)
+    val api=client.createService(DefaultApi::class.java)
+    val pet=api.getPet(id=7,q="space & + 鼹鼠",xTest="moleapi-fixture").execute().body()!!
+    check(pet.id==7 && pet.status==Pet.Status.ready && pet.note==null)
+    val echoed=api.replacePet(id=7,pet=Pet(id=7,status=Pet.Status.ready,note="鼹鼠 \"quotes\" & +")).execute().body()!!
+    check(echoed.note=="鼹鼠 \"quotes\" & +")
+    val failure=api.failGet().execute()
+    check(failure.code()==400 && failure.errorBody()!!.string().contains("expected fixture failure"))
+    val cat=api.getAnimal("cat").execute().body()!!
+    check(cat is Animal.CatWrapper && cat.value.kind==Cat.Kind.cat && cat.value.name=="鼹鼠 \"quotes\" & +")
+    val dog=api.getAnimal("dog").execute().body()!!
+    check(dog is Animal.DogWrapper && dog.value.kind==Dog.Kind.dog && dog.value.barks)
+    check(api.echoAnimal(cat).execute().body()!! == cat)
+    check(api.echoAnimal(dog).execute().body()!! == dog)
+    val json=Serializer.kotlinxSerializationJson
+    for (malformed in listOf("{}", "{\"kind\":\"bird\",\"name\":\"bad\"}", "{\"kind\":\"cat\"}", "{\"kind\":\"dog\",\"barks\":{}}")) {
+        var rejected=false
+        try { json.decodeFromString<Animal>(malformed) } catch (_:Exception) { rejected=true }
+        check(rejected) { "Malformed variant accepted: $malformed" }
+    }
+    val transport=http.build()
+    transport.connectionPool.evictAll()
+    transport.dispatcher.executorService.shutdown()
+    println("PASS Kotlin jvm-retrofit2 kotlinx serialization tagged union")
+}
+'''
+
 def kotlin_client(directory,url,args):
     assert args.gradle and args.gradle.is_file(), "Configure an explicit --gradle executable"
     if args.profile=='union':
-        source=KOTLIN_UNION
+        manifest=json.loads((directory/'moleapi-generation.json').read_text())
+        options=manifest['options']
+        assert options.get('library')=='jvm-retrofit2' and options.get('generateOneOfAnyOfWrappers') is True, "Kotlin union consumer requires explicit Retrofit wrappers"
+        consumers={'gson':KOTLIN_UNION_GSON,'kotlinx_serialization':KOTLIN_UNION_KOTLINX}
+        serializer=options.get('serializationLibrary')
+        assert serializer in consumers, "Kotlin union consumer requires a supported serializer"
+        source=consumers[serializer]
     else:
         extra={'core':'','binary':KOTLIN_BINARY,'multipart':KOTLIN_MULTIPART}[args.profile]
         source=KOTLIN_CORE.replace('__KOTLIN_EXTENDED__',extra)

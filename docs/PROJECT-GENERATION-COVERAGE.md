@@ -211,5 +211,23 @@ was exercised in Chromium in English and Chinese at390px; wrapper/library values
 and the dialog stayed within the viewport. Catalog responses used trusted fixture data.
 
 This proves simple referenced tagged-oneOf with explicitly selected Retrofit/Gson.
-Kotlinx serialization runtime, default Moshi support, anyOf/nullable/nested/ambiguous
+Default Moshi support, anyOf/nullable/nested/ambiguous
 unions and other Kotlin libraries/platforms remain required work.
+
+
+## Explicit Kotlin Retrofit/kotlinx serialization tagged unions
+
+Both3.0.3 and3.1.0 generated projects also passed their original Gradle builds and
+14 actual core/union requests with `serializationLibrary=kotlinx_serialization` and
+explicit Retrofit wrappers. The consumer uses generated sealed Animal.CatWrapper and
+Animal.DogWrapper values and the generated Serializer.kotlinxSerializationJson,
+including unknown/missing discriminator, missing required subtype field and invalid
+boolean rejection. Generated serializers/transport/build dependencies are unchanged.
+Exact libraries: Kotlin2.4.0, kotlinx-serialization-json1.11.0, Retrofit3.0.0,
+OkHttp5.4.0; same Gradle8.14.5/Temurin JDK21 Linux tools as the Gson slice.
+
+The QA driver selects a distinct typed consumer from actual generation-manifest options,
+including reuse runs, and fails explicitly for non-wrapper/unsupported configurations.
+Both Gson3.0/3.1 regression consumers also passed14 actual requests after this change.
+This adds two serializer/dialect cases; default Moshi and broader union/platform/keyword
+support remain open. No additional product runtime is downloaded or executed by preview.

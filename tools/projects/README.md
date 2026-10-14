@@ -102,5 +102,8 @@ and malformed variant rejection passed;14 actual requests. A library-specific co
 API template orders path parameters before query parameters. Explicit templates keep priority.
 The fixture example accepts the same JSON options as its final positional argument;
 evidence records capture actual manifest options, including when reusing generated output.
-Default Moshi unions reject explicitly. Kotlinx serialization is exposed as an upstream
-supported wrapper choice but runtime parity is unverified; broader union shapes remain open.
+Default Moshi unions reject explicitly. For `kotlinx_serialization`, replace the serializer value in the JSON option object.
+The driver selects actual generated sealed-wrapper and kotlinx serializer APIs from the
+manifest. Both dialect cases passed the same14 requests and malformed-variant checks;
+the emitted project uses kotlinx-serialization-json1.11.0. Both Gson regression cases
+also passed. Broader union shapes/default-Moshi/platform scenarios remain open.
