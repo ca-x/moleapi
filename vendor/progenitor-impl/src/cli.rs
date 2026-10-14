@@ -19,6 +19,12 @@ use crate::{
     validate_openapi,
 };
 
+struct BodyTemplate {
+    schema: String,
+    candidate: Option<serde_json::Value>,
+    named: BTreeMap<String, serde_json::Value>,
+}
+
 struct CliOperation {
     cli_fn: TokenStream,
     execute_fn: TokenStream,
@@ -77,13 +83,15 @@ impl Generator {
                     let schema = media.schema.as_ref().unwrap();
                     let resolved = schema.item(&spec.components)?;
                     let mut candidate = media.example.clone();
-                    if candidate.is_none() {
-                        for example in media.examples.values() {
-                            if let Some(value) = &example.item(&spec.components)?.value { candidate = Some(value.clone()); break; }
-                        }
+                    let mut named = BTreeMap::new();
+                    for (name, example) in &media.examples {
+                        let value = &example.item(&spec.components)?.value;
+                        if candidate.is_none() { candidate = value.clone(); }
+                        let entry = match value { Some(value) => serde_json::json!({"value":value}), None => serde_json::json!({}) };
+                        named.insert(name.clone(), entry);
                     }
                     let candidate = candidate.or_else(|| resolved.schema_data.example.clone()).or_else(|| resolved.schema_data.default.clone());
-                    body_templates.insert(method.operation_id.clone(), (serde_json::to_string(&schema.to_schema()).unwrap(), candidate));
+                    body_templates.insert(method.operation_id.clone(), BodyTemplate {schema:serde_json::to_string(&schema.to_schema()).unwrap(), candidate, named});
                 }
                 Ok(method)
             })
@@ -100,7 +108,7 @@ impl Generator {
         let template_ops = methods.iter().map(|op| &op.template_fn);
         let template_fns = raw_methods
             .iter()
-            .map(|method| format_ident!("body_template_{}", &method.operation_id));
+            .map(|method| format_ident!("__moleapi_template_{}", &method.operation_id));
 
         let operation_id = raw_methods.iter().map(|method| &method.operation_id);
 
@@ -206,7 +214,10 @@ impl Generator {
                 }
 
                 pub fn body_template(cmd: CliCommand) -> anyhow::Result<serde_json::Value> {
-                    match cmd { #( CliCommand::#cli_variants => Self::#template_fns(), )* }
+                    Self::body_template_named(cmd, None)
+                }
+                pub fn body_template_named(cmd: CliCommand, name: Option<&str>) -> anyhow::Result<serde_json::Value> {
+                    match cmd { #( CliCommand::#cli_variants => Self::#template_fns(name), )* }
                 }
                 #(#template_ops)*
                 #(#cli_ops)*
@@ -216,8 +227,8 @@ impl Generator {
                     cmd: CliCommand,
                     matches: &::clap::ArgMatches,
                 ) -> anyhow::Result<()> {
-                    if matches.try_get_one::<bool>("json-body-template").ok().flatten().copied().unwrap_or(false) {
-                        let value = Self::body_template(cmd)?;
+                    if let Some(name) = matches.try_get_one::<String>("json-body-template").ok().flatten() {
+                        let value = Self::body_template_named(cmd, (!name.is_empty()).then_some(name.as_str()))?;
                         use std::io::Write;
                         writeln!(std::io::stdout().lock(), "{}", serde_json::to_string_pretty(&value)?)?;
                         return Ok(());
@@ -295,17 +306,17 @@ impl Generator {
     fn cli_method(
         &mut self,
         method: &crate::method::OperationMethod,
-        template: Option<&(String, Option<serde_json::Value>)>,
+        template: Option<&BodyTemplate>,
     ) -> CliOperation {
-        let template_name = format_ident!("body_template_{}", &method.operation_id);
-        let template_body = template.map(|(schema, candidate)| {
+        let template_name = format_ident!("__moleapi_template_{}", &method.operation_id);
+        let template_body = template.map(|template| {
+            let schema = &template.schema;
+            let candidate = &template.candidate;
+            let named = serde_json::to_string(&template.named).unwrap();
             let param = method.params.iter().find(|param| matches!(param.kind, OperationParameterKind::Body(_))).unwrap();
             let OperationParameterType::Type(type_id) = &param.typ else { unreachable!() };
             let ty = self.type_space.get_type(type_id).unwrap();
             let ident = ty.ident();
-            if candidate.is_none() && !ty.has_impl(TypeSpaceImpl::Default) {
-                return quote! { anyhow::bail!("No body template candidate; add a request media/schema example or default to the specification") };
-            }
             let candidate = if let Some(candidate) = candidate {
                 let text = serde_json::to_string(candidate).unwrap();
                 quote! { serde_json::from_str::<serde_json::Value>(#text)? }
@@ -315,7 +326,11 @@ impl Generator {
                 quote! { anyhow::bail!("No body template candidate; add a request media/schema example or default to the specification") }
             };
             quote! {
-                let value: serde_json::Value = #candidate;
+                let value: serde_json::Value = if let Some(name) = name {
+                    let examples: serde_json::Value = serde_json::from_str(#named)?;
+                    examples.get(name).and_then(|entry| entry.get("value")).cloned()
+                        .with_context(|| format!("Unknown or unavailable named body example: {name}"))?
+                } else { #candidate };
                 let _: #ident = serde_json::from_value(value.clone()).context("Body template does not match the generated model")?;
                 let mut schema: serde_json::Value = serde_json::from_str(#schema)?;
                 schema.as_object_mut().context("Invalid body template schema")?.insert("components".into(),
@@ -326,8 +341,7 @@ impl Generator {
                 Ok(value)
             }
         }).unwrap_or_else(|| quote! { anyhow::bail!("Operation has no typed JSON/form request body") });
-        let template_fn =
-            quote! { fn #template_name() -> anyhow::Result<serde_json::Value> { #template_body } };
+        let template_fn = quote! { fn #template_name(name: Option<&str>) -> anyhow::Result<serde_json::Value> { #template_body } };
 
         let CliArg {
             parser: parser_args,
@@ -735,9 +749,12 @@ impl Generator {
                 .arg(
                     ::clap::Arg::new("json-body-template")
                         .long("json-body-template")
-                        .action(::clap::ArgAction::SetTrue)
+                        .num_args(0..=1)
+                        .require_equals(true)
+                        .default_missing_value("")
+                        .value_name("EXAMPLE")
                         .exclusive(true)
-                        .help("Print a validated JSON body template offline; uses a supplied example/default or model Default")
+                        .help("Print a validated JSON body template offline; optionally select a named example with =EXAMPLE")
                 )
             }
         });

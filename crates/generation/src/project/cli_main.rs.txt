@@ -78,9 +78,9 @@ async fn main() -> anyhow::Result<()> {
     let matches = command.get_matches();
     let (name, args) = matches.subcommand().expect("Required operation");
     let operation = CliCommand::iter().find(|operation| operation.operation_id() == name).expect("Known generated operation");
-    if args.try_get_one::<bool>("json-body-template").ok().flatten().copied().unwrap_or(false) {
+    if let Some(name) = args.try_get_one::<String>("json-body-template").ok().flatten() {
         use std::io::Write;
-        let value = Cli::<Output>::body_template(operation)?;
+        let value = Cli::<Output>::body_template_named(operation, (!name.is_empty()).then_some(name.as_str()))?;
         writeln!(std::io::stdout().lock(), "{}", serde_json::to_string_pretty(&value)?)?;
         return Ok(());
     }

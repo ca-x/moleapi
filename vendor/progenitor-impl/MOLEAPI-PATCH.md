@@ -77,3 +77,14 @@ required-argument-free offline output. The adapter checks template output before
 configuration; execution still requires an explicit URL. Generated Clap enables string
 for the upstream dynamic enum parser. Offline and2 real file roundtrip cases plus all
 previous generated consumers passed; arbitrary sampling/selection/platforms remain open.
+
+
+Optional equals-style JSON template names now select supplied media examples explicitly,
+with no fallback/download for missing/external/invalid entries. The default public helper
+remains and body_template_named adds library selection. Wrapped named values preserve
+null separately from missing entries; original default example order is retained. Internal
+helper prefixes avoid an actual named operation collision with the new public helper.
+An actual operationId string compile failure also required fully qualified emitted standard
+String types. The generator depends on the separately documented openapiv32.2.0 explicit-null
+Serde patch; generated clients do not. Named/null/default-priority and2 wire cases plus all
+prior consumers passed. Arbitrary sampling/other standard-name/platform gaps remain open.

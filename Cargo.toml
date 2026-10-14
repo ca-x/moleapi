@@ -1,5 +1,5 @@
 [workspace]
-exclude = ["vendor/mysql_async", "vendor/tokio-postgres", "vendor/a2a-rs","vendor/a2a-types","vendor/a2a-client", "vendor/a2a-client-legacy", "vendor/rmcp", "vendor/graphql-ws-client", "vendor/cynic-introspection", "vendor/protox-parse", "vendor/rust_socketio", "vendor/rust_engineio", "vendor/rumqttc", "vendor/wsdl", "vendor/hawk", "vendor/hyperx", "vendor/tropel-auth", "vendor/progenitor-impl", "vendor/schematools", "vendor/mustache"]
+exclude = ["vendor/mysql_async", "vendor/tokio-postgres", "vendor/a2a-rs","vendor/a2a-types","vendor/a2a-client", "vendor/a2a-client-legacy", "vendor/rmcp", "vendor/graphql-ws-client", "vendor/cynic-introspection", "vendor/protox-parse", "vendor/rust_socketio", "vendor/rust_engineio", "vendor/rumqttc", "vendor/wsdl", "vendor/hawk", "vendor/hyperx", "vendor/tropel-auth", "vendor/progenitor-impl", "vendor/schematools", "vendor/mustache", "vendor/openapiv3"]
 members = ["crates/cli", "crates/core", "crates/server", "crates/formats", "crates/script-runtime", "crates/protocols", "crates/generation", "crates/data", "desktop"]
 default-members = ["crates/cli", "crates/core", "crates/server", "crates/formats", "crates/script-runtime", "crates/protocols", "crates/generation", "crates/data"]
 resolver = "3"
@@ -46,6 +46,7 @@ strip = "symbols"
 codegen-units = 1
 
 [patch.crates-io]
+openapiv3 = { path = "vendor/openapiv3" }
 protox-parse = { path = "vendor/protox-parse" }
 
 rust_socketio = { path = "vendor/rust_socketio" }

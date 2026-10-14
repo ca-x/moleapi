@@ -64,7 +64,7 @@ fn optional_raw_bodies_preserve_omission_and_cli_file_types_in_artifacts() {
             assert!(cli.contains("stream_file(path)"));
         } else {
             assert!(sdk.contains("body: Option<B>"));
-            assert!(sdk.contains("body: Option<String>"));
+            assert!(sdk.contains("body: Option<::std::string::String>"));
         }
     }
 }

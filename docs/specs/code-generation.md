@@ -126,3 +126,11 @@ schema/components before output. Preserve zero/false/empty/null. Missing/invalid
 fail with guidance, never execute an API call. Template output needs no URL/token/client;
 normal execution still needs explicit URL configuration. Arbitrary schema sampling and
 broader keyword/platform/template selection remain separate required work.
+
+
+--json-body-template=EXAMPLE explicitly selects a supplied named media example offline;
+bare flag retains default selection. Explicit missing/external-only/invalid names fail
+rather than fallback/fetch. Preserve null/falsy values and author default-example order.
+Public body_template stays default; body_template_named exposes explicit library selection.
+OpenAPI parsing retains absent versus explicit-null examples/defaults through standard
+Serde, with versioned upstream patch provenance and original source/privacy fences.

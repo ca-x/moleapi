@@ -447,6 +447,41 @@ cases ignored), all11 owned-worker API cases passed, including default media-tem
 exclusion and explicit inclusion. Strict scoped Clippy/formatting passed.
 
 Arbitrary schema sampling when no example/default exists, broader conversion/constraint
-keywords, template selection/editing, interactive workflows and native-platform evidence
+keywords, further template editing/sampling, interactive workflows and native-platform evidence
 remain required module work. This establishes the specified offline candidate contract,
 not an automatically valid example for every possible API schema.
+
+
+## Native named body templates and explicit null fidelity
+
+--json-body-template=EXAMPLE explicitly selects a supplied media example, including
+component references. Bare --json-body-template keeps the original media/first-supplied/
+schema/model-default precedence. Author order remains intact even though stored named
+maps are deterministic. Explicit unknown, external-only and invalid names fail without
+fallback/download/API execution; selected null/false/zero/empty strings remain values.
+Cli::body_template retains its default contract and body_template_named adds explicit
+library selection. Internal template helper names use a private prefix to avoid the
+reproduced operationId named/public-method collision.
+
+Runtime investigation reproduced two upstream defects rather than simplifying fixtures:
+operationId string shadowed the standard String error type in generated builders; affected
+emitted strings are now fully qualified. openapiv3 2.2.0 Option<Value> parsing collapsed
+explicit null into missing. A versioned MIT/Apache-2.0 parser patch uses standard Serde
+value deserialization for Example.value, MediaType.example and SchemaData.example/default;
+missing stays None, explicit null stays Some(Null), and serialization roundtrips both.
+Only four upstream source files change; original fixtures/licenses and archive SHA256 are
+retained. No separate OpenAPI parser is introduced, and generated projects need no parser patch.
+
+A standalone CLI passed offline original-order, named/component/Unicode/falsy selection,
+media/schema null overriding a different default, missing/external/invalid rejection and
+exclusive field behavior. Selected templates completed2 real JSON-false/form-Unicode POSTs.
+All11 standalone fixtures passed70 real requests; latest96MiB upload RSS13,084KiB on Linux.
+Generation77 cases passed (24 external-tool cases ignored), including new parser null-value
+roundtrip checks; all11 owned API cases passed with named-template default secret exclusion
+and explicit inclusion. Upstream parser18 unit/5 fixture/2 doc tests passed in an isolated
+copy. Strict scoped Clippy/formatting passed.
+
+Arbitrary no-example sampling, empty/nonstandard labels, broader reserved standard-library
+names, advanced constraints/conversions, interactive/native-platform execution and full CLI
+parity remain required work. Empty CLI selector means default mode; the library API can
+select an explicit empty name if present. External example values are never fetched.

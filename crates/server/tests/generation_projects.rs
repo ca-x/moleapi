@@ -572,6 +572,12 @@ async fn upgraded_cli_generation_uses_owned_worker_and_preserves_source_privacy(
         ["properties"]["password"] = json!({"type":"string","format":"password"});
     source["paths"]["/optional-json"]["post"]["requestBody"]["content"]["application/json"]["example"] =
         json!({"id":7,"password":"private-template-fixture"});
+    let mut named_media =
+        source["paths"]["/optional-json"]["post"]["requestBody"]["content"]["application/json"]
+            .clone();
+    named_media.as_object_mut().unwrap().remove("example");
+    named_media["examples"] = json!({"public":{"value":{"id":8}},"private":{"value":{"id":9,"password":"private-named-template-fixture"}}});
+    source["paths"]["/named-private"] = json!({"post":{"operationId":"named_private","requestBody":{"required":false,"content":{"application/json":named_media}},"responses":{"204":{"description":"Accepted"}}}});
     let source = source.to_string();
     let mut data = example_data();
     data["specifications"] =
@@ -615,6 +621,12 @@ async fn upgraded_cli_generation_uses_owned_worker_and_preserves_source_privacy(
     assert_eq!(status, StatusCode::OK, "{artifact}");
     assert!(!artifact.to_string().contains("private-upgrade-fixture"));
     assert!(!artifact.to_string().contains("private-template-fixture"));
+    assert!(
+        !artifact
+            .to_string()
+            .contains("private-named-template-fixture")
+    );
+    assert!(artifact.to_string().contains("body_template_named"));
     let files = artifact["files"].as_array().unwrap();
     assert!(files.iter().any(|f| {
         f["path"] == "src/cli.rs"
@@ -703,4 +715,9 @@ async fn upgraded_cli_generation_uses_owned_worker_and_preserves_source_privacy(
     assert_eq!(status, StatusCode::OK, "{included}");
     assert!(included.to_string().contains("private-upgrade-fixture"));
     assert!(included.to_string().contains("private-template-fixture"));
+    assert!(
+        included
+            .to_string()
+            .contains("private-named-template-fixture")
+    );
 }

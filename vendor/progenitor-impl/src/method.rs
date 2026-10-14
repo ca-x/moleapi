@@ -596,7 +596,7 @@ impl Generator {
                             quote! { B }
                         }
                         OperationParameterKind::Body(BodyContentType::Text(_)) => {
-                            quote! { String }
+                            quote! { ::std::string::String }
                         }
                         _ => unreachable!(),
                     },
@@ -1493,30 +1493,30 @@ impl Generator {
                         (&param.kind, ty.builder())
                     {
                         if method.body_required {
-                            Ok(quote! { Result<#builder_name, String> })
+                            Ok(quote! { Result<#builder_name, ::std::string::String> })
                         } else {
-                            Ok(quote! { Result<Option<#builder_name>, String> })
+                            Ok(quote! { Result<Option<#builder_name>, ::std::string::String> })
                         }
                     } else if matches!(param.kind, OperationParameterKind::Body(_))
                         && !method.body_required
                     {
                         let t = ty.ident();
-                        Ok(quote! { Result<Option<#t>, String> })
+                        Ok(quote! { Result<Option<#t>, ::std::string::String> })
                     } else if param.kind.is_required() {
                         let t = ty.ident();
-                        Ok(quote! { Result<#t, String> })
+                        Ok(quote! { Result<#t, ::std::string::String> })
                     } else {
                         let t = ty.ident();
-                        Ok(quote! { Result<Option<#t>, String> })
+                        Ok(quote! { Result<Option<#t>, ::std::string::String> })
                     }
                 }
 
                 OperationParameterType::RawBody => {
                     cloneable = false;
                     if method.body_required {
-                        Ok(quote! { Result<reqwest::Body, String> })
+                        Ok(quote! { Result<reqwest::Body, ::std::string::String> })
                     } else {
-                        Ok(quote! { Result<Option<reqwest::Body>, String> })
+                        Ok(quote! { Result<Option<reqwest::Body>, ::std::string::String> })
                     }
                 }
             })
@@ -1719,7 +1719,7 @@ impl Generator {
 
                                 Ok(quote! {
                                     pub fn #param_name<V>(mut self, value: V) -> Self
-                                        where V: std::convert::TryInto<String>
+                                        where V: std::convert::TryInto<::std::string::String>
                                     {
                                         self.#param_name = value
                                             .try_into()
