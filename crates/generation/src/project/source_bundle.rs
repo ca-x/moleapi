@@ -65,57 +65,6 @@ fn check_document(value: &Value) -> Result<()> {
     }
     Ok(())
 }
-fn discriminator_mappings(
-    value: &mut Value,
-    base: &Url,
-    names: &std::collections::BTreeSet<String>,
-    aliases: &BTreeMap<Url, String>,
-    dictionary: bool,
-) -> Result<()> {
-    match value {
-        Value::Object(object) => {
-            if !dictionary
-                && let Some(mapping) = object
-                    .get_mut("discriminator")
-                    .and_then(|value| value.get_mut("mapping"))
-                    .and_then(Value::as_object_mut)
-            {
-                for value in mapping.values_mut() {
-                    let reference = value
-                        .as_str()
-                        .context("Invalid source discriminator mapping")?;
-                    if names.contains(reference) {
-                        continue;
-                    }
-                    let url = schematools::storage::ref_to_url(base, reference)
-                        .context("Invalid discriminator URI")?;
-                    let name = aliases.get(&url).context(
-                        "Source discriminator target must have an explicit schema component alias",
-                    )?;
-                    *value = Value::String(name.clone());
-                }
-            }
-            for (key, value) in object {
-                if !super::reference_policy::literal_member(key, value, dictionary) {
-                    discriminator_mappings(
-                        value,
-                        base,
-                        names,
-                        aliases,
-                        !dictionary && super::reference_policy::dictionary_member(key),
-                    )?;
-                }
-            }
-        }
-        Value::Array(array) => {
-            for value in array {
-                discriminator_mappings(value, base, names, aliases, false)?;
-            }
-        }
-        _ => {}
-    }
-    Ok(())
-}
 fn references(
     value: &Value,
     base: &Url,
@@ -334,35 +283,18 @@ pub fn bundle_openapi(input: OpenapiSourceBundle) -> Result<BundledOpenapi> {
                 .is_some_and(|version| version.starts_with("3.0.") || version.starts_with("3.1.")),
         "Source entry requires OpenAPI3.0/3.1"
     );
-    let names: std::collections::BTreeSet<String> = root
-        .pointer("/components/schemas")
-        .and_then(Value::as_object)
-        .into_iter()
-        .flat_map(|object| object.keys().cloned())
-        .collect();
-    let mut aliases = BTreeMap::new();
-    for (name, value) in root
-        .pointer("/components/schemas")
-        .and_then(Value::as_object)
-        .into_iter()
-        .flatten()
-    {
-        if let Some(reference) = value.get("$ref").and_then(Value::as_str)
-            && let Some(url) = schematools::storage::ref_to_url(&entry, reference)
-        {
-            aliases.insert(url, name.clone());
-        }
-        let mut pointer = entry.clone();
-        let encoded = name.replace('~', "~0").replace('/', "~1");
-        pointer.set_fragment(Some(&schematools::storage::encode_pointer_fragment(
-            &format!("/components/schemas/{encoded}"),
-        )));
-        aliases.insert(pointer, name.clone());
-    }
+    let promoted = super::discriminator::normalize(&mut documents, &entry)?;
     for (url, value) in &mut documents {
         let dictionary = super::reference_policy::root_dictionary(value);
-        discriminator_mappings(value, url, &names, &aliases, dictionary)?;
         absolutize_operations(value, url, dictionary)?;
+    }
+    for (url, document) in &documents {
+        references(
+            document,
+            url,
+            &documents,
+            super::reference_policy::root_dictionary(document),
+        )?;
     }
     let root = documents.get(&entry).unwrap();
     // schematools names repeated references at their first use. Resolve model
@@ -389,9 +321,12 @@ pub fn bundle_openapi(input: OpenapiSourceBundle) -> Result<BundledOpenapi> {
             .map(|(url, document)| Schema::from_json_at(document.clone(), url.clone()))
             .collect(),
     );
-    let mut locations = Dereferencer::options()
-        .with_skip_root_internal_references(true)
-        .process_with_references(&mut schema, &storage);
+    let mut options = Dereferencer::options();
+    options.with_skip_root_internal_references(true);
+    if promoted {
+        options.with_preserve_root_internal_references(true);
+    }
+    let mut locations = options.process_with_references(&mut schema, &storage);
     locations.insert(entry.to_string(), String::new());
     let mut specification = schema.get_body().clone();
     relocate_operations(&mut specification, &locations, false)?;
@@ -845,5 +780,187 @@ mod tests {
             };
             assert!(bundle_openapi(input).is_err(), "{version}");
         }
+    }
+    fn subtype_fixture(version: &str) -> OpenapiSourceBundle {
+        let root = serde_json::json!({"openapi":version,"info":{"title":"Subtypes","version":"1"},"paths":{},"components":{"schemas":{"Animal":{"oneOf":[{"$ref":"cat.json"},{"$ref":"dog.json"}],"discriminator":{"propertyName":"kind","mapping":{"cat":"cat.json","feline":"cat.json#","dog":"dog.json"}},"example":{"discriminator":{"mapping":{"literal":"outside.json"}}}}}}});
+        let cat = serde_json::json!({"type":"object","required":["kind","name"],"properties":{"kind":{"type":"string","enum":["cat"]},"name":{"type":"string"},"friend":{"$ref":"dog.json"}}});
+        let dog = serde_json::json!({"type":"object","required":["kind","barks"],"properties":{"kind":{"type":"string","enum":["dog"]},"barks":{"type":"boolean"},"friend":{"$ref":"cat.json"}}});
+        OpenapiSourceBundle {
+            format: SOURCE_BUNDLE_FORMAT.into(),
+            entry_file: "root.json".into(),
+            files: vec![
+                source("root.json", root),
+                source("cat.json", cat),
+                source("dog.json", dog),
+            ],
+        }
+    }
+
+    #[test]
+    fn discriminator_subtypes_gain_stable_components_and_keep_cross_resource_recursion() {
+        for version in ["3.0.3", "3.1.0"] {
+            let input = subtype_fixture(version);
+            let result = bundle_openapi(input.clone()).unwrap();
+            let schemas = &result.specification["components"]["schemas"];
+            let mapping = &schemas["Animal"]["discriminator"]["mapping"];
+            let cat = mapping["cat"].as_str().unwrap();
+            let dog = mapping["dog"].as_str().unwrap();
+            assert!(cat.starts_with("cat_"));
+            assert!(dog.starts_with("dog_"));
+            assert_eq!(mapping["feline"], cat);
+            assert_eq!(schemas[cat]["properties"]["name"]["type"], "string");
+            assert_eq!(schemas[dog]["properties"]["barks"]["type"], "boolean");
+            assert_eq!(
+                schemas[cat]["properties"]["friend"]["$ref"],
+                format!("#/components/schemas/{dog}")
+            );
+            assert_eq!(
+                schemas[dog]["properties"]["friend"]["$ref"],
+                format!("#/components/schemas/{cat}")
+            );
+            assert_eq!(
+                schemas["Animal"]["oneOf"][0]["$ref"],
+                format!("#/components/schemas/{cat}")
+            );
+            assert_eq!(
+                schemas["Animal"]["example"]["discriminator"]["mapping"]["literal"],
+                "outside.json"
+            );
+            for file in &input.files {
+                assert!(
+                    result
+                        .documents
+                        .contains(&serde_json::from_str::<Value>(&file.content).unwrap())
+                );
+            }
+            let mut reversed = input.clone();
+            reversed.files.reverse();
+            assert_eq!(
+                bundle_openapi(reversed).unwrap().specification,
+                result.specification
+            );
+            if version == "3.0.3" {
+                let spec: openapiv3::OpenAPI =
+                    serde_json::from_value(result.specification).unwrap();
+                progenitor::Generator::default()
+                    .generate_tokens(&spec)
+                    .unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn mapping_only_models_and_authored_name_collisions_preserve_both_schemas() {
+        let mut input = subtype_fixture("3.0.3");
+        let mut root: Value = serde_json::from_str(&input.files[0].content).unwrap();
+        root["components"]["schemas"]["Animal"]
+            .as_object_mut()
+            .unwrap()
+            .remove("oneOf");
+        root["components"]["schemas"]["Animal"]["type"] = "object".into();
+        input.files[0] = source("root.json", root.clone());
+        let first = bundle_openapi(input.clone()).unwrap();
+        let original_name = first.specification["components"]["schemas"]["Animal"]["discriminator"]
+            ["mapping"]["cat"]
+            .as_str()
+            .unwrap();
+        root["components"]["schemas"][original_name] =
+            serde_json::json!({"type":"integer","description":"authored"});
+        input.files[0] = source("root.json", root);
+        let result = bundle_openapi(input).unwrap();
+        let schemas = &result.specification["components"]["schemas"];
+        let name = schemas["Animal"]["discriminator"]["mapping"]["cat"]
+            .as_str()
+            .unwrap();
+        assert_ne!(name, original_name);
+        assert_eq!(schemas[original_name]["description"], "authored");
+        assert_eq!(schemas[name]["properties"]["name"]["type"], "string");
+    }
+
+    #[test]
+    fn external_openapi_bare_mapping_names_use_its_own_schema_scope() {
+        let root = serde_json::json!({"openapi":"3.0.3","info":{"title":"Scopes","version":"1"},"paths":{},"components":{"schemas":{"Cat":{"type":"integer"},"Animal":{"$ref":"types.json#/components/schemas/Animal"}}}});
+        let types = serde_json::json!({"openapi":"3.0.3","info":{"title":"Types","version":"1"},"paths":{},"components":{"schemas":{"Cat":{"type":"object","properties":{"local":{"type":"string"}}},"Animal":{"type":"object","discriminator":{"propertyName":"kind","mapping":{"cat":"Cat"}}}}}});
+        let result = bundle_openapi(OpenapiSourceBundle {
+            format: SOURCE_BUNDLE_FORMAT.into(),
+            entry_file: "root.json".into(),
+            files: vec![source("root.json", root), source("types.json", types)],
+        })
+        .unwrap();
+        let schemas = &result.specification["components"]["schemas"];
+        let name = schemas["Animal"]["discriminator"]["mapping"]["cat"]
+            .as_str()
+            .unwrap();
+        assert_ne!(name, "Cat");
+        assert_eq!(schemas["Cat"]["type"], "integer");
+        assert_eq!(schemas[name]["properties"]["local"]["type"], "string");
+    }
+
+    #[test]
+    fn static_anchor_and_encoded_mapping_pointers_share_supplied_component_aliases() {
+        let root = serde_json::json!({"openapi":"3.1.0","info":{"title":"Anchors","version":"1"},"paths":{},"components":{"schemas":{"Animal":{"type":"object","discriminator":{"propertyName":"kind","mapping":{"anchor":"https://schemas.test/cat#cat","encoded":"model.json#%2F$defs%2FCaf%C3%A9~1%25"}}}}}});
+        let model = serde_json::json!({"$defs":{"Café/%":{"$id":"https://schemas.test/cat","$anchor":"cat","type":"object","properties":{"kind":{"type":"string"}}}}});
+        let result = bundle_openapi(OpenapiSourceBundle {
+            format: SOURCE_BUNDLE_FORMAT.into(),
+            entry_file: "root.json".into(),
+            files: vec![source("root.json", root), source("model.json", model)],
+        })
+        .unwrap();
+        let mapping =
+            &result.specification["components"]["schemas"]["Animal"]["discriminator"]["mapping"];
+        assert_eq!(mapping["anchor"], mapping["encoded"]);
+        let name = mapping["anchor"].as_str().unwrap();
+        assert_eq!(
+            result.specification["components"]["schemas"][name]["type"],
+            "object"
+        );
+    }
+
+    #[test]
+    fn subtype_aliases_reject_missing_malformed_non_schema_and_excessive_targets() {
+        for reference in [
+            "https://outside.test/cat",
+            "missing.json",
+            "cat.json#/missing",
+            "cat.json#/%GG",
+            "cat.json#/bad~2",
+            "scalar.json",
+            "root.json#/info",
+        ] {
+            let mut input = subtype_fixture("3.0.3");
+            let mut root: Value = serde_json::from_str(&input.files[0].content).unwrap();
+            root["components"]["schemas"]["Animal"]["discriminator"]["mapping"]["cat"] =
+                reference.into();
+            input.files[0] = source("root.json", root);
+            input
+                .files
+                .push(source("scalar.json", serde_json::json!(1)));
+            assert!(bundle_openapi(input).is_err(), "{reference}");
+        }
+        let mut mapping = serde_json::Map::new();
+        let mut models = serde_json::Map::new();
+        for index in 0..257 {
+            let name = format!("Model{index}");
+            mapping.insert(
+                name.clone(),
+                format!("models.json#/definitions/{name}").into(),
+            );
+            models.insert(name, serde_json::json!({"type":"object"}));
+        }
+        let root = serde_json::json!({"openapi":"3.0.3","info":{"title":"Limit","version":"1"},"paths":{},"components":{"schemas":{"Animal":{"type":"object","discriminator":{"propertyName":"kind","mapping":mapping}}}}});
+        let input = OpenapiSourceBundle {
+            format: SOURCE_BUNDLE_FORMAT.into(),
+            entry_file: "root.json".into(),
+            files: vec![
+                source("root.json", root),
+                source("models.json", serde_json::json!({"definitions":models})),
+            ],
+        };
+        assert!(
+            bundle_openapi(input)
+                .unwrap_err()
+                .to_string()
+                .contains("alias limit")
+        );
     }
 }

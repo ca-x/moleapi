@@ -32,6 +32,7 @@ impl DereferencerContext {
 #[derive(Default)]
 pub struct DereferencerOptions {
     pub skip_root_internal_references: bool,
+    pub preserve_root_internal_references: bool,
     pub skip_discriminators: bool,
     pub create_internal_references: bool,
     pub skip_references: Vec<String>,
@@ -40,6 +41,12 @@ pub struct DereferencerOptions {
 impl DereferencerOptions {
     pub fn with_skip_root_internal_references(&mut self, value: bool) -> &mut Self {
         self.skip_root_internal_references = value;
+        self
+    }
+
+    /// Keep canonical root pointers at every depth when promoted models already own components.
+    pub fn with_preserve_root_internal_references(&mut self, value: bool) -> &mut Self {
+        self.preserve_root_internal_references = value;
         self
     }
 
@@ -79,6 +86,7 @@ impl Dereferencer {
     pub fn options() -> DereferencerOptions {
         DereferencerOptions {
             skip_root_internal_references: false,
+            preserve_root_internal_references: false,
             skip_discriminators: false,
             create_internal_references: true,
             skip_references: vec![],
@@ -98,8 +106,13 @@ fn process_ref(
     match ref_to_url(&ctx.base, &reference) {
         Some(mut url) => {
             let reference = url.to_string();
+            let fragment = url.fragment().map(str::to_owned);
             url.set_fragment(None);
 
+            if options.preserve_root_internal_references && ctx.base == url {
+                root["$ref"] = format!("#{}", fragment.as_deref().unwrap_or("")).into();
+                return;
+            }
             if options.skip_root_internal_references && ctx.depth == 1 && ctx.base == url {
                 return;
             }

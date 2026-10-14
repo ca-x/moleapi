@@ -57,6 +57,22 @@ fn mark_schemas(value: &Value, nodes: &mut HashSet<usize>) {
         mark_schemas(child, nodes);
     }
 }
+pub(super) fn openapi_schema_nodes(document: &Value) -> HashSet<usize> {
+    let mut roots = Vec::new();
+    schema_roots(
+        document,
+        "",
+        reference_policy::root_dictionary(document),
+        &mut roots,
+    );
+    let mut nodes = HashSet::new();
+    for pointer in roots {
+        if let Some(value) = document.pointer(&pointer) {
+            mark_schemas(value, &mut nodes);
+        }
+    }
+    nodes
+}
 fn index_locations(value: &Value, location: &Location, index: &mut HashMap<usize, Location>) {
     index.insert(address(value), location.clone());
     match value {

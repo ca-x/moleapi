@@ -15,3 +15,5 @@ Make tera-contrib optional under codegen and enable JSON Schema TLS only under h
 Expose upstream first-use reference locations via process_with_references for relocation of operation links, and retain permitted summary/description annotations on repeated-reference fast paths. URI resolution and reference graph traversal remain upstream.
 
 Decode URI-fragment JSON Pointers exactly once through percent-encoding 2.3 before resolver lookup; reject malformed percent/UTF8/RFC6901 tilde escapes. Canonicalize equivalent pointer URI encodings in reference URLs and encode generated internal-reference pointers. No resource loader or separate graph resolver is added.
+
+Expose an explicit preserve_root_internal_references option for promoted discriminator models. Exact root-document URI membership is checked by the existing resolver; retained root pointers canonicalize to local fragments at every depth. This preserves separately declared model components during copying and cross-resource recursion without introducing a new reference graph/resolver or broad hostname skip rule. The option defaults off.

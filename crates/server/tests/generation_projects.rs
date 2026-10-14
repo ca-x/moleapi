@@ -2,17 +2,25 @@ mod common;
 use common::*;
 #[tokio::test]
 async fn source_bundle_generation_uses_capped_worker_and_screens_referenced_and_unused_documents() {
-    source_bundle_worker_case(false, false).await;
+    source_bundle_worker_case(false, false, false).await;
 }
 #[tokio::test]
 async fn static_schema_resources_use_owned_worker_and_preserve_source_privacy() {
-    source_bundle_worker_case(true, false).await;
+    source_bundle_worker_case(true, false, false).await;
 }
 #[tokio::test]
 async fn schema_reference_siblings_survive_owned_worker_model_generation_and_privacy() {
-    source_bundle_worker_case(true, true).await;
+    source_bundle_worker_case(true, true, false).await;
 }
-async fn source_bundle_worker_case(static_resources: bool, schema_siblings: bool) {
+#[tokio::test]
+async fn mapping_only_subtypes_generate_in_owned_worker_with_source_privacy() {
+    source_bundle_worker_case(true, false, true).await;
+}
+async fn source_bundle_worker_case(
+    static_resources: bool,
+    schema_siblings: bool,
+    promoted_subtypes: bool,
+) {
     let temp = tempfile::tempdir().unwrap();
     let router = local(&temp.path().join("source-bundle.db")).await.unwrap();
     let root = json!({"openapi":"3.0.3","info":{"title":"Source bundle","version":"1"},"components":{"schemas":{"Health":{"$ref":"models/health.json#%2Fdefinitions%2FHealth%20%25"}}},"paths":{"/health":{"get":{"operationId":"health","responses":{"200":{"description":"Healthy","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Health"}}}}}}}}});
@@ -36,6 +44,10 @@ async fn source_bundle_worker_case(static_resources: bool, schema_siblings: bool
     if schema_siblings {
         root["components"]["schemas"]["Health"]["properties"] = json!({"status":{"type":"string"}});
         root["components"]["schemas"]["Health"]["required"] = json!(["status"]);
+    }
+    if promoted_subtypes {
+        model["$defs"]["Health %"]["discriminator"] = json!({"propertyName":"kind","mapping":{"subtype":"moleapi://source-bundle/models/health.json#/$defs/Other"}});
+        model["$defs"]["Other"] = json!({"type":"object","properties":{"subtypeMarker":{"type":"string"},"password":{"type":"string","format":"password","example":"subtype_bundle_secret"}}});
     }
     let source = json!({"format":"moleapi-openapi-source-v1","entry_file":"api.json","files":[{"path":"api.json","content":root.to_string()},{"path":"models/health.json","content":model.to_string()},{"path":"unused.json","content":unused.to_string()}]}).to_string();
     let mut data = example_data();
@@ -61,6 +73,25 @@ async fn source_bundle_worker_case(static_resources: bool, schema_siblings: bool
     assert_eq!(status, StatusCode::OK, "{safe}");
     assert!(!safe.to_string().contains("referenced_bundle_secret"));
     assert!(!safe.to_string().contains("unused_bundle_secret"));
+    assert!(!safe.to_string().contains("subtype_bundle_secret"));
+    if promoted_subtypes {
+        assert!(safe["files"].as_array().unwrap().iter().any(|file| {
+            file["path"] != "moleapi-generation.json"
+                && file["content"].as_str().unwrap().contains("SubtypeMarker")
+        }));
+        let mut copied = input.clone();
+        copied["job_id"] = "bundle-subtype-copy".into();
+        copied["options"] = json!({"package":"subtype_bundle_secret"});
+        let (status, _) = call(
+            &router,
+            "POST",
+            "/api/generation/projects",
+            None,
+            Some(copied),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
     assert!(
         !safe
             .to_string()

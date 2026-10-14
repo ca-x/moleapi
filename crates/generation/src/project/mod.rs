@@ -1,5 +1,6 @@
 //! Mature SDK/server emitters produce isolated, bounded artifacts.
 mod artifact;
+mod discriminator;
 mod import;
 pub use import::*;
 mod models;
