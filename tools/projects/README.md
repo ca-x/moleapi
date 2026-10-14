@@ -455,3 +455,19 @@ Official message/service plugins v1.36.12/v1.6.2 were built with checksum-db ver
 in isolated cache; module sums/dependency/tool/build/source/hash evidence is retained.
 Other Go package/toolchain/platform/transport/options/schema combinations require their
 own gates. Product preview/export never acquires or runs these QA dependencies.
+
+
+## Default PHP nested models/maps and nullable fields
+
+```sh
+cargo run -p moleapi-generation --example fixture_projects -- /absolute/php-containers /absolute/moleapi-server /absolute/java php 3.0.3,3.1.0 containers
+python3 tools/projects/verify-php-containers.py /absolute/php-containers --php /absolute/php --composer /absolute/composer
+```
+
+This separate profile verifies native nested models, model arrays/maps, integer zero and
+string keys, required nullable presence, optional omission and explicit null on actual
+authenticated HTTP. Both dialects passed14 requests on PHP8.5.11/Guzzle7.15.5/Linux;
+core and union regressions retain independent coverage. Original generated source
+hashes remain unchanged; Composer locks/resolved packages and tool/runtime evidence
+are written to isolated QA. Servers stop/join. Empty/null-valued maps, nested unions,
+async/static-analyzer contracts and other ranges/platforms need separate evidence.

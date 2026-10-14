@@ -26,9 +26,25 @@ fn specification(version: &str, profile: &str, discriminator_property: &str) -> 
         "/fail":{"get":{"operationId":"failGet","responses":{"400":{"description":"Expected failure","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Failure"}}}}}}}
     },
     "components":{"securitySchemes":{"bearerAuth":{"type":"http","scheme":"bearer"}},"schemas":{
-        "Pet":{"type":"object","required":["id","status"],"properties":{"id":{"type":"integer","format":"int32"},"status":{"type":"string","enum":["ready","done"]},"note":note}},
+        "Pet":{"type":"object","required":["id","status"],"properties":{"id":{"type":"integer","format":"int32"},"status":{"type":"string","enum":["ready","done"]},"note":note.clone()}},
         "Failure":{"type":"object","required":["message"],"properties":{"message":{"type":"string"}}}
     }}});
+    if profile == "containers" {
+        specification["components"]["schemas"]["Envelope"] = json!({
+            "type":"object","required":["primary","pets","lookup","counts","note"],
+            "properties":{
+                "primary":{"$ref":"#/components/schemas/Pet"},
+                "pets":{"type":"array","items":{"$ref":"#/components/schemas/Pet"}},
+                "lookup":{"type":"object","additionalProperties":{"$ref":"#/components/schemas/Pet"}},
+                "counts":{"type":"object","additionalProperties":{"type":"integer","format":"int32"}},
+                "note":note.clone(),"label":note
+            }
+        });
+        specification["paths"]["/envelopes"] = json!({
+            "get":{"operationId":"getEnvelope","responses":{"200":{"description":"Nested map","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Envelope"}}}}}},
+            "post":{"operationId":"echoEnvelope","requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/Envelope"}}}},"responses":{"200":{"description":"Nested echo","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Envelope"}}}}}}
+        });
+    }
     if matches!(profile, "binary" | "multipart") {
         specification["paths"]["/files"] = json!({
             "get":{"operationId":"downloadFile","responses":{"200":{"description":"Binary download","content":{"application/octet-stream":{"schema":{"type":"string","format":"binary"}}}}}},
@@ -92,8 +108,15 @@ async fn main() -> Result<()> {
     let versions = args.next().unwrap_or_else(|| "3.0.3,3.1.0".into());
     let profile = args.next().unwrap_or_else(|| "core".into());
     ensure!(
-        matches!(profile.as_str(), "core" | "binary" | "multipart" | "union"),
+        matches!(
+            profile.as_str(),
+            "core" | "binary" | "multipart" | "union" | "containers"
+        ),
         "Unknown fixture profile"
+    );
+    ensure!(
+        profile != "containers" || targets == "php",
+        "Container QA currently requires PHP"
     );
     let options: BTreeMap<String, Value> =
         serde_json::from_str(&args.next().unwrap_or_else(|| "{}".into()))?;

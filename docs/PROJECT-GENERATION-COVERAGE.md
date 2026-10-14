@@ -1126,3 +1126,31 @@ asset-input race was detected by MBX and correctly rejected.
 
 This adds representative Go SDK/interface runtime evidence. Other Go toolchain/dependency/
 platform/import/options/schema/TLS/auth and remaining full-module/release scopes stay open.
+
+
+## PHP nested models, model maps and nullable presence
+
+Default PHP/Guzzle consumers now pass a separate containers profile for both OpenAPI
+3.0.3 and3.1.0. Original Envelope models contain a native Pet, Pet array, string-keyed
+Pet map, integer map with zero, required nullable note and optional nullable label.
+Actual authenticated GET/POST calls retain nested native classes, Unicode, enum values,
+zero values and nonnumeric/zero-prefixed string keys. Constructed and decoded models
+roundtrip separately; explicit optional null roundtrips, absent optional fields remain
+absent, and an absent required nullable field retains invalid model status.
+
+The pinned upstream ObjectSerializer previously called nullable setters for both absent
+and null properties, inventing fields on reserialization and satisfying absent nullable
+required fields. Its existing compatibility template now checks original property
+presence before calling a nullable setter. Mature generated classes/transport/map
+code and explicit template precedence remain unchanged. This is not general JSON
+Schema constraint validation.
+
+Both dialect cases passed14 actual core/container requests; freshly generated existing
+union cases passed14 further requests.80 generation cases,12 owned API cases, actual
+explicit PHP serializer override,2 framing tests and scoped strict Clippy/format pass.
+The separate harness stops and joins servers, verifies generated PHP source hashes, and
+retains source/generator/tool/Composer lock/resolved-dependency/runtime evidence in QA.
+Recorded PHP8.5.11 NTS, OpenAPI Generator7.26.0 and Guzzle7.15.5 on Linux. Product
+preview/export never installs dependencies or executes consumers. Empty maps, null map
+entries, nested/ambiguous unions, async map/static-analyzer contracts, broader constraints
+and platform/library/toolchain ranges remain open.
