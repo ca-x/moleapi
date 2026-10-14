@@ -22,7 +22,7 @@ async fn main() -> Result<()> {
         ensure!(
             matches!(
                 language.as_str(),
-                "python" | "java" | "csharp" | "kotlin" | "ruby" | "cpp" | "php" | "go"
+                "python" | "java" | "csharp" | "kotlin" | "ruby" | "cpp" | "php" | "go" | "objc"
             ),
             "Unsupported QA consumer language"
         );

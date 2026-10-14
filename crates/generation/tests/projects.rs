@@ -1724,3 +1724,75 @@ async fn official_go_plugins_emit_authored_import_path_models_and_optional_servi
         "Missing authored go_package must not be guessed"
     );
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured protoc and official Objective-C gRPC plugin"]
+async fn official_objc_plugin_emits_original_apple_models_and_four_rpc_interfaces() {
+    let compiler =
+        PathBuf::from(std::env::var_os("MOLEAPI_CODEGEN_TEST_PROTOC").expect("explicit protoc"));
+    let plugin = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_GRPC_OBJC").expect("explicit Objective-C plugin"),
+    );
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), None)
+        .unwrap()
+        .with_protoc(Some(compiler), BTreeMap::from([("objc".into(), plugin)]))
+        .unwrap();
+    let specification: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../tools/projects/fixtures/protobuf-imports.json"
+    ))
+    .unwrap();
+    let input = ProjectInput {
+        target: "protobuf-objc".into(),
+        specification,
+        options: BTreeMap::new(),
+        include_secrets: false,
+        templates: None,
+    };
+    let artifact = runtime
+        .generate(input.clone(), CancellationToken::new())
+        .await
+        .unwrap();
+    assert!(
+        artifact
+            .files
+            .iter()
+            .any(|file| file.path == "models/Types.pbobjc.h")
+    );
+    let service = artifact
+        .files
+        .iter()
+        .find(|file| file.path.ends_with(".pbrpc.h"))
+        .unwrap();
+    for method in ["call", "watch", "collect", "chat"] {
+        assert!(
+            service.content.contains(method),
+            "Missing Objective-C {method}"
+        );
+    }
+    let descriptor = artifact
+        .files
+        .iter()
+        .find(|file| file.path == "descriptor-set.bin")
+        .unwrap();
+    let mut replay = input;
+    replay.specification = json!({"kind":"descriptor","descriptor_set_base64":descriptor.content});
+    let repeated = runtime
+        .generate(replay, CancellationToken::new())
+        .await
+        .unwrap();
+    for file in artifact
+        .files
+        .iter()
+        .filter(|file| file.path.ends_with(".h") || file.path.ends_with(".m"))
+    {
+        assert_eq!(
+            file.content,
+            repeated
+                .files
+                .iter()
+                .find(|other| other.path == file.path)
+                .unwrap()
+                .content
+        );
+    }
+}
