@@ -26,7 +26,7 @@ Apifox's [model code list](https://docs.apifox.com/generate-code.md), checked202
 
 The specification generation dialog has a separate data-model category, language selection, all/exact component selection and expandable upstream serialization/style settings. Enum choices and booleans retain their types. Preview/copy/file/ZIP downloads, regeneration and owner/content/cancellation guards reuse project artifacts. SQL exports DDL only and requires the existing explicit Java runtime; the18 Quicktype targets work without Java or Node in hosted and offline applications.
 
-Actual evidence: all18 language targets generated recursive/enum/nullable component models in the host-free Rust VM; the capped application worker produced all20 target artifacts, including actual MySQL/PostgreSQL DDL. Generated Python, JavaScript, TypeScript, Go, C#, Java, Rust, Ruby, C++, Kotlin, Dart, Swift, Flow and Elm models now run recursive/enum/nullable/Unicode serialization roundtrips in OpenAPI3.0.3/3.1.0 fixtures. TypeScript, Go, C#, Java, Rust, C++, Kotlin, Dart, Swift, Flow and Elm compile with real toolchains; Python, JavaScript and Ruby run through their native runtimes. The other4 model language runtimes and execution of generated SQL DDL are not established by artifact generation. Required/optional/null serialization differences remain those of the upstream target; this is model conversion, not universal schema validation.
+Actual evidence: all18 language targets generated recursive/enum/nullable component models in the host-free Rust VM; the capped application worker produced all20 target artifacts, including actual MySQL/PostgreSQL DDL. Generated Python, JavaScript, TypeScript, Go, C#, Java, Rust, Ruby, C++, Kotlin, Dart, Swift, Flow, Elm and Pike models now run recursive/enum/nullable/Unicode serialization roundtrips in OpenAPI3.0.3/3.1.0 fixtures. TypeScript, Go, C#, Java, Rust, C++, Kotlin, Dart, Swift, Flow and Elm compile with real toolchains; Python, JavaScript, Ruby and Pike run through their native runtimes. The other3 model language runtimes and execution of generated SQL DDL are not established by artifact generation. Required/optional/null serialization differences remain those of the upstream target; this is model conversion, not universal schema validation.
 
 API evidence covers authenticated ownership, anonymous/cross-owner rejection, default credential-example exclusion, exact component selection, typed-option rejection and unchanged canonical source. Component/UI tests cover typed model settings and existing late-reply fencing; English/Chinese catalogs include model flows.
 
@@ -188,3 +188,48 @@ and collision (model-elm) expose the separately tested dispatch/alias/name cases
 Rebuilding the embedded model engine uses npm --prefix tools/models ci then
 npm --prefix tools/models run build; package/version/hash guards prevent patching
 an unexpected upstream release.
+
+
+## Pike recursive and container models
+
+Actual native Pike compilation exposed shallow nested-model decoding and missing
+enum checking in the pinned mature renderer. The compatibility patch now delegates
+property values to existing generated model/enum conversions and uses native map
+for arrays/maps, including top-level containers. Optional missing fields and explicit
+JSON null follow original native representation; required enum values reject unknown
+strings. Original native class/member/JSON/primitive handling remains in control.
+No generated model rewrites, custom JSON parser or alternate object substitute occurs.
+
+Four real3.0.3/3.1.0 core/container cases pass decoded and constructed native models,
+recursive objects, zero, known/unknown enum, explicit null and Unicode with quotes/
+ampersand/plus. Containers cover direct models, two model-array entries, Unicode and
+zero-prefixed string map keys, enum arrays with rejection, integer-map zero and top-level
+model arrays/maps. The consumer asserts nested objects rather than retained mappings,
+and checks original file hashes and exact source/dialect/manifest. Core model sources
+match across the equivalent schemas; artifact engine is26.0.0+moleapi.1.
+
+Runtime: Pike8.0 release1956, isolated Ubuntu8.0.1956-4 native core package on Linux
+with official HTTPS package-index/archive SHA256 match. An isolated libcrypt compatibility
+package verifies against the official Arch keyring, with its exact package/signer/hash
+record. The explicit launcher sets only that runtime's master/module/include/library
+paths; system packages remain unchanged. Standard utf8_to_string/string_to_utf8 wrap
+QA file/console I/O, preserving actual Unicode values without changing model codecs.
+Tool versions include stderr because native Pike prints --version there. Exact tool/
+package/source/hash/platform/runtime evidence remains in isolated QA. Product generation
+never downloads or executes this runtime.
+
+17 other Quicktype target outputs match their pre-patch bytes;5 prior model runtime
+regressions,80 generation cases,1 owned model API case and scoped format/strict Clippy
+pass. Catalog now records15 representative model runtimes. Other Pike versions/platforms/
+containers/options, complex/ambiguous unions, general scalar/schema validation and
+missing/null membership fidelity remain required work. Crystal/Haskell/Objective-C
+model runtimes, SQL execution and full SDK/product/platform/release scope remain open.
+
+```sh
+cargo run -p moleapi-generation --example fixture_models -- /absolute/pike-models /absolute/moleapi-server /absolute/java 3.1.0 model-pike
+python3 tools/models/verify-pike.py --fixtures /absolute/pike-models --dialect 3.1.0 --pike /absolute/pike-launcher
+```
+
+Use a separate fresh root per dialect and append containers as the fixture example's
+final argument for the dedicated container cases. The explicit launcher may configure
+its isolated library and Pike paths, without changing host/runtime settings.

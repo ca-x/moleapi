@@ -18,7 +18,8 @@ async fn main() -> Result<()> {
     ensure!(
         profile == "core"
             || profile == "date" && selected == "model-flow"
-            || matches!(profile.as_str(), "flat" | "collision") && selected == "model-elm",
+            || matches!(profile.as_str(), "flat" | "collision") && selected == "model-elm"
+            || profile == "containers" && selected == "model-pike",
         "Unknown model fixture profile"
     );
     ensure!(
@@ -52,6 +53,18 @@ async fn main() -> Result<()> {
     if profile == "collision" {
         specification["components"]["schemas"]["StatusValue"] =
             json!({"type":"object","required":["value"],"properties":{"value":{"type":"integer"}}});
+    }
+    if profile == "containers" {
+        let pet = json!({"$ref":"#/components/schemas/Pet"});
+        let status = json!({"type":"string","enum":["ready","done"]});
+        specification["components"]["schemas"]["Envelope"] = json!({"type":"object","required":["primary","pets","lookup","shades"],"properties":{
+            "primary":pet.clone(),"pets":{"type":"array","items":pet.clone()},"lookup":{"type":"object","additionalProperties":pet.clone()},
+            "shades":{"type":"array","items":status},"counts":{"type":"object","additionalProperties":{"type":"integer"}}
+        }});
+        specification["components"]["schemas"]["PetArray"] =
+            json!({"type":"array","items":pet.clone()});
+        specification["components"]["schemas"]["PetMap"] =
+            json!({"type":"object","additionalProperties":pet});
     }
     for target in catalog.into_iter().filter(|target| {
         target.kind == "model" && (selected == "*" || selected.split(',').any(|id| id == target.id))
