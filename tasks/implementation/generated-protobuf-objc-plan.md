@@ -77,3 +77,18 @@ builds if the selected interpreter is wrong. QA Rust cache saves completed compi
 work even when a later acceptance phase fails, preventing repeated cold-build cost.
 Actionlint passes. This fixes QA interpreter selection, not an Apple runtime claim.
 Real Apple compile/call acceptance remains pending corrected job execution.
+
+
+Run38648919858/aae9693: ARM job116142606454 compiled all original Objective-C
+consumer/GPB/gRPC sources after successful generation and CocoaPods resolution, but
+linking failed on __swift_FORCE_LOAD_$_swiftCompatibility56 from Protobuf's
+GPBUnknownField+Additions.o. The clang-only command-line target did not configure
+Swift runtime/link search paths for this transitive Swift static-library object.
+Intel is independently still building. No Apple RPC ran.
+
+The QA project now includes an empty Swift compilation unit and SWIFT_VERSION5.0/
+ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES so Xcode owns its matching runtime linkage.
+The Objective-C main and original generated files remain unchanged; GPB retains
+manual-reference-counting flags. Actual xcodeproj construction/inspection passes
+with the Swift unit/settings and all3 original GPB flags; Apple link/call proof
+still requires corrected native jobs. This is a QA build configuration correction.
