@@ -981,3 +981,37 @@ fixture parser tests and scoped strict Clippy/format passed. Catalog validation 
 representative configured Kotlin+Java four-mode evidence. Product preview never acquires
 plugins/JDKs/dependencies or executes consumers. Other Kotlin toolchain/runtime/library/
 platform/options/schema/TLS/auth behavior and remaining plugins stay full-module scope.
+
+
+## Explicit Ruby protobuf/gRPC four-mode consumers
+
+Official grpc-tools1.84.0 GNU Linux Ruby plugin has actual syntax/import/call evidence
+with explicit protoc36.1. The RubyGems published package SHA256 was verified before
+extracting/executing the selected ELF: grpc-tools package
+`f54767ec65e22553768d38a20d021ca2241c33ae2e96d51336152bbcc62578a8`, plugin
+`dfebb612e662fd1fe1c71553bd169e068d447c1345fa044fed34ee392d261e43`.
+Sources: https://grpc.io/docs/languages/ruby/quickstart/ and
+https://rubygems.org/gems/grpc-tools/1.84.0.
+
+Host Ruby was absent. Official Ruby3.4.7 source tar.xz SHA256
+`db425a86f6e07546957578f4946cc700a91e7fd51115a86c56e096f30e0530c7` was verified against
+https://www.ruby-lang.org/en/news/2025/10/07/ruby-3-4-7-released/ and built/installed only
+in isolated /tmp QA directories. Published RubyGems SHA256s were verified for prebuilt
+grpc1.84.0/google-protobuf4.36.1 GNU Linux packages, googleapis-common-protos-types1.23.0
+and rake13.4.2; Ruby's bundled bigdecimal3.1.8 and standard gems come from the verified
+source installation. Neither system Ruby nor product runtime downloads were introduced.
+
+Both source/descriptor original generated Ruby modules passed syntax checks and imports,
+then actual unary/server-streaming/client-streaming/bidi loopback calls (8 RPCs).
+Unicode/non-UTF8 bytes, enum/repeated fields, oneof presence including code=0 and Timestamp
+survive real Ruby gRPC codecs. Channels/server/thread terminate after complete streams.
+Generated source hashes match across representations and remain unchanged; Ruby/gem/tool/
+descriptor/package-integrity/runtime evidence remains in isolated QA. Selected gem paths
+include only the explicit QA gem home and selected Ruby runtime's bundled/default gems.
+No model/service/transport emitter change or mock was needed.
+
+The actual Ruby plugin emission test passed; Python default regression passed8 RPCs.
+79 normal generation cases (39 external-tool cases ignored),11 owned API cases, fixture
+parser tests and scoped strict Clippy/format passed. Catalog evidence names the configured
+Ruby-plugin four-mode fixture. Other Ruby/platform/plugin/gem ranges, TLS/auth/advanced
+schemas/options and remaining plugins remain full-module work.

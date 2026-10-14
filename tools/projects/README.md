@@ -369,3 +369,24 @@ Gradle dependency locks and resolved tool/runtime evidence. Recorded Linux tools
 Gradle8.14.5/Kotlin2.4.0/JDK21.0.12.1+1, protobuf Java/Kotlin4.36.1,
 gRPC Java1.84.1/grpc-kotlin-stub1.5.0/coroutines1.10.2. Other ranges/options/platforms
 remain their own gates; product preview/export never executes this consumer.
+
+
+## Explicit Ruby protobuf/gRPC consumer
+
+Use a checksum-verified official Ruby gRPC plugin with a final ruby selector, then
+syntax-check/import/call original outputs using an explicit Ruby and isolated gem home:
+
+```sh
+cargo run -p moleapi-generation --example fixture_protobuf -- /absolute/ruby-qa-output /absolute/moleapi-server /absolute/protoc /absolute/grpc_ruby_plugin ruby
+python3 tools/projects/verify-protobuf-ruby.py /absolute/ruby-qa-output/source --ruby /absolute/qa-runtime/bin/ruby --gem-home /absolute/qa-gems
+python3 tools/projects/verify-protobuf-ruby.py /absolute/ruby-qa-output/descriptor --ruby /absolute/qa-runtime/bin/ruby --gem-home /absolute/qa-gems
+```
+
+The consumer uses the explicit gem home plus bundled/default gems belonging only to the
+selected Ruby prefix. It records actual Ruby/gem versions, original generated hashes,
+descriptor/runtime evidence and four-mode call results. Both inputs passed8 RPCs on
+source-built Ruby3.4.7/Linux, grpc-tools/grpc1.84.0/google-protobuf4.36.1/
+googleapis-common-protos-types1.23.0/rake13.4.2/bigdecimal3.1.8 with source/package SHA256s
+verified. Python regression passed8 further RPCs. No generated sources or serializers were
+replaced. Other runtime/plugin/platform/schema/transport options need separate evidence;
+product preview/export never acquires or executes these QA dependencies.
