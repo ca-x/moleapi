@@ -91,7 +91,9 @@ async fn main() -> Result<()> {
                     "typescript-fetch",
                     "python-fastapi",
                     "csharp",
-                    "aspnetcore"
+                    "aspnetcore",
+                    "java",
+                    "spring"
                 ]
                 .contains(&target),
                 "Unknown fixture target"

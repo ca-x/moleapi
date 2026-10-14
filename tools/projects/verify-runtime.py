@@ -381,6 +381,98 @@ foreach (var invalid in new[]{"{}", System.Text.Json.JsonSerializer.Serialize(ne
 '''
 
 
+JAVA_CORE = r'''import org.openapitools.client.ApiClient;
+import org.openapitools.client.ApiException;
+import org.openapitools.client.api.DefaultApi;
+import org.openapitools.client.model.Pet;
+public class RuntimeFixture {
+    public static void main(String[] args) throws Exception {
+        ApiClient client = new ApiClient();
+        client.setBasePath(System.getenv("FIXTURE_URL"));
+        client.setBearerToken("fixture-token");
+        client.setConnectTimeout(10000); client.setReadTimeout(10000);
+        DefaultApi api = new DefaultApi(client);
+        Pet pet = api.getPet(__JAVA_GET_ARGS__);
+        if (pet.getId()!=7 || pet.getStatus()!=Pet.StatusEnum.READY || pet.getNote()!=null)
+            throw new IllegalStateException("GET model/nullable value lost");
+        Pet input = new Pet().id(7).status(Pet.StatusEnum.READY).note("鼹鼠 \"quotes\" & +");
+        pet = api.replacePet(__JAVA_POST_ARGS__);
+        if (!"鼹鼠 \"quotes\" & +".equals(pet.getNote())) throw new IllegalStateException("POST JSON lost");
+        try {api.failGet(); throw new IllegalStateException("HTTP400 was not exposed");}
+        catch (ApiException error) {
+            if (error.getCode()!=400 || !error.getResponseBody().contains("expected fixture failure")) throw error;
+        }
+        System.out.println("PASS Java okhttp-gson client");
+    }
+}
+'''
+
+
+def java_environment(args):
+    assert args.jdk and (args.jdk / "bin/javac").is_file(), "Configure an explicit --jdk directory"
+    env=dict(os.environ)
+    env["JAVA_HOME"]=str(args.jdk)
+    env["PATH"]=str(args.jdk / "bin")+os.pathsep+env.get("PATH","")
+    return env
+
+
+def maven(args, directory, goals):
+    assert args.maven and args.maven.is_file(), "Configure an explicit --maven executable"
+    return run([str(args.maven),"--batch-mode","-Dmaven.test.skip=true",*goals], directory, java_environment(args), timeout=600)
+
+
+def java_client(directory, url, args):
+    assert args.profile=="core", "Java extended profiles still require their own consumers"
+    source=(directory / "src/main/java/org/openapitools/client/api/DefaultApi.java").read_text()
+    driver=JAVA_CORE
+    for method,placeholder,values in [
+        ("getPet","__JAVA_GET_ARGS__",{"id":"7","q":json.dumps(QUERY,ensure_ascii=False),"xTest":json.dumps("moleapi-fixture")}),
+        ("replacePet","__JAVA_POST_ARGS__",{"id":"7","pet":"input"}),
+    ]:
+        signature=re.search(r"public Pet "+method+r"\(([^)]*)\)",source)
+        assert signature, "Generated Java signature missing: "+method
+        names=[parameter.strip().split()[-1] for parameter in signature.group(1).split(',')]
+        assert set(names)==set(values), names
+        driver=driver.replace(placeholder,','.join(values[name] for name in names))
+    (directory / "src/main/java/RuntimeFixture.java").write_text(driver)
+    maven(args,directory,["package","dependency:build-classpath","-Dmdep.outputFile=runtime-classpath.txt"])
+    classpath=str(directory / "target/classes")+os.pathsep+(directory / "runtime-classpath.txt").read_text().strip()
+    run([str(args.jdk / "bin/java"),"-cp",classpath,"RuntimeFixture"],directory,dict(java_environment(args),FIXTURE_URL=url))
+
+
+def spring(directory,args):
+    assert args.profile=="core", "Spring extended profiles still require their own consumers"
+    maven(args,directory,["package"])
+    jars=[path for path in (directory / "target").glob("*.jar") if not any(s in path.name for s in ['sources','javadoc','tests'])]
+    assert len(jars)==1,jars
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1",0));port=listener.getsockname()[1]
+    url=f"http://127.0.0.1:{port}"
+    with (directory / "runtime-server.log").open('w') as log:
+        process=subprocess.Popen([str(args.jdk / "bin/java"),"-jar",str(jars[0]),"--server.address=127.0.0.1","--server.port="+str(port)],cwd=directory,env=java_environment(args),stdout=log,stderr=log)
+        try:
+            deadline=time.monotonic()+45
+            while True:
+                if process.poll() is not None: raise AssertionError((directory / "runtime-server.log").read_text())
+                try:
+                    with urllib.request.urlopen(url+"/v3/api-docs",timeout=1) as reply:
+                        assert reply.status==200
+                        definition=json.load(reply)
+                        assert "/pets/{id}" in definition['paths'] and '/fail' in definition['paths']
+                    break
+                except (OSError,urllib.error.URLError):
+                    if time.monotonic()>=deadline:raise AssertionError((directory / "runtime-server.log").read_text())
+                    time.sleep(0.1)
+            request=urllib.request.Request(url+"/pets/7?"+urllib.parse.urlencode({'q':QUERY}),headers={'Authorization':f'Bearer {TOKEN}','X-Test':'moleapi-fixture','Accept':'application/json'})
+            try:
+                urllib.request.urlopen(request,timeout=5)
+            except urllib.error.HTTPError as error:
+                assert error.code==501,error.code
+            else:raise AssertionError('Expected generated unimplemented business-handler response')
+        finally:stop(process)
+    print('PASS Spring default build/start/routes and explicit501 placeholder',flush=True)
+
+
 ASPNET_HOST = r'''using System;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
@@ -547,6 +639,8 @@ def client(target, directory, url, args):
         (directory / "runtime_fixture_test.go").write_text(driver)
         run([args.go, "mod", "tidy"], directory)
         run([args.go, "test", "-run", "^TestRuntimeFixture$", "-count=1", "-race", "-v"], directory, env)
+    elif target == "java":
+        java_client(directory,url,args)
     elif target == "csharp":
         csharp(directory, url, args)
     elif target == "python":
@@ -633,6 +727,8 @@ def main():
     parser.add_argument("--npm", default=shutil.which("npm"))
     parser.add_argument("--go", default=shutil.which("go"))
     parser.add_argument("--dotnet", default=shutil.which("dotnet"))
+    parser.add_argument("--jdk", type=Path)
+    parser.add_argument("--maven", type=Path)
     parser.add_argument("--reuse-generated", action="store_true", help="Use only previously generated isolated fixtures")
     args = parser.parse_args()
     assert args.worker.is_absolute() and args.worker.is_file()
@@ -640,10 +736,10 @@ def main():
     assert args.output.is_absolute()
     targets = args.targets.split(",")
     versions = args.versions.split(",")
-    assert all(t in {"javascript", "python", "go", "typescript-fetch", "python-fastapi", "csharp", "aspnetcore"} for t in targets)
+    assert all(t in {"javascript", "python", "go", "typescript-fetch", "python-fastapi", "csharp", "aspnetcore", "java", "spring"} for t in targets)
     assert all(v in {"3.0.3", "3.1.0"} for v in versions)
     if args.profile in {"binary","multipart","union"}:
-        assert not {"python-fastapi","aspnetcore"}.intersection(targets), "Extended profiles currently validate clients"
+        assert not {"python-fastapi","aspnetcore","java","spring"}.intersection(targets), "Extended profiles currently validate clients"
     if not args.reuse_generated:
         run(["cargo", "run", "-p", "moleapi-generation", "--example", "fixture_projects", "--", str(args.output), str(args.worker), str(args.java), args.targets, args.versions, args.profile], REPO, timeout=300)
     evidence_path = args.output / "runtime-evidence.json"
@@ -654,6 +750,10 @@ def main():
     for name, command in [("node", args.node), ("npm", args.npm), ("go", args.go)]:
         if command:
             tools[name] = subprocess.check_output([command, "version" if name=="go" else "--version"], text=True).strip()
+    if args.jdk:
+        tools["jdk"]=subprocess.check_output([str(args.jdk / "bin/java"),"-version"],stderr=subprocess.STDOUT,text=True).strip()
+    if args.maven:
+        tools["maven"]=subprocess.check_output([str(args.maven),"--version"],env=java_environment(args),text=True).strip()
     if args.dotnet:
         tools["dotnet"] = subprocess.check_output([args.dotnet, "--info"], text=True).strip()
     (args.output / "runtime-tools.json").write_text(json.dumps(tools, indent=2) + "\n")
@@ -671,6 +771,8 @@ def main():
                     fastapi(directory)
                 elif target == "aspnetcore":
                     aspnetcore(directory, args)
+                elif target == "spring":
+                    spring(directory,args)
                 else:
                     client(target, directory, f"http://127.0.0.1:{server.server_port}", args)
                     assert not Fixture.errors, Fixture.errors
