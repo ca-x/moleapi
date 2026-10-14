@@ -933,6 +933,52 @@ foreach (['{}', json_encode([$tagProperty => 'bird', 'name' => 'bad']), json_enc
 }
 '''
 
+PHP_STATIC_UNION = r'''<?php
+use OpenAPI\Client\Api\DefaultApi;
+use OpenAPI\Client\Model\Cat;
+use OpenAPI\Client\Model\Dog;
+use OpenAPI\Client\Model\Pet;
+use function PHPStan\Testing\assertType;
+function verifyMappedTypes(DefaultApi $api, Cat $cat, Dog $dog, Pet $pet): void {
+    assertType('OpenAPI\\Client\\Model\\Cat|OpenAPI\\Client\\Model\\Dog', $api->getAnimal(kind: 'cat'));
+    $api->echoAnimal(animal: $cat);
+    $api->echoAnimal(animal: $dog);
+    assertType('OpenAPI\\Client\\Model\\Pet', $api->getPet(id: 7, q: 'x', x_test: 'header'));
+    $api->replacePet(id: 7, pet: $pet);
+    assertType('OpenAPI\\Client\\Model\\Cat|OpenAPI\\Client\\Model\\Dog', $api->mixedModel(pet: $pet));
+}
+'''
+
+
+def php_static_types(directory, args):
+    assert args.phpstan and args.phpstan.is_absolute() and args.phpstan.is_file()
+    assert args.profile=='union', "PHPStan typed union consumer requires union fixtures"
+    consumer=directory/'static_consumer.php'
+    consumer.write_text(PHP_STATIC_UNION)
+    config=directory/'runtime-phpstan.neon'
+    config.write_text('parameters:\n    level: 7\n    tmpDir: '+str(directory/'phpstan-cache')+'\n    bootstrapFiles:\n        - '+str(directory/'vendor/autoload.php')+'\n')
+    command=[str(args.php),str(args.phpstan),'analyse','--no-progress','--error-format=json','--configuration',str(config)]
+    result=subprocess.run([*command,str(consumer)],cwd=directory,text=True,capture_output=True,timeout=300)
+    (directory/'runtime-phpstan-positive.json').write_text(result.stdout)
+    assert result.returncode==0, result.stdout+result.stderr
+    negative=directory/'static_negative.php'
+    negative.write_text('''<?php
+use OpenAPI\Client\Api\DefaultApi;
+use OpenAPI\Client\Model\Pet;
+use OpenAPI\Client\Model\Cat;
+function rejectedModels(DefaultApi $api, Pet $pet, Cat $cat): void {
+    $api->echoAnimal(animal: $pet);
+    $api->mixedModel(pet: $cat);
+}
+''')
+    result=subprocess.run([*command,str(negative)],cwd=directory,text=True,capture_output=True,timeout=300)
+    (directory/'runtime-phpstan-negative.json').write_text(result.stdout)
+    report=json.loads(result.stdout)
+    messages=[message for entry in report.get('files',{}).values() for message in entry.get('messages',[])]
+    assert result.returncode!=0 and len(messages)==2 and all(message.get('identifier')=='argument.type' for message in messages), result.stdout+result.stderr
+    print('PASS PHPStan mapped/ordinary/mixed model contracts plus rejected wrong model arguments',flush=True)
+
+
 def php_client(directory, url, args):
     assert args.profile in {'core','binary','multipart','union'}
     assert args.php and args.php.is_absolute() and args.php.is_file(), "Configure an explicit --php executable"
@@ -945,6 +991,8 @@ def php_client(directory, url, args):
     for source in sorted(directory.glob('lib/**/*.php')):
         result=subprocess.run([str(args.php),'-l',str(source)],cwd=directory,text=True,capture_output=True,check=True,timeout=30)
         assert 'No syntax errors detected' in result.stdout, result.stdout
+    if args.phpstan:
+        php_static_types(directory,args)
     run([str(args.php),'runtime_fixture.php'],directory,dict(os.environ,FIXTURE_URL=url,FIXTURE_DISCRIMINATOR_PROPERTY=args.discriminator_property))
 
 
@@ -1056,6 +1104,7 @@ def main():
     parser.add_argument("--gradle", type=Path)
     parser.add_argument("--php", type=Path)
     parser.add_argument("--composer", type=Path)
+    parser.add_argument("--phpstan", type=Path)
     parser.add_argument("--discriminator-property", default="kind", help="PHP union fixture wire field (default kind)")
     parser.add_argument("--generator-options", default="{}", help="Explicit JSON object passed to the fixture generator")
     parser.add_argument("--reuse-generated", action="store_true", help="Use only previously generated isolated fixtures")
@@ -1093,6 +1142,8 @@ def main():
         tools["maven"]=subprocess.check_output([str(args.maven),"--version"],env=java_environment(args),text=True).strip()
     if args.php:
         tools['php']=subprocess.check_output([str(args.php),'--version'],text=True).strip()
+    if args.php and args.phpstan:
+        tools['phpstan']=subprocess.check_output([str(args.php),str(args.phpstan),'--version'],text=True).strip()
     if args.php and args.composer:
         tools['composer']=subprocess.check_output([str(args.php),str(args.composer),'--version'],stderr=subprocess.STDOUT,text=True).strip()
     if args.dotnet:

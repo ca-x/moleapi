@@ -779,3 +779,40 @@ async fn explicit_php_model_and_serializer_templates_override_union_compatibilit
             .contains("explicit PHP serializer")
     );
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured Java17+ test runtime"]
+async fn explicit_php_model_header_overrides_static_type_alias_defaults() {
+    let java = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_JAVA").expect("explicit Java executable"),
+    );
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), Some(java)).unwrap();
+    let input = ProjectInput {
+        target: "php".into(),
+        options: BTreeMap::new(),
+        include_secrets: false,
+        specification: json!({"openapi":"3.0.3","info":{"title":"Header override","version":"1"},"paths":{},"components":{"schemas":{"Pet":{"type":"object","properties":{"id":{"type":"integer"}}}}}}),
+        templates: Some(TemplateBundle {
+            format: "moleapi-codegen-templates-v1".into(),
+            outputs: BTreeMap::new(),
+            files: vec![TemplateFile {
+                path: "model.mustache".into(),
+                content:
+                    "{{#models}}{{#model}}// explicit PHP header {{classname}}{{/model}}{{/models}}"
+                        .into(),
+                encoding: None,
+            }],
+        }),
+    };
+    let result = runtime
+        .generate(input, CancellationToken::new())
+        .await
+        .unwrap();
+    let model = result
+        .files
+        .iter()
+        .find(|file| file.path.ends_with("/Model/Pet.php"))
+        .unwrap();
+    assert!(model.content.contains("explicit PHP header Pet"));
+    assert!(!model.content.contains("phpstan-type"));
+}

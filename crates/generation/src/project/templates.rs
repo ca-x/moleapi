@@ -116,6 +116,12 @@ pub(super) fn write_builtin(input: &ProjectInput, root: &Path) -> Result<bool> {
                     ),
                 ),
                 (
+                    "model.mustache",
+                    include_str!(
+                        "../../../../vendor/openapi-generator/compat/php-guzzle/model.mustache"
+                    ),
+                ),
+                (
                     "model_generic.mustache",
                     include_str!(
                         "../../../../vendor/openapi-generator/compat/php-guzzle/model_generic.mustache"

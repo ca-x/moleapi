@@ -157,3 +157,13 @@ selects those ModelInterface implementations and applies their existing valid/re
 checks. Missing/unknown tags reject. Other model paths retain upstream behavior; default
 Guzzle only, explicit model/serializer templates retain priority. This does not provide
 general JSON Schema validation or oneOf-parent PHP inheritance/static annotation parity.
+
+
+## PHP Guzzle mapped-model PHPStan aliases
+
+Model header source: php/model.mustache, pinned7.26.0 JAR, original SHA256
+`f2fdcaf784a434ab36a7199079f8795111c27b0718026967f9e55453c1d1196e` (Apache-2.0 header retained). Models export
+ModelValue local aliases; API imports per-operation/model aliases rather than inferring
+request types from the operation's response discriminator. Runtime classes/transport
+remain upstream; PHPStan scoped annotation evidence is separate from nominal inheritance,
+array/async/other-analyzer contracts. Explicit model header/API templates retain priority.

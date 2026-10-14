@@ -598,3 +598,26 @@ parent PHPDoc/static return annotations and merged parent models are not complet
 oneOf typing. This establishes mapped variant decoding/echo/required checks. Static parent
 annotation/interface parity, anyOf/untagged/nested/ambiguous/nullable unions, primitive
 coercion/full schema validation, custom libraries and native platforms remain required work.
+
+
+## PHPStan direct model API contracts
+
+Default Guzzle model headers export a local ModelValue alias: self for ordinary models,
+mapped class unions for tagged oneOf. API class imports unique aliases for each direct
+non-container model parameter/return and synchronous entrypoints use PHPStan tags.
+This avoids borrowing the operation response discriminator to describe a different request
+model. Runtime classes, standard PHPDoc, transport and method signatures are retained.
+Nominal Animal inheritance is still absent; the PHPStan contract now describes Cat|Dog.
+
+PHPStan2.3.1 level7 consumers passed both3.0.3/3.1.0 projects, asserting Cat|Dog returns,
+accepting Cat/Dog arguments, preserving ordinary Pet returns, and distinguishing Pet
+requests from Animal responses on the mixed-model operation. Negative consumers reported
+exactly two argument.type failures for swapped models. Actual generated SDK union calls
+also passed14 requests. Reports/tool versions are retained; PHPStan is an explicitly
+configured QA PHAR and is never installed/executed by product generation.
+
+All12 explicit template override tests passed (including model header), generation78
+cases passed (28 external-tool cases ignored), all11 project API regressions and strict
+scoped Clippy/formatting passed. PHPStan direct synchronous contracts are verified;
+arrays/async/http-info tuples, Psalm/other analyzers, nominal hierarchy, advanced schemas/
+names and platforms remain required work. Standard PHPDoc alone is not full union typing.

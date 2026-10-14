@@ -41,6 +41,14 @@ use {{invokerPackage}}\ObjectSerializer;
  * @package  {{invokerPackage}}
  * @author   OpenAPI Generator team
  * @link     https://openapi-generator.tech
+{{#operations}}{{#operation}}
+{{#returnProperty}}{{#isModel}}{{^isContainer}}
+ * @phpstan-import-type ModelValue from {{{dataType}}} as Moleapi_{{operationId}}_Return
+{{/isContainer}}{{/isModel}}{{/returnProperty}}
+{{#allParams}}{{#isModel}}{{^isContainer}}
+ * @phpstan-import-type ModelValue from {{{dataType}}} as Moleapi_{{operationId}}_Param_{{paramName}}
+{{/isContainer}}{{/isModel}}{{/allParams}}
+{{/operation}}{{/operations}}
  */
 {{#operations}}class {{classname}}
 {
@@ -172,6 +180,12 @@ use {{invokerPackage}}\ObjectSerializer;
     {{#isDeprecated}}
      * @deprecated
     {{/isDeprecated}}
+{{#returnProperty}}{{#isModel}}{{^isContainer}}
+     * @phpstan-return Moleapi_{{operationId}}_Return
+{{/isContainer}}{{/isModel}}{{/returnProperty}}
+{{#allParams}}{{#isModel}}{{^isContainer}}
+     * @phpstan-param Moleapi_{{operationId}}_Param_{{paramName}}{{#notRequiredOrIsNullable}}|null{{/notRequiredOrIsNullable}} ${{paramName}}
+{{/isContainer}}{{/isModel}}{{/allParams}}
      */
     public function {{operationId}}({{^exts.x-group-parameters}}{{#allParams}}${{paramName}}{{^required}} = {{#defaultValue}}{{{.}}}{{/defaultValue}}{{^defaultValue}}null{{/defaultValue}}{{/required}}, {{/allParams}}{{#servers}}{{#-first}}?int $hostIndex = null, array $variables = [], {{/-first}}{{/servers}}string $contentType = self::contentTypes['{{{operationId}}}'][0]{{/exts.x-group-parameters}}{{#exts.x-group-parameters}}$associative_array{{/exts.x-group-parameters}})
     {

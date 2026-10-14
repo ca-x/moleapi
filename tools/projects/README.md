@@ -163,3 +163,13 @@ Reuse runs must select the same wire name as the generated fixture.
 The models remain ModelInterface implementations; merged Animal/static parent PHPDoc and
 inheritance are separate incomplete contracts. AnyOf/untagged/advanced shapes, strict
 primitive/schema validation, other libraries/platforms require further evidence.
+
+
+For PHP union fixtures, optionally provide --phpstan /absolute/path/to/phpstan.phar.
+The driver analyzes a level7 positive consumer and checks exact argument.type failures
+from swapped-model negative consumers, preserving JSON reports. PHPStan2.3.1 passed
+both dialects with Cat/Dog/ordinary Pet and mixed-model request/response contracts.
+ModelValue aliases and per-operation imports cover direct synchronous model contracts;
+async/arrays/http-info/other analyzers and nominal parent inheritance remain separate.
+PHPStan is installed only in an isolated QA project; emitted SDK runtime requirements
+are unchanged. The mixed-model fixture endpoint is used for static analysis only.
