@@ -128,7 +128,7 @@ fn native_project(input: &ProjectInput) -> Result<ProjectArtifact> {
         );
         manifest.push_str("tokio-tungstenite = {version=\"0.27\",default-features=false}\nanyhow = \"1\"\nclap = {version=\"4\",features=[\"env\"]}\nschemars = {version=\"0.8\",features=[\"chrono\",\"uuid1\"]}\ntokio = {version=\"1\",features=[\"macros\",\"rt-multi-thread\",\"fs\",\"io-util\",\"io-std\"]}\n");
         files.insert("Cargo.toml".into(), manifest.into_bytes());
-        files.insert("README.md".into(),b"Generated CLI uses Progenitor's clap operation parser and typed SDK. Build with cargo build. Set MOLEAPI_API_URL or --base-url and choose an operation with --help. Optional MOLEAPI_API_TOKEN supplies a Bearer token; no credentials are baked into generated code. JSON results go to stdout; binary responses stream unchanged to stdout or --output-file (new files only). Use operation --body-file for raw binary/text request bodies (loaded into memory). Use --upgrade-input to send file bytes on HTTP 101 connections (one binary message for declared WebSocket endpoints); incoming payloads stream to stdout/output-file until peer close. Generic streams half-close at input EOF. WebSocket framing/control messages use tokio-tungstenite. Errors exit nonzero.\n".to_vec());
+        files.insert("README.md".into(),b"Generated CLI uses Progenitor's clap operation parser and typed SDK. Build with cargo build. Set MOLEAPI_API_URL or --base-url and choose an operation with --help. Optional MOLEAPI_API_TOKEN supplies a Bearer token; no credentials are baked into generated code. JSON results go to stdout; binary responses stream unchanged to stdout or --output-file (new files only). Use operation --body-file for raw binary/text request bodies (loaded into memory). Omit --body-file for optional raw bodies; text files must contain valid UTF-8. Use --upgrade-input to send file bytes on HTTP 101 connections (one binary message for declared WebSocket endpoints); incoming payloads stream to stdout/output-file until peer close. Generic streams half-close at input EOF. WebSocket framing/control messages use tokio-tungstenite. Errors exit nonzero.\n".to_vec());
     }
     artifact(
         input,
@@ -297,3 +297,7 @@ mod tests {
 #[cfg(test)]
 #[path = "native_cli_upgrade_tests.rs"]
 mod upgrade_tests;
+
+#[cfg(test)]
+#[path = "native_cli_body_tests.rs"]
+mod body_tests;

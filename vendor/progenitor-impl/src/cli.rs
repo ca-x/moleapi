@@ -10,7 +10,9 @@ use typify::{Type, TypeEnumVariant, TypeSpaceImpl, TypeStructPropInfo};
 
 use crate::{
     Generator, Result,
-    method::{OperationParameterKind, OperationParameterType, OperationResponseStatus},
+    method::{
+        BodyContentType, OperationParameterKind, OperationParameterType, OperationResponseStatus,
+    },
     to_schema::ToSchema,
     util::{Case, sanitize},
     validate_openapi,
@@ -462,19 +464,25 @@ impl Generator {
                 && matches!(&param.typ, OperationParameterType::RawBody)
         });
         let raw_body_parser = raw_body.map(|_| {
+            let required = method.raw_body_required;
             quote! {
                 .arg(::clap::Arg::new("body-file")
                     .long("body-file").value_name("FILE")
-                    .required(true)
+                    .required(#required)
                     .value_parser(::clap::value_parser!(std::path::PathBuf))
                     .help("Read the raw request body from a file"))
             }
         });
-        let raw_body_consumer = raw_body.map(|_| quote! {
-            if let Some(path) = matches.get_one::<std::path::PathBuf>("body-file") {
-                let bytes = tokio::fs::read(path).await
-                    .with_context(|| format!("failed to read {}", path.display()))?;
-                request = request.body(bytes);
+        let raw_body_consumer = raw_body.map(|param| {
+            let read = match &param.kind {
+                OperationParameterKind::Body(BodyContentType::Text(_)) => quote! { tokio::fs::read_to_string(path) },
+                _ => quote! { tokio::fs::read(path) },
+            };
+            quote! {
+                if let Some(path) = matches.get_one::<std::path::PathBuf>("body-file") {
+                    let body = #read.await.with_context(|| format!("failed to read {}", path.display()))?;
+                    request = request.body(body);
+                }
             }
         });
 

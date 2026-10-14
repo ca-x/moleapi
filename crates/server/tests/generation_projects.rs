@@ -551,6 +551,7 @@ async fn upgraded_cli_generation_uses_owned_worker_and_preserves_source_privacy(
     let owner = register(&router, "upgrade-owner").await;
     let other = register(&router, "upgrade-other").await;
     let source = json!({"openapi":"3.0.3","info":{"title":"Owned upgrade","version":"1"},"paths":{
+        "/optional-text":{"post":{"operationId":"optional_text","requestBody":{"required":false,"content":{"text/plain":{"schema":{"type":"string"}}}},"responses":{"204":{"description":"Accepted"}}}},
         "/socket":{"get":{"operationId":"socket","x-dropshot-websocket":true,"responses":{
             "101":{"description":"Upgraded"},
             "400":{"description":"Rejected","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Failure"}}}}
@@ -611,6 +612,20 @@ async fn upgraded_cli_generation_uses_owned_worker_and_preserves_source_privacy(
                 .as_str()
                 .unwrap()
                 .contains("WebSocketStream::from_raw_socket")
+    }));
+    assert!(files.iter().any(|f| {
+        f["path"] == "src/cli.rs"
+            && f["content"]
+                .as_str()
+                .unwrap()
+                .contains("tokio::fs::read_to_string(path)")
+    }));
+    assert!(files.iter().any(|f| {
+        f["path"] == "src/lib.rs"
+            && f["content"]
+                .as_str()
+                .unwrap()
+                .contains("if let Some(body) = body")
     }));
     let (_, saved) = call(
         &router,

@@ -32,7 +32,7 @@ Remaining complete-module work includes broader per-language compile/run fixture
 
 ## Native generated CLI and regeneration
 
-`rust-progenitor-cli` uses Progenitor’s builder SDK and clap CLI emitter, not a custom operation/argument emitter. A small executable adapter supplies base URL/Bearer configuration and JSON output. Generated CLI projects compiled and called real HTTP fixtures for GET and POST with path/query/body parameters. CLI help exposes operation arguments, whole JSON-body files and nonzero API-error behavior. Finite raw responses now use a small, MPL-preserving Progenitor emitter patch (see `vendor/progenitor-impl/MOLEAPI-PATCH.md`): success bytes stream unchanged to stdout or `--output-file`, which uses create-new semantics and refuses overwrite. Raw error responses retain the SDK error and exit nonzero. `--body-file` reads binary/text request bodies into the upstream builder; upload input currently loads the file into memory. A generated standalone project compiled and passed real HTTP byte-identical stdout/download/upload, existing-file preservation and raw HTTP400-error checks. Raw paginated response paths remain unsupported and explicitly rejected by the emitted-code guard; upgraded CLI connections now have the separately verified transport slice below; optional raw request bodies still inherit upstream’s required-body behavior. These gaps remain full-module work.
+`rust-progenitor-cli` uses Progenitor’s builder SDK and clap CLI emitter, not a custom operation/argument emitter. A small executable adapter supplies base URL/Bearer configuration and JSON output. Generated CLI projects compiled and called real HTTP fixtures for GET and POST with path/query/body parameters. CLI help exposes operation arguments, whole JSON-body files and nonzero API-error behavior. Finite raw responses now use a small, MPL-preserving Progenitor emitter patch (see `vendor/progenitor-impl/MOLEAPI-PATCH.md`): success bytes stream unchanged to stdout or `--output-file`, which uses create-new semantics and refuses overwrite. Raw error responses retain the SDK error and exit nonzero. `--body-file` reads binary/text request bodies into the upstream builder; upload input currently loads the file into memory. A generated standalone project compiled and passed real HTTP byte-identical stdout/download/upload, existing-file preservation and raw HTTP400-error checks. Raw paginated response paths remain unsupported and explicitly rejected by the emitted-code guard; upgraded CLI connections now have the separately verified transport slice below; optional raw request-body requiredness and text input are repaired in the separately verified slice below. These gaps remain full-module work.
 
 Save generated snapshot JSON from the project dialog. Regeneration compares the original snapshot, current edited snapshot and next generated files using diffy0.5.2 in a capped, cancellable application worker. Original/generated hashes, duplicate paths, file/aggregate/line/diff limits and owner/workspace admission are checked. Nonoverlapping changes merge, unchanged local files update, edited/deleted/authored files are preserved or become explicit conflicts. Conflicts block ZIP download until the user chooses working/generated/deletion; no filesystem overwrite occurs. Merged ZIPs include actual merged-content checksums in `moleapi-regeneration.json` and preserve safe executable flags. Snapshot import, conflict-choice and archive gating have frontend/API tests. Original `moleapi-generation.json` describes generator output; the regeneration manifest describes the edited/merged result.
 
@@ -259,6 +259,32 @@ capped-worker upgraded CLI generation, unauthorized/cross-owner rejection, origi
 preservation, default credential-example exclusion and explicit inclusion. Scoped strict
 Clippy/formatting passed. This does not complete CLI parity: raw pagination, interactive
 stdin/terminal, WebSocket message-boundary-preserving output, subprotocol/extension and
-malformed-handshake coverage, optional raw-body semantics and broader/native-platform
+malformed-handshake coverage and broader/native-platform
 upgrade transports remain required work. File WebSocket input is buffered as one message;
 generic upgraded input/output and raw output use streaming IO.
+
+
+## Native optional raw bodies and text file input
+
+The Progenitor adapter preserves `requestBody.required` metadata for recognized raw
+binary/text bodies. Optional positional methods accept Option; optional builder bodies
+default to None, and provided values set Some. Omitted bodies do not acquire generated
+Content-Type/body data. Explicit empty-file input still sets its declared Content-Type.
+The CLI's --body-file requiredness matches the original definition. Text files are read
+as UTF8 strings instead of byte vectors, fixing generated text-body CLI compilation;
+invalid UTF8/missing files fail before request execution. Binary file bytes remain exact.
+
+Generated CLI and positional SDK projects compiled and passed9 actual POST requests:
+optional binary/text omission, explicit empty files, binary and Unicode text input,
+required text input, and positional optional binary/text calls. Missing required binary
+or text flags, invalid text and missing files rejected; server wire assertions ensure no
+extra calls. The existing5-request binary and6-request upgrade/WebSocket CLI fixtures
+also passed after the SDK/CLI emitter change. All3 standalone process fixtures passed
+with a shared explicitly configured Cargo target and serial execution.
+
+Generation regression passed68 cases (16 external-tool cases ignored); all11 owned
+project API cases passed with capped-worker optional-text generation, original source
+and sensitive-example/owner boundaries retained. Scoped strict Clippy/formatting passed.
+This slice does not implement optional JSON/form-object request semantics, arbitrary
+media types, streaming file upload or all-platform behavior. File input remains buffered;
+large-file streaming and further transport/typed-body profiles remain required work.

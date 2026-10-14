@@ -14,3 +14,11 @@ upgrades and tokio-tungstenite over the SDK upgraded connection for declared Web
 raw paginated responses remain guarded. This emitter patch is used by the generator,
 not required by generated projects. Generated CLI projects depend on tokio-tungstenite
 for frame handling; they do not depend on this vendored implementation.
+
+
+Raw-body metadata now retains the original requestBody.required flag. Optional raw
+positional/builder methods preserve None and attach a Content-Type/body only for Some;
+required raw behavior and typed JSON/form bodies are unchanged. CLI --body-file follows
+requiredness, uses read_to_string for text and read for octet streams. Generated CLI and
+positional SDK projects passed actual omitted/empty/provided binary/text wire cases;
+existing raw/upgrade consumers passed. Buffered upload remains an explicit limitation.

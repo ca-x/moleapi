@@ -30,6 +30,7 @@ pub(crate) struct OperationMethod {
     pub responses: Vec<OperationResponse>,
     pub dropshot_paginated: Option<DropshotPagination>,
     pub(crate) dropshot_websocket: bool,
+    pub(crate) raw_body_required: bool,
 }
 
 pub enum HttpMethod {
@@ -554,6 +555,12 @@ impl Generator {
             responses,
             dropshot_paginated,
             dropshot_websocket,
+            raw_body_required: operation
+                .request_body
+                .as_ref()
+                .map(|body| body.item(components).map(|body| body.required))
+                .transpose()?
+                .unwrap_or(false),
         })
     }
 
@@ -595,6 +602,12 @@ impl Generator {
                     },
                     (OperationParameterType::RawBody, true) => unreachable!(),
                 };
+                let typ =
+                    if param.typ == OperationParameterType::RawBody && !method.raw_body_required {
+                        quote! { Option<#typ> }
+                    } else {
+                        typ
+                    };
                 quote! {
                     #name: #typ
                 }
@@ -887,6 +900,9 @@ impl Generator {
 
         // Generate code to handle the body param.
         let body_func = method.params.iter().filter_map(|param| {
+            if param.typ == OperationParameterType::RawBody && !method.raw_body_required {
+                return None;
+            }
             match (&param.kind, &param.typ) {
                 (
                     OperationParameterKind::Body(BodyContentType::OctetStream),
@@ -931,6 +947,23 @@ impl Generator {
                     unreachable!("invalid body kind/type combination")
                 }
                 _ => None,
+            }
+        });
+        let optional_body = method.params.iter().find_map(|param| {
+            if param.typ == OperationParameterType::RawBody && !method.raw_body_required {
+                let OperationParameterKind::Body(content_type) = &param.kind else {
+                    unreachable!()
+                };
+                let mime_type = content_type.to_string();
+                Some(quote! {
+                    if let Some(body) = body {
+                        #request_ident.headers_mut().insert(::reqwest::header::CONTENT_TYPE,
+                            ::reqwest::header::HeaderValue::from_static(#mime_type));
+                        *#request_ident.body_mut() = Some(body.into());
+                    }
+                })
+            } else {
+                None
             }
         });
         // ... and there can be at most one body.
@@ -1109,6 +1142,7 @@ impl Generator {
                 #websock_hdrs
                 .build()?;
 
+            #optional_body
             let info = OperationInfo {
                 operation_id: #operation_id,
             };
@@ -1465,7 +1499,11 @@ impl Generator {
 
                 OperationParameterType::RawBody => {
                     cloneable = false;
-                    Ok(quote! { Result<reqwest::Body, String> })
+                    if method.raw_body_required {
+                        Ok(quote! { Result<reqwest::Body, String> })
+                    } else {
+                        Ok(quote! { Result<Option<reqwest::Body>, String> })
+                    }
                 }
             })
             .collect::<Result<Vec<_>>>()?;
@@ -1495,8 +1533,12 @@ impl Generator {
                 }
 
                 OperationParameterType::RawBody => {
-                    let err_msg = format!("{} was not initialized", param.name);
-                    Ok(quote! { Err(#err_msg.to_string()) })
+                    if method.raw_body_required {
+                        let err_msg = format!("{} was not initialized", param.name);
+                        Ok(quote! { Err(#err_msg.to_string()) })
+                    } else {
+                        Ok(quote! { Ok(None) })
+                    }
                 }
             })
             .collect::<Result<Vec<_>>>()?;
@@ -1621,39 +1663,44 @@ impl Generator {
                         }
                     }
 
-                    OperationParameterType::RawBody => match param.kind {
-                        OperationParameterKind::Body(BodyContentType::OctetStream) => {
-                            let err_msg =
-                                format!("conversion to `reqwest::Body` for {} failed", param.name,);
+                    OperationParameterType::RawBody => {
+                        let optional = (!method.raw_body_required).then(|| quote! { .map(Some) });
+                        match param.kind {
+                            OperationParameterKind::Body(BodyContentType::OctetStream) => {
+                                let err_msg = format!(
+                                    "conversion to `reqwest::Body` for {} failed",
+                                    param.name,
+                                );
 
-                            Ok(quote! {
-                                pub fn #param_name<B>(mut self, value: B) -> Self
-                                    where B: std::convert::TryInto<reqwest::Body>
-                                {
-                                    self.#param_name = value.try_into()
-                                        .map_err(|_| #err_msg.to_string());
-                                    self
-                                }
-                            })
-                        }
-                        OperationParameterKind::Body(BodyContentType::Text(_)) => {
-                            let err_msg =
-                                format!("conversion to `String` for {} failed", param.name,);
+                                Ok(quote! {
+                                    pub fn #param_name<B>(mut self, value: B) -> Self
+                                        where B: std::convert::TryInto<reqwest::Body>
+                                    {
+                                        self.#param_name = value.try_into()
+                                            .map_err(|_| #err_msg.to_string()) #optional;
+                                        self
+                                    }
+                                })
+                            }
+                            OperationParameterKind::Body(BodyContentType::Text(_)) => {
+                                let err_msg =
+                                    format!("conversion to `String` for {} failed", param.name,);
 
-                            Ok(quote! {
-                                pub fn #param_name<V>(mut self, value: V) -> Self
-                                    where V: std::convert::TryInto<String>
-                                {
-                                    self.#param_name = value
-                                        .try_into()
-                                        .map_err(|_| #err_msg.to_string())
-                                        .map(|v| v.into());
-                                    self
-                                }
-                            })
+                                Ok(quote! {
+                                    pub fn #param_name<V>(mut self, value: V) -> Self
+                                        where V: std::convert::TryInto<String>
+                                    {
+                                        self.#param_name = value
+                                            .try_into()
+                                            .map_err(|_| #err_msg.to_string())
+                                            .map(|v| v.into()) #optional;
+                                        self
+                                    }
+                                })
+                            }
+                            _ => unreachable!(),
                         }
-                        _ => unreachable!(),
-                    },
+                    }
                 }
             })
             .collect::<Result<Vec<_>>>()?;
