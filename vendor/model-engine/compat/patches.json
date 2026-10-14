@@ -25,6 +25,18 @@
       "patch": "PikeRenderer.patch",
       "original_sha256": "88f86469d8c0c992a18561185352646b79761f4e27521bc55b9110d02a54f684",
       "patched_sha256": "7c4772e97856a7ab96f9009245ba20bd5dd133511a6fa124db65d85186051e13"
+    },
+    {
+      "file": "dist/esm/language/Crystal/CrystalRenderer.js",
+      "patch": "CrystalRenderer.patch",
+      "original_sha256": "bb71b2e0251d9207ff898539462b17dbfae4ed5124b0dc956b34aa75d4052cbb",
+      "patched_sha256": "d6517baf403297873df62240db80a4964afeab4920604c706e852cb377ec09bf"
+    },
+    {
+      "file": "dist/esm/language/Crystal/utils.js",
+      "patch": "CrystalStrings.patch",
+      "original_sha256": "16df74e80eb61a894164536d34b4aa7eb6f9a0202144eee3abd428a4161681e2",
+      "patched_sha256": "6b5e81082f2d6d071e83eb29c0435a370d4a41c7ba8dadaa3a0af8609e7d67d3"
     }
   ]
 }

@@ -1,0 +1,9 @@
+--- a/dist/esm/language/Crystal/utils.js
++++ b/dist/esm/language/Crystal/utils.js
+@@ -29,4 +29,5 @@
+         return `\\u{${intToHex(codePoint, 6)}}`;
+     }
+ }
+-export const crystalStringEscape = utf32ConcatMap(escapeNonPrintableMapper(isPrintable, standardUnicodeCrystalEscape));
++const escapeCrystalCharacters = utf32ConcatMap(escapeNonPrintableMapper(isPrintable, standardUnicodeCrystalEscape));
++export const crystalStringEscape = text => escapeCrystalCharacters(text).replaceAll("#{", "\\#{");
