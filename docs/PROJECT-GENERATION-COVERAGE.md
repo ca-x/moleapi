@@ -15,7 +15,7 @@ Explicit Mustache overrides now reuse the embedded OpenAPI Generator and mature 
 | javascript, python, go, csharp | Generated3.0/3.1 clients installed/built and passed real GET/POST/Bearer/query/header/nullable/enum/error fixtures; Go also passed race checking; C# default generichost hosting/token/typed400 APIs were called | Broader union/file/dynamic-keyword and library-option compatibility remains required |
 | php | Default Guzzle3.0/3.1 core, binary/multipart and mapped Cat/Dog tagged-oneOf decode/echo passed; original wire discriminator names retained | Static parent annotations/inheritance, advanced unions/constraints/files, other libraries/platforms remain required |
 | dart | Default HTTP3.0/3.1 core/file and mapped Cat/Dog oneOf wrappers/array echoes passed with analysis/AOT | Untagged/advanced unions, files/abort/options, SDK ranges and platforms remain required |
-| swift6 | Default URLSession3.0/3.1 Swift6 release packages and core/binary/multipart calls passed on Linux | Apple/other SDK platforms, advanced files/unions, encoding/options remain required |
+| swift6 | Default URLSession3.0/3.1 release packages and core/binary/multipart/mapped tagged-oneOf calls passed on Linux | Apple/other SDK platforms, advanced files/unions, encoding/options remain required |
 | python-fastapi | Generated3.0/3.1 packages installed; unchanged generated app started, exposed routes/OpenAPI and returned its explicit500 missing-business-handler response | Authentication/business implementations remain consumer work; broader framework/keyword compatibility remains required |
 | aspnetcore | Default .NET10 projects built and started for3.0/3.1; consumer-configured authentication reached generated sample handlers (200) and rejected anonymous requests (401) | Real authentication scheme/validation and business handlers remain consumer work; broader framework/keyword compatibility remains required |
 | kotlin | Default jvm-okhttp4 Gradle3.0/3.1 core/binary/multipart fixtures passed; explicit Retrofit/Gson and Retrofit/kotlinx typed tagged-oneOf cases passed both dialects | Default Moshi unions, advanced union shapes, other libraries/platforms and broader keyword/file coverage remain required |
@@ -798,3 +798,25 @@ parser tests and scoped strict Clippy/format checks passed. Tools are the isolat
 Swift6.4.1/Linux and pinned generator7.26.0/JRE21 recorded above. Finite buffering/cache
 behavior remains upstream; huge/nonseekable/streaming, nested/custom/multiple parts,
 other encoding/library/toolchain/platform and Apple/Darwin evidence remain open.
+
+
+## Default Swift6 mapped tagged oneOf
+
+Original generated Animal enum cases typeCat/typeDog carry actual Cat/Dog Codable
+models. Separate Swift6 release consumers passed six3.0.3/3.1.0 cases for original wire
+discriminator fields kind, animal-kind and 0:54 actual core/union requests. Both typed
+variant GETs and explicitly constructed enum case echoes preserve Unicode fields and
+wire tags; arrays decode and echo through generated [Animal] API types. Required subtype
+keys, unknown/missing tags and wrong name/barks types reject through native JSONDecoder
+in release mode (six malformed objects per case). The consumer derives original subtype
+initializer labels/order, including animalKind and _0, from emitted model sources.
+
+No model/union/serializer template change was needed: pinned generator7.26.0's original
+Swift6 URLSession enum/Codable handling passed directly. SDK Package.swift/transport/
+models remain unchanged, retaining prior query/form compatibility partials and override
+contracts. Existing core/binary/multipart regression passed26 more requests;19 explicit
+compatibility overrides,78 generation cases (35 external-tool cases ignored),11 owned
+project API cases, fixture parser tests and scoped strict Clippy/format checks passed.
+Tool/platform evidence remains the isolated official Swift6.4.1/Linux setup recorded above.
+Untyped/untagged/anyOf/nested/nullable/ambiguous unions, advanced keyword constraints,
+custom aliases/options, other libraries/toolchains and Apple/other platforms remain open.

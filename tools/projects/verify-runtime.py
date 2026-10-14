@@ -1234,17 +1234,51 @@ SWIFT_MULTIPART = r'''let bytes=Data([0,1,2,13,10,255,128,65])
 '''
 
 
+
+SWIFT_UNION = r'''let cat=try await DefaultAPI.getAnimal(kind:"cat",apiConfiguration:config)
+        let dog=try await DefaultAPI.getAnimal(kind:"dog",apiConfiguration:config)
+        guard case .typeCat(let catValue)=cat, case .typeDog(let dogValue)=dog else { throw NSError(domain:"RuntimeFixture",code:2) }
+        try ensureFixture(catValue.name=="鼹鼠 \"quotes\" & +" && dogValue.barks,"Union variant fields lost")
+        let suppliedCat=Animal.typeCat(Cat(__SWIFT_CAT_ARGS__))
+        let suppliedDog=Animal.typeDog(Dog(__SWIFT_DOG_ARGS__))
+        let echoedCat=try await DefaultAPI.echoAnimal(animal:suppliedCat,apiConfiguration:config)
+        let echoedDog=try await DefaultAPI.echoAnimal(animal:suppliedDog,apiConfiguration:config)
+        try ensureFixture(echoedCat==cat && echoedDog==dog,"Typed union echo lost")
+        let items=try await DefaultAPI.listAnimals(apiConfiguration:config)
+        try ensureFixture(items==[cat,dog],"Union array decode lost")
+        let echoedItems=try await DefaultAPI.echoAnimalArray(animal:items,apiConfiguration:config)
+        try ensureFixture(echoedItems==items,"Union array echo lost")
+        for malformed in __SWIFT_MALFORMED_UNIONS__ {
+            var rejected=false
+            do { _=try JSONDecoder().decode(Animal.self,from:Data(malformed.utf8)) }
+            catch { rejected=true }
+            try ensureFixture(rejected,"Malformed tagged object accepted: "+malformed)
+        }
+'''
+
+
 def swift_client(directory,url,args):
-    assert args.profile in {'core','binary','multipart'}, 'Swift union profiles require dedicated consumers'
+    assert args.profile in {'core','binary','multipart','union'}
     assert args.swift and args.swift.is_absolute() and args.swift.is_file(), "Configure explicit --swift executable"
     source=(directory/'Sources/OpenAPIClient/APIs/DefaultAPI.swift').read_text()
-    driver=SWIFT_CORE.replace('__SWIFT_EXTENDED__',{'core':'','binary':SWIFT_BINARY,'multipart':SWIFT_MULTIPART}[args.profile])
+    driver=SWIFT_CORE.replace('__SWIFT_EXTENDED__',{'core':'','binary':SWIFT_BINARY,'multipart':SWIFT_MULTIPART,'union':SWIFT_UNION}[args.profile])
     for method,placeholder,values in [('getPet','__SWIFT_GET_ARGS__',{'id':'id:7','q':'q:'+json.dumps(QUERY,ensure_ascii=False),'xTest':'xTest:'+json.dumps('moleapi-fixture'),'apiConfiguration':'apiConfiguration:config'}),('replacePet','__SWIFT_POST_ARGS__',{'id':'id:7','pet':'pet:body','apiConfiguration':'apiConfiguration:config'})]:
         match=re.search(r'open class func '+method+r'\(([^)]*)\) async',source)
         assert match, 'Generated Swift signature missing: '+method
         names=[part.strip().split(':',1)[0] for part in match.group(1).split(',')]
         assert set(names)==set(values),names
         driver=driver.replace(placeholder,','.join(values[name] for name in names))
+    if args.profile=='union':
+        for model,field,value,tag in [('Cat','name',json.dumps(NOTE,ensure_ascii=False),'cat'),('Dog','barks','true','dog')]:
+            model_source=(directory/'Sources/OpenAPIClient/Models'/f'{model}.swift').read_text()
+            match=re.search(r'public init\(([^)]*)\)',model_source)
+            assert match, 'Generated Swift initializer missing: '+model
+            names=[part.strip().split(':',1)[0] for part in match.group(1).split(',')]
+            assert len(names)==2 and field in names,names
+            driver=driver.replace('__SWIFT_'+model.upper()+'_ARGS__',','.join(name+':'+(value if name==field else '.'+tag) for name in names))
+        key=args.discriminator_property
+        malformed=[{}, {key:'bird','name':'bad'}, {key:'cat'}, {key:'dog'}, {key:'dog','barks':{}}, {key:'cat','name':False}]
+        driver=driver.replace('__SWIFT_MALFORMED_UNIONS__','['+','.join(json.dumps(json.dumps(value,ensure_ascii=False),ensure_ascii=False) for value in malformed)+']')
     consumer=directory/'runtime-consumer';(consumer/'Sources/RuntimeFixture').mkdir(parents=True,exist_ok=True)
     (consumer/'Package.swift').write_text('// swift-tools-version:6.0\nimport PackageDescription\nlet package=Package(name:"RuntimeFixture",dependencies:[.package(name:"OpenAPIClient",path:'+json.dumps(str(directory))+')],targets:[.executableTarget(name:"RuntimeFixture",dependencies:[.product(name:"OpenAPIClient",package:"OpenAPIClient")])],swiftLanguageModes:[.v6])\n')
     (consumer/'Sources/RuntimeFixture/RuntimeFixture.swift').write_text(driver)
@@ -1369,7 +1403,7 @@ def main():
     parser.add_argument("--composer", type=Path)
     parser.add_argument("--phpstan", type=Path)
     parser.add_argument("--php-async", action="store_true")
-    parser.add_argument("--discriminator-property", default="kind", help="PHP union fixture wire field (default kind)")
+    parser.add_argument("--discriminator-property", default="kind", help="PHP/Swift union fixture wire field (default kind)")
     parser.add_argument("--generator-options", default="{}", help="Explicit JSON object passed to the fixture generator")
     parser.add_argument("--reuse-generated", action="store_true", help="Use only previously generated isolated fixtures")
     args = parser.parse_args()
@@ -1387,12 +1421,12 @@ def main():
         assert args.php and args.php.is_absolute() and args.php.is_file()
         assert args.composer and args.composer.is_absolute() and args.composer.is_file()
     assert args.discriminator_property and len(args.discriminator_property.encode())<=128
-    assert args.discriminator_property=='kind' or (targets==['php'] and args.profile=='union'), "Alternate union wire fields currently have PHP consumers only"
+    assert args.discriminator_property=='kind' or (targets in [['php'],['swift6']] and args.profile=='union'), "Alternate union wire fields require PHP or Swift consumers"
     assert not args.php_async or (targets==['php'] and args.profile=='union'), "Async PHP consumers require PHP union fixtures"
     if 'dart' in targets:
         assert args.profile in {'core','binary','multipart','union'} and args.dart and args.dart.is_absolute() and args.dart.is_file()
     if 'swift6' in targets:
-        assert args.profile in {'core','binary','multipart'} and args.swift and args.swift.is_absolute() and args.swift.is_file()
+        assert args.profile in {'core','binary','multipart','union'} and args.swift and args.swift.is_absolute() and args.swift.is_file()
     if not args.reuse_generated:
         run(["cargo", "run", "-p", "moleapi-generation", "--example", "fixture_projects", "--", str(args.output), str(args.worker), str(args.java), args.targets, args.versions, args.profile, args.generator_options, args.discriminator_property], REPO, timeout=300)
     evidence_path = args.output / "runtime-evidence.json"
@@ -1447,7 +1481,7 @@ def main():
                     if args.profile=="binary": expected += [("GET","/files"),("POST","/files")]
                     if args.profile=="multipart": expected += [("POST","/multipart")] * (2 if target=='swift6' else 1)
                     if args.profile=="union": expected += [("GET","/animals/cat"),("GET","/animals/dog"),("POST","/animals"),("POST","/animals")]
-                    if target=='dart' and args.profile=='union': expected += [("GET","/animal-list"),("POST","/animal-list")]
+                    if target in {'dart','swift6'} and args.profile=='union': expected += [("GET","/animal-list"),("POST","/animal-list")]
                     if target=='php' and args.php_async: expected += [("GET","/animals/cat"),("GET","/animals/dog"),("GET","/animals/cat"),("GET","/animal-list"),("POST","/animal-list"),("GET","/animal-list"),("GET","/animal-list")] + [("GET","/animals/cat"),("GET","/animals/dog"),("GET","/fail"),("GET","/fail"),("GET","/animals/cat"),("GET","/animals/dog")]
                     assert Fixture.observations == expected, Fixture.observations
                 manifest = json.loads((directory / "moleapi-generation.json").read_text())

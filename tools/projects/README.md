@@ -248,3 +248,13 @@ form arrays; explicit _param.mustache overrides retain priority. Generated URLSe
 models and Package.swift remain upstream. Consumer and downloaded files are cleaned up;
 finite SDK buffering is unchanged. Streaming/nested/custom/multiple files, other encoding
 styles and platforms still require their own evidence.
+
+
+Swift --profile union now uses the generated Animal.typeCat/typeDog enum and actual
+Cat/Dog constructors, plus generated [Animal] list/echo APIs. Use --discriminator-property
+kind, animal-kind or 0 (PHP and Swift consumers support explicit alternate wire names).
+Six Swift dialect/key cases passed54 core/union HTTP requests and native release rejection
+of malformed tags, required fields and wrong subtype property types. Original initializer
+labels are derived from model sources; no union template/codec replacement was needed.
+Core/file regression passed26 further requests. Untagged/anyOf/nested/nullable/ambiguous/
+advanced constraint and other platform/library/toolchain cases remain separate gates.
