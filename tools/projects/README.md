@@ -107,3 +107,23 @@ The driver selects actual generated sealed-wrapper and kotlinx serializer APIs f
 manifest. Both dialect cases passed the same14 requests and malformed-variant checks;
 the emitted project uses kotlinx-serialization-json1.11.0. Both Gson regression cases
 also passed. Broader union shapes/default-Moshi/platform scenarios remain open.
+
+
+## Default PHP Guzzle SDK
+
+Provide explicit PHP8.1+ with curl/json/mbstring and an absolute Composer PHP entrypoint
+(executable PHAR/script); the driver invokes it through that PHP interpreter:
+
+```sh
+python3 tools/projects/verify-runtime.py --worker /absolute/path/to/moleapi-server --java /absolute/path/to/java --output /absolute/path/to/new-php-fixtures --targets php --profile core --php /absolute/path/to/php --composer /absolute/path/to/composer.phar
+```
+
+The unchanged default composer manifest installs with --no-dev/--no-plugins/--no-scripts.
+The driver records composer.lock/dependency JSON/tool metadata, lints generated lib PHP,
+and calls actual DefaultApi/Pet/Failure classes. Named PHP parameters accommodate the
+engine's3.0/3.1 parameter order; typed400, enum/null, Bearer and exact Unicode wire fields
+are asserted. Both dialect cases passed6 requests using PHP8.5.11/Composer2.10.3 and
+Guzzle7.15.5 on Linux. Explicit wrapper paths may configure isolated PHP modules/libraries;
+QA package preparation does not modify application/runtime behavior. Reuse generated
+fixtures with --reuse-generated. Binary/multipart/union and other PHP options/platforms
+require their own consumers and remain unverified by this core profile.

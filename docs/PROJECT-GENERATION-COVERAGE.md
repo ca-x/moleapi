@@ -13,7 +13,8 @@ Explicit Mustache overrides now reuse the embedded OpenAPI Generator and mature 
 | typescript-fetch | Generated3.0/3.1 npm projects compiled for CommonJS/ESM; real GET/POST/Bearer/query/header/nullable/enum/error fixtures passed | Broader union/file/dynamic-keyword and library-option compatibility remains required |
 | go-server | Generated skeleton compiled after `go mod tidy`; generated router/service started on a controlled loopback test harness and returned its expected501 business-handler placeholder | A skeleton intentionally needs application handler implementations; dependency installation is a consumer build step |
 | javascript, python, go, csharp | Generated3.0/3.1 clients installed/built and passed real GET/POST/Bearer/query/header/nullable/enum/error fixtures; Go also passed race checking; C# default generichost hosting/token/typed400 APIs were called | Broader union/file/dynamic-keyword and library-option compatibility remains required |
-| php, swift6, dart | Actual multi-file engine artifact generation, bounded ZIP, checksums and output collection | Artifact evidence does not establish language compile/run coverage |
+| php | Default Guzzle3.0/3.1 Composer projects installed, generated PHP linted and actual core model/auth/parameter/error calls passed | Binary/multipart/union, other libraries, advanced constraints and platform evidence remain required |
+| swift6, dart | Actual multi-file engine artifact generation, bounded ZIP, checksums and output collection | Artifact evidence does not establish language compile/run coverage |
 | python-fastapi | Generated3.0/3.1 packages installed; unchanged generated app started, exposed routes/OpenAPI and returned its explicit500 missing-business-handler response | Authentication/business implementations remain consumer work; broader framework/keyword compatibility remains required |
 | aspnetcore | Default .NET10 projects built and started for3.0/3.1; consumer-configured authentication reached generated sample handlers (200) and rejected anonymous requests (401) | Real authentication scheme/validation and business handlers remain consumer work; broader framework/keyword compatibility remains required |
 | kotlin | Default jvm-okhttp4 Gradle3.0/3.1 core/binary/multipart fixtures passed; explicit Retrofit/Gson and Retrofit/kotlinx typed tagged-oneOf cases passed both dialects | Default Moshi unions, advanced union shapes, other libraries/platforms and broader keyword/file coverage remain required |
@@ -510,3 +511,31 @@ Other identifier/model/short-option and user-hook namespaces, merged/separate ta
 all-platform execution and broader generator semantics remain required evidence. This
 slice proves the specified names and existing default interfaces, not every possible Rust
 identifier or customization. Public operation builder names remain stable.
+
+
+## Default PHP/Guzzle core runtime evidence
+
+The trusted runtime driver now supports php using explicit --php and --composer paths.
+Both3.0.3 and3.1.0 projects kept the upstream Guzzle library, composer.json, PHP model/API/
+serializer sources and package namespace. Composer installed runtime dependencies without
+plugins/scripts, generated PHP files passed syntax checks, and a separate consumer used
+actual named API parameters to retain dialect-specific ordering. Both cases completed6
+real requests preserving path, quoted Unicode query/body, custom header, Bearer, model
+enum/null decoding and typed400 Failure response objects. No custom transport/JSON emitter
+or compatibility patch was required. Representative basic coverage is now22 combinations
+across8 SDK clients and3 server skeletons; broader shapes remain separate gates.
+
+Local QA tools were extracted only into /tmp from Arch repository packages verified
+against local repository SHA256 metadata (no system install). PHP8.5.11, Composer2.10.3,
+Guzzle7.15.5, PSR7 2.13.1 and Promises2.5.3 on Linux; Generator7.26.0/JRE21 remained.
+PHP package SHA256: `3f009d6c41e36a95ee03ef5af7ac0ae4bf08814c1853171a344f3ca109d01ae6`;
+Composer package SHA256: `a37663752abed59a06b9e647863a4e363b6561c41b4cb3b3681711975fd34fee`.
+libzip/argon2 extraction hashes, full package URLs, composer.lock, dependency JSON and
+engine/tool/options evidence were retained in the isolated QA output/tool directories.
+
+Generation regression passed78 cases (25 external-tool cases ignored), the explicit
+configured PHP artifact fixture passed, all11 owned project API regressions and scoped
+strict Clippy/formatting passed. Catalog validation now labels representative PHP3.0/3.1
+compile/call evidence. Product preview/download still needs only its configured Java
+engine and never downloads/executes PHP or Composer. Extended PHP profiles, namespace/
+library options, PHP versions/platforms and full keyword/constraint behavior remain open.

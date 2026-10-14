@@ -830,6 +830,47 @@ def python_environment(directory):
     return python
 
 
+PHP_CORE = r'''<?php
+require __DIR__ . '/vendor/autoload.php';
+use OpenAPI\Client\Api\DefaultApi;
+use OpenAPI\Client\ApiException;
+use OpenAPI\Client\Configuration;
+use OpenAPI\Client\Model\Pet;
+use OpenAPI\Client\Model\Failure;
+function ensureFixture(bool $condition, string $message): void { if (!$condition) throw new RuntimeException($message); }
+$config = (new Configuration())->setHost(getenv('FIXTURE_URL'))->setAccessToken('fixture-token');
+$http = new GuzzleHttp\Client(['timeout' => 10, 'connect_timeout' => 10]);
+$api = new DefaultApi($http, $config);
+$pet = $api->getPet(id: 7, q: 'space & + 鼹鼠', x_test: 'moleapi-fixture');
+ensureFixture($pet instanceof Pet && $pet->getId() === 7 && $pet->getStatus() === Pet::STATUS_READY && $pet->getNote() === null, 'GET model/enum/nullable values lost');
+$note = '鼹鼠 "quotes" & +';
+$echo = $api->replacePet(id: 7, pet: new Pet(['id' => 7, 'status' => Pet::STATUS_READY, 'note' => $note]));
+ensureFixture($echo instanceof Pet && $echo->getNote() === $note, 'POST quoted Unicode JSON lost');
+$rejected = false;
+try { $api->failGet(); } catch (ApiException $error) {
+    $response = $error->getResponseObject();
+    $rejected = $error->getCode() === 400 && $response instanceof Failure && $response->getMessage() === 'expected fixture failure';
+}
+ensureFixture($rejected, 'Typed HTTP400 not exposed');
+echo "PASS PHP default Guzzle SDK\n";
+'''
+
+
+def php_client(directory, url, args):
+    assert args.profile=='core', "PHP extended profiles require additional generated-API consumers"
+    assert args.php and args.php.is_absolute() and args.php.is_file(), "Configure an explicit --php executable"
+    assert args.composer and args.composer.is_absolute() and args.composer.is_file(), "Configure an explicit --composer PHP entrypoint"
+    composer=[str(args.php),str(args.composer)]
+    run([*composer,'install','--no-dev','--no-interaction','--no-plugins','--no-scripts','--prefer-dist'],directory,timeout=600)
+    dependencies=subprocess.check_output([*composer,'show','--format=json','--no-plugins'],cwd=directory,text=True)
+    (directory/'runtime-consumer-dependencies.json').write_text(dependencies)
+    (directory/'runtime_fixture.php').write_text(PHP_CORE)
+    for source in sorted(directory.glob('lib/**/*.php')):
+        result=subprocess.run([str(args.php),'-l',str(source)],cwd=directory,text=True,capture_output=True,check=True,timeout=30)
+        assert 'No syntax errors detected' in result.stdout, result.stdout
+    run([str(args.php),'runtime_fixture.php'],directory,dict(os.environ,FIXTURE_URL=url))
+
+
 def client(target, directory, url, args):
     env = dict(os.environ, FIXTURE_URL=url)
     if target == "go":
@@ -841,6 +882,8 @@ def client(target, directory, url, args):
         (directory / "runtime_fixture_test.go").write_text(driver)
         run([args.go, "mod", "tidy"], directory)
         run([args.go, "test", "-run", "^TestRuntimeFixture$", "-count=1", "-race", "-v"], directory, env)
+    elif target == "php":
+        php_client(directory,url,args)
     elif target == "kotlin":
         kotlin_client(directory,url,args)
     elif target == "java":
@@ -934,6 +977,8 @@ def main():
     parser.add_argument("--jdk", type=Path)
     parser.add_argument("--maven", type=Path)
     parser.add_argument("--gradle", type=Path)
+    parser.add_argument("--php", type=Path)
+    parser.add_argument("--composer", type=Path)
     parser.add_argument("--generator-options", default="{}", help="Explicit JSON object passed to the fixture generator")
     parser.add_argument("--reuse-generated", action="store_true", help="Use only previously generated isolated fixtures")
     args = parser.parse_args()
@@ -942,10 +987,14 @@ def main():
     assert args.output.is_absolute()
     targets = args.targets.split(",")
     versions = args.versions.split(",")
-    assert all(t in {"javascript", "python", "go", "typescript-fetch", "python-fastapi", "csharp", "aspnetcore", "java", "spring", "kotlin"} for t in targets)
+    assert all(t in {"javascript", "python", "go", "typescript-fetch", "python-fastapi", "csharp", "aspnetcore", "java", "spring", "kotlin", "php"} for t in targets)
     assert all(v in {"3.0.3", "3.1.0"} for v in versions)
     if args.profile in {"binary","multipart","union"}:
         assert not {"python-fastapi","aspnetcore","spring"}.intersection(targets), "Extended profiles currently validate clients"
+    if 'php' in targets:
+        assert args.profile=='core', "PHP extended profiles require dedicated consumers"
+        assert args.php and args.php.is_absolute() and args.php.is_file()
+        assert args.composer and args.composer.is_absolute() and args.composer.is_file()
     if not args.reuse_generated:
         run(["cargo", "run", "-p", "moleapi-generation", "--example", "fixture_projects", "--", str(args.output), str(args.worker), str(args.java), args.targets, args.versions, args.profile, args.generator_options], REPO, timeout=300)
     evidence_path = args.output / "runtime-evidence.json"
@@ -962,6 +1011,10 @@ def main():
         tools["gradle"]=subprocess.check_output([str(args.gradle),'--version'],env=java_environment(args),text=True).strip()
     if args.maven:
         tools["maven"]=subprocess.check_output([str(args.maven),"--version"],env=java_environment(args),text=True).strip()
+    if args.php:
+        tools['php']=subprocess.check_output([str(args.php),'--version'],text=True).strip()
+    if args.php and args.composer:
+        tools['composer']=subprocess.check_output([str(args.php),str(args.composer),'--version'],stderr=subprocess.STDOUT,text=True).strip()
     if args.dotnet:
         tools["dotnet"] = subprocess.check_output([args.dotnet, "--info"], text=True).strip()
     (args.output / "runtime-tools.json").write_text(json.dumps(tools, indent=2) + "\n")
