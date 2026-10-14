@@ -5,6 +5,8 @@ from email.parser import BytesParser
 from email.policy import default as mime_policy
 import hashlib
 import http.server
+import http.client
+import io
 import json
 import os
 import re
@@ -32,6 +34,31 @@ def run(command, cwd, env=None, timeout=300):
     subprocess.run(command, cwd=cwd, env=env, check=True, timeout=timeout)
 
 
+def read_chunked_body(stream):
+    # Reuse the standard HTTP response decoder for the shared chunked message framing.
+    class Reader:
+        def __init__(self):
+            self.prefix=io.BytesIO(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n")
+        def readline(self, size=-1):
+            return self.prefix.readline(size) or stream.readline(size)
+        def read(self, size=-1):
+            return stream.read(size)
+        def flush(self):
+            pass
+        def close(self):
+            self.prefix.close()
+    class Socket:
+        def makefile(self, mode):
+            assert mode=='rb'
+            return Reader()
+    response=http.client.HTTPResponse(Socket())
+    try:
+        response.begin()
+        return response.read()
+    finally:
+        response.close()
+
+
 class Fixture(http.server.BaseHTTPRequestHandler):
     observations = []
     errors = []
@@ -49,7 +76,7 @@ class Fixture(http.server.BaseHTTPRequestHandler):
 
     def request(self):
         parsed = urllib.parse.urlsplit(self.path)
-        body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+        body = read_chunked_body(self.rfile) if self.headers.get('Transfer-Encoding','').lower()=='chunked' else self.rfile.read(int(self.headers.get("Content-Length", "0")))
         self.observations.append((self.command, parsed.path))
         try:
             assert self.headers.get("Authorization") == f"Bearer {TOKEN}"
@@ -852,19 +879,45 @@ try { $api->failGet(); } catch (ApiException $error) {
     $rejected = $error->getCode() === 400 && $response instanceof Failure && $response->getMessage() === 'expected fixture failure';
 }
 ensureFixture($rejected, 'Typed HTTP400 not exposed');
+__PHP_EXTENDED__
 echo "PASS PHP default Guzzle SDK\n";
 '''
 
 
+PHP_BINARY = r'''$bytes = chr(0).chr(1).chr(2).chr(13).chr(10).chr(255).chr(128).'A';
+$download = $api->downloadFile();
+ensureFixture($download instanceof SplFileObject, 'Binary download did not return its generated file type');
+$downloadPath = $download->getPathname();
+try { ensureFixture(file_get_contents($downloadPath) === $bytes, 'Binary download changed bytes'); }
+finally { unset($download); unlink($downloadPath); }
+$upload = tempnam(sys_get_temp_dir(), 'php-upload');
+try {
+    file_put_contents($upload, $bytes);
+    $receipt = $api->uploadFile(body: new SplFileObject($upload, 'r'));
+    ensureFixture($receipt->getSize() === strlen($bytes), 'Binary upload receipt lost');
+} finally { unlink($upload); }
+'''
+
+PHP_MULTIPART = r'''$bytes = chr(0).chr(1).chr(2).chr(13).chr(10).chr(255).chr(128).'A';
+$directory = sys_get_temp_dir().'/php-multipart-'.bin2hex(random_bytes(8));
+mkdir($directory);
+$file = $directory.'/payload.bin';
+try {
+    file_put_contents($file, $bytes);
+    $receipt = $api->uploadMultipart(file: new SplFileObject($file, 'r'), note: $note, tags: ['red','蓝'], optional_tags: ['red','蓝'], packed_tags: ['red','蓝']);
+    ensureFixture($receipt->getSize() === strlen($bytes), 'Multipart receipt lost');
+} finally { unlink($file);rmdir($directory); }
+'''
+
 def php_client(directory, url, args):
-    assert args.profile=='core', "PHP extended profiles require additional generated-API consumers"
+    assert args.profile in {'core','binary','multipart'}, "PHP union profile requires its own generated-model consumer"
     assert args.php and args.php.is_absolute() and args.php.is_file(), "Configure an explicit --php executable"
     assert args.composer and args.composer.is_absolute() and args.composer.is_file(), "Configure an explicit --composer PHP entrypoint"
     composer=[str(args.php),str(args.composer)]
     run([*composer,'install','--no-dev','--no-interaction','--no-plugins','--no-scripts','--prefer-dist'],directory,timeout=600)
     dependencies=subprocess.check_output([*composer,'show','--format=json','--no-plugins'],cwd=directory,text=True)
     (directory/'runtime-consumer-dependencies.json').write_text(dependencies)
-    (directory/'runtime_fixture.php').write_text(PHP_CORE)
+    (directory/'runtime_fixture.php').write_text(PHP_CORE.replace('__PHP_EXTENDED__', {'core':'','binary':PHP_BINARY,'multipart':PHP_MULTIPART}[args.profile]))
     for source in sorted(directory.glob('lib/**/*.php')):
         result=subprocess.run([str(args.php),'-l',str(source)],cwd=directory,text=True,capture_output=True,check=True,timeout=30)
         assert 'No syntax errors detected' in result.stdout, result.stdout
@@ -992,7 +1045,7 @@ def main():
     if args.profile in {"binary","multipart","union"}:
         assert not {"python-fastapi","aspnetcore","spring"}.intersection(targets), "Extended profiles currently validate clients"
     if 'php' in targets:
-        assert args.profile=='core', "PHP extended profiles require dedicated consumers"
+        assert args.profile in {'core','binary','multipart'}, "PHP union profile requires a dedicated consumer"
         assert args.php and args.php.is_absolute() and args.php.is_file()
         assert args.composer and args.composer.is_absolute() and args.composer.is_file()
     if not args.reuse_generated:

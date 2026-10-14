@@ -24,3 +24,18 @@ needed. PHP8.5.11/Composer2.10.3/libzip/argon2 packages were SHA256-verified and
 only in /tmp; original composer manifests/locks/runtime deps recorded.78 generation and
 11 API cases, configured PHP engine artifact fixture, strict scoped Clippy/format passed.
 Extended shapes/libraries/platforms stay open in parent scope.
+
+
+Continuation: preserve default SplFileObject APIs and prepare binary/multipart consumers
+before executing. Actual bytes/name/MIME, required/optional repeated arrays and packed CSV
+must satisfy existing wire assertions. Inspect upstream template/metadata for reproduced
+loss, repair mature serializer/API seams only, retain explicit override precedence and
+other-library limits. Verify3.0/3.1 runtime and regression gates before merge/push.
+
+
+Continuation verified: binary/multipart4 profile/dialect cases and18 requests passed.
+Binary stream was already correct; fixed QA chunked decoding via standard HTTPResponse
+with2 focused protocol/ownership regressions. Actual multipart array flattening was fixed
+through pinned default-Guzzle API metadata/collection serializer, scoped to selected
+multipart.10 explicit override tests,78 generation cases,11 API cases and strict scoped
+Clippy/formatting passed. Other libraries, unions and advanced file/platform scope remain open.

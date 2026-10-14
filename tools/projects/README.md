@@ -127,3 +127,20 @@ Guzzle7.15.5 on Linux. Explicit wrapper paths may configure isolated PHP modules
 QA package preparation does not modify application/runtime behavior. Reuse generated
 fixtures with --reuse-generated. Binary/multipart/union and other PHP options/platforms
 require their own consumers and remain unverified by this core profile.
+
+
+Default PHP also supports the trusted binary and multipart QA profiles with the same
+explicit --php/--composer paths. Four3.0/3.1 cases passed18 requests. Binary upload uses
+SplFileObject's actual chunked stream; the shared server decodes standard chunked framing
+and compares exact bytes. Multipart uses SplFileObject plus required/optional repeated
+arrays and declared CSV. A pinned Guzzle API template repairs primitive-array flattening;
+explicit templates keep priority. Generated PHP and composer manifests remain upstream
+except that documented compatibility default. Run focused framing regression with:
+
+```sh
+python3 tools/projects/test_verify_runtime.py
+```
+
+This checks binary framing/extensions/trailers/stream ownership and incomplete-body
+rejection. PHP unions, custom/nested/multiple files, streaming size/platform/other-library
+contracts remain separate profiles, not implied by these finite file consumers.

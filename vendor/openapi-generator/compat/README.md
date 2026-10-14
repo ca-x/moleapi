@@ -127,3 +127,18 @@ The compatibility signature renders upstream path parameters first, then remaini
 parameters, using Kotlin trailing commas. Upstream annotations, parameter partials,
 transport, serializers and return types remain intact. Retrofit only; explicit
 API templates keep precedence. Both dialect fixtures use actual typed wrappers.
+
+
+## PHP Guzzle form collection formats
+
+Source: `php/api.mustache`, pinned7.26.0 JAR (Apache-2.0/upstream header retained).
+Original SHA256: `ad9429664001475e758291beb4cacbf4f879a28a64262c0f6801e72684f88b92`.
+
+Actual multipart calls flattened primitive arrays to tags[0]/tags[1] and similarly
+flattened declared CSV. For selected multipart/form-data, the compatibility API retains multi primitive lists before
+the existing nested-object flattening and uses ObjectSerializer::serializeCollection
+for other formats. Existing file/nested/object/transport paths stay upstream; default
+Guzzle only. Explicit API templates retain priority. This is finite primitive-array
+evidence, not every nested/file/encoding/library case. Raw binary SplFileObject upload
+is already a correct unknown-length chunked stream; the QA server now decodes that
+framing through the Python standard HTTP decoder rather than counting it as an empty body.

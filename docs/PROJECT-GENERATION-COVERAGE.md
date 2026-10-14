@@ -13,7 +13,7 @@ Explicit Mustache overrides now reuse the embedded OpenAPI Generator and mature 
 | typescript-fetch | Generated3.0/3.1 npm projects compiled for CommonJS/ESM; real GET/POST/Bearer/query/header/nullable/enum/error fixtures passed | Broader union/file/dynamic-keyword and library-option compatibility remains required |
 | go-server | Generated skeleton compiled after `go mod tidy`; generated router/service started on a controlled loopback test harness and returned its expected501 business-handler placeholder | A skeleton intentionally needs application handler implementations; dependency installation is a consumer build step |
 | javascript, python, go, csharp | Generated3.0/3.1 clients installed/built and passed real GET/POST/Bearer/query/header/nullable/enum/error fixtures; Go also passed race checking; C# default generichost hosting/token/typed400 APIs were called | Broader union/file/dynamic-keyword and library-option compatibility remains required |
-| php | Default Guzzle3.0/3.1 Composer projects installed, generated PHP linted and actual core model/auth/parameter/error calls passed | Binary/multipart/union, other libraries, advanced constraints and platform evidence remain required |
+| php | Default Guzzle3.0/3.1 Composer/PHP core, raw binary and multipart file/array calls passed | Union, nested/custom/large-file cases, other libraries, advanced constraints and platforms remain required |
 | swift6, dart | Actual multi-file engine artifact generation, bounded ZIP, checksums and output collection | Artifact evidence does not establish language compile/run coverage |
 | python-fastapi | Generated3.0/3.1 packages installed; unchanged generated app started, exposed routes/OpenAPI and returned its explicit500 missing-business-handler response | Authentication/business implementations remain consumer work; broader framework/keyword compatibility remains required |
 | aspnetcore | Default .NET10 projects built and started for3.0/3.1; consumer-configured authentication reached generated sample handlers (200) and rejected anonymous requests (401) | Real authentication scheme/validation and business handlers remain consumer work; broader framework/keyword compatibility remains required |
@@ -539,3 +539,32 @@ strict Clippy/formatting passed. Catalog validation now labels representative PH
 compile/call evidence. Product preview/download still needs only its configured Java
 engine and never downloads/executes PHP or Composer. Extended PHP profiles, namespace/
 library options, PHP versions/platforms and full keyword/constraint behavior remain open.
+
+
+## Default PHP raw binary and multipart profiles
+
+Both3.0.3/3.1.0 default Guzzle binary and multipart projects passed Composer install,
+generated PHP syntax checks and18 actual requests across4 profile/dialect cases.
+Consumers use emitted SplFileObject APIs and delete temporary uploads/downloads. Raw
+bytes remained exact, and multipart preserved payload.bin/octet-stream, Unicode note,
+required/optional repeated tag fields and packed CSV tags. Core auth/query/model/error
+assertions remain in each profile; no handwritten transport or model serializer replaces
+PHP SDK calls.
+
+Initial binary failure was a QA framing defect: SplFileObject already produced a correct
+unknown-length chunked stream, while the old fixture read absent Content-Length as zero.
+The fixture now reuses Python's standard HTTP decoder for chunked framing; focused tests
+preserve binary chunks/extensions/trailers, caller stream ownership and reject premature
+EOF. Initial multipart calls exposed a real upstream defect: FormDataProcessor flattened
+primitive lists to tags[0]/tags[1] and ignored declared CSV. A pinned default-Guzzle API
+compatibility template keeps scalar lists for multi and uses the existing collection
+serializer for non-multi formats before nested flattening. The change is scoped to selected
+multipart/form-data; file/object/nested and other content types retain upstream handling.
+Explicit API templates keep precedence; other PHP libraries do not load this default.
+
+All10 configured explicit override tests passed, generation78 cases passed (26 configured
+external-tool cases ignored), all11 owned project API regressions and strict scoped
+Clippy/formatting passed. Tools remain PHP8.5.11/Composer2.10.3, Guzzle7.15.5/PSR7 2.13.1
+on Linux, Generator7.26.0/JRE21. Finite one-file/primitive string-array evidence does not
+complete PHP unions, custom/nested/multiple-file/MIME/streaming/resume/platform behavior.
+Those and full module parity remain required work.
