@@ -875,3 +875,38 @@ async fn explicit_php_supporting_output_retains_priority_over_static_analysis_de
         );
     }
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured Java17+ test runtime"]
+async fn explicit_php_error_partial_override_is_used_in_sync_and_async_handlers() {
+    let java = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_JAVA").expect("explicit Java executable"),
+    );
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), Some(java)).unwrap();
+    let input = ProjectInput {
+        target: "php".into(),
+        options: BTreeMap::new(),
+        include_secrets: false,
+        specification: json!({"openapi":"3.0.3","info":{"title":"Error override","version":"1"},"paths":{"/x":{"get":{"operationId":"x","responses":{"400":{"description":"Error","content":{"application/json":{"schema":{"type":"object","properties":{"message":{"type":"string"}}}}}}}}}}}),
+        templates: Some(TemplateBundle {
+            format: "moleapi-codegen-templates-v1".into(),
+            outputs: BTreeMap::new(),
+            files: vec![TemplateFile {
+                path: "deserialize_error.mustache".into(),
+                content: "// explicit error decoder\n".into(),
+                encoding: None,
+            }],
+        }),
+    };
+    let result = runtime
+        .generate(input, CancellationToken::new())
+        .await
+        .unwrap();
+    let api = result
+        .files
+        .iter()
+        .find(|file| file.path.ends_with("/Api/DefaultApi.php"))
+        .unwrap();
+    assert_eq!(api.content.matches("explicit error decoder").count(), 2);
+    assert!(!api.content.contains("$e->setResponseObject"));
+}

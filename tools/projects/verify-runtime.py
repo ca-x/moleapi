@@ -956,6 +956,30 @@ $asyncItems = $api->listAnimalsAsync()->wait();
 ensureFixture($asyncItems[0] instanceof OpenAPI\Client\Model\Cat && $asyncItems[1] instanceof OpenAPI\Client\Model\Dog, 'Async array lost');
 $asyncListInfo = $api->listAnimalsAsyncWithHttpInfo()->wait();
 ensureFixture($asyncListInfo[0][0] instanceof OpenAPI\Client\Model\Cat && $asyncListInfo[0][1] instanceof OpenAPI\Client\Model\Dog && $asyncListInfo[1] === 200, 'Async list info lost');
+$mapped = $api->getAnimalAsync(kind: 'cat')->then(static fn($animal): string => $animal->getName())->then(static fn(string $name): string => $name.' mapped')->wait();
+ensureFixture($mapped === $note.' mapped', 'Callback mapping lost');
+$kept = $api->getAnimalAsync(kind: 'dog')->then(null, static fn($reason): string => 'unexpected')->wait();
+ensureFixture($kept instanceof OpenAPI\Client\Model\Dog, 'Absent fulfilled handler lost value');
+$rejected = false;
+try { $api->failGetAsync()->wait(); } catch (ApiException $error) { $rejected = $error->getCode() === 400 && $error->getResponseObject() instanceof Failure && $error->getResponseObject()->getMessage() === 'expected fixture failure'; }
+ensureFixture($rejected, 'Async typed HTTP400 rejected incorrectly');
+$recovered = $api->failGetAsync()->otherwise(static function($reason): string { ensureFixture($reason instanceof ApiException && $reason->getCode() === 400, 'Rejection reason lost'); return 'recovered'; })->wait();
+ensureFixture($recovered === 'recovered', 'Rejection recovery lost');
+$adopted = $api->getAnimalAsync(kind: 'cat')->then(static fn($animal) => new GuzzleHttp\Promise\FulfilledPromise('adopted'))->wait();
+ensureFixture($adopted === 'adopted', 'Returned promise was not adopted');
+$thrown = $api->getAnimalAsync(kind: 'dog')->then(static function($animal) { throw new RuntimeException('callback-failure'); })->otherwise(static function($reason): string { ensureFixture($reason instanceof RuntimeException && $reason->getMessage() === 'callback-failure', 'Thrown callback error lost'); return 'handled'; })->wait();
+ensureFixture($thrown === 'handled', 'Thrown callback recovery lost');
+$socket = stream_socket_server('tcp://127.0.0.1:0', $errorCode, $errorMessage);
+ensureFixture($socket !== false, 'Cannot reserve unreachable fixture port');
+$address = stream_socket_get_name($socket, false);
+fclose($socket);
+$deadConfig = (clone $config)->setHost('http://'.$address);
+$deadApi = new DefaultApi(new GuzzleHttp\Client(['timeout'=>2, 'connect_timeout'=>2]), $deadConfig);
+$networkRejected = false;
+try { $deadApi->failGetAsync()->wait(); } catch (ApiException $error) { $networkRejected = $error->getCode() === 0 && $error->getResponseBody() === null; }
+ensureFixture($networkRejected, 'No-response rejection was masked');
+
+
 '''
 
 PHP_STATIC_UNION = r'''<?php
@@ -984,6 +1008,13 @@ function verifyMappedTypes(DefaultApi $api, Cat $cat, Dog $dog, Pet $pet): void 
     assertType('array<OpenAPI\\Client\\Model\\Cat|OpenAPI\\Client\\Model\\Dog>', $api->listAnimalsAsync()->wait());
     $listInfo = $api->listAnimalsAsyncWithHttpInfo()->wait();
     assertType('array<OpenAPI\\Client\\Model\\Cat|OpenAPI\\Client\\Model\\Dog>', $listInfo[0]);
+    $mapped = $api->getAnimalAsync(kind: 'cat')->then(static fn(Cat|Dog $animal): string => $animal instanceof Cat ? $animal->getName() : 'dog');
+    assertType('string', $mapped->wait());
+    assertType('OpenAPI\\Client\\Model\\Cat|OpenAPI\\Client\\Model\\Dog', $api->getAnimalAsync(kind: 'dog')->then()->wait());
+    assertType('OpenAPI\\Client\\Model\\Cat|OpenAPI\\Client\\Model\\Dog|string', $api->getAnimalAsync(kind: 'dog')->then(null, static fn(mixed $reason): string => 'recovered')->wait());
+    assertType('OpenAPI\\Client\\Model\\Cat|OpenAPI\\Client\\Model\\Dog|string', $api->getAnimalAsync(kind: 'dog')->otherwise(static fn(mixed $reason): string => 'recovered')->wait());
+    assertType('string', $api->getAnimalAsync(kind: 'cat')->then(static fn(Cat|Dog $animal) => $mapped)->wait());
+
 
 }
 '''
@@ -1012,13 +1043,14 @@ function rejectedModels(DefaultApi $api, Pet $pet, Cat $cat): void {
     $api->echoAnimalWithHttpInfo(animal: $pet);
     $api->echoAnimalRequest(animal: $pet);
     $api->echoAnimalArray(animal: [$pet]);
+    $api->getAnimalAsync(kind: 'cat')->then(static fn(Pet $wrong): string => 'wrong');
 }
 ''')
     result=subprocess.run([*command,str(negative)],cwd=directory,text=True,capture_output=True,timeout=300)
     (directory/'runtime-phpstan-negative.json').write_text(result.stdout)
     report=json.loads(result.stdout)
     messages=[message for entry in report.get('files',{}).values() for message in entry.get('messages',[])]
-    assert result.returncode!=0 and len(messages)==6 and all(message.get('identifier')=='argument.type' for message in messages), result.stdout+result.stderr
+    assert result.returncode!=0 and len(messages)==7 and all(message.get('identifier')=='argument.type' for message in messages), result.stdout+result.stderr
     print('PASS PHPStan mapped/ordinary/mixed model contracts plus rejected wrong model arguments',flush=True)
 
 
@@ -1218,7 +1250,7 @@ def main():
                     if args.profile=="binary": expected += [("GET","/files"),("POST","/files")]
                     if args.profile=="multipart": expected += [("POST","/multipart")]
                     if args.profile=="union": expected += [("GET","/animals/cat"),("GET","/animals/dog"),("POST","/animals"),("POST","/animals")]
-                    if target=='php' and args.php_async: expected += [("GET","/animals/cat"),("GET","/animals/dog"),("GET","/animals/cat"),("GET","/animal-list"),("POST","/animal-list"),("GET","/animal-list"),("GET","/animal-list")]
+                    if target=='php' and args.php_async: expected += [("GET","/animals/cat"),("GET","/animals/dog"),("GET","/animals/cat"),("GET","/animal-list"),("POST","/animal-list"),("GET","/animal-list"),("GET","/animal-list")] + [("GET","/animals/cat"),("GET","/animals/dog"),("GET","/fail"),("GET","/fail"),("GET","/animals/cat"),("GET","/animals/dog")]
                     assert Fixture.observations == expected, Fixture.observations
                 manifest = json.loads((directory / "moleapi-generation.json").read_text())
                 source_digest = hashlib.sha256((directory / "fixture-source.json").read_bytes()).hexdigest()

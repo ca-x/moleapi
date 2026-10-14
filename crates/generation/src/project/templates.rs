@@ -116,6 +116,12 @@ pub(super) fn write_builtin(input: &ProjectInput, root: &Path) -> Result<bool> {
                     ),
                 ),
                 (
+                    "deserialize_error.mustache",
+                    include_str!(
+                        "../../../../vendor/openapi-generator/compat/php-guzzle/deserialize_error.mustache"
+                    ),
+                ),
+                (
                     "phpstan-guzzle.stub.mustache",
                     include_str!(
                         "../../../../vendor/openapi-generator/compat/php-guzzle/phpstan-guzzle.stub.mustache"

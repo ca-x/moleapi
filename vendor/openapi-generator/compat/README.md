@@ -175,3 +175,12 @@ stub/config are supporting files emitted by the existing generator, with user so
 priority retained. Runtime promise/code/model implementations are unchanged. PHPStan2.3.1
 positive/six-error negative consumers and28 async/list/tuple wire calls passed both dialects.
 Nested/map containers, callback generic inference and other analyzers remain separate scope.
+
+
+PHP PromiseInterface stub then/otherwise annotations preserve callback/recovery/adopted
+result types without changing actual Guzzle runtime. A real async400 lacked the sync
+Failure response object; the API now reuses the existing response metadata/deserialization
+block as deserialize_error.mustache for both handlers. ConnectException/no-response
+RequestException receive typed ApiException before response access. Both dialects passed
+callback/recovery/adoption/error and closed-port fixtures; source/partial overrides retain
+priority. The original API source/header/hash above also covers the extracted error block.

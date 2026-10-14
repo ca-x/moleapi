@@ -1,0 +1,25 @@
+            switch ($e->getCode()) {
+        {{#responses}}
+            {{#dataType}}
+                {{^isRange}}{{^isWildcard}}case {{code}}:{{/isWildcard}}{{#isWildcard}}default:{{/isWildcard}}
+                    $data = ObjectSerializer::deserialize(
+                        $e->getResponseBody(),
+                        '{{{dataType}}}',
+                        $e->getResponseHeaders()
+                    );
+                    $e->setResponseObject($data);
+                    throw $e;{{/isRange}}
+            {{/dataType}}
+        {{/responses}}
+            }
+        {{#responses}}{{#dataType}}{{#isRange}}{{^isWildcard}}
+            if ($this->responseWithinRangeCode('{{code}}', $e->getCode())) {
+                $data = ObjectSerializer::deserialize(
+                    $e->getResponseBody(),
+                    '{{{dataType}}}',
+                    $e->getResponseHeaders()
+                );
+                $e->setResponseObject($data);
+                throw $e;
+            }{{/isWildcard}}{{/isRange}}{{/dataType}}{{/responses}}
+

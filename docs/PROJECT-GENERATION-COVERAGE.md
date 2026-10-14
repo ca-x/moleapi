@@ -644,3 +644,28 @@ This proves one-level arrays and wait-result PHPStan contracts, not nested/map c
 Promise callback/chaining/rejection generic inference, other analyzers, nominal parent
 inheritance or all-platform behavior. Those and broad generator semantics remain required.
 PHPStan is a QA/user analysis tool; preview/download never installs or executes it.
+
+
+## PHP Promise callbacks and async rejection parity
+
+The shipped PHPStan-only stub now describes then/otherwise callback input/result types,
+retains original values when handlers are absent, and adopts returned typed promises.
+Actual Guzzle runtime remains in use. PHPStan2.3.1 positive consumers passed mapped
+callbacks, no-handler identity, rejection recovery unions and promise adoption on both
+dialects; seven exact argument.type errors were required from negative consumers,
+including a callback whose Pet parameter cannot accept Cat/Dog.
+
+Actual callbacks also mapped results, adopted FulfilledPromise values, preserved success
+with no fulfilled handler, recovered400 failures and handled thrown RuntimeException.
+The initial async400 call exposed missing typed Failure response objects. A shared
+upstream-metadata error-deserialization partial now handles both sync/async exceptions,
+retaining model/status/body/header parity. Async transport ConnectException and response-
+less RequestException branches return ApiException rather than dereference a missing
+response. Both dialects verified a closed-port connection failure with status0/null body.
+
+Forty async/list/tuple/callback HTTP requests and24 core/binary/multipart regression
+requests passed; local no-response failures were additional checks. All14 explicit override
+cases passed, including the shared error partial in both handlers. Generation78 cases
+passed (30 external-tool cases ignored), all11 owned API regressions and scoped strict
+Clippy/formatting passed. Broader cancellation/race/mixed rejection policies, nested/map
+containers, other analyzers, nominal hierarchy and native-platform coverage remain open.

@@ -183,3 +183,12 @@ argument errors are required, alongside positive type assertions. The stub is an
 and leaves the actual Guzzle runtime untouched. Source/destination supporting-file overrides
 retain priority. Nested containers/callback generic inference/other analyzers and nominal
 inheritance remain separate requirements. Async mode currently has PHP union consumers only.
+
+
+PHP async mode now also checks callback mapping/adoption, absent-handler identity,
+HTTP400 recovery, thrown callback errors and no-response connection failure. Both dialects
+passed40 HTTP requests plus local transport failures. PHPStan uses seven negative argument
+errors (including callback input mismatch) and positive then/otherwise/wait assertions.
+A shared error partial repairs async typed ApiException/Failure parity with sync calls;
+explicit partial overrides retain priority. Broader cancellation/rejection policy, nesting,
+other analyzer and platform behavior remain separate requirements.

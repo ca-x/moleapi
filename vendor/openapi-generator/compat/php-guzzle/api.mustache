@@ -342,31 +342,7 @@ use {{invokerPackage}}\ObjectSerializer;
             return [null, $statusCode, $response->getHeaders()];
             {{/returnType}}
         } catch (ApiException $e) {
-            switch ($e->getCode()) {
-        {{#responses}}
-            {{#dataType}}
-                {{^isRange}}{{^isWildcard}}case {{code}}:{{/isWildcard}}{{#isWildcard}}default:{{/isWildcard}}
-                    $data = ObjectSerializer::deserialize(
-                        $e->getResponseBody(),
-                        '{{{dataType}}}',
-                        $e->getResponseHeaders()
-                    );
-                    $e->setResponseObject($data);
-                    throw $e;{{/isRange}}
-            {{/dataType}}
-        {{/responses}}
-            }
-        {{#responses}}{{#dataType}}{{#isRange}}{{^isWildcard}}
-            if ($this->responseWithinRangeCode('{{code}}', $e->getCode())) {
-                $data = ObjectSerializer::deserialize(
-                    $e->getResponseBody(),
-                    '{{{dataType}}}',
-                    $e->getResponseHeaders()
-                );
-                $e->setResponseObject($data);
-                throw $e;
-            }{{/isWildcard}}{{/isRange}}{{/dataType}}{{/responses}}
-
+            {{>deserialize_error}}
             throw $e;
         }
     }
@@ -535,18 +511,25 @@ use {{invokerPackage}}\ObjectSerializer;
                     {{/returnType}}
                 },
                 function ($exception) {
+                    if ($exception instanceof ConnectException) {
+                        throw new ApiException($exception->getMessage(), (int) $exception->getCode(), null, null);
+                    }
+                    if (!$exception instanceof RequestException) {
+                        throw $exception;
+                    }
                     $response = $exception->getResponse();
+                    if ($response === null) {
+                        throw new ApiException($exception->getMessage(), (int) $exception->getCode(), null, null);
+                    }
                     $statusCode = $response->getStatusCode();
-                    throw new ApiException(
-                        sprintf(
-                            '[%d] Error connecting to the API (%s)',
-                            $statusCode,
-                            $exception->getRequest()->getUri()
-                        ),
+                    $e = new ApiException(
+                        sprintf('[%d] Error connecting to the API (%s)', $statusCode, $exception->getRequest()->getUri()),
                         $statusCode,
                         $response->getHeaders(),
                         (string) $response->getBody()
                     );
+                    {{>deserialize_error}}
+                    throw $e;
                 }
             );
     }

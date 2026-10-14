@@ -5,6 +5,20 @@ namespace GuzzleHttp\Promise;
 interface PromiseInterface
 {
     /**
+     * @template TNext = never
+     * @template TRecovered = never
+     * @param (callable(TValue): (TNext|PromiseInterface<TNext>))|null $onFulfilled
+     * @param (callable(mixed): (TRecovered|PromiseInterface<TRecovered>))|null $onRejected
+     * @return PromiseInterface<($onFulfilled is null ? TValue : TNext)|($onRejected is null ? never : TRecovered)>
+     */
+    public function then(?callable $onFulfilled = null, ?callable $onRejected = null): PromiseInterface;
+    /**
+     * @template TRecovered
+     * @param callable(mixed): (TRecovered|PromiseInterface<TRecovered>) $onRejected
+     * @return PromiseInterface<TValue|TRecovered>
+     */
+    public function otherwise(callable $onRejected): PromiseInterface;
+    /**
      * @return ($unwrap is true ? TValue : null)
      */
     public function wait(bool $unwrap = true);
