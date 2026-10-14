@@ -100,3 +100,17 @@ or all-language encoding parity.
 Original ApiClient.mustache SHA256: `605d3eac175edbd72231badd1dd8a1359d71a122cefe19881ec571602fe63330`.
 
 Original api.mustache SHA256: `a041e1c4af516bdbda4a6f3b118983aa9d2950c76768128ebbb57e4666a511de`.
+
+
+## Kotlin jvm-okhttp4 non-multi form arrays
+
+Source: `kotlin-client/libraries/jvm-okhttp/api.mustache`, same7.26.0 JAR;
+Apache-2.0/upstream headers and renderer retained. Original SHA256:
+`2ee424554e1953a922595e52712c599447dd2b2c8a544a641387d4fe6dff4f6d`.
+
+Actual multipart assertions found that an explode=false array was repeated instead
+of retaining its declared CSV form. The API compatibility template uses upstream
+toMultiValue/collection-format metadata for non-multi non-file arrays, preserving
+multi/file/scalar parts and the existing transport. Default jvm-okhttp4 only;
+explicit API templates keep priority. The tested string-array contract does not
+establish nested/custom-part or every encoding/platform behavior.

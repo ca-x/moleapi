@@ -468,6 +468,7 @@ fun main() {
         rejected=error.statusCode==400 && (error.response as? ClientError<*>)?.body.toString().contains("expected fixture failure")
     }
     check(rejected) { "HTTP400 not exposed" }
+    __KOTLIN_EXTENDED__
     ApiClient.defaultClient.connectionPool.evictAll()
     ApiClient.defaultClient.dispatcher.executorService.shutdown()
     println("PASS Kotlin jvm-okhttp4 client")
@@ -475,10 +476,33 @@ fun main() {
 '''
 
 
+KOTLIN_BINARY = r'''val bytes=byteArrayOf(0,1,2,13,10,255.toByte(),128.toByte(),65)
+    val downloaded=api.downloadFile()
+    try { check(downloaded.readBytes().contentEquals(bytes)) { "Binary download changed bytes" } }
+    finally { downloaded.delete() }
+    val upload=java.nio.file.Files.createTempFile("kotlin-upload", ".bin").toFile()
+    try {
+        upload.writeBytes(bytes)
+        val receipt=api.uploadFile(body=upload)
+        check(receipt.propertySize==bytes.size) { "Binary upload receipt lost" }
+    } finally { upload.delete() }
+'''
+KOTLIN_MULTIPART = r'''val bytes=byteArrayOf(0,1,2,13,10,255.toByte(),128.toByte(),65)
+    val temporary=java.nio.file.Files.createTempDirectory("kotlin-multipart")
+    val upload=temporary.resolve("payload.bin").toFile()
+    try {
+        upload.writeBytes(bytes)
+        val receipt=api.uploadMultipart(file=upload,note="鼹鼠 \"quotes\" & +",tags=listOf("red","蓝"),optionalTags=listOf("red","蓝"),packedTags=listOf("red","蓝"))
+        check(receipt.propertySize==bytes.size) { "Multipart receipt lost" }
+    } finally { upload.delete();java.nio.file.Files.deleteIfExists(temporary) }
+'''
+
+
 def kotlin_client(directory,url,args):
-    assert args.profile=='core', "Kotlin extended profiles require their own consumers"
+    assert args.profile in {'core','binary','multipart'}, "Kotlin union profiles require their own consumers"
     assert args.gradle and args.gradle.is_file(), "Configure an explicit --gradle executable"
-    (directory/'src/main/kotlin/RuntimeFixture.kt').write_text(KOTLIN_CORE)
+    extra={'core':'','binary':KOTLIN_BINARY,'multipart':KOTLIN_MULTIPART}[args.profile]
+    (directory/'src/main/kotlin/RuntimeFixture.kt').write_text(KOTLIN_CORE.replace('__KOTLIN_EXTENDED__',extra))
     (directory/'runtime-fixture.init.gradle').write_text('''gradle.projectsEvaluated {
     rootProject.tasks.register('runtimeFixture', JavaExec) {
         dependsOn rootProject.tasks.named('classes')
@@ -833,7 +857,7 @@ def main():
     assert all(t in {"javascript", "python", "go", "typescript-fetch", "python-fastapi", "csharp", "aspnetcore", "java", "spring", "kotlin"} for t in targets)
     assert all(v in {"3.0.3", "3.1.0"} for v in versions)
     if args.profile in {"binary","multipart","union"}:
-        assert not {"python-fastapi","aspnetcore","spring","kotlin"}.intersection(targets), "Extended profiles currently validate clients"
+        assert not {"python-fastapi","aspnetcore","spring"}.intersection(targets), "Extended profiles currently validate clients"
     if not args.reuse_generated:
         run(["cargo", "run", "-p", "moleapi-generation", "--example", "fixture_projects", "--", str(args.output), str(args.worker), str(args.java), args.targets, args.versions, args.profile], REPO, timeout=300)
     evidence_path = args.output / "runtime-evidence.json"

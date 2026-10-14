@@ -77,6 +77,20 @@ pub(super) fn write_builtin(input: &ProjectInput, root: &Path) -> Result<bool> {
                 ),
             ]
         }
+        "kotlin"
+            if input
+                .options
+                .get("library")
+                .and_then(Value::as_str)
+                .is_none_or(|library| library == "jvm-okhttp4") =>
+        {
+            &[(
+                "api.mustache",
+                include_str!(
+                    "../../../../vendor/openapi-generator/compat/kotlin-jvm-okhttp4/api.mustache"
+                ),
+            )]
+        }
         _ => return Ok(false),
     };
     std::fs::create_dir_all(root)?;

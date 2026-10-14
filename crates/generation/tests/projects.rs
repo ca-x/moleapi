@@ -586,3 +586,47 @@ async fn explicit_java_templates_override_okhttp_form_compatibility_defaults() {
             .contains("explicit Java client")
     );
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured Java17+ test runtime"]
+async fn explicit_kotlin_api_template_overrides_form_format_compatibility_default() {
+    let java = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_JAVA").expect("explicit Java executable"),
+    );
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), Some(java)).unwrap();
+    let input = ProjectInput {
+        target: "kotlin".into(),
+        options: BTreeMap::new(),
+        include_secrets: false,
+        specification: json!({"openapi":"3.0.3","info":{"title":"Kotlin override","version":"1"},"paths":{"/x":{"get":{"operationId":"x","responses":{"200":{"description":"OK"}}}}}}),
+        templates: Some(TemplateBundle {
+            format: "moleapi-codegen-templates-v1".into(),
+            outputs: BTreeMap::new(),
+            files: vec![TemplateFile {
+                path: "api.mustache".into(),
+                content: "// explicit Kotlin API {{classname}}\n".into(),
+                encoding: None,
+            }],
+        }),
+    };
+    let result = runtime
+        .generate(input, CancellationToken::new())
+        .await
+        .unwrap();
+    let api = result
+        .files
+        .iter()
+        .find(|file| file.path.ends_with("/apis/DefaultApi.kt"))
+        .unwrap();
+    assert!(api.content.contains("// explicit Kotlin API DefaultApi"));
+    assert!(!api.content.contains("PartConfig"));
+    assert!(
+        result
+            .files
+            .iter()
+            .find(|file| file.path == "moleapi-templates.json")
+            .unwrap()
+            .content
+            .contains("explicit Kotlin API")
+    );
+}
