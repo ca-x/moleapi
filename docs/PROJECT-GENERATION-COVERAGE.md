@@ -389,7 +389,7 @@ remained below64MiB. Generation regression passed73 cases (21 external-tool case
 all11 owned project API cases passed with emitted conflict metadata/privacy checks,
 and strict scoped Clippy/formatting passed.
 
-Template flag execution, broader parser namespaces, nested/union/
+Broader template sampling and parser namespaces, nested/union/
 custom body encodings, interactive/native-platform workflows and full CLI parity remain
 required work. This slice does not claim unsupported template or namespace capabilities.
 
@@ -415,5 +415,38 @@ required body failed before network. All9 standalone fixtures passed66 real requ
 privacy checks, and scoped strict Clippy/formatting passed.
 
 This covers the specified controls and repeated-prefix avoidance, not every sanitized-name,
-short-option, template, interactive or native-platform discovery/namespace behavior.
+short-option, arbitrary template sampling, interactive or native-platform discovery/namespace behavior.
 Those plus broader body/protocol/pagination semantics remain required CLI module work.
+
+
+## Native offline JSON body templates
+
+The existing --json-body-template flag now prints a validated body value and returns
+before URL/token/client setup, body-file reads or API execution. It is exclusive within
+the operation and bypasses required operation arguments. Regular execution still requires
+--base-url/MOLEAPI_API_URL. Library callers can use Cli::body_template for a value result;
+Cli::execute also handles the flag before constructing an SDK request.
+
+Candidate order is media example, first supplied named example (including component refs),
+resolved schema example/default, then the mature generated model's Default when available.
+False/zero/empty/null values are preserved. Model deserialization and jsonschema0.49.9
+Draft7 with format validation check the original upstream-converted schema/components.
+No network retrieval feature is enabled. Missing or invalid candidates fail with guidance;
+no arbitrary-schema sampler or alternate schema parser is added. A compile fixture also
+reproduced dynamic enum Clap values requiring the string feature; generated manifests now
+enable it rather than removing enum coverage.
+
+A standalone generated CLI passed media/named/component/schema/default/Default templates,
+nested/enum/array/nullable and empty scalar values offline without a base URL. Invalid URL
+and token values were bypassed during template output. Invalid candidate minLength/minItems,
+no-candidate bodies, conflicting file/field inputs and missing execution URL failed without
+API calls. Template files then passed2 real JSON/form POST roundtrips, including nested/
+enum models and URL-encoded Unicode. All10 standalone fixtures passed68 API requests;
+96MiB upload still observed13,004KiB Linux RSS. Generation75 cases passed (23 external-tool
+cases ignored), all11 owned-worker API cases passed, including default media-template secret
+exclusion and explicit inclusion. Strict scoped Clippy/formatting passed.
+
+Arbitrary schema sampling when no example/default exists, broader conversion/constraint
+keywords, template selection/editing, interactive workflows and native-platform evidence
+remain required module work. This establishes the specified offline candidate contract,
+not an automatically valid example for every possible API schema.

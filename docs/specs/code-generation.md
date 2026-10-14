@@ -117,3 +117,12 @@ Generated CLI API arguments reserved by operation body/help controls receive det
 api- prefixes until unused against all original API names. Help shows the source parameter
 name; SDK/wire mappings stay unchanged. OperationId help remains executable, distinct from
 --help. Other sanitized/short-option/template namespaces require their own coverage.
+
+
+Native --json-body-template is an exclusive offline operation action. Prefer supplied
+media/named/schema examples, schema defaults, then generated model Default; validate with
+model deserialization and the mature JSON Schema validator over upstream-converted local
+schema/components before output. Preserve zero/false/empty/null. Missing/invalid candidates
+fail with guidance, never execute an API call. Template output needs no URL/token/client;
+normal execution still needs explicit URL configuration. Arbitrary schema sampling and
+broader keyword/platform/template selection remain separate required work.

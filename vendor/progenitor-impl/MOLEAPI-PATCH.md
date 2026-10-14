@@ -65,3 +65,15 @@ actual SDK setter/wire name is retained and help documents the original paramete
 Body help keys use full JSON files. The adapter disables auto help-subcommand generation
 so an operationId help can execute while --help still displays usage. A standalone
 3-request fixture and all prior consumers passed; broader parser/template modes remain open.
+
+
+Offline json-body-template now uses supplied media/named/component/schema examples or
+schema/model defaults and validates through the generated DTO plus jsonschema0.49.9
+against upstream ToSchema components. Shared component text is emitted once. Named
+example lookup extends the existing component resolver. No arbitrary-schema sampler,
+network retrieval or alternate schema parser is introduced. Missing/invalid candidates
+return errors instead of executing API requests. Exclusive operation parsing permits
+required-argument-free offline output. The adapter checks template output before client
+configuration; execution still requires an explicit URL. Generated Clap enables string
+for the upstream dynamic enum parser. Offline and2 real file roundtrip cases plus all
+previous generated consumers passed; arbitrary sampling/selection/platforms remain open.

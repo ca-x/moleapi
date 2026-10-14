@@ -550,7 +550,7 @@ async fn upgraded_cli_generation_uses_owned_worker_and_preserves_source_privacy(
     .unwrap();
     let owner = register(&router, "upgrade-owner").await;
     let other = register(&router, "upgrade-other").await;
-    let source = json!({"openapi":"3.0.3","info":{"title":"Owned upgrade","version":"1"},"paths":{
+    let mut source = json!({"openapi":"3.0.3","info":{"title":"Owned upgrade","version":"1"},"paths":{
         "/pages":{"get":{"operationId":"pages","x-dropshot-pagination":{},"parameters":[
             {"in":"query","name":"limit","schema":{"type":"integer","minimum":1,"maximum":4294967295u64}},
             {"in":"query","name":"page_token","schema":{"type":"string"}}
@@ -567,7 +567,12 @@ async fn upgraded_cli_generation_uses_owned_worker_and_preserves_source_privacy(
             "101":{"description":"Upgraded"},
             "400":{"description":"Rejected","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Failure"}}}}
         }}}
-    },"components":{"schemas":{"Failure":{"type":"object","properties":{"password":{"type":"string","format":"password","example":"private-upgrade-fixture"}}}}}}).to_string();
+    },"components":{"schemas":{"Failure":{"type":"object","properties":{"password":{"type":"string","format":"password","example":"private-upgrade-fixture"}}}}}});
+    source["paths"]["/optional-json"]["post"]["requestBody"]["content"]["application/json"]["schema"]
+        ["properties"]["password"] = json!({"type":"string","format":"password"});
+    source["paths"]["/optional-json"]["post"]["requestBody"]["content"]["application/json"]["example"] =
+        json!({"id":7,"password":"private-template-fixture"});
+    let source = source.to_string();
     let mut data = example_data();
     data["specifications"] =
         json!([{"id":"spec","name":"Upgrade","kind":"openapi","dialect":"3.0.3","source":source}]);
@@ -609,6 +614,7 @@ async fn upgraded_cli_generation_uses_owned_worker_and_preserves_source_privacy(
     .await;
     assert_eq!(status, StatusCode::OK, "{artifact}");
     assert!(!artifact.to_string().contains("private-upgrade-fixture"));
+    assert!(!artifact.to_string().contains("private-template-fixture"));
     let files = artifact["files"].as_array().unwrap();
     assert!(files.iter().any(|f| {
         f["path"] == "src/cli.rs"
@@ -696,4 +702,5 @@ async fn upgraded_cli_generation_uses_owned_worker_and_preserves_source_privacy(
     .await;
     assert_eq!(status, StatusCode::OK, "{included}");
     assert!(included.to_string().contains("private-upgrade-fixture"));
+    assert!(included.to_string().contains("private-template-fixture"));
 }

@@ -68,7 +68,7 @@ impl CliConfig for Output {
 async fn main() -> anyhow::Result<()> {
     let mut command = clap::Command::new(env!("CARGO_PKG_NAME"))
         .subcommand_required(true).arg_required_else_help(true).disable_help_subcommand(true)
-        .arg(clap::Arg::new("base-url").long("base-url").env("MOLEAPI_API_URL").hide_env_values(true).required(true))
+        .arg(clap::Arg::new("base-url").long("base-url").env("MOLEAPI_API_URL").hide_env_values(true))
         .arg(clap::Arg::new("output-file").long("output-file").value_name("NEW_FILE").help("Stream binary or upgraded response payloads to a new file; refuses overwrite"))
         .arg(clap::Arg::new("upgrade-input").long("upgrade-input").value_name("FILE").help("Send file bytes on an upgraded connection; WebSocket sends one binary message"))
         .arg(clap::Arg::new("token").long("token").env("MOLEAPI_API_TOKEN").hide_env_values(true));
@@ -78,12 +78,20 @@ async fn main() -> anyhow::Result<()> {
     let matches = command.get_matches();
     let (name, args) = matches.subcommand().expect("Required operation");
     let operation = CliCommand::iter().find(|operation| operation.operation_id() == name).expect("Known generated operation");
+    if args.try_get_one::<bool>("json-body-template").ok().flatten().copied().unwrap_or(false) {
+        use std::io::Write;
+        let value = Cli::<Output>::body_template(operation)?;
+        writeln!(std::io::stdout().lock(), "{}", serde_json::to_string_pretty(&value)?)?;
+        return Ok(());
+    }
+    use anyhow::Context;
+    let base_url = matches.get_one::<String>("base-url").context("Set --base-url or MOLEAPI_API_URL to execute an API operation")?;
     let mut headers = reqwest::header::HeaderMap::new();
     if let Some(token) = matches.get_one::<String>("token") {
         let mut header = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}"))?;
         header.set_sensitive(true); headers.insert(reqwest::header::AUTHORIZATION, header);
     }
     let http = reqwest::Client::builder().default_headers(headers).build()?;
-    let client = Client::new_with_client(matches.get_one::<String>("base-url").expect("Required URL"), http);
+    let client = Client::new_with_client(base_url, http);
     Cli::new(client, Output { file: matches.get_one::<String>("output-file").map(std::path::PathBuf::from), upgrade_input: matches.get_one::<String>("upgrade-input").map(std::path::PathBuf::from) }).execute(operation, args).await
 }

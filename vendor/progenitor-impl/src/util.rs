@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use indexmap::IndexMap;
-use openapiv3::{Components, Parameter, ReferenceOr, RequestBody, Response, Schema};
+use openapiv3::{Components, Example, Parameter, ReferenceOr, RequestBody, Response, Schema};
 use unicode_ident::{is_xid_continue, is_xid_start};
 
 use crate::Result;
@@ -66,6 +66,12 @@ impl ComponentLookup for RequestBody {
 impl ComponentLookup for Response {
     fn get_components(components: &Components) -> &IndexMap<String, ReferenceOr<Self>> {
         &components.responses
+    }
+}
+
+impl ComponentLookup for Example {
+    fn get_components(components: &Components) -> &IndexMap<String, ReferenceOr<Self>> {
+        &components.examples
     }
 }
 
