@@ -1208,3 +1208,67 @@ async fn explicit_swift_parameter_partial_retains_priority_over_form_array_defau
     assert!(api.content.contains("explicit Swift parameter"));
     assert!(!api.content.contains("compactMap"));
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured protoc and official Java gRPC plugin"]
+async fn official_java_plugin_emits_imported_models_and_four_rpc_service_interfaces() {
+    let compiler =
+        PathBuf::from(std::env::var_os("MOLEAPI_CODEGEN_TEST_PROTOC").expect("explicit protoc"));
+    let plugin = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_GRPC_JAVA").expect("explicit Java plugin"),
+    );
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), None)
+        .unwrap()
+        .with_protoc(Some(compiler), BTreeMap::from([("java".into(), plugin)]))
+        .unwrap();
+    let specification = serde_json::from_str(include_str!(
+        "../../../tools/projects/fixtures/protobuf-imports.json"
+    ))
+    .unwrap();
+    let artifact = runtime
+        .generate(
+            ProjectInput {
+                target: "protobuf-java".into(),
+                specification,
+                options: BTreeMap::new(),
+                include_secrets: false,
+                templates: None,
+            },
+            CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert!(
+        artifact
+            .files
+            .iter()
+            .any(|file| file.path == "fixture/Types.java")
+    );
+    assert!(
+        artifact
+            .files
+            .iter()
+            .any(|file| file.path == "fixture/Common.java")
+    );
+    let service = artifact
+        .files
+        .iter()
+        .find(|file| file.path == "fixture/EchoServiceGrpc.java")
+        .unwrap();
+    for method in [
+        "getCallMethod",
+        "getWatchMethod",
+        "getCollectMethod",
+        "getChatMethod",
+    ] {
+        assert!(
+            service.content.contains(method),
+            "Missing generated Java {method}"
+        );
+    }
+    assert!(
+        service.content.contains("EchoServiceStub")
+            && service.content.contains("EchoServiceImplBase")
+    );
+    assert!(artifact.engine.contains("grpc-plugin=true"));
+}

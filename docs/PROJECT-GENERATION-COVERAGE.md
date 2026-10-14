@@ -856,3 +856,33 @@ format checks passed. Catalog evidence distinguishes builtin message generation 
 configured Python-plugin four-mode fixture. Other-language compilation/gRPC plugins,
 advanced schema/options/dependency/runtime ranges, platform deployment and broader
 full-module scopes remain open.
+
+
+## Explicit Java protobuf/gRPC four-mode consumers
+
+Official protoc-gen-grpc-java1.84.1 (Linux x86_64) now has actual compile/call evidence with
+explicit protoc36.1. The published Maven Central SHA256 was verified before execution:
+`1aae91278f0d8187641862710748df2c163582d7df0a177e549f7d8238a9a3fe`.
+Source: https://repo.maven.apache.org/maven2/io/grpc/protoc-gen-grpc-java/1.84.1/;
+official version/dependency/plugin setup: https://github.com/grpc/grpc-java.
+The existing explicit plugin route emits original Types/Common messages and
+EchoServiceGrpc stubs/service interfaces from the checked multi-file descriptor graph;
+no plugin, model, transport or service emitter replacement was needed.
+
+Separate consumers for source and descriptor input compile the unchanged generated Java
+files with Temurin21.0.12.1+1/Maven3.9.11, gRPC1.84.1 and protobuf-java4.36.1. A matching
+protobuf runtime is explicit because protoc36.1 emits the4.36.1 runtime guard. Maven uses
+strict checksums and an isolated QA repository. Actual Netty loopback unary/server-stream/
+client-stream/bidi calls passed for both inputs (8 RPCs), preserving Unicode, non-UTF8
+bytes, enum/repeated fields, oneof presence including code=0 and Timestamp. Source and
+descriptor generated-code hashes match; original source hashes remain unchanged after
+build/calls. Dependency trees, tool versions, descriptor hashes and runtime evidence are
+retained in isolated QA output. Channels/servers terminate after calls.
+
+The configured Java plugin emission test passed, Python's unchanged default fixture
+invocation passed8 four-mode regression RPCs, and78 generation cases (36 external-tool
+cases ignored),11 owned API cases, fixture parser tests and scoped strict Clippy/format
+passed. Catalog validation names the configured Java-plugin fixture separately from
+message-only compiler integration. Product preview/export does not install dependencies,
+execute consumers or acquire plugins. Other Java plugin/runtime/library/platform ranges,
+TLS/auth/advanced schemas/options and remaining languages/plugins stay full-module work.

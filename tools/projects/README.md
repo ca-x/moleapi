@@ -280,3 +280,28 @@ representations passed8 RPCs on grpcio1.84.0/protobuf6.33.6/integrated protoc31.
 Explicit builtin protoc36.1 tests also verified all8 language import outputs and source/
 descriptor code equivalence. Other language compilation/calls and plugin/platform cases
 remain independent gates. This QA tooling is never invoked by product preview/export.
+
+
+## Explicit Java protobuf/gRPC consumer
+
+The fixture generator accepts an optional final java selector (omitting it retains the
+Python fixture). Pass the official configured Java plugin and protoc as absolute paths:
+
+```sh
+cargo run -p moleapi-generation --example fixture_protobuf -- /absolute/java-qa-output /absolute/moleapi-server /absolute/protoc /absolute/protoc-gen-grpc-java java
+python3 tools/projects/verify-protobuf-java.py /absolute/java-qa-output/source --jdk /absolute/jdk --maven /absolute/mvn --repository /absolute/isolated-maven-repository
+python3 tools/projects/verify-protobuf-java.py /absolute/java-qa-output/descriptor --jdk /absolute/jdk --maven /absolute/mvn --repository /absolute/isolated-maven-repository
+```
+
+The separate Maven consumer copies generated Java files with unchanged bytes and verifies
+original-source hashes afterward. It uses gRPC1.84.1/protobuf-java4.36.1, an explicit JDK21
+and strict Maven checksums. Typed generated models/stubs/service interfaces exercise
+unary/server/client/bidi calls over Netty loopback, enum/bytes/Unicode/repeated/oneof/
+Timestamp data and cleanup. Resolved dependency trees, tool versions, descriptor hash and
+per-input runtime evidence are retained in QA output. The tool never runs from product
+preview/export; other plugin versions/platforms/options require separate evidence.
+
+Verified Java tools: official plugin1.84.1 (published SHA256 checked), explicit protoc36.1,
+Temurin21.0.12.1+1/Maven3.9.11 on Linux. Source and descriptor consumers passed8 RPCs;
+original generated hashes match across both representations and remain unchanged.
+Python's original default invocation passed8 further four-mode regression RPCs.
