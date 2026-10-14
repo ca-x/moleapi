@@ -11,7 +11,7 @@ construction and response classification remain upstream. Upgrade responses call
 `CliConfig::success_upgrade` hook with the existing WebSocket classification. Upgrade
 errors retain the SDK error. The executable adapter uses Tokio duplex IO for generic
 upgrades and tokio-tungstenite over the SDK upgraded connection for declared WebSockets;
-raw paginated responses remain guarded. This emitter patch is used by the generator,
+incompatible declared/raw-success pagination contracts remain rejected. This emitter patch is used by the generator,
 not required by generated projects. Generated CLI projects depend on tokio-tungstenite
 for frame handling; they do not depend on this vendored implementation.
 
@@ -22,3 +22,11 @@ required raw behavior and typed JSON/form bodies are unchanged. CLI --body-file 
 requiredness, uses read_to_string for text and read for octet streams. Generated CLI and
 positional SDK projects passed actual omitted/empty/provided binary/text wire cases;
 existing raw/upgrade consumers passed. Buffered upload remains an explicit limitation.
+
+
+For recognized typed Dropshot pages, raw error branches retain the SDK error/nonzero
+exit instead of todo. The CLI limit uses the exact schema-derived Clap type and positive
+integer conversion, fixing an actual NonZeroU64/NonZeroU32 downcast panic. Unsupported
+explicit pagination contracts reject before CLI rendering; no alternate page parser is
+introduced. Two standalone typed-page limit variants passed real multi-page, limit and
+first/later raw-error wire fixtures while preserving upstream lazy token streaming.

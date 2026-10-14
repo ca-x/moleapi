@@ -301,3 +301,7 @@ mod upgrade_tests;
 #[cfg(test)]
 #[path = "native_cli_body_tests.rs"]
 mod body_tests;
+
+#[cfg(test)]
+#[path = "native_cli_pagination_tests.rs"]
+mod pagination_tests;

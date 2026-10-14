@@ -32,7 +32,7 @@ Remaining complete-module work includes broader per-language compile/run fixture
 
 ## Native generated CLI and regeneration
 
-`rust-progenitor-cli` uses Progenitor’s builder SDK and clap CLI emitter, not a custom operation/argument emitter. A small executable adapter supplies base URL/Bearer configuration and JSON output. Generated CLI projects compiled and called real HTTP fixtures for GET and POST with path/query/body parameters. CLI help exposes operation arguments, whole JSON-body files and nonzero API-error behavior. Finite raw responses now use a small, MPL-preserving Progenitor emitter patch (see `vendor/progenitor-impl/MOLEAPI-PATCH.md`): success bytes stream unchanged to stdout or `--output-file`, which uses create-new semantics and refuses overwrite. Raw error responses retain the SDK error and exit nonzero. `--body-file` reads binary/text request bodies into the upstream builder; upload input currently loads the file into memory. A generated standalone project compiled and passed real HTTP byte-identical stdout/download/upload, existing-file preservation and raw HTTP400-error checks. Raw paginated response paths remain unsupported and explicitly rejected by the emitted-code guard; upgraded CLI connections now have the separately verified transport slice below; optional raw request-body requiredness and text input are repaired in the separately verified slice below. These gaps remain full-module work.
+`rust-progenitor-cli` uses Progenitor’s builder SDK and clap CLI emitter, not a custom operation/argument emitter. A small executable adapter supplies base URL/Bearer configuration and JSON output. Generated CLI projects compiled and called real HTTP fixtures for GET and POST with path/query/body parameters. CLI help exposes operation arguments, whole JSON-body files and nonzero API-error behavior. Finite raw responses now use a small, MPL-preserving Progenitor emitter patch (see `vendor/progenitor-impl/MOLEAPI-PATCH.md`): success bytes stream unchanged to stdout or `--output-file`, which uses create-new semantics and refuses overwrite. Raw error responses retain the SDK error and exit nonzero. `--body-file` reads binary/text request bodies into the upstream builder; upload input currently loads the file into memory. A generated standalone project compiled and passed real HTTP byte-identical stdout/download/upload, existing-file preservation and raw HTTP400-error checks. Declared raw success pages/incompatible Dropshot pagination remain unsupported and reject during CLI generation; typed-page raw errors are supported by the verified pagination slice below; upgraded CLI connections now have the separately verified transport slice below; optional raw request-body requiredness and text input are repaired in the separately verified slice below. These gaps remain full-module work.
 
 Save generated snapshot JSON from the project dialog. Regeneration compares the original snapshot, current edited snapshot and next generated files using diffy0.5.2 in a capped, cancellable application worker. Original/generated hashes, duplicate paths, file/aggregate/line/diff limits and owner/workspace admission are checked. Nonoverlapping changes merge, unchanged local files update, edited/deleted/authored files are preserved or become explicit conflicts. Conflicts block ZIP download until the user chooses working/generated/deletion; no filesystem overwrite occurs. Merged ZIPs include actual merged-content checksums in `moleapi-regeneration.json` and preserve safe executable flags. Snapshot import, conflict-choice and archive gating have frontend/API tests. Original `moleapi-generation.json` describes generator output; the regeneration manifest describes the edited/merged result.
 
@@ -288,3 +288,31 @@ and sensitive-example/owner boundaries retained. Scoped strict Clippy/formatting
 This slice does not implement optional JSON/form-object request semantics, arbitrary
 media types, streaming file upload or all-platform behavior. File input remains buffered;
 large-file streaming and further transport/typed-body profiles remain required work.
+
+
+## Native CLI typed pagination and raw page errors
+
+The CLI preserves Progenitor's Dropshot `items`/optional `next_page` convention,
+first-page-required query parameters and lazy page-token stream. Generated raw error
+branches return the original SDK error/nonzero exit rather than `todo!()`. Pagination
+limit lookup now uses the actual schema-derived Clap type instead of a fixed NonZeroU32;
+the shared positive-integer serialization check prevents the reproduced NonZeroU64
+downcast panic and retains total-item limits. Incompatible declared pagination contracts
+(raw success pages, missing token parameter, invalid next_page shape) reject explicitly
+before CLI emission instead of becoming a one-shot command.
+
+Two standalone generated CLI builds (bounded integer and explicit uint32 limit schemas)
+passed18 real GET requests in total. Each exercised full three-page traversal, a limit
+spanning pages, limit1 without extra fetch, reserved/Unicode page tokens, removal of
+first-page-only sort, and preserved Bearer/custom headers. First-page raw400 fails with
+empty stdout; later raw400 retains previously emitted JSON item lines and exits nonzero
+without a panic. Missing initial sort, zero limits and manual page-token arguments reject
+without additional requests. The prior body/binary/upgrade fixtures also passed in the
+same serial5-fixture batch, for38 actual requests across all standalone consumers.
+
+Generation regression passed70 cases (18 external-tool cases ignored); all11 owned
+project API cases passed with capped-worker typed/raw-error pagination generation,
+source/privacy/owner checks. Scoped strict Clippy/formatting passed. Raw success-page
+transports, non-Dropshot pagination conventions, streaming upload, typed optional bodies,
+interactive CLI and native-platform transport evidence remain required work. This is
+verified native3.0 pagination, not full CLI or OpenAPI3.1 support.

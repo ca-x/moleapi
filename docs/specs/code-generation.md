@@ -90,3 +90,11 @@ payload, while explicit empty files retain the declared MIME. Text input must be
 UTF8; binary bytes remain unchanged. Positional SDK optional raw bodies accept Option;
 builder defaults omit them. File input is currently buffered; streaming/optional typed
 JSON/form request semantics require separate implementation and evidence.
+
+
+Native CLI Dropshot typed pagination retains items/next_page and first-page parameter
+semantics; total limits use the actual generated parameter type. Typed-page raw errors
+exit nonzero with the SDK error; already emitted items remain on stdout after a later-page
+failure. Explicit incompatible pagination contracts reject instead of silently falling
+back to a one-shot command. Raw success pages and other pagination conventions require
+separate implementation and evidence.

@@ -50,7 +50,13 @@ impl Generator {
                 })
             })
             .map(|(path, method, operation, path_parameters)| {
-                self.process_operation(operation, &spec.components, path, method, path_parameters)
+                let method = self.process_operation(operation, &spec.components, path, method, path_parameters)?;
+                if operation.extensions.contains_key("x-dropshot-pagination") && method.dropshot_paginated.is_none() {
+                    return Err(crate::Error::InvalidExtension(format!(
+                        "unsupported pagination contract for {}: expected typed items/next_page with optional page_token and limit", method.operation_id
+                    )));
+                }
+                Ok(method)
             })
             .collect::<Result<Vec<_>>>()?;
 
@@ -303,6 +309,15 @@ impl Generator {
 
             // Paginated APIs for which we iterate over each item.
             Some(_) => {
+                let limit = method
+                    .params
+                    .iter()
+                    .find(|param| param.api_name == "limit")
+                    .unwrap();
+                let OperationParameterType::Type(limit_type_id) = &limit.typ else {
+                    unreachable!()
+                };
+                let limit_type = self.type_space.get_type(limit_type_id).unwrap().ident();
                 let success_type = match success_kind {
                     crate::method::OperationResponseKind::Type(type_id) => {
                         self.type_space.get_type(&type_id).unwrap().ident()
@@ -325,12 +340,19 @@ impl Generator {
                     | crate::method::OperationResponseKind::Upgrade => {
                         quote! {
                             {
-                                todo!()
+                                return Err(anyhow::Error::new(r))
                             }
                         }
                     }
                 };
                 quote! {
+                    let maximum_items = matches.get_one::<#limit_type>("limit")
+                        .map(|value| {
+                            let value = ::serde_json::to_value(value)?;
+                            let count = value.as_u64().filter(|count| *count > 0)
+                                .context("Pagination limit must be a positive integer")?;
+                            Ok::<usize, anyhow::Error>(usize::try_from(count).unwrap_or(usize::MAX))
+                        }).transpose()?.unwrap_or(usize::MAX);
                     self.config.list_start::<#success_type>();
 
                     // We're using "limit" as both the maximum page size and
@@ -339,9 +361,7 @@ impl Generator {
                     // bunch of results we don't display... but it's fine.
                     let mut stream = futures::StreamExt::take(
                         request.stream(),
-                        matches
-                            .get_one::<std::num::NonZeroU32>("limit")
-                            .map_or(usize::MAX, |x| x.get() as usize));
+                        maximum_items);
 
                     loop {
                         match futures::TryStreamExt::try_next(&mut stream).await {

@@ -551,6 +551,10 @@ async fn upgraded_cli_generation_uses_owned_worker_and_preserves_source_privacy(
     let owner = register(&router, "upgrade-owner").await;
     let other = register(&router, "upgrade-other").await;
     let source = json!({"openapi":"3.0.3","info":{"title":"Owned upgrade","version":"1"},"paths":{
+        "/pages":{"get":{"operationId":"pages","x-dropshot-pagination":{},"parameters":[
+            {"in":"query","name":"limit","schema":{"type":"integer","minimum":1,"maximum":4294967295u64}},
+            {"in":"query","name":"page_token","schema":{"type":"string"}}
+        ],"responses":{"200":{"description":"Page","content":{"application/json":{"schema":{"type":"object","required":["items"],"properties":{"items":{"type":"array","items":{"type":"string"}},"next_page":{"type":"string","nullable":true}}}}}},"400":{"description":"Raw error","content":{"application/octet-stream":{"schema":{"type":"string","format":"binary"}}}}}}},
         "/optional-text":{"post":{"operationId":"optional_text","requestBody":{"required":false,"content":{"text/plain":{"schema":{"type":"string"}}}},"responses":{"204":{"description":"Accepted"}}}},
         "/socket":{"get":{"operationId":"socket","x-dropshot-websocket":true,"responses":{
             "101":{"description":"Upgraded"},
@@ -626,6 +630,14 @@ async fn upgraded_cli_generation_uses_owned_worker_and_preserves_source_privacy(
                 .as_str()
                 .unwrap()
                 .contains("if let Some(body) = body")
+    }));
+    assert!(files.iter().any(|file| {
+        file["path"] == "src/cli.rs"
+            && file["content"]
+                .as_str()
+                .unwrap()
+                .contains("request.stream()")
+            && !file["content"].as_str().unwrap().contains("todo!()")
     }));
     let (_, saved) = call(
         &router,
