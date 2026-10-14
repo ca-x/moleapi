@@ -19,9 +19,9 @@ for frame handling; they do not depend on this vendored implementation.
 Raw-body metadata now retains the original requestBody.required flag. Optional raw
 positional/builder methods preserve None and attach a Content-Type/body only for Some;
 required raw behavior and typed JSON/form bodies are unchanged. CLI --body-file follows
-requiredness, uses read_to_string for text and read for octet streams. Generated CLI and
+requiredness, uses read_to_string for text and sized ReaderStream IO for regular octet-stream files. Generated CLI and
 positional SDK projects passed actual omitted/empty/provided binary/text wire cases;
-existing raw/upgrade consumers passed. Buffered upload remains an explicit limitation.
+existing raw/upgrade consumers passed. Text/WebSocket buffering and nonseekable input remain explicit limitations.
 
 
 For recognized typed Dropshot pages, raw error branches retain the SDK error/nonzero
@@ -30,3 +30,12 @@ integer conversion, fixing an actual NonZeroU64/NonZeroU32 downcast panic. Unsup
 explicit pagination contracts reject before CLI rendering; no alternate page parser is
 introduced. Two standalone typed-page limit variants passed real multi-page, limit and
 first/later raw-error wire fixtures while preserving upstream lazy token streaming.
+
+
+Binary CLI file bodies use a64KiB Tokio ReaderStream and a minimal http_body wrapper
+with exact remaining size, retaining Content-Length. Opened-handle regular-file checks,
+captured-length read caps and early EOF errors prevent growth append/short-body success.
+A96MiB real upload preserved digest/length with observed Linux RSS below64MiB; helper
+empty/growth/shrink/directory tests and all earlier standalone CLI consumers passed.
+The wrapper supplies size/frame metadata to reqwest; request construction/transport stays
+upstream. Text file input remains UTF8-buffered. Generated CLIs add http-body1/tokio-util0.7.

@@ -61,7 +61,7 @@ fn optional_raw_bodies_preserve_omission_and_cli_file_types_in_artifacts() {
             assert!(cli.contains(".required(false)"));
             assert!(cli.contains(".required(true)"));
             assert!(cli.contains("tokio::fs::read_to_string(path)"));
-            assert!(cli.contains("tokio::fs::read(path)"));
+            assert!(cli.contains("stream_file(path)"));
         } else {
             assert!(sdk.contains("body: Option<B>"));
             assert!(sdk.contains("body: Option<String>"));

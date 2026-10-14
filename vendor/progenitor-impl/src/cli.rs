@@ -96,9 +96,60 @@ impl Generator {
             .map(|b| syn::parse_str::<syn::Path>(b).unwrap())
             .collect::<Vec<_>>();
 
+        let streamed_file = raw_methods.iter().any(|method| method.params.iter().any(|param|
+            param.typ == OperationParameterType::RawBody && param.kind == OperationParameterKind::Body(BodyContentType::OctetStream)
+        )).then(|| quote! {
+            struct FileBody {
+                reader: tokio_util::io::ReaderStream<tokio::io::Take<tokio::fs::File>>,
+                remaining: u64,
+            }
+            impl http_body::Body for FileBody {
+                type Data = tokio_util::bytes::Bytes;
+                type Error = std::io::Error;
+                fn poll_frame(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>)
+                    -> std::task::Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
+                    use futures::StreamExt;
+                    let this = self.get_mut();
+                    if this.remaining == 0 { return std::task::Poll::Ready(None); }
+                    match this.reader.poll_next_unpin(cx) {
+                        std::task::Poll::Pending => std::task::Poll::Pending,
+                        std::task::Poll::Ready(Some(Ok(bytes))) => {
+                            this.remaining -= bytes.len() as u64;
+                            std::task::Poll::Ready(Some(Ok(http_body::Frame::data(bytes))))
+                        }
+                        std::task::Poll::Ready(Some(Err(error))) => {
+                            this.remaining = 0;
+                            std::task::Poll::Ready(Some(Err(error)))
+                        }
+                        std::task::Poll::Ready(None) => {
+                            this.remaining = 0;
+                            std::task::Poll::Ready(Some(Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof,
+                                "Input file ended before its captured length"))))
+                        }
+                    }
+                }
+                fn is_end_stream(&self) -> bool { self.remaining == 0 }
+                fn size_hint(&self) -> http_body::SizeHint { http_body::SizeHint::with_exact(self.remaining) }
+            }
+            async fn stream_file(path: &std::path::Path) -> anyhow::Result<reqwest::Body> {
+                use tokio::io::AsyncReadExt;
+                // Reject directories/devices/FIFOs before opening; validate the opened handle too.
+                anyhow::ensure!(tokio::fs::metadata(path).await?.is_file(), "Binary input must be a regular file");
+                let file = tokio::fs::File::open(path).await?;
+                let metadata = file.metadata().await?;
+                anyhow::ensure!(metadata.is_file(), "Binary input must be a regular file");
+                let length = metadata.len();
+                Ok(reqwest::Body::wrap(FileBody {
+                    reader: tokio_util::io::ReaderStream::with_capacity(file.take(length), 64 * 1024),
+                    remaining: length,
+                }))
+            }
+        });
+
         let code = quote! {
             use #crate_path::*;
             use anyhow::Context as _;
+            #streamed_file
 
             pub struct Cli<T: CliConfig> {
                 client: Client,
@@ -496,7 +547,7 @@ impl Generator {
         let raw_body_consumer = raw_body.map(|param| {
             let read = match &param.kind {
                 OperationParameterKind::Body(BodyContentType::Text(_)) => quote! { tokio::fs::read_to_string(path) },
-                _ => quote! { tokio::fs::read(path) },
+                _ => quote! { stream_file(path) },
             };
             quote! {
                 if let Some(path) = matches.get_one::<std::path::PathBuf>("body-file") {

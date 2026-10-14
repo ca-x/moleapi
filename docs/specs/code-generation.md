@@ -88,8 +88,7 @@ Native raw request-body metadata preserves original requiredness. --body-file is
 only for optional raw bodies; omitted binary/text bodies do not gain a Content-Type or
 payload, while explicit empty files retain the declared MIME. Text input must be valid
 UTF8; binary bytes remain unchanged. Positional SDK optional raw bodies accept Option;
-builder defaults omit them. File input is currently buffered; streaming/optional typed
-JSON/form request semantics require separate implementation and evidence.
+builder defaults omit them. Binary CLI file input now streams with a64KiB ReaderStream and exact captured regular-file length, preserving Content-Length/empty input. Growth is capped and premature EOF fails; text/WebSocket file input remains buffered. Nonseekable/other transport streaming and optional typed JSON/form semantics require separate implementation and evidence.
 
 
 Native CLI Dropshot typed pagination retains items/next_page and first-page parameter

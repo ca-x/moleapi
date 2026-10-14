@@ -126,7 +126,7 @@ pub fn project_catalog() -> Result<Vec<ProjectTarget>> {
             model_options: Vec::new(),
             kind: "cli".into(),
             upstream_stability: "stable".into(),
-            validation: "implementation-awaiting-cli-fixtures".into(),
+            validation: "representative-3.0-cli-compile-call-fixture".into(),
             options: BTreeMap::from([
                 ("packageName".into(), Value::String("moleapi_cli".into())),
                 ("packageVersion".into(), Value::String("0.1.0".into())),

@@ -8,14 +8,15 @@ Explicit Mustache overrides now reuse the embedded OpenAPI Generator and mature 
 
 | Target | Current evidence | Limits |
 | --- | --- | --- |
-| rust-progenitor | Generated3.0 reference/nullable model SDK compiled; async client called a real HTTP fixture; owned API/default private-example screening preserved original source | Native engine supports3.0; broader union/auth/file fixtures and generated CLI remain required |
+| rust-progenitor | Generated3.0 reference/nullable model SDK compiled; async client called a real HTTP fixture; owned API/default private-example screening preserved original source | Native engine supports3.0; broader union/auth/file SDK fixtures remain required; generated CLI evidence is separate below |
+| rust-progenitor-cli | Generated3.0 CLI projects compiled/called real core, binary, optional body, upgraded/WebSocket, typed pagination and96MiB streamed-file fixtures; owned capped worker/privacy gates passed | Native3.0 only; other pagination conventions, interactive CLI, broader body/protocol/platform behavior remain required |
 | typescript-fetch | Generated3.0/3.1 npm projects compiled for CommonJS/ESM; real GET/POST/Bearer/query/header/nullable/enum/error fixtures passed | Broader union/file/dynamic-keyword and library-option compatibility remains required |
 | go-server | Generated skeleton compiled after `go mod tidy`; generated router/service started on a controlled loopback test harness and returned its expected501 business-handler placeholder | A skeleton intentionally needs application handler implementations; dependency installation is a consumer build step |
 | javascript, python, go, csharp | Generated3.0/3.1 clients installed/built and passed real GET/POST/Bearer/query/header/nullable/enum/error fixtures; Go also passed race checking; C# default generichost hosting/token/typed400 APIs were called | Broader union/file/dynamic-keyword and library-option compatibility remains required |
 | php, swift6, dart | Actual multi-file engine artifact generation, bounded ZIP, checksums and output collection | Artifact evidence does not establish language compile/run coverage |
 | python-fastapi | Generated3.0/3.1 packages installed; unchanged generated app started, exposed routes/OpenAPI and returned its explicit500 missing-business-handler response | Authentication/business implementations remain consumer work; broader framework/keyword compatibility remains required |
 | aspnetcore | Default .NET10 projects built and started for3.0/3.1; consumer-configured authentication reached generated sample handlers (200) and rejected anonymous requests (401) | Real authentication scheme/validation and business handlers remain consumer work; broader framework/keyword compatibility remains required |
-| kotlin | Default jvm-okhttp4 emitted Gradle3.0/3.1 projects built; core plus raw binary/multipart file-array wire fixtures passed | Union, other libraries/platforms and broader keyword/file coverage remain required |
+| kotlin | Default jvm-okhttp4 Gradle3.0/3.1 core/binary/multipart fixtures passed; explicit Retrofit/Gson and Retrofit/kotlinx typed tagged-oneOf cases passed both dialects | Default Moshi unions, advanced union shapes, other libraries/platforms and broader keyword/file coverage remain required |
 | java | Default okhttp-gson3.0/3.1 SDKs compiled and called core, raw binary, multipart array/file and referenced tagged-union fixtures | Broader/nested/custom/streaming/advanced keyword/options runtime remains required |
 | spring | Default spring-boot3.0/3.1 executable projects compiled/started; generated OpenAPI/routes and501 placeholder responded | Consumer business/security implementations and broader framework/keyword compatibility remain required |
 | Other upstream targets | Pinned CLI catalog and captured naming/library defaults | Catalog availability is not a MoleAPI support claim |
@@ -32,7 +33,7 @@ Remaining complete-module work includes broader per-language compile/run fixture
 
 ## Native generated CLI and regeneration
 
-`rust-progenitor-cli` uses Progenitor’s builder SDK and clap CLI emitter, not a custom operation/argument emitter. A small executable adapter supplies base URL/Bearer configuration and JSON output. Generated CLI projects compiled and called real HTTP fixtures for GET and POST with path/query/body parameters. CLI help exposes operation arguments, whole JSON-body files and nonzero API-error behavior. Finite raw responses now use a small, MPL-preserving Progenitor emitter patch (see `vendor/progenitor-impl/MOLEAPI-PATCH.md`): success bytes stream unchanged to stdout or `--output-file`, which uses create-new semantics and refuses overwrite. Raw error responses retain the SDK error and exit nonzero. `--body-file` reads binary/text request bodies into the upstream builder; upload input currently loads the file into memory. A generated standalone project compiled and passed real HTTP byte-identical stdout/download/upload, existing-file preservation and raw HTTP400-error checks. Declared raw success pages/incompatible Dropshot pagination remain unsupported and reject during CLI generation; typed-page raw errors are supported by the verified pagination slice below; upgraded CLI connections now have the separately verified transport slice below; optional raw request-body requiredness and text input are repaired in the separately verified slice below. These gaps remain full-module work.
+`rust-progenitor-cli` uses Progenitor’s builder SDK and clap CLI emitter, not a custom operation/argument emitter. A small executable adapter supplies base URL/Bearer configuration and JSON output. Generated CLI projects compiled and called real HTTP fixtures for GET and POST with path/query/body parameters. CLI help exposes operation arguments, whole JSON-body files and nonzero API-error behavior. Finite raw responses now use a small, MPL-preserving Progenitor emitter patch (see `vendor/progenitor-impl/MOLEAPI-PATCH.md`): success bytes stream unchanged to stdout or `--output-file`, which uses create-new semantics and refuses overwrite. Raw error responses retain the SDK error and exit nonzero. `--body-file` streams regular binary files with known length into the upstream builder; validated UTF8 text files remain buffered. A generated standalone project compiled and passed real HTTP byte-identical stdout/download/upload, existing-file preservation and raw HTTP400-error checks. Declared raw success pages/incompatible Dropshot pagination remain unsupported and reject during CLI generation; typed-page raw errors are supported by the verified pagination slice below; upgraded CLI connections now have the separately verified transport slice below; optional raw request-body requiredness and text input are repaired in the separately verified slice below. These gaps remain full-module work.
 
 Save generated snapshot JSON from the project dialog. Regeneration compares the original snapshot, current edited snapshot and next generated files using diffy0.5.2 in a capped, cancellable application worker. Original/generated hashes, duplicate paths, file/aggregate/line/diff limits and owner/workspace admission are checked. Nonoverlapping changes merge, unchanged local files update, edited/deleted/authored files are preserved or become explicit conflicts. Conflicts block ZIP download until the user chooses working/generated/deletion; no filesystem overwrite occurs. Merged ZIPs include actual merged-content checksums in `moleapi-regeneration.json` and preserve safe executable flags. Snapshot import, conflict-choice and archive gating have frontend/API tests. Original `moleapi-generation.json` describes generator output; the regeneration manifest describes the edited/merged result.
 
@@ -286,8 +287,7 @@ Generation regression passed68 cases (16 external-tool cases ignored); all11 own
 project API cases passed with capped-worker optional-text generation, original source
 and sensitive-example/owner boundaries retained. Scoped strict Clippy/formatting passed.
 This slice does not implement optional JSON/form-object request semantics, arbitrary
-media types, streaming file upload or all-platform behavior. File input remains buffered;
-large-file streaming and further transport/typed-body profiles remain required work.
+media types, streaming file upload or all-platform behavior. At that checkpoint file input was buffered; binary file streaming is now verified below, while text/other transports and typed-body profiles remain required work.
 
 
 ## Native CLI typed pagination and raw page errors
@@ -313,6 +313,32 @@ same serial5-fixture batch, for38 actual requests across all standalone consumer
 Generation regression passed70 cases (18 external-tool cases ignored); all11 owned
 project API cases passed with capped-worker typed/raw-error pagination generation,
 source/privacy/owner checks. Scoped strict Clippy/formatting passed. Raw success-page
-transports, non-Dropshot pagination conventions, streaming upload, typed optional bodies,
+transports, non-Dropshot pagination conventions, other streamed-input transports, typed optional bodies,
 interactive CLI and native-platform transport evidence remain required work. This is
 verified native3.0 pagination, not full CLI or OpenAPI3.1 support.
+
+
+## Native CLI sized streaming binary upload
+
+Octet-stream --body-file now uses Tokio ReaderStream with a64KiB capacity and a small
+http_body adapter carrying the opened regular file's remaining exact length. reqwest
+preserves Content-Length without reading the full file into memory. Reads stop at the
+captured length if the file grows; early EOF after shrink becomes a body error. Empty
+files retain zero length/MIME and non-regular files reject. This captures size, not an
+immutable content snapshot; text file input and single-message WebSocket file input
+retain their documented buffering contracts.
+
+A standalone generated CLI uploaded96MiB to a slow loopback server using bounded buffers.
+Content-Length, octet-stream MIME, Bearer token and SHA256 matched. Linux peak observed
+RSS was12,940KiB on the final run, below the explicit64MiB ceiling; the prior run observed
+13,400KiB. Generated helper tests passed exact size/empty/growth/shrink/directory cases.
+All6 standalone runtime fixtures passed, including the previous body/binary/upgrade/
+pagination consumers (39 real requests total). Generation regression passed71 cases
+(19 configured external-tool cases ignored), and all11 owned project API cases passed
+with streamed-file generation/privacy checks. Strict scoped Clippy and formatting passed.
+The native CLI catalog now labels its representative3.0 compile/call evidence explicitly.
+
+Toolchain remains Rust/Cargo1.99.0, Progenitor/client0.15.0, reqwest0.13.5 on Linux;
+the generated helper uses http-body1 and tokio-util0.7 rather than a new transport engine.
+Nonseekable input, text/WebSocket chunking, multipart/other-target large files, concurrent
+content-mutation guarantees, interactive and native-platform execution remain required work.

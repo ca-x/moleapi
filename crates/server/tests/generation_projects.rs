@@ -555,6 +555,7 @@ async fn upgraded_cli_generation_uses_owned_worker_and_preserves_source_privacy(
             {"in":"query","name":"limit","schema":{"type":"integer","minimum":1,"maximum":4294967295u64}},
             {"in":"query","name":"page_token","schema":{"type":"string"}}
         ],"responses":{"200":{"description":"Page","content":{"application/json":{"schema":{"type":"object","required":["items"],"properties":{"items":{"type":"array","items":{"type":"string"}},"next_page":{"type":"string","nullable":true}}}}}},"400":{"description":"Raw error","content":{"application/octet-stream":{"schema":{"type":"string","format":"binary"}}}}}}},
+        "/optional-binary":{"post":{"operationId":"optional_binary","requestBody":{"required":false,"content":{"application/octet-stream":{"schema":{"type":"string","format":"binary"}}}},"responses":{"204":{"description":"Accepted"}}}},
         "/optional-text":{"post":{"operationId":"optional_text","requestBody":{"required":false,"content":{"text/plain":{"schema":{"type":"string"}}}},"responses":{"204":{"description":"Accepted"}}}},
         "/socket":{"get":{"operationId":"socket","x-dropshot-websocket":true,"responses":{
             "101":{"description":"Upgraded"},
@@ -638,6 +639,13 @@ async fn upgraded_cli_generation_uses_owned_worker_and_preserves_source_privacy(
                 .unwrap()
                 .contains("request.stream()")
             && !file["content"].as_str().unwrap().contains("todo!()")
+    }));
+    assert!(files.iter().any(|file| {
+        file["path"] == "src/cli.rs"
+            && file["content"]
+                .as_str()
+                .unwrap()
+                .contains("ReaderStream::with_capacity")
     }));
     let (_, saved) = call(
         &router,
