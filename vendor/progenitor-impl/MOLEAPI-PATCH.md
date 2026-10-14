@@ -88,3 +88,12 @@ An actual operationId string compile failure also required fully qualified emitt
 String types. The generator depends on the separately documented openapiv32.2.0 explicit-null
 Serde patch; generated clients do not. Named/null/default-priority and2 wire cases plus all
 prior consumers passed. Arbitrary sampling/other standard-name/platform gaps remain open.
+
+
+Builder namespace protection reuses Syn visit-mut on upstream generated builder tokens.
+Standard type/variant and parent SDK support paths are qualified; lifetime operation impl
+paths and public identifiers stay unchanged. SDK helper traits import as underscores to
+avoid duplicate bindings with operation Error/ResponseValue/ByteStream/OperationInfo/etc.
+The visitor does not inspect strings/docs or invent operations/types.13 standard/SDK-named
+operation requests and a direct public-type consumer compiled/passed, with all earlier
+runtime fixtures retained. Other hook/model/tag/identifier options remain separate scope.

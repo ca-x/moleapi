@@ -572,6 +572,9 @@ async fn upgraded_cli_generation_uses_owned_worker_and_preserves_source_privacy(
         ["properties"]["password"] = json!({"type":"string","format":"password"});
     source["paths"]["/optional-json"]["post"]["requestBody"]["content"]["application/json"]["example"] =
         json!({"id":7,"password":"private-template-fixture"});
+    for operation in ["result", "option", "error"] {
+        source["paths"][format!("/builder-{operation}")] = json!({"post":{"operationId":operation,"requestBody":{"required":false,"content":{"application/json":{"schema":{"type":"object","required":["id"],"properties":{"id":{"type":"integer","format":"int32"}}}}}},"responses":{"204":{"description":"Accepted"}}}});
+    }
     let mut named_media =
         source["paths"]["/optional-json"]["post"]["requestBody"]["content"]["application/json"]
             .clone();
@@ -654,7 +657,7 @@ async fn upgraded_cli_generation_uses_owned_worker_and_preserves_source_privacy(
             && f["content"]
                 .as_str()
                 .unwrap()
-                .contains("if let Some(body) = body")
+                .contains("if let ::std::option::Option::Some(body) = body")
     }));
     assert!(files.iter().any(|file| {
         file["path"] == "src/cli.rs"
@@ -691,6 +694,13 @@ async fn upgraded_cli_generation_uses_owned_worker_and_preserves_source_privacy(
                 .as_str()
                 .unwrap()
                 .contains("api-api-json-body")
+    }));
+    assert!(files.iter().any(|file| {
+        file["path"] == "src/lib.rs"
+            && file["content"]
+                .as_str()
+                .unwrap()
+                .contains("pub struct Result<'a>")
     }));
     let (_, saved) = call(
         &router,

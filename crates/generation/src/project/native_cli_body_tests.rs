@@ -50,7 +50,10 @@ fn optional_raw_bodies_preserve_omission_and_cli_file_types_in_artifacts() {
             .find(|file| file.path == "src/lib.rs")
             .unwrap()
             .content;
-        assert!(sdk.contains("if let Some(body) = body"));
+        assert!(
+            sdk.contains("if let Some(body) = body")
+                || sdk.contains("if let ::std::option::Option::Some(body) = body")
+        );
         if target == "rust-progenitor-cli" {
             let cli = &artifact
                 .files

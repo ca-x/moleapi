@@ -21,6 +21,7 @@ pub use typify::TypeSpacePatch as TypePatch;
 pub use typify::UnknownPolicy;
 
 mod cli;
+mod builder_paths;
 mod httpmock;
 mod method;
 mod template;
@@ -598,13 +599,9 @@ impl Generator {
                 #[allow(unused_imports)]
                 use super::{
                     encode_path,
-                    ByteStream,
-                    ClientInfo,
-                    ClientHooks,
-                    Error,
-                    OperationInfo,
-                    RequestBuilderExt,
-                    ResponseValue,
+                    ClientInfo as _,
+                    ClientHooks as _,
+                    RequestBuilderExt as _,
                 };
 
                 #(#builder_struct)*
@@ -646,13 +643,9 @@ impl Generator {
                 #[allow(unused_imports)]
                 use super::{
                     encode_path,
-                    ByteStream,
-                    ClientInfo,
-                    ClientHooks,
-                    Error,
-                    OperationInfo,
-                    RequestBuilderExt,
-                    ResponseValue,
+                    ClientInfo as _,
+                    ClientHooks as _,
+                    RequestBuilderExt as _,
                 };
 
                 #(#builder_struct)*

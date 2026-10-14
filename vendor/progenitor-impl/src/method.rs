@@ -1943,7 +1943,7 @@ impl Generator {
             }
         };
 
-        Ok(quote! {
+        Ok(crate::builder_paths::qualify(quote! {
             #[doc = #struct_doc]
             #derive
             pub struct #struct_ident<'a> {
@@ -1963,7 +1963,7 @@ impl Generator {
                 #send_impl
                 #stream_impl
             }
-        })
+        }))
     }
 
     fn builder_helper(&self, method: &OperationMethod) -> BuilderImpl {

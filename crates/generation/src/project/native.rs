@@ -329,3 +329,7 @@ mod template_tests;
 #[cfg(test)]
 #[path = "native_cli_named_template_tests.rs"]
 mod named_template_tests;
+
+#[cfg(test)]
+#[path = "native_builder_namespace_tests.rs"]
+mod builder_namespace_tests;

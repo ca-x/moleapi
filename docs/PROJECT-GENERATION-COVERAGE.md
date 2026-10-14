@@ -485,3 +485,28 @@ Arbitrary no-example sampling, empty/nonstandard labels, broader reserved standa
 names, advanced constraints/conversions, interactive/native-platform execution and full CLI
 parity remain required work. Empty CLI selector means default mode; the library API can
 select an explicit empty name if present. External example values are never fetched.
+
+
+## Native builder operation names and support type scopes
+
+The mature builder emitter now passes its builder tokens through Syn's AST visitor to
+qualify standard Result/Option/String and Some/None/Ok/Err, plus parent SDK Error,
+ResponseValue, ByteStream and OperationInfo paths. Operation impl paths with lifetime
+arguments, model-qualified paths, public builder identifiers and literal documentation
+remain intact. SDK helper traits import anonymously, avoiding duplicate name bindings.
+This adds scope qualification to the existing emitter rather than another operation parser.
+
+A standalone generated CLI compiled13 operations named result/option/some/none/ok/err/
+error/response_value/byte_stream/operation_info/client_info/client_hooks/request_builder_ext
+and completed13 POSTs. Optional body omission/present JSON, query and Bearer values
+were asserted. A separate direct Rust consumer compiled the retained public builder::Result,
+Option, Error, ResponseValue and Some types. All12 generated-program fixtures passed83
+requests, covering prior raw/pagination/upgrade/template behaviors;96MiB upload observed
+13,336KiB Linux RSS below64MiB. Generation78 cases passed (25 external-tool cases ignored),
+all11 owned API cases passed with standard-named worker artifacts/privacy, and strict
+scoped Clippy/formatting passed.
+
+Other identifier/model/short-option and user-hook namespaces, merged/separate tag options,
+all-platform execution and broader generator semantics remain required evidence. This
+slice proves the specified names and existing default interfaces, not every possible Rust
+identifier or customization. Public operation builder names remain stable.

@@ -62,7 +62,10 @@ fn optional_typed_body_artifacts_preserve_presence_and_builder_validation() {
             .find(|file| file.path == "src/lib.rs")
             .unwrap()
             .content;
-        assert!(sdk.contains("if let Some(body) = body"));
+        assert!(
+            sdk.contains("if let Some(body) = body")
+                || sdk.contains("if let ::std::option::Option::Some(body) = body")
+        );
         if target == "rust-progenitor-cli" {
             assert!(sdk.contains("value.unwrap_or_default()"));
         } else {

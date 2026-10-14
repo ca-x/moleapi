@@ -134,3 +134,9 @@ rather than fallback/fetch. Preserve null/falsy values and author default-exampl
 Public body_template stays default; body_template_named exposes explicit library selection.
 OpenAPI parsing retains absent versus explicit-null examples/defaults through standard
 Serde, with versioned upstream patch provenance and original source/privacy fences.
+
+
+Native builder public operation names remain stable when they match standard/SDK support
+types. Syn AST qualification and anonymous helper-trait imports protect generated Result/
+Option/variant and SDK support references without renaming operations. Broader identifier,
+model/hook/tag namespaces and platform execution need separate evidence.
