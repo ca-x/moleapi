@@ -14,7 +14,7 @@ Explicit Mustache overrides now reuse the embedded OpenAPI Generator and mature 
 | go-server | Generated skeleton compiled after `go mod tidy`; generated router/service started on a controlled loopback test harness and returned its expected501 business-handler placeholder | A skeleton intentionally needs application handler implementations; dependency installation is a consumer build step |
 | javascript, python, go, csharp | Generated3.0/3.1 clients installed/built and passed real GET/POST/Bearer/query/header/nullable/enum/error fixtures; Go also passed race checking; C# default generichost hosting/token/typed400 APIs were called | Broader union/file/dynamic-keyword and library-option compatibility remains required |
 | php | Default Guzzle3.0/3.1 core, binary/multipart and mapped Cat/Dog tagged-oneOf decode/echo passed; original wire discriminator names retained | Static parent annotations/inheritance, advanced unions/constraints/files, other libraries/platforms remain required |
-| dart | Default HTTP3.0/3.1 pub dependencies/analyzer/AOT executables and core calls passed; truncated/no-response errors converted | Extended file/union/abort/options, SDK ranges and platforms remain required |
+| dart | Default HTTP3.0/3.1 analyze/AOT/core, raw binary and multipart arrays/files passed; truncated/no-response errors converted | Union, advanced files/abort/options, SDK ranges and platforms remain required |
 | swift6 | Actual multi-file engine artifact generation, bounded ZIP, checksums and output collection | Artifact evidence does not establish language compile/run coverage |
 | python-fastapi | Generated3.0/3.1 packages installed; unchanged generated app started, exposed routes/OpenAPI and returned its explicit500 missing-business-handler response | Authentication/business implementations remain consumer work; broader framework/keyword compatibility remains required |
 | aspnetcore | Default .NET10 projects built and started for3.0/3.1; consumer-configured authentication reached generated sample handlers (200) and rejected anonymous requests (401) | Real authentication scheme/validation and business handlers remain consumer work; broader framework/keyword compatibility remains required |
@@ -696,3 +696,27 @@ external-tool cases ignored), all11 API regressions and scoped strict Clippy/for
 Only this recorded modern SDK/dependency/Linux core contract is established. Advertised
 older SDK range behavior, dependency lower bounds/abort types, files/multipart/unions,
 strict keyword/model validation, other libraries/browsers/platforms remain required work.
+
+
+## Default Dart binary and multipart API
+
+Both3.0.3/3.1.0 default HTTP binary/multipart projects passed original pub resolution,
+warning-free analysis and AOT consumers. Four cases completed22 HTTP requests (including
+core/truncated transport checks); separate closed-port failures remained covered. Downloads
+now create the existing MultipartFile type directly from response.bodyBytes rather than
+passing arbitrary binary through text/JSON decoding. Raw upload keeps the upstream file
+stream path. Byte-identical payloads were verified.
+
+The pinned API template removes redundant file.field text parts and uses existing
+_queryParams collection formats. Repeated fields use the mature multipart encoder's
+filename-less string parts; CSV stays joined fields. Null guards emit only for nullable/
+optional inputs, resolving analyzer warnings for required file/note/tags. Actual name/MIME,
+Unicode note, required/optional repeat order and CSV fields passed unchanged wire assertions.
+Explicit API/client templates retain priority; Dart-Dio/other libraries remain separate.
+
+All16 configured override cases passed, generation78 cases passed (32 external-tool cases
+ignored), all11 owned API regressions and strict scoped Clippy/formatting passed. Dart3.13.5/
+http1.6.0/Linux and Generator7.26.0 are the recorded tools. Finite MultipartFile payloads
+don't establish zero/large/resume/custom/multiple/nested file/MIME/SDK-range/platform or
+union semantics; these remain required module work. Download filename/content-type
+metadata beyond the constructor's default contract is also separately unverified.

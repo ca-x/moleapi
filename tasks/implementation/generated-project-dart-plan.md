@@ -19,3 +19,18 @@ catch defect; repaired through pinned default client template with override prec
 Dart3.13.5 repository package SHA verified/extracted only in /tmp, exact lock/tool metadata
 retained.15 overrides/78 generation/11 API cases and strict scoped Clippy/format passed.
 Older SDK/dependency-range promises and all extended/platform behavior remain parent scope.
+
+
+Continuation: preserve generated MultipartFile raw APIs and multipart client/model types.
+Write exact binary and file/name/MIME/repeated/CSV consumers before checks. Reproduce
+failed binary decode/collection/file-part behavior; repair mature API/template seams
+without custom serializers or switching libraries. Verify3.0/3.1 compile/analyze/calls,
+explicit overrides and shared regressions, then document limits and merge/push.
+
+
+File continuation verified: download JSON-decode failure and required-null analyzer
+warnings repaired by pinned API; duplicate file text fields removed, mature _queryParams
+and multipart string parts preserve repeated/CSV values.4 analyze/AOT cases passed22
+HTTP requests plus closed-port checks.16 overrides/78 generation/11 API cases and strict
+scoped Clippy/format passed. Advanced filename/MIME/empty/large/nested/multiple/resume,
+union/SDK-range/platform scope remains explicit in parent plan.

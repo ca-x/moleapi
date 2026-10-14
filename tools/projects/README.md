@@ -204,3 +204,12 @@ emitted signatures. Both3.0/3.1 cases passed core plus truncated/no-response che
 requests) on Dart3.13.5/Linux. A pinned client template awaits response-body futures so
 read errors remain in existing SDK exception conversion. Other Dart libraries are untouched.
 File/union/abort/old-SDK/platform profiles require separate consumers and remain open.
+
+
+Dart binary/multipart profiles use the same --dart explicit SDK. Four dialect/profile
+cases passed22 HTTP requests plus no-response checks with warning-free analysis/AOT.
+Consumers use actual MultipartFile APIs and compare exact bytes. The pinned default API
+constructs file downloads from bytes, removes duplicate file text fields, and reuses
+_queryParams formatting plus filename-less multipart string parts for repeats. Required
+inputs don't emit nullable guards. CSV/repeat/name/MIME/Unicode assertions are retained.
+Core, advanced file/metadata/union/abort and SDK/platform scopes remain separate gates.

@@ -193,3 +193,15 @@ original SHA256 `d0dca7a0528859b2661facadafacdde23eb4f5e6f9ceadb20239782a5f31d78
 unawaited Response.fromStream futures inside try blocks. Awaiting them retains streamed
 body failures in the existing transport exception conversion; other transport/serialization
 logic remains upstream. Default dart/http only; explicit client templates retain priority.
+
+
+## Dart HTTP binary and multipart API
+
+Source: dart2/api.mustache, pinned7.26.0 JAR, original SHA256
+`2b4d1992fdbaeb014e4e08f2064f5b6c4a3dcf245568b2325878bf6eefbd1395`; upstream Apache-2.0 notices retained.
+Raw download previously sent response bytes through text/JSON decoding to MultipartFile.
+The compatibility return path constructs the same file type from response bytes. Multipart
+uses existing _queryParams formats, filename-less MultipartFile strings for repeated
+fields, and map fields for joined values. Remove duplicate file.field text entries and
+only test nullable/optional parameters for null. Default Dart HTTP only; explicit API
+templates keep priority. Other libraries/nested/file/platform behavior remains separate.

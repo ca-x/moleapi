@@ -1083,6 +1083,7 @@ def php_client(directory, url, args):
 
 DART_CORE = r'''import 'dart:io';
 import 'package:openapi/api.dart';
+import 'package:http/http.dart' as http;
 void ensureFixture(bool condition, String message) { if (!condition) throw StateError(message); }
 Future<void> main() async {
   final auth=HttpBearerAuth()..accessToken='fixture-token';
@@ -1109,6 +1110,7 @@ Future<void> main() async {
     on ApiException catch(error) { disconnected=error.innerException!=null; }
     finally { dead.client.close(); }
     ensureFixture(disconnected,'Connection failure not exposed');
+    __DART_EXTENDED__
 
   } finally { client.client.close(); }
   stdout.writeln('PASS Dart default HTTP SDK');
@@ -1116,11 +1118,26 @@ Future<void> main() async {
 '''
 
 
+DART_BINARY = r'''final bytes=<int>[0,1,2,13,10,255,128,65];
+    final downloaded=await api.downloadFile();
+    ensureFixture(downloaded!=null,'Download file missing');
+    final actual=await downloaded!.finalize().toBytes();
+    ensureFixture(actual.length==bytes.length && List.generate(bytes.length,(i)=>i).every((i)=>actual[i]==bytes[i]),'Binary download changed bytes');
+    final receipt=await api.uploadFile(http.MultipartFile.fromBytes('body',bytes,filename:'payload.bin'));
+    ensureFixture(receipt!=null && receipt.size==bytes.length,'Binary receipt lost');
+'''
+
+DART_MULTIPART = r'''final bytes=<int>[0,1,2,13,10,255,128,65];
+    final receipt=await api.uploadMultipart(http.MultipartFile.fromBytes('file',bytes,filename:'payload.bin'),'鼹鼠 "quotes" & +',['red','蓝'],optionalTags:['red','蓝'],packedTags:['red','蓝']);
+    ensureFixture(receipt!=null && receipt.size==bytes.length,'Multipart receipt lost');
+'''
+
 def dart_client(directory,url,args):
-    assert args.profile=='core', "Dart extended profiles require dedicated consumers"
+    assert args.profile in {'core','binary','multipart'}, "Dart union profile requires a dedicated consumer"
     assert args.dart and args.dart.is_absolute() and args.dart.is_file(), "Configure explicit --dart executable"
     source=(directory/'lib/api/default_api.dart').read_text()
-    driver=DART_CORE
+    driver=DART_CORE.replace('__DART_EXTENDED__', {'core':'','binary':DART_BINARY,'multipart':DART_MULTIPART}[args.profile])
+    if args.profile=='core': driver=driver.replace("import 'package:http/http.dart' as http;\n",'')
     for method,placeholder,values in [('getPet','__DART_GET_ARGS__',{'id':'7','q':json.dumps(QUERY,ensure_ascii=False),'xTest':json.dumps('moleapi-fixture')}),('replacePet','__DART_POST_ARGS__',{'id':'7','pet':'body'})]:
         match=re.search(r'Future<[^\n]+> '+method+r'\(([^{}]*)',source)
         assert match, 'Generated Dart signature missing: '+method
@@ -1271,7 +1288,7 @@ def main():
     assert args.discriminator_property=='kind' or (targets==['php'] and args.profile=='union'), "Alternate union wire fields currently have PHP consumers only"
     assert not args.php_async or (targets==['php'] and args.profile=='union'), "Async PHP consumers require PHP union fixtures"
     if 'dart' in targets:
-        assert args.profile=='core' and args.dart and args.dart.is_absolute() and args.dart.is_file()
+        assert args.profile in {'core','binary','multipart'} and args.dart and args.dart.is_absolute() and args.dart.is_file()
     if not args.reuse_generated:
         run(["cargo", "run", "-p", "moleapi-generation", "--example", "fixture_projects", "--", str(args.output), str(args.worker), str(args.java), args.targets, args.versions, args.profile, args.generator_options, args.discriminator_property], REPO, timeout=300)
     evidence_path = args.output / "runtime-evidence.json"
