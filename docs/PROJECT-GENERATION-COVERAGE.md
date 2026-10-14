@@ -14,7 +14,8 @@ Explicit Mustache overrides now reuse the embedded OpenAPI Generator and mature 
 | go-server | Generated skeleton compiled after `go mod tidy`; generated router/service started on a controlled loopback test harness and returned its expected501 business-handler placeholder | A skeleton intentionally needs application handler implementations; dependency installation is a consumer build step |
 | javascript, python, go, csharp | Generated3.0/3.1 clients installed/built and passed real GET/POST/Bearer/query/header/nullable/enum/error fixtures; Go also passed race checking; C# default generichost hosting/token/typed400 APIs were called | Broader union/file/dynamic-keyword and library-option compatibility remains required |
 | php | Default Guzzle3.0/3.1 core, binary/multipart and mapped Cat/Dog tagged-oneOf decode/echo passed; original wire discriminator names retained | Static parent annotations/inheritance, advanced unions/constraints/files, other libraries/platforms remain required |
-| swift6, dart | Actual multi-file engine artifact generation, bounded ZIP, checksums and output collection | Artifact evidence does not establish language compile/run coverage |
+| dart | Default HTTP3.0/3.1 pub dependencies/analyzer/AOT executables and core calls passed; truncated/no-response errors converted | Extended file/union/abort/options, SDK ranges and platforms remain required |
+| swift6 | Actual multi-file engine artifact generation, bounded ZIP, checksums and output collection | Artifact evidence does not establish language compile/run coverage |
 | python-fastapi | Generated3.0/3.1 packages installed; unchanged generated app started, exposed routes/OpenAPI and returned its explicit500 missing-business-handler response | Authentication/business implementations remain consumer work; broader framework/keyword compatibility remains required |
 | aspnetcore | Default .NET10 projects built and started for3.0/3.1; consumer-configured authentication reached generated sample handlers (200) and rejected anonymous requests (401) | Real authentication scheme/validation and business handlers remain consumer work; broader framework/keyword compatibility remains required |
 | kotlin | Default jvm-okhttp4 Gradle3.0/3.1 core/binary/multipart fixtures passed; explicit Retrofit/Gson and Retrofit/kotlinx typed tagged-oneOf cases passed both dialects | Default Moshi unions, advanced union shapes, other libraries/platforms and broader keyword/file coverage remain required |
@@ -669,3 +670,29 @@ cases passed, including the shared error partial in both handlers. Generation78 
 passed (30 external-tool cases ignored), all11 owned API regressions and scoped strict
 Clippy/formatting passed. Broader cancellation/race/mixed rejection policies, nested/map
 containers, other analyzers, nominal hierarchy and native-platform coverage remain open.
+
+
+## Default Dart HTTP core SDK
+
+Both3.0.3/3.1.0 default Dart projects kept upstream pubspec/model/API/serialization output,
+resolved original dependencies, passed warning-free lib/consumer analysis and compiled
+native executable consumers. Actual generated positional signatures determine argument
+order rather than altering APIs. Eight HTTP requests preserved path, Unicode query/header/
+Bearer, quoted JSON, enum/null decoding and400 exceptions; SDK public transport also
+rejected truncated bodies, and closed-port checks verified no-response conversion.
+A pinned api_client template awaits three Response.fromStream futures inside the existing
+try/catch, fixing analyzer warnings and preventing response-read errors escaping SDK
+exception conversion. Explicit client templates retain precedence; Dart-Dio is separate.
+
+Dart3.13.5 Linux SDK was repository-SHA verified and extracted only in /tmp (package
+SHA256 `b4cc5ad1ee604909245c7e413af2b1167b7ee4c16a55fb68a03afcf5308853cb`).
+Resolved dependencies/lock included http1.6.0, intl0.20.3, collection1.19.1, meta1.19.0,
+test1.21.7; the emitted manifest was not retargeted. Generator7.26.0/JRE21 remained.
+Catalog status now names representative3.0/3.1 compile/call evidence; basic mainstream
+coverage is24 combinations across9 clients/3 server skeletons. Product preview never
+installs or executes Dart. All15 configured override cases, generation78 cases (31
+external-tool cases ignored), all11 API regressions and scoped strict Clippy/format passed.
+
+Only this recorded modern SDK/dependency/Linux core contract is established. Advertised
+older SDK range behavior, dependency lower bounds/abort types, files/multipart/unions,
+strict keyword/model validation, other libraries/browsers/platforms remain required work.

@@ -101,6 +101,12 @@ pub(super) fn write_builtin(input: &ProjectInput, root: &Path) -> Result<bool> {
                 ),
             )]
         }
+        "dart" => &[(
+            "api_client.mustache",
+            include_str!(
+                "../../../../vendor/openapi-generator/compat/dart-http/api_client.mustache"
+            ),
+        )],
         "php"
             if input
                 .options

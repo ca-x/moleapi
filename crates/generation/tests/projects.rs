@@ -910,3 +910,38 @@ async fn explicit_php_error_partial_override_is_used_in_sync_and_async_handlers(
     assert_eq!(api.content.matches("explicit error decoder").count(), 2);
     assert!(!api.content.contains("$e->setResponseObject"));
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured Java17+ test runtime"]
+async fn explicit_dart_client_template_overrides_response_await_default() {
+    let java = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_JAVA").expect("explicit Java executable"),
+    );
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), Some(java)).unwrap();
+    let input = ProjectInput {
+        target: "dart".into(),
+        options: BTreeMap::new(),
+        include_secrets: false,
+        specification: json!({"openapi":"3.0.3","info":{"title":"Dart override","version":"1"},"paths":{}}),
+        templates: Some(TemplateBundle {
+            format: "moleapi-codegen-templates-v1".into(),
+            outputs: BTreeMap::new(),
+            files: vec![TemplateFile {
+                path: "api_client.mustache".into(),
+                content: "// explicit Dart client\n".into(),
+                encoding: None,
+            }],
+        }),
+    };
+    let result = runtime
+        .generate(input, CancellationToken::new())
+        .await
+        .unwrap();
+    let client = result
+        .files
+        .iter()
+        .find(|file| file.path == "lib/api_client.dart")
+        .unwrap();
+    assert!(client.content.contains("explicit Dart client"));
+    assert!(!client.content.contains("Response.fromStream"));
+}

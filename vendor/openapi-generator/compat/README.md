@@ -184,3 +184,12 @@ block as deserialize_error.mustache for both handlers. ConnectException/no-respo
 RequestException receive typed ApiException before response access. Both dialects passed
 callback/recovery/adoption/error and closed-port fixtures; source/partial overrides retain
 priority. The original API source/header/hash above also covers the extracted error block.
+
+
+## Dart HTTP response-body await
+
+Source: dart2/api_client.mustache, pinned7.26.0 JAR (Apache-2.0/upstream notices retained),
+original SHA256 `d0dca7a0528859b2661facadafacdde23eb4f5e6f9ceadb20239782a5f31d782`. Analysis reported three
+unawaited Response.fromStream futures inside try blocks. Awaiting them retains streamed
+body failures in the existing transport exception conversion; other transport/serialization
+logic remains upstream. Default dart/http only; explicit client templates retain priority.

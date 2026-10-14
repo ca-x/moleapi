@@ -81,6 +81,16 @@ class Fixture(http.server.BaseHTTPRequestHandler):
         self.observations.append((self.command, parsed.path))
         try:
             assert self.headers.get("Authorization") == f"Bearer {TOKEN}"
+            if parsed.path == "/truncated":
+                assert self.command=='GET'
+                self.send_response(200)
+                self.send_header('Content-Type','application/json')
+                self.send_header('Content-Length','100')
+                self.send_header('Connection','close')
+                self.end_headers()
+                self.wfile.write(b'short')
+                self.close_connection=True
+                return
             if parsed.path == "/fail":
                 assert self.command == "GET"
                 self.respond(400, {"message": "expected fixture failure"})
@@ -1071,6 +1081,62 @@ def php_client(directory, url, args):
     run([str(args.php),'runtime_fixture.php'],directory,dict(os.environ,FIXTURE_URL=url,FIXTURE_DISCRIMINATOR_PROPERTY=args.discriminator_property))
 
 
+DART_CORE = r'''import 'dart:io';
+import 'package:openapi/api.dart';
+void ensureFixture(bool condition, String message) { if (!condition) throw StateError(message); }
+Future<void> main() async {
+  final auth=HttpBearerAuth()..accessToken='fixture-token';
+  final client=ApiClient(basePath:Platform.environment['FIXTURE_URL']!,authentication:auth);
+  final api=DefaultApi(client);
+  try {
+    final pet=await api.getPet(__DART_GET_ARGS__);
+    ensureFixture(pet!=null && pet.id==7 && pet.status==PetStatusEnum.ready && pet.note==null,'GET model/enum/null lost');
+    final body=Pet(id:7,status:PetStatusEnum.ready,note:'鼹鼠 "quotes" & +');
+    final echo=await api.replacePet(__DART_POST_ARGS__);
+    ensureFixture(echo!=null && echo.note=='鼹鼠 "quotes" & +','Quoted Unicode JSON lost');
+    var rejected=false;
+    try { await api.failGet(); } on ApiException catch(error) { rejected=error.code==400 && (error.message??'').contains('expected fixture failure'); }
+    ensureFixture(rejected,'HTTP400 not exposed');
+    var truncated=false;
+    try { await client.invokeAPI('/truncated','GET',[],null,{}, {},'application/json').timeout(const Duration(seconds:10)); }
+    on ApiException catch(error) { truncated=error.innerException!=null; }
+    ensureFixture(truncated,'Truncated response bypassed SDK exception conversion');
+    final reservation=await ServerSocket.bind(InternetAddress.loopbackIPv4,0);
+    final port=reservation.port;await reservation.close();
+    final dead=ApiClient(basePath:'http://127.0.0.1:$port',authentication:auth);
+    var disconnected=false;
+    try { await DefaultApi(dead).failGet().timeout(const Duration(seconds:10)); }
+    on ApiException catch(error) { disconnected=error.innerException!=null; }
+    finally { dead.client.close(); }
+    ensureFixture(disconnected,'Connection failure not exposed');
+
+  } finally { client.client.close(); }
+  stdout.writeln('PASS Dart default HTTP SDK');
+}
+'''
+
+
+def dart_client(directory,url,args):
+    assert args.profile=='core', "Dart extended profiles require dedicated consumers"
+    assert args.dart and args.dart.is_absolute() and args.dart.is_file(), "Configure explicit --dart executable"
+    source=(directory/'lib/api/default_api.dart').read_text()
+    driver=DART_CORE
+    for method,placeholder,values in [('getPet','__DART_GET_ARGS__',{'id':'7','q':json.dumps(QUERY,ensure_ascii=False),'xTest':json.dumps('moleapi-fixture')}),('replacePet','__DART_POST_ARGS__',{'id':'7','pet':'body'})]:
+        match=re.search(r'Future<[^\n]+> '+method+r'\(([^{}]*)',source)
+        assert match, 'Generated Dart signature missing: '+method
+        names=[part.strip().split()[-1] for part in match.group(1).rstrip(' ,').split(',')]
+        assert set(names)==set(values), names
+        driver=driver.replace(placeholder,','.join(values[name] for name in names))
+    run([str(args.dart),'pub','get'],directory,timeout=600)
+    (directory/'runtime-consumer-dependencies.json').write_text(subprocess.check_output([str(args.dart),'pub','deps','--json'],cwd=directory,text=True))
+    (directory/'bin').mkdir(exist_ok=True)
+    entry=directory/'bin/runtime_fixture.dart';entry.write_text(driver)
+    run([str(args.dart),'analyze','lib','bin/runtime_fixture.dart'],directory,timeout=300)
+    executable=directory/'runtime_fixture'
+    run([str(args.dart),'compile','exe',str(entry),'-o',str(executable)],directory,timeout=300)
+    run([str(executable)],directory,dict(os.environ,FIXTURE_URL=url))
+
+
 def client(target, directory, url, args):
     env = dict(os.environ, FIXTURE_URL=url)
     if target == "go":
@@ -1082,6 +1148,8 @@ def client(target, directory, url, args):
         (directory / "runtime_fixture_test.go").write_text(driver)
         run([args.go, "mod", "tidy"], directory)
         run([args.go, "test", "-run", "^TestRuntimeFixture$", "-count=1", "-race", "-v"], directory, env)
+    elif target == "dart":
+        dart_client(directory,url,args)
     elif target == "php":
         php_client(directory,url,args)
     elif target == "kotlin":
@@ -1177,6 +1245,7 @@ def main():
     parser.add_argument("--jdk", type=Path)
     parser.add_argument("--maven", type=Path)
     parser.add_argument("--gradle", type=Path)
+    parser.add_argument("--dart", type=Path)
     parser.add_argument("--php", type=Path)
     parser.add_argument("--composer", type=Path)
     parser.add_argument("--phpstan", type=Path)
@@ -1190,7 +1259,7 @@ def main():
     assert args.output.is_absolute()
     targets = args.targets.split(",")
     versions = args.versions.split(",")
-    assert all(t in {"javascript", "python", "go", "typescript-fetch", "python-fastapi", "csharp", "aspnetcore", "java", "spring", "kotlin", "php"} for t in targets)
+    assert all(t in {"javascript", "python", "go", "typescript-fetch", "python-fastapi", "csharp", "aspnetcore", "java", "spring", "kotlin", "php", "dart"} for t in targets)
     assert all(v in {"3.0.3", "3.1.0"} for v in versions)
     if args.profile in {"binary","multipart","union"}:
         assert not {"python-fastapi","aspnetcore","spring"}.intersection(targets), "Extended profiles currently validate clients"
@@ -1201,6 +1270,8 @@ def main():
     assert args.discriminator_property and len(args.discriminator_property.encode())<=128
     assert args.discriminator_property=='kind' or (targets==['php'] and args.profile=='union'), "Alternate union wire fields currently have PHP consumers only"
     assert not args.php_async or (targets==['php'] and args.profile=='union'), "Async PHP consumers require PHP union fixtures"
+    if 'dart' in targets:
+        assert args.profile=='core' and args.dart and args.dart.is_absolute() and args.dart.is_file()
     if not args.reuse_generated:
         run(["cargo", "run", "-p", "moleapi-generation", "--example", "fixture_projects", "--", str(args.output), str(args.worker), str(args.java), args.targets, args.versions, args.profile, args.generator_options, args.discriminator_property], REPO, timeout=300)
     evidence_path = args.output / "runtime-evidence.json"
@@ -1217,6 +1288,8 @@ def main():
         tools["gradle"]=subprocess.check_output([str(args.gradle),'--version'],env=java_environment(args),text=True).strip()
     if args.maven:
         tools["maven"]=subprocess.check_output([str(args.maven),"--version"],env=java_environment(args),text=True).strip()
+    if args.dart:
+        tools['dart']=subprocess.check_output([str(args.dart),'--version'],stderr=subprocess.STDOUT,text=True).strip()
     if args.php:
         tools['php']=subprocess.check_output([str(args.php),'--version'],text=True).strip()
     if args.php and args.phpstan:
@@ -1247,6 +1320,7 @@ def main():
                     client(target, directory, f"http://127.0.0.1:{server.server_port}", args)
                     assert not Fixture.errors, Fixture.errors
                     expected=[("GET", "/pets/7"), ("POST", "/pets/7"), ("GET", "/fail")]
+                    if target=='dart': expected += [("GET","/truncated")]
                     if args.profile=="binary": expected += [("GET","/files"),("POST","/files")]
                     if args.profile=="multipart": expected += [("POST","/multipart")]
                     if args.profile=="union": expected += [("GET","/animals/cat"),("GET","/animals/dog"),("POST","/animals"),("POST","/animals")]

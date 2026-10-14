@@ -192,3 +192,15 @@ errors (including callback input mismatch) and positive then/otherwise/wait asse
 A shared error partial repairs async typed ApiException/Failure parity with sync calls;
 explicit partial overrides retain priority. Broader cancellation/rejection policy, nesting,
 other analyzer and platform behavior remain separate requirements.
+
+
+## Default Dart HTTP SDK
+
+Provide an absolute Dart SDK executable with --targets dart --profile core --dart PATH,
+plus the usual explicit worker/Java/output arguments. The driver resolves the original
+pubspec, stores pubspec.lock/pub dependency JSON/tools, analyzes generated lib and consumer,
+compiles an executable and calls real routes. It derives positional argument order from
+emitted signatures. Both3.0/3.1 cases passed core plus truncated/no-response checks (8 HTTP
+requests) on Dart3.13.5/Linux. A pinned client template awaits response-body futures so
+read errors remain in existing SDK exception conversion. Other Dart libraries are untouched.
+File/union/abort/old-SDK/platform profiles require separate consumers and remain open.
