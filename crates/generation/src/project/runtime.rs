@@ -144,7 +144,7 @@ impl ProjectRuntime {
         if let Some(templates) = &input.templates {
             templates.write(&template_directory)?;
         }
-        let builtin_templates = templates::write_builtin(&input.target, &template_directory)?;
+        let builtin_templates = templates::write_builtin(&input, &template_directory)?;
         std::fs::write(&jar, JAR)?;
         std::fs::write(&spec, serde_json::to_vec(&input.specification)?)?;
         ensure!(

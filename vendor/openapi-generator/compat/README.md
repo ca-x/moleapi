@@ -19,3 +19,21 @@ Generated files are never edited after rendering.
 
 Upstream Startup template SHA256 before modification:
 `1431c9ed2aeff727b9ef65a624e1bd33a8d5e1e0ac7f546b785a3b51b74472a4`.
+
+## JavaScript binary client responses
+
+Source: `Javascript/libraries/javascript/ApiClient.mustache` in the same7.26.0 JAR.
+Apache-2.0 and upstream headers/renderer remain intact. Original template SHA256:
+`7c019f32ea21f8fa6bfe14e770b4298e8253fc57c9c490411ef8774606744136`.
+
+The API template emits the global File constructor for a binary response, while the
+original ApiClient recognized only the string 'Blob'. Actual Node requests consequently
+fell through text parsing and failed an exact binary-byte check. The compatibility copy
+recognizes File/Blob constructors and type strings, requests SuperAgent's binary response
+mode, and returns the binary body before JSON/text fallback. This uses the same mature
+SuperAgent transport/parser; it does not add an HTTP/file emitter. Node returns Buffer;
+the browser transport supplies Blob. Binary browser runtime remains separately to verify.
+
+Apply only to the default `javascript` library, not `apollo`. Explicit ApiClient template
+overrides retain priority. The original JAR remains unchanged and generated output is
+not rewritten after rendering.

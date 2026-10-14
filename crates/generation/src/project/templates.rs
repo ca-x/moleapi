@@ -4,21 +4,39 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use std::{collections::BTreeSet, path::Path};
 pub const TEMPLATE_LIMIT: usize = 512 * 1024;
 
-/// Upstream skeleton compatibility defaults; explicitly supplied templates override them.
-pub(super) fn write_builtin(target: &str, root: &Path) -> Result<bool> {
-    if target != "aspnetcore" {
-        return Ok(false);
-    }
+/// Pinned upstream compatibility defaults; explicitly supplied templates override them.
+pub(super) fn write_builtin(input: &ProjectInput, root: &Path) -> Result<bool> {
+    let (name, content) = match input.target.as_str() {
+        "aspnetcore" => (
+            "Startup.mustache",
+            include_str!("../../../../vendor/openapi-generator/compat/aspnetcore/Startup.mustache"),
+        ),
+        "javascript"
+            if input
+                .options
+                .get("library")
+                .and_then(Value::as_str)
+                .is_none_or(|library| library == "javascript") =>
+        {
+            (
+                "ApiClient.mustache",
+                include_str!(
+                    "../../../../vendor/openapi-generator/compat/javascript/ApiClient.mustache"
+                ),
+            )
+        }
+        _ => return Ok(false),
+    };
     std::fs::create_dir_all(root)?;
-    let startup = root.join("Startup.mustache");
-    if startup.exists() {
-        ensure!(startup.is_file(), "Startup template must be a regular file");
+    let path = root.join(name);
+    if path.exists() {
+        ensure!(
+            path.is_file(),
+            "Compatibility template must be a regular file"
+        );
         return Ok(true);
     }
-    std::fs::write(
-        startup,
-        include_str!("../../../../vendor/openapi-generator/compat/aspnetcore/Startup.mustache"),
-    )?;
+    std::fs::write(path, content)?;
     Ok(true)
 }
 

@@ -352,3 +352,47 @@ async fn explicit_startup_template_overrides_builtin_aspnet_compatibility_templa
         .unwrap();
     assert!(source.content.contains("explicitly selected startup"));
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured Java17+ test runtime"]
+async fn explicit_javascript_client_template_overrides_binary_compatibility_default() {
+    let java = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_JAVA").expect("explicit Java executable"),
+    );
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), Some(java)).unwrap();
+    let input = ProjectInput {
+        specification: json!({"openapi":"3.0.3","info":{"title":"Client override","version":"1"},"paths":{}}),
+        target: "javascript".into(),
+        options: BTreeMap::new(),
+        include_secrets: false,
+        templates: Some(TemplateBundle {
+            format: "moleapi-codegen-templates-v1".into(),
+            outputs: BTreeMap::new(),
+            files: vec![TemplateFile {
+                path: "ApiClient.mustache".into(),
+                content: "// explicit client {{projectName}}\n".into(),
+                encoding: None,
+            }],
+        }),
+    };
+    let result = runtime
+        .generate(input, CancellationToken::new())
+        .await
+        .unwrap();
+    let client = result
+        .files
+        .iter()
+        .find(|file| file.path == "src/ApiClient.js")
+        .unwrap();
+    assert!(client.content.contains("// explicit client"));
+    assert!(!client.content.contains("isBinaryType"));
+    assert!(
+        result
+            .files
+            .iter()
+            .find(|file| file.path == "moleapi-templates.json")
+            .unwrap()
+            .content
+            .contains("explicit client")
+    );
+}

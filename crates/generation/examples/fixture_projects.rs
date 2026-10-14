@@ -6,12 +6,12 @@ use serde_json::{Value, json};
 use std::{collections::BTreeMap, path::PathBuf};
 use tokio_util::sync::CancellationToken;
 
-fn specification(version: &str) -> Value {
+fn specification(version: &str, profile: &str) -> Value {
     let mut note = json!({"type":"string","nullable":true});
     if version == "3.1.0" {
         note = json!({"type":["string","null"]});
     }
-    json!({"openapi":version,"info":{"title":"Runtime fixture","version":"1"},
+    let mut specification = json!({"openapi":version,"info":{"title":"Runtime fixture","version":"1"},
     "security":[{"bearerAuth":[]}],
     "paths":{
         "/pets/{id}":{
@@ -28,7 +28,15 @@ fn specification(version: &str) -> Value {
     "components":{"securitySchemes":{"bearerAuth":{"type":"http","scheme":"bearer"}},"schemas":{
         "Pet":{"type":"object","required":["id","status"],"properties":{"id":{"type":"integer","format":"int32"},"status":{"type":"string","enum":["ready","done"]},"note":note}},
         "Failure":{"type":"object","required":["message"],"properties":{"message":{"type":"string"}}}
-    }}})
+    }}});
+    if profile == "binary" {
+        specification["paths"]["/files"] = json!({
+            "get":{"operationId":"downloadFile","responses":{"200":{"description":"Binary download","content":{"application/octet-stream":{"schema":{"type":"string","format":"binary"}}}}}},
+            "post":{"operationId":"uploadFile","requestBody":{"required":true,"content":{"application/octet-stream":{"schema":{"type":"string","format":"binary"}}}},"responses":{"200":{"description":"Upload receipt","content":{"application/json":{"schema":{"$ref":"#/components/schemas/UploadReceipt"}}}}}}
+        });
+        specification["components"]["schemas"]["UploadReceipt"] = json!({"type":"object","required":["size"],"properties":{"size":{"type":"integer","format":"int32"}}});
+    }
+    specification
 }
 
 #[tokio::main]
@@ -42,6 +50,11 @@ async fn main() -> Result<()> {
     let java = PathBuf::from(args.next().context("Absolute Java executable required")?);
     let targets = args.next().context("Comma-separated targets required")?;
     let versions = args.next().unwrap_or_else(|| "3.0.3,3.1.0".into());
+    let profile = args.next().unwrap_or_else(|| "core".into());
+    ensure!(
+        matches!(profile.as_str(), "core" | "binary"),
+        "Unknown fixture profile"
+    );
     let runtime = ProjectRuntime::new(worker, Some(java))?;
     for version in versions.split(',') {
         ensure!(
@@ -64,7 +77,7 @@ async fn main() -> Result<()> {
             );
             let input = ProjectInput {
                 target: target.into(),
-                specification: specification(version),
+                specification: specification(version, &profile),
                 options: BTreeMap::new(),
                 include_secrets: false,
                 templates: None,

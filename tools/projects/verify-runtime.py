@@ -22,6 +22,7 @@ TOKEN = "fixture-token"
 QUERY = "space & + 鼹鼠"
 NOTE = '鼹鼠 "quotes" & +'
 PET = {"id": 7, "status": "ready", "note": NOTE}
+BINARY = bytes([0,1,2,13,10,255,128,65])
 
 
 def run(command, cwd, env=None, timeout=300):
@@ -53,6 +54,20 @@ class Fixture(http.server.BaseHTTPRequestHandler):
             if parsed.path == "/fail":
                 assert self.command == "GET"
                 self.respond(400, {"message": "expected fixture failure"})
+                return
+            if parsed.path == "/files":
+                if self.command == "GET":
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/octet-stream")
+                    self.send_header("Content-Length", str(len(BINARY)))
+                    self.send_header("Content-Disposition", 'attachment; filename="fixture.bin"')
+                    self.end_headers()
+                    self.wfile.write(BINARY)
+                else:
+                    assert self.command == "POST"
+                    assert self.headers.get_content_type() == "application/octet-stream"
+                    assert body == BINARY, body
+                    self.respond(200,{"size":len(body)})
                 return
             assert parsed.path == "/pets/7", parsed.path
             if self.command == "GET":
@@ -98,6 +113,7 @@ func TestRuntimeFixture(t *testing.T) {
     if err!=nil || response.StatusCode!=200 || pet.GetNote()!="鼹鼠 \"quotes\" & +" {t.Fatalf("POST: %v %v %v",pet,response,err)}
     response,err=api.DefaultAPI.FailGet(ctx).Execute()
     if err==nil || response==nil || response.StatusCode!=400 {t.Fatalf("error response lost: %v %v",response,err)}
+    __GO_BINARY__
 }
 '''
 PYTHON = r'''import os
@@ -117,6 +133,7 @@ with ApiClient(Configuration(host=os.environ["FIXTURE_URL"], access_token="fixtu
         assert error.status==400 and "expected fixture failure" in error.body, error
     else:
         raise AssertionError("HTTP error was not exposed")
+    __PYTHON_BINARY__
 print("PASS Python client")
 '''
 JAVASCRIPT = r'''const assert=require('node:assert/strict');
@@ -131,6 +148,7 @@ function call(name,...args) {return new Promise((resolve,reject)=>api[name](...a
   pet=await call('replacePet',7,sdk.Pet.constructFromObject({id:7,status:'ready',note:'鼹鼠 "quotes" & +'}));
   assert.equal(pet.note,'鼹鼠 "quotes" & +');
   await assert.rejects(call('failGet'),error=>error.status===400 && error.response.body.message==='expected fixture failure');
+  __JS_BINARY__
   console.log('PASS JavaScript client');
 })().catch(error=>{console.error(error);process.exit(1)});
 '''
@@ -143,6 +161,7 @@ const api=new sdk.DefaultApi(new sdk.Configuration({basePath:process.env.FIXTURE
   pet=await api.replacePet({id:7,pet:{id:7,status:'ready',note:'鼹鼠 "quotes" & +'}});
   assert.equal(pet.note,'鼹鼠 "quotes" & +');
   await assert.rejects(api.failGet(),error=>error instanceof sdk.ResponseError && error.response.status===400);
+  __TS_BINARY__
   console.log('PASS TypeScript client');
 })().catch(error=>{console.error(error);process.exit(1)});
 '''
@@ -180,7 +199,59 @@ if (post.StatusCode != HttpStatusCode.OK || post.Ok()!.Note != "鼹鼠 \"quotes\
 var failure = await api.FailGetAsync(cancellationToken: cancel.Token);
 if (failure.StatusCode != HttpStatusCode.BadRequest || failure.BadRequest()!.Message != "expected fixture failure")
     throw new Exception("HTTP400 model/status lost");
+__CS_BINARY__
 Console.WriteLine("PASS C# generichost client");
+'''
+
+
+GO_BINARY = r'''data:=[]byte{0,1,2,13,10,255,128,65}
+    downloaded,response,err:=api.DefaultAPI.DownloadFile(ctx).Execute()
+    if err!=nil || response.StatusCode!=200 {t.Fatalf("download: %v %v",response,err)}
+    defer downloaded.Close(); defer os.Remove(downloaded.Name())
+    raw,err:=io.ReadAll(downloaded)
+    if err!=nil || !bytes.Equal(raw,data) {t.Fatalf("download bytes: %x %v",raw,err)}
+    upload,err:=os.CreateTemp(t.TempDir(),"upload*.bin"); if err!=nil {t.Fatal(err)}
+    defer upload.Close()
+    if _,err=upload.Write(data); err!=nil {t.Fatal(err)}
+    if _,err=upload.Seek(0,0); err!=nil {t.Fatal(err)}
+    receipt,response,err:=api.DefaultAPI.UploadFile(ctx).Body(upload).Execute()
+    if err!=nil || response.StatusCode!=200 || receipt.GetSize()!=int32(len(data)) {t.Fatalf("upload: %v %v %v",receipt,response,err)}
+'''
+PYTHON_BINARY = r'''data=bytes([0,1,2,13,10,255,128,65])
+    downloaded=api.download_file()
+    if isinstance(downloaded,str):
+        from pathlib import Path
+        path=Path(downloaded)
+        try: raw=path.read_bytes()
+        finally: path.unlink()
+    else:
+        raw=bytes(downloaded)
+    assert raw==data, raw
+    receipt=api.upload_file(body=data)
+    assert receipt.size==len(data), receipt
+'''
+JS_BINARY = r'''const data=Buffer.from([0,1,2,13,10,255,128,65]);
+  const downloaded=await call('downloadFile');
+  assert.ok(Buffer.isBuffer(downloaded), 'download is not raw binary');
+  assert.deepEqual(downloaded,data);
+  const receipt=await call('uploadFile',data);
+  assert.equal(receipt.size,data.length);
+'''
+TS_BINARY = r'''const data=Buffer.from([0,1,2,13,10,255,128,65]);
+  const downloaded=await api.downloadFile();
+  assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()),data);
+  const receipt=await api.uploadFile({body:new Blob([data],{type:'application/octet-stream'})});
+  assert.equal(receipt.size,data.length);
+'''
+CS_BINARY = r'''byte[] data = {0,1,2,13,10,255,128,65};
+var downloaded = await api.DownloadFileAsync(cancellationToken: cancel.Token);
+using var stream = downloaded.Ok()!;
+using var buffer = new System.IO.MemoryStream();
+await stream.CopyToAsync(buffer,cancel.Token);
+if (!System.Linq.Enumerable.SequenceEqual(buffer.ToArray(),data)) throw new Exception("Binary download changed bytes");
+using var upload = new System.IO.MemoryStream(data);
+var receipt = await api.UploadFileAsync(body: new FileParameter(upload), cancellationToken: cancel.Token);
+if (receipt.StatusCode != HttpStatusCode.OK || receipt.Ok()!.Size != data.Length) throw new Exception("Binary upload receipt failed");
 '''
 
 
@@ -235,6 +306,7 @@ def csharp(directory, url, args):
     assert match, "Generated hosting extension missing"
     api_name = match.group(1)
     driver = CSHARP.replace("__CONFIGURE_API__", "Configure" + api_name).replace("__ADD_HTTP_CLIENTS__", "Add" + api_name + "HttpClients")
+    driver = driver.replace("__CS_BINARY__", CS_BINARY if args.profile=="binary" else "")
     consumer = directory / "runtime-consumer"
     consumer.mkdir(exist_ok=True)
     (consumer / "Program.cs").write_text(driver)
@@ -341,14 +413,17 @@ def python_environment(directory):
 def client(target, directory, url, args):
     env = dict(os.environ, FIXTURE_URL=url)
     if target == "go":
-        (directory / "runtime_fixture_test.go").write_text(GO)
+        driver = GO.replace("__GO_BINARY__", GO_BINARY if args.profile=="binary" else "")
+        if args.profile=="binary":
+            driver=driver.replace('"context"', '"context"\n    "bytes"\n    "io"',1)
+        (directory / "runtime_fixture_test.go").write_text(driver)
         run([args.go, "mod", "tidy"], directory)
         run([args.go, "test", "-run", "^TestRuntimeFixture$", "-count=1", "-race", "-v"], directory, env)
     elif target == "csharp":
         csharp(directory, url, args)
     elif target == "python":
         python = python_environment(directory)
-        (directory / "runtime_fixture.py").write_text(PYTHON)
+        (directory / "runtime_fixture.py").write_text(PYTHON.replace("__PYTHON_BINARY__", PYTHON_BINARY if args.profile=="binary" else ""))
         run([str(python), "runtime_fixture.py"], directory, env)
     else:
         run([args.npm, "install", "--no-audit", "--no-fund"], directory)
@@ -362,6 +437,7 @@ def client(target, directory, url, args):
             assert names[-1] == "callback" and set(names[:-1]) == {"id","q","xTest"}, names
             values = {"id": "7", "q": json.dumps(QUERY), "xTest": json.dumps("moleapi-fixture")}
             driver = JAVASCRIPT.replace("__GET_PET_ARGS__", ",".join(values[name] for name in names[:-1]))
+        driver=driver.replace("__JS_BINARY__", JS_BINARY if args.profile=="binary" else "").replace("__TS_BINARY__", TS_BINARY if args.profile=="binary" else "")
         (directory / "runtime_fixture.cjs").write_text(driver)
         run([args.node, "runtime_fixture.cjs"], directory, env)
 
@@ -414,6 +490,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--targets", default="javascript,python,go,typescript-fetch,python-fastapi")
     parser.add_argument("--versions", default="3.0.3,3.1.0")
+    parser.add_argument("--profile", choices=["core","binary"], default="core")
     parser.add_argument("--node", default=shutil.which("node"))
     parser.add_argument("--npm", default=shutil.which("npm"))
     parser.add_argument("--go", default=shutil.which("go"))
@@ -427,11 +504,13 @@ def main():
     versions = args.versions.split(",")
     assert all(t in {"javascript", "python", "go", "typescript-fetch", "python-fastapi", "csharp", "aspnetcore"} for t in targets)
     assert all(v in {"3.0.3", "3.1.0"} for v in versions)
+    if args.profile=="binary":
+        assert not {"python-fastapi","aspnetcore"}.intersection(targets), "Binary profile currently validates clients"
     if not args.reuse_generated:
-        run(["cargo", "run", "-p", "moleapi-generation", "--example", "fixture_projects", "--", str(args.output), str(args.worker), str(args.java), args.targets, args.versions], REPO, timeout=300)
+        run(["cargo", "run", "-p", "moleapi-generation", "--example", "fixture_projects", "--", str(args.output), str(args.worker), str(args.java), args.targets, args.versions, args.profile], REPO, timeout=300)
     evidence_path = args.output / "runtime-evidence.json"
     evidence = json.loads(evidence_path.read_text()) if evidence_path.exists() else []
-    evidence = [record for record in evidence if (record["target"], record["dialect"]) not in {(t,v) for t in targets for v in versions}]
+    evidence = [record for record in evidence if (record["target"], record["dialect"], record.get("profile","core")) not in {(t,v,args.profile) for t in targets for v in versions}]
     evidence_path.write_text(json.dumps(evidence, indent=2) + "\n")
     tools = {"python": sys.version, "java": subprocess.check_output([str(args.java), "-version"], stderr=subprocess.STDOUT, text=True).strip()}
     for name, command in [("node", args.node), ("npm", args.npm), ("go", args.go)]:
@@ -457,10 +536,12 @@ def main():
                 else:
                     client(target, directory, f"http://127.0.0.1:{server.server_port}", args)
                     assert not Fixture.errors, Fixture.errors
-                    assert Fixture.observations == [("GET", "/pets/7"), ("POST", "/pets/7"), ("GET", "/fail")], Fixture.observations
+                    expected=[("GET", "/pets/7"), ("POST", "/pets/7"), ("GET", "/fail")]
+                    if args.profile=="binary": expected += [("GET","/files"),("POST","/files")]
+                    assert Fixture.observations == expected, Fixture.observations
                 manifest = json.loads((directory / "moleapi-generation.json").read_text())
                 source_digest = hashlib.sha256((directory / "fixture-source.json").read_bytes()).hexdigest()
-                evidence.append({"target": target, "dialect": version, "engine": manifest["engine"], "fixture_sha256": source_digest, "result": "passed"})
+                evidence.append({"target": target, "dialect": version, "profile": args.profile, "engine": manifest["engine"], "fixture_sha256": source_digest, "result": "passed"})
                 (args.output / "runtime-evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
                 print(f"PASS {target}/{version}", flush=True)
     finally:
