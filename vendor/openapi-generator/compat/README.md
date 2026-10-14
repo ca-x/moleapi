@@ -239,3 +239,16 @@ leaving multi arrays, scalars/files and non-form parameters on the upstream expr
 Required/optional arrays preserve optional omission. Default URLSession only; explicit
 API/_param templates retain priority. Other collection styles/nested/custom/streaming
 parts and Apple/other-platform execution remain separate gates.
+
+
+## PHP nullable field presence
+
+The existing Apache-2.0 PHP ObjectSerializer partial (original upstream SHA256 recorded
+above) now calls a nullable setter only when the decoded object actually contains the
+original wire property. `isset` alone conflated missing properties with explicit null,
+inventing optional null fields on decode/reencode and satisfying missing nullable
+required fields. A real nested-model/map consumer reproduced the optional presence
+failure before this change; both dialects now retain omission, authored null and model
+validity. Original model/map/transport implementations remain upstream, and explicit
+ObjectSerializer.mustache overrides retain priority. This does not add general schema
+validation or redefine null map-value/empty-map behavior.
