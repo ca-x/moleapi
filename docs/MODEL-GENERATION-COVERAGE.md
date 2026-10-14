@@ -26,7 +26,7 @@ Apifox's [model code list](https://docs.apifox.com/generate-code.md), checked202
 
 The specification generation dialog has a separate data-model category, language selection, all/exact component selection and expandable upstream serialization/style settings. Enum choices and booleans retain their types. Preview/copy/file/ZIP downloads, regeneration and owner/content/cancellation guards reuse project artifacts. SQL exports DDL only and requires the existing explicit Java runtime; the18 Quicktype targets work without Java or Node in hosted and offline applications.
 
-Actual evidence: all18 language targets generated recursive/enum/nullable component models in the host-free Rust VM; the capped application worker produced all20 target artifacts, including actual MySQL/PostgreSQL DDL. Generated Python, JavaScript, TypeScript, Go, C#, Java, Rust, Ruby and C++ models now run recursive/enum/nullable/Unicode serialization roundtrips in OpenAPI3.0.3/3.1.0 fixtures. TypeScript, Go, C#, Java, Rust and C++ compile with real toolchains; Python, JavaScript and Ruby run through their native runtimes. The other9 model language runtimes and execution of generated SQL DDL are not established by artifact generation. Required/optional/null serialization differences remain those of the upstream target; this is model conversion, not universal schema validation.
+Actual evidence: all18 language targets generated recursive/enum/nullable component models in the host-free Rust VM; the capped application worker produced all20 target artifacts, including actual MySQL/PostgreSQL DDL. Generated Python, JavaScript, TypeScript, Go, C#, Java, Rust, Ruby, C++, Kotlin, Dart and Swift models now run recursive/enum/nullable/Unicode serialization roundtrips in OpenAPI3.0.3/3.1.0 fixtures. TypeScript, Go, C#, Java, Rust, C++, Kotlin, Dart and Swift compile with real toolchains; Python, JavaScript and Ruby run through their native runtimes. The other6 model language runtimes and execution of generated SQL DDL are not established by artifact generation. Required/optional/null serialization differences remain those of the upstream target; this is model conversion, not universal schema validation.
 
 API evidence covers authenticated ownership, anonymous/cross-owner rejection, default credential-example exclusion, exact component selection, typed-option rejection and unchanged canonical source. Component/UI tests cover typed model settings and existing late-reply fencing; English/Chinese catalogs include model flows.
 
@@ -89,3 +89,43 @@ python3 tools/models/verify-native.py --fixtures /absolute/models-3.1 --dialect 
 The Ruby gem home must be prepared explicitly with the versions above; the C++ include
 directory contains json.hpp and its associated upstream headers. Use fresh fixture
 roots; the driver creates a separate consumer directory and refuses to overwrite it.
+
+
+## Kotlin/Dart/Swift native model acceptance
+
+All6 default3.0.3/3.1.0 cases passed actual decoded and constructed recursive
+Pet/Status models, zero-valued ID, nullable native value, Unicode/quotes/ampersand/
+plus and unknown-enum rejection. Original emitted sources match across the equivalent
+nullable schemas and remain unchanged after compilation. Kotlin uses its default
+Jackson mapper with Kotlin2.4.0/Gradle8.14.5/JDK21.0.12.1/Jackson2.17.3; Dart3.13.5
+passes analyzer (fatal infos) and executes its AOT binary with SDK-only dependencies;
+Swift6.4.1 builds/runs a release SwiftPM executable using Linux Foundation Codable.
+Kotlin dependency locks/resolution, Dart lock, source/tool/hash/platform and exact
+runtime records stay in isolated QA. Product never fetches or executes these tools.
+
+Default Kotlin Jackson NON_NULL and Swift synthesized Codable omit nil-valued optional
+properties when serializing. Both preserve the tested native nullable value; they do
+not preserve whether that input field was absent or explicitly null. Dart's default
+serializer emits null. The driver asserts each actual output policy and records
+nullable_serialization; it retains explicit-null assertions for the earlier four
+native targets rather than relaxing their checks. Full optional/null presence
+fidelity, required/scalar/constraint validation and more complex shapes remain open
+parent-module requirements. These are model conversion cases, not universal schema
+validation or a claim of identical input/output JSON object membership.
+
+Fresh Java/Rust/Ruby/C++ driver regressions passed4 further actual cases;80 generation
+regressions,1 owned model API case and scoped format/strict Clippy pass. Catalog now
+records12 representative model language runtimes. Linux Swift proof does not establish
+Apple/iOS deployment; other platforms/toolchains/options/frameworks/dependency ranges,
+6 model runtimes, SQL execution, advanced model/SDK/server generation and release gates
+remain open.
+
+```sh
+cargo run -p moleapi-generation --example fixture_models -- /absolute/three-models /absolute/moleapi-server /absolute/java 3.1.0 model-kotlin,model-dart,model-swift
+python3 tools/models/verify-native.py --fixtures /absolute/three-models --dialect 3.1.0 --target model-kotlin --jdk /absolute/jdk --gradle /absolute/gradle
+python3 tools/models/verify-native.py --fixtures /absolute/three-models --dialect 3.1.0 --target model-dart --dart /absolute/dart
+python3 tools/models/verify-native.py --fixtures /absolute/three-models --dialect 3.1.0 --target model-swift --swift /absolute/swift
+```
+
+Repeat using a separate fresh3.0.3 output root. An explicit Swift launcher may set
+only its selected toolchain's verified runtime-library paths, as used in Linux QA.

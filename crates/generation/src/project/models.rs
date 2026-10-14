@@ -32,6 +32,9 @@ pub(super) fn catalog() -> Result<Vec<ProjectTarget>> {
                 | "model-rust"
                 | "model-ruby"
                 | "model-c++"
+                | "model-kotlin"
+                | "model-dart"
+                | "model-swift"
         ) {
             target.validation = "representative-3.0-3.1-native-model-roundtrip-fixture".into();
         }

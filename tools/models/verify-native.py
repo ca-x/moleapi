@@ -123,6 +123,80 @@ int main() {
 }
 '''
 
+KOTLIN = r'''package fixture
+import quicktype.*
+import java.nio.file.*
+fun main() {
+    val source = Files.readString(Path.of("sample.json"))
+    val decoded = Pet.fromJson(source)
+    check(decoded.id == 0L && decoded.status == Status.Ready && decoded.note == null)
+    val child = requireNotNull(decoded.friend)
+    check(child.id == 2L && child.status == Status.Done && child.note == "鼹鼠 \"quotes\" & +")
+    println(decoded.toJson())
+    val built = Pet(id = 0L, status = Status.Ready, note = null,
+        friend = Pet(id = 2L, status = Status.Done, note = "鼹鼠 \"quotes\" & +"))
+    println(built.toJson())
+    var rejected = false
+    try {Pet.fromJson(source.replace("\"ready\"", "\"invalid\""))} catch (expected: Exception) {rejected = true}
+    check(rejected)
+}
+'''
+
+GRADLE = '''plugins { kotlin("jvm") version "2.4.0"; application }
+repositories { mavenCentral() }
+dependencies {
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.17.3")
+    implementation(kotlin("reflect"))
+}
+kotlin { jvmToolchain(21) }
+application { mainClass.set("fixture.RuntimeFixtureKt") }
+dependencyLocking { lockAllConfigurations() }
+'''
+
+DART = r'''import 'dart:convert';
+import 'dart:io';
+import 'models.dart';
+void ensure(bool value) { if (!value) throw StateError('Native model fields lost'); }
+void main() {
+    final source = File('sample.json').readAsStringSync();
+    final decoded = petFromJson(source);
+    ensure(decoded.id == 0 && decoded.status == Status.READY && decoded.note == null);
+    final child = decoded.friend!;
+    ensure(child.id == 2 && child.status == Status.DONE && child.note == '鼹鼠 "quotes" & +');
+    print(petToJson(decoded));
+    final built = Pet(id: 0, status: Status.READY, note: null,
+        friend: Pet(id: 2, status: Status.DONE, note: '鼹鼠 "quotes" & +'));
+    print(petToJson(built));
+    final invalid = jsonDecode(source) as Map<String, dynamic>;
+    invalid['status'] = 'invalid';
+    var rejected = false;
+    try {petFromJson(jsonEncode(invalid));} catch (_) {rejected = true;}
+    ensure(rejected);
+}
+'''
+
+SWIFT = r'''import Foundation
+func ensure(_ value: Bool) { if !value { fatalError("Native model fields lost") } }
+let source = try String(contentsOfFile: "sample.json", encoding: .utf8)
+let decoded = try Pet(source)
+ensure(decoded.id == 0 && decoded.status == .ready && decoded.note == nil)
+let child = decoded.friend!
+ensure(child.id == 2 && child.status == .done && child.note == "鼹鼠 \"quotes\" & +")
+print(try decoded.jsonString()!)
+let built = Pet(friend: Pet(friend: nil, id: 2, note: "鼹鼠 \"quotes\" & +", status: .done),
+    id: 0, note: nil, status: .ready)
+print(try built.jsonString()!)
+var rejected = false
+do { _ = try Pet(source.replacingOccurrences(of: "\"ready\"", with: "\"invalid\"")) }
+catch { rejected = true }
+ensure(rejected)
+'''
+
+SWIFT_PACKAGE = '''// swift-tools-version: 6.0
+import PackageDescription
+let package = Package(name: "ModelQA", targets: [.executableTarget(name: "ModelQA")])
+'''
+
 
 def run(command, cwd, env=None, timeout=600):
     print('RUN', ' '.join(map(str, command)), flush=True)
@@ -132,12 +206,15 @@ def run(command, cwd, env=None, timeout=600):
     return result.stdout
 
 
-def check(output):
+def check(output, nullable_serialization='null'):
     records = [json.loads(line) for line in output.splitlines() if line.startswith('{')]
     assert len(records) == 2, output
     for value in records:
         assert value['id'] == 0 and value['status'] == 'ready'
-        assert 'note' in value and value['note'] is None
+        if nullable_serialization == 'omitted':
+            assert 'note' not in value
+        else:
+            assert 'note' in value and value['note'] is None
         assert value['friend']['id'] == 2 and value['friend']['status'] == 'done'
         assert value['friend']['note'] == NOTE
 
@@ -159,6 +236,7 @@ def verify(args):
     (consumer / 'sample.json').write_text(json.dumps(SAMPLE, ensure_ascii=False) + '\n')
     tools = {}
     dependencies = {}
+    nullable_serialization = 'null'
     if target == 'model-java':
         assert args.jdk and args.jdk.is_absolute() and (args.jdk / 'bin/java').is_file()
         assert args.maven and args.maven.is_absolute() and args.maven.is_file()
@@ -195,7 +273,7 @@ def verify(args):
         output = run([str(args.ruby), 'RuntimeFixture.rb'], consumer, env)
         tools['ruby'] = run([str(args.ruby), '--version'], consumer).strip()
         dependencies = json.loads((consumer / 'runtime-gems.json').read_text())
-    else:
+    elif target == 'model-c++':
         assert target == 'model-c++'
         assert args.cxx and args.cxx.is_absolute() and args.cxx.is_file()
         assert args.json_include and args.json_include.is_absolute() and (args.json_include / 'json.hpp').is_file()
@@ -205,12 +283,54 @@ def verify(args):
         output = run([str(consumer / 'model-qa')], consumer)
         tools['cxx'] = run([str(args.cxx), '--version'], consumer).splitlines()[0]
         dependencies['nlohmann_header_sha256'] = hashlib.sha256((args.json_include / 'json.hpp').read_bytes()).hexdigest()
-    check(output)
+    elif target == 'model-kotlin':
+        assert args.jdk and args.jdk.is_absolute() and (args.jdk / 'bin/java').is_file()
+        assert args.gradle and args.gradle.is_absolute() and args.gradle.is_file()
+        env = dict(os.environ, JAVA_HOME=str(args.jdk), PATH=str(args.jdk / 'bin') + os.pathsep + os.environ['PATH'])
+        source = consumer / 'src/main/kotlin'
+        source.mkdir(parents=True)
+        shutil.copyfile(sources / 'models.kt', source / 'models.kt')
+        (source / 'RuntimeFixture.kt').write_text(KOTLIN)
+        (consumer / 'build.gradle.kts').write_text(GRADLE)
+        (consumer / 'settings.gradle.kts').write_text('rootProject.name = "model-qa"\n')
+        run([str(args.gradle), '--no-daemon', '--write-locks', 'installDist'], consumer, env, timeout=900)
+        output = run([str(consumer / 'build/install/model-qa/bin/model-qa')], consumer, env)
+        tools['gradle'] = run([str(args.gradle), '--version'], consumer, env).strip()
+        tools['java'] = run([str(args.jdk / 'bin/javac'), '-version'], consumer).strip()
+        resolved = run([str(args.gradle), '--no-daemon', 'dependencies', '--configuration', 'runtimeClasspath'], consumer, env)
+        (consumer / 'runtime-dependencies.txt').write_text(resolved)
+        dependencies['gradle_lock_sha256'] = hashlib.sha256((consumer / 'gradle.lockfile').read_bytes()).hexdigest()
+        nullable_serialization = 'omitted'
+    elif target == 'model-dart':
+        assert args.dart and args.dart.is_absolute() and args.dart.is_file()
+        shutil.copyfile(sources / 'models.dart', consumer / 'models.dart')
+        (consumer / 'RuntimeFixture.dart').write_text(DART)
+        (consumer / 'pubspec.yaml').write_text("name: model_qa\nenvironment:\n  sdk: '>=3.0.0 <4.0.0'\n")
+        run([str(args.dart), 'pub', 'get', '--offline'], consumer)
+        run([str(args.dart), 'analyze', '--fatal-infos'], consumer)
+        run([str(args.dart), 'compile', 'exe', 'RuntimeFixture.dart', '-o', 'model-qa'], consumer)
+        output = run([str(consumer / 'model-qa')], consumer)
+        tools['dart'] = run([str(args.dart), '--version'], consumer).strip()
+        dependencies['pub_lock_sha256'] = hashlib.sha256((consumer / 'pubspec.lock').read_bytes()).hexdigest()
+    else:
+        assert target == 'model-swift'
+        assert args.swift and args.swift.is_absolute() and args.swift.is_file()
+        source = consumer / 'Sources/ModelQA'
+        source.mkdir(parents=True)
+        shutil.copyfile(sources / 'models.swift', source / 'models.swift')
+        (source / 'main.swift').write_text(SWIFT)
+        (consumer / 'Package.swift').write_text(SWIFT_PACKAGE)
+        run([str(args.swift), 'build', '--configuration', 'release'], consumer)
+        output = run([str(args.swift), 'run', '--skip-build', '--configuration', 'release', 'ModelQA'], consumer)
+        tools['swift'] = run([str(args.swift), '--version'], consumer).strip()
+        nullable_serialization = 'omitted'
+    check(output, nullable_serialization)
     assert all(hashlib.sha256((sources / path).read_bytes()).hexdigest() == digest for path, digest in before.items())
     evidence = {'target': target, 'dialect': args.dialect, 'engine': manifest['engine'],
                 'source_sha256': manifest['source_sha256'], 'platform': platform.platform(),
                 'tools': tools, 'dependencies': dependencies, 'generated_source_sha256': before,
-                'profiles': ['decoded', 'constructed', 'zero', 'recursive', 'enum', 'nullable', 'unicode', 'invalid-enum'], 'result': 'passed'}
+                'profiles': ['decoded', 'constructed', 'zero', 'recursive', 'enum', 'nullable', 'unicode', 'invalid-enum'],
+                'nullable_serialization': nullable_serialization, 'result': 'passed'}
     (consumer / 'runtime-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
     print(f'PASS {target}/{args.dialect}: original native models')
 
@@ -219,7 +339,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--fixtures', required=True, type=Path)
     parser.add_argument('--dialect', required=True, choices=['3.0.3', '3.1.0'])
-    parser.add_argument('--target', required=True, choices=['model-java', 'model-rust', 'model-ruby', 'model-c++'])
-    for name in ['jdk', 'maven', 'cargo', 'ruby', 'gem-home', 'cxx', 'json-include']:
+    parser.add_argument('--target', required=True, choices=['model-java', 'model-rust', 'model-ruby', 'model-c++', 'model-kotlin', 'model-dart', 'model-swift'])
+    for name in ['jdk', 'maven', 'cargo', 'ruby', 'gem-home', 'cxx', 'json-include', 'gradle', 'dart', 'swift']:
         parser.add_argument('--' + name, type=Path)
     verify(parser.parse_args())
