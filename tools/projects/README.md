@@ -63,3 +63,16 @@ Java uses the default okhttp-gson library, creates a generated ApiClient/Default
 Default Java okhttp-gson now also accepts `--profile binary`, `multipart` and `union`. Binary consumers use returned File objects and compare/delete temporary downloads; uploads use actual File inputs. Multipart sends one named binary file, quoted Unicode note, required/optional repeated tags and non-exploded CSV tags. Union consumers use generated getActualInstance wrappers and POST the decoded model instances without custom serialization. All6 extended profile/dialect cases passed. The API's escaped `_file` parameter and any dialect-specific argument order come from its actual signature.
 
 Pinned default-library ApiClient/API templates fix two observed multipart failures: the transport loop now writes each current list element, and non-multi arrays use the engine's existing collection-format join helper before transport. Explicit templates keep precedence; other Java libraries are untouched. Larger/nested/custom/delimiter/nonseekable/resume/browser and advanced union/dynamic semantics remain separate gates.
+
+
+## Real browser SDK profiles
+
+`verify-browser.py` runs fresh default JavaScript and TypeScript-fetch clients in an isolated agent-browser Chromium session, using the same exact loopback wire assertions. Install agent-browser/Chrome and provide the repository's esbuild executable (the frontend development dependency):
+
+```sh
+python3 tools/projects/verify-browser.py   --worker /absolute/path/to/target/debug/moleapi-server   --java /absolute/path/to/java   --output /absolute/path/to/new-browser-fixture-directory
+```
+
+Defaults are two clients, two dialects and `core,binary,multipart,union`:16 combinations/76 actual API calls. `--targets`, `--versions`, `--profiles`, `--browser`, `--npm`, `--esbuild` and `--reuse-generated` select explicit tools/subsets or rerun the same trusted fixtures. Standard browser bundling uses generated source/package browser entries; Node transport, mock SDKs and custom serialization are not substituted. Browser-native File/Blob payloads retain bytes/name/MIME and form-array/union behavior. The page and API share one loopback origin; cookies/cross-origin/CORS and real desktop WebViews remain separate gates.
+
+The harness derives and closes its own named browser session, shuts down its owned server, and preserves package locks, generated projects, entrypoints/bundles, browser/tool versions, engine/source/bundle hashes and successful profile records. Test pages contain only trusted synthetic data. Preview/download does not launch a browser or execute imported projects.
