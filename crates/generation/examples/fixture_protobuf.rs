@@ -20,7 +20,7 @@ async fn main() -> Result<()> {
         let plugin = PathBuf::from(args.next().context("Absolute gRPC plugin required")?);
         let language = args.next().unwrap_or_else(|| "python".into());
         ensure!(
-            matches!(language.as_str(), "python" | "java"),
+            matches!(language.as_str(), "python" | "java" | "csharp"),
             "Unsupported QA consumer language"
         );
         let runtime = ProjectRuntime::new(worker, None)?

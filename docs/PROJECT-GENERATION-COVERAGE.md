@@ -913,3 +913,33 @@ Catalog validation now names representative native four-mode source/descriptor e
 Product preview/export does not build or run target code. Rust toolchain/dependency
 ranges, broader schemas/options/auth/TLS/cancellation/platform deployment and other
 language plugins remain full-module requirements.
+
+
+## Explicit C# protobuf/gRPC four-mode consumers
+
+Official Grpc.Tools2.84.0 Linux x86_64 plugin now has actual compile/call evidence with
+explicit protoc36.1 and .NET10.0.401. The NuGet repository package signature was verified
+by dotnet nuget verify --all before extracting/executing the selected plugin. The hash/
+leaf catalog endpoints returned404, so no published checksum comparison is claimed.
+Recorded plugin SHA256: `3cc2e9ef1b7100c407ce5e8f36ef6c48be2c9a08fbbdc51c7087026cd86ff2f7`;
+full package/signature/source metadata remain in isolated QA. Official references:
+https://www.nuget.org/packages/Grpc.Tools/2.84.0 and https://github.com/grpc/grpc-dotnet.
+
+The existing explicit plugin route emits original Types/Common/Fixture models and
+FixtureGrpc service/client interfaces. Separate source/descriptor consumers copied those
+C# files unchanged and built release projects with Google.Protobuf3.36.1,
+Grpc.Net.Client/Grpc.AspNetCore.Server2.84.0 (resolved Grpc.Core.Api/Grpc.Net.Common2.84.0).
+Actual Kestrel HTTP2 loopback unary/server-stream/client-stream/bidirectional calls passed
+for both inputs (8 RPCs), preserving Unicode/non-UTF8 bytes, enum/repeated fields, oneof
+presence including code=0 and Timestamp. All streams and the server stop cleanly. Generated
+source hashes match across inputs and remain unchanged after build/calls; package locks,
+restore assets, dependency/tool/descriptor/hash/runtime evidence are retained. Package/
+CLI-home directories are isolated. No transport/model/plugin emitter patch was needed.
+
+The actual C# plugin emission test passed; Python default invocation passed8 regression
+RPCs.78 generation cases (37 external-tool cases ignored),11 owned API cases, fixture
+parser tests and scoped strict Clippy/format checks passed. Catalog validation names the
+configured C#-plugin four-mode fixture separately from message-only integration.
+Product preview/export never installs SDKs/plugins/packages or executes consumers. Other
+.NET/plugin/runtime/dependency ranges, libraries/platforms, TLS/auth/advanced schemas/
+options and remaining languages/plugins stay full-module work.

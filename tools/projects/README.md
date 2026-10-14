@@ -325,3 +325,23 @@ Timestamp data and complete streams/server shutdown. Recorded QA: Cargo1.99.0/Li
 Tonic/tonic-prost0.14.6, Prost/prost-types0.14.4, Tokio1.53.3/tokio-stream0.1.19. Python
 regression passed8 further RPCs. Other toolchain/dependency/schema/platform/transport
 options remain their own gates; this tooling never executes from product preview.
+
+
+## Explicit C# protobuf/gRPC consumer
+
+Pass the official configured C# plugin and protoc with a final csharp selector, then
+compile/call separate consumers with explicit .NET/package/CLI-home directories:
+
+```sh
+cargo run -p moleapi-generation --example fixture_protobuf -- /absolute/csharp-qa-output /absolute/moleapi-server /absolute/protoc /absolute/grpc_csharp_plugin csharp
+python3 tools/projects/verify-protobuf-csharp.py /absolute/csharp-qa-output/source --dotnet /absolute/dotnet --packages /absolute/qa-packages --cli-home /absolute/qa-cli-home
+python3 tools/projects/verify-protobuf-csharp.py /absolute/csharp-qa-output/descriptor --dotnet /absolute/dotnet --packages /absolute/qa-packages --cli-home /absolute/qa-cli-home
+```
+
+The consumer keeps original generated C# hashes, builds release .NET10 projects, records
+NuGet locks/assets/resolved dependency/tool metadata and exercises Kestrel HTTP2 with
+Grpc.Net.Client for all four modes. Both inputs passed8 RPCs with enum/repeated/bytes/
+Unicode/oneof-zero/Timestamp data. Recorded tools: .NET10.0.401/Linux, protoc36.1,
+Grpc.Tools2.84.0 plugin (NuGet repository signature verified), Google.Protobuf3.36.1 and
+gRPC.NET2.84.0. Python regression passed8 further RPCs. Other ranges/options/platforms
+require separate evidence; product preview/export never executes this tool.

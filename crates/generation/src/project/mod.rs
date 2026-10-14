@@ -161,6 +161,7 @@ pub fn project_catalog() -> Result<Vec<ProjectTarget>> {
             validation: match language {
                 "python" => "representative-python-four-mode-configured-plugin-fixture",
                 "java" => "representative-java-four-mode-configured-plugin-fixture",
+                "csharp" => "representative-csharp-four-mode-configured-plugin-fixture",
                 _ => "representative-protoc-message-source-descriptor-fixture",
             }
             .into(),

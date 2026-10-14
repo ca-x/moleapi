@@ -1272,3 +1272,52 @@ async fn official_java_plugin_emits_imported_models_and_four_rpc_service_interfa
     );
     assert!(artifact.engine.contains("grpc-plugin=true"));
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured protoc and official C# gRPC plugin"]
+async fn official_csharp_plugin_emits_imported_models_and_four_rpc_service_interfaces() {
+    let compiler =
+        PathBuf::from(std::env::var_os("MOLEAPI_CODEGEN_TEST_PROTOC").expect("explicit protoc"));
+    let plugin = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_GRPC_CSHARP").expect("explicit C# plugin"),
+    );
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), None)
+        .unwrap()
+        .with_protoc(Some(compiler), BTreeMap::from([("csharp".into(), plugin)]))
+        .unwrap();
+    let specification = serde_json::from_str(include_str!(
+        "../../../tools/projects/fixtures/protobuf-imports.json"
+    ))
+    .unwrap();
+    let artifact = runtime
+        .generate(
+            ProjectInput {
+                target: "protobuf-csharp".into(),
+                specification,
+                options: BTreeMap::new(),
+                include_secrets: false,
+                templates: None,
+            },
+            CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert!(artifact.files.iter().any(|file| file.path == "Types.cs"));
+    assert!(artifact.files.iter().any(|file| file.path == "Common.cs"));
+    let service = artifact
+        .files
+        .iter()
+        .find(|file| file.path == "FixtureGrpc.cs")
+        .unwrap();
+    for method in ["CallAsync", "Watch", "Collect", "Chat"] {
+        assert!(
+            service.content.contains(method),
+            "Missing generated C# {method}"
+        );
+    }
+    assert!(
+        service.content.contains("EchoServiceClient")
+            && service.content.contains("EchoServiceBase")
+    );
+    assert!(artifact.engine.contains("grpc-plugin=true"));
+}
