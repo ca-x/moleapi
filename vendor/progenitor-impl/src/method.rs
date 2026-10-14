@@ -30,7 +30,7 @@ pub(crate) struct OperationMethod {
     pub responses: Vec<OperationResponse>,
     pub dropshot_paginated: Option<DropshotPagination>,
     pub(crate) dropshot_websocket: bool,
-    pub(crate) raw_body_required: bool,
+    pub(crate) body_required: bool,
 }
 
 pub enum HttpMethod {
@@ -555,7 +555,7 @@ impl Generator {
             responses,
             dropshot_paginated,
             dropshot_websocket,
-            raw_body_required: operation
+            body_required: operation
                 .request_body
                 .as_ref()
                 .map(|body| body.item(components).map(|body| body.required))
@@ -602,12 +602,13 @@ impl Generator {
                     },
                     (OperationParameterType::RawBody, true) => unreachable!(),
                 };
-                let typ =
-                    if param.typ == OperationParameterType::RawBody && !method.raw_body_required {
-                        quote! { Option<#typ> }
-                    } else {
-                        typ
-                    };
+                let typ = if matches!(param.kind, OperationParameterKind::Body(_))
+                    && !method.body_required
+                {
+                    quote! { Option<#typ> }
+                } else {
+                    typ
+                };
                 quote! {
                     #name: #typ
                 }
@@ -900,7 +901,7 @@ impl Generator {
 
         // Generate code to handle the body param.
         let body_func = method.params.iter().filter_map(|param| {
-            if param.typ == OperationParameterType::RawBody && !method.raw_body_required {
+            if matches!(param.kind, OperationParameterKind::Body(_)) && !method.body_required {
                 return None;
             }
             match (&param.kind, &param.typ) {
@@ -950,21 +951,24 @@ impl Generator {
             }
         });
         let optional_body = method.params.iter().find_map(|param| {
-            if param.typ == OperationParameterType::RawBody && !method.raw_body_required {
-                let OperationParameterKind::Body(content_type) = &param.kind else {
-                    unreachable!()
-                };
-                let mime_type = content_type.to_string();
-                Some(quote! {
-                    if let Some(body) = body {
-                        #request_ident.headers_mut().insert(::reqwest::header::CONTENT_TYPE,
-                            ::reqwest::header::HeaderValue::from_static(#mime_type));
-                        *#request_ident.body_mut() = Some(body.into());
-                    }
-                })
-            } else {
-                None
+            let OperationParameterKind::Body(content_type) = &param.kind else {
+                return None;
+            };
+            if method.body_required {
+                return None;
             }
+            let set = match content_type {
+                BodyContentType::Json => quote! { #request_ident.json(&body) },
+                BodyContentType::FormUrlencoded => {
+                    quote! { #request_ident.form_urlencoded(&body)? }
+                }
+                _ => {
+                    let mime_type = content_type.to_string();
+                    quote! { #request_ident.header(::reqwest::header::CONTENT_TYPE,
+                    ::reqwest::header::HeaderValue::from_static(#mime_type)).body(body) }
+                }
+            };
+            Some(quote! { if let Some(body) = body { #request_ident = #set; } })
         });
         // ... and there can be at most one body.
         assert!(body_func.clone().count() <= 1);
@@ -1140,9 +1144,10 @@ impl Generator {
                 #( .query(#query_params) )*
                 #headers_use
                 #websock_hdrs
-                .build()?;
+                ;
 
             #optional_body
+            let mut #request_ident = #request_ident.build()?;
             let info = OperationInfo {
                 operation_id: #operation_id,
             };
@@ -1487,7 +1492,16 @@ impl Generator {
                     if let (OperationParameterKind::Body(_), Some(builder_name)) =
                         (&param.kind, ty.builder())
                     {
-                        Ok(quote! { Result<#builder_name, String> })
+                        if method.body_required {
+                            Ok(quote! { Result<#builder_name, String> })
+                        } else {
+                            Ok(quote! { Result<Option<#builder_name>, String> })
+                        }
+                    } else if matches!(param.kind, OperationParameterKind::Body(_))
+                        && !method.body_required
+                    {
+                        let t = ty.ident();
+                        Ok(quote! { Result<Option<#t>, String> })
                     } else if param.kind.is_required() {
                         let t = ty.ident();
                         Ok(quote! { Result<#t, String> })
@@ -1499,7 +1513,7 @@ impl Generator {
 
                 OperationParameterType::RawBody => {
                     cloneable = false;
-                    if method.raw_body_required {
+                    if method.body_required {
                         Ok(quote! { Result<reqwest::Body, String> })
                     } else {
                         Ok(quote! { Result<Option<reqwest::Body>, String> })
@@ -1521,7 +1535,12 @@ impl Generator {
 
                     // Fill in the appropriate initial value for the
                     // param_types generated above.
-                    if let (OperationParameterKind::Body(_), Some(_)) = (&param.kind, ty.builder())
+                    if matches!(param.kind, OperationParameterKind::Body(_))
+                        && !method.body_required
+                    {
+                        Ok(quote! { Ok(None) })
+                    } else if let (OperationParameterKind::Body(_), Some(_)) =
+                        (&param.kind, ty.builder())
                     {
                         Ok(quote! { Ok(::std::default::Default::default()) })
                     } else if param.kind.is_required() {
@@ -1533,7 +1552,7 @@ impl Generator {
                 }
 
                 OperationParameterType::RawBody => {
-                    if method.raw_body_required {
+                    if method.body_required {
                         let err_msg = format!("{} was not initialized", param.name);
                         Ok(quote! { Err(#err_msg.to_string()) })
                     } else {
@@ -1554,10 +1573,11 @@ impl Generator {
                     let ty = self.type_space.get_type(type_id)?;
                     if ty.builder().is_some() {
                         let type_name = ty.ident();
-                        Ok(quote! {
-                            .and_then(|v| #type_name::try_from(v)
-                                .map_err(|e| e.to_string()))
-                        })
+                        if matches!(param.kind, OperationParameterKind::Body(_)) && !method.body_required {
+                            Ok(quote! { .and_then(|value| value.map(#type_name::try_from).transpose().map_err(|error| error.to_string())) })
+                        } else {
+                            Ok(quote! { .and_then(|v| #type_name::try_from(v).map_err(|e| e.to_string())) })
+                        }
                     } else {
                         Ok(quote! {})
                     }
@@ -1576,11 +1596,22 @@ impl Generator {
                 match &param.typ {
                     OperationParameterType::Type(type_id) => {
                         let ty = self.type_space.get_type(type_id)?;
-                        match (ty.builder(), param.kind.is_optional()) {
-                            // TODO right now optional body parameters are not
-                            // addressed
-                            (Some(_), true) => {
-                                unreachable!()
+                        match (ty.builder(), param.kind.is_optional() || (matches!(param.kind, OperationParameterKind::Body(_)) && !method.body_required)) {
+                            (Some(builder_name), true) => {
+                                assert_eq!(param.name, "body");
+                                let typ = ty.ident();
+                                Ok(quote! {
+                                    pub fn body<V>(mut self, value: V) -> Self
+                                    where V: std::convert::TryInto<#typ>, <V as std::convert::TryInto<#typ>>::Error: std::fmt::Display {
+                                        self.body = value.try_into().map(From::from).map(Some).map_err(|error| error.to_string());
+                                        self
+                                    }
+                                    pub fn body_map<F>(mut self, f: F) -> Self
+                                    where F: std::ops::FnOnce(#builder_name) -> #builder_name {
+                                        self.body = self.body.map(|value| Some(f(value.unwrap_or_default())));
+                                        self
+                                    }
+                                })
                             }
                             (None, true) => {
                                 let typ = ty.ident();
@@ -1664,7 +1695,7 @@ impl Generator {
                     }
 
                     OperationParameterType::RawBody => {
-                        let optional = (!method.raw_body_required).then(|| quote! { .map(Some) });
+                        let optional = (!method.body_required).then(|| quote! { .map(Some) });
                         match param.kind {
                             OperationParameterKind::Body(BodyContentType::OctetStream) => {
                                 let err_msg = format!(

@@ -309,3 +309,7 @@ mod pagination_tests;
 #[cfg(test)]
 #[path = "native_cli_stream_tests.rs"]
 mod stream_tests;
+
+#[cfg(test)]
+#[path = "native_cli_typed_body_tests.rs"]
+mod typed_body_tests;

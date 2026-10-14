@@ -18,7 +18,7 @@ for frame handling; they do not depend on this vendored implementation.
 
 Raw-body metadata now retains the original requestBody.required flag. Optional raw
 positional/builder methods preserve None and attach a Content-Type/body only for Some;
-required raw behavior and typed JSON/form bodies are unchanged. CLI --body-file follows
+required raw behavior is retained; typed JSON/form presence support is described below. CLI --body-file follows
 requiredness, uses read_to_string for text and sized ReaderStream IO for regular octet-stream files. Generated CLI and
 positional SDK projects passed actual omitted/empty/provided binary/text wire cases;
 existing raw/upgrade consumers passed. Text/WebSocket buffering and nonseekable input remain explicit limitations.
@@ -39,3 +39,12 @@ A96MiB real upload preserved digest/length with observed Linux RSS below64MiB; h
 empty/growth/shrink/directory tests and all earlier standalone CLI consumers passed.
 The wrapper supplies size/frame metadata to reqwest; request construction/transport stays
 upstream. Text file input remains UTF8-buffered. Generated CLIs add http-body1/tokio-util0.7.
+
+
+Request-body requiredness now also controls typed JSON/form SDK/CLI generation. Optional
+positional arguments gain an outer Option; optional builders preserve None, explicit
+body/body_map setters create Some and validate provided fields. The upstream RequestBuilder
+applies JSON/form encoding only to Some, preserving omitted/empty/null distinctions.
+CLI optional body properties/files do not become globally required. Required body fields
+still validate on provided content. Generated CLI/positional SDK16-request fixtures plus
+all previous standalone consumers passed; broader shapes/precedence/interactive cases stay open.

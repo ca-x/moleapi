@@ -97,3 +97,11 @@ exit nonzero with the SDK error; already emitted items remain on stdout after a 
 failure. Explicit incompatible pagination contracts reject instead of silently falling
 back to a one-shot command. Raw success pages and other pagination conventions require
 separate implementation and evidence.
+
+
+Optional native JSON/form request bodies preserve presence separately from model validity:
+omitted bodies add neither Content-Type nor payload, explicit provided bodies validate
+required fields, and nullable JSON distinguishes omission from present null. SDK positional
+methods use outer Option, builders start without an optional body and explicit setters
+create one. CLI optional body flags/files are not globally required; partial provided bodies
+still fail validation before execution. Existing reqwest/Progenitor encoders own transport.

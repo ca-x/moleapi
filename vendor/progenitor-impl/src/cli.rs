@@ -535,7 +535,7 @@ impl Generator {
                 && matches!(&param.typ, OperationParameterType::RawBody)
         });
         let raw_body_parser = raw_body.map(|_| {
-            let required = method.raw_body_required;
+            let required = method.body_required;
             quote! {
                 .arg(::clap::Arg::new("body-file")
                     .long("body-file").value_name("FILE")
@@ -575,14 +575,16 @@ impl Generator {
             match details {
                 typify::TypeDetails::Struct(struct_info) => {
                     for prop_info in struct_info.properties_info() {
-                        self.cli_method_body_arg(&mut args, prop_info)
+                        self.cli_method_body_arg(&mut args, prop_info, method.body_required)
                     }
                 }
 
                 _ => {
                     // If the body is not a struct, we don't know what's
                     // required or how to generate it
-                    args.body_required()
+                    if method.body_required {
+                        args.body_required()
+                    }
                 }
             }
         }
@@ -657,7 +659,12 @@ impl Generator {
         CliArg { parser, consumer }
     }
 
-    fn cli_method_body_arg(&self, args: &mut CliOperationArgs, prop_info: TypeStructPropInfo<'_>) {
+    fn cli_method_body_arg(
+        &self,
+        args: &mut CliOperationArgs,
+        prop_info: TypeStructPropInfo<'_>,
+        body_required: bool,
+    ) {
         let TypeStructPropInfo {
             name,
             description,
@@ -693,7 +700,7 @@ impl Generator {
 
         let prop_name = name.to_kebab_case();
         if scalar && !args.has_arg(&prop_name) {
-            let volitionality = if required {
+            let volitionality = if required && body_required {
                 Volitionality::RequiredIfNoBody
             } else {
                 Volitionality::Optional
@@ -721,7 +728,7 @@ impl Generator {
                 }
             };
             args.add_arg(prop_name, CliArg { parser, consumer })
-        } else if required {
+        } else if required && body_required {
             args.body_required()
         }
 

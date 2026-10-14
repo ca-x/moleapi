@@ -286,8 +286,7 @@ with a shared explicitly configured Cargo target and serial execution.
 Generation regression passed68 cases (16 external-tool cases ignored); all11 owned
 project API cases passed with capped-worker optional-text generation, original source
 and sensitive-example/owner boundaries retained. Scoped strict Clippy/formatting passed.
-This slice does not implement optional JSON/form-object request semantics, arbitrary
-media types, streaming file upload or all-platform behavior. At that checkpoint file input was buffered; binary file streaming is now verified below, while text/other transports and typed-body profiles remain required work.
+This earlier raw-body slice does not establish arbitrary media types or all-platform behavior; optional JSON/form cases and binary file streaming now have separately verified slices below. At that checkpoint file input was buffered; binary file streaming is now verified below, while text/other transports and typed-body profiles remain required work.
 
 
 ## Native CLI typed pagination and raw page errors
@@ -313,7 +312,7 @@ same serial5-fixture batch, for38 actual requests across all standalone consumer
 Generation regression passed70 cases (18 external-tool cases ignored); all11 owned
 project API cases passed with capped-worker typed/raw-error pagination generation,
 source/privacy/owner checks. Scoped strict Clippy/formatting passed. Raw success-page
-transports, non-Dropshot pagination conventions, other streamed-input transports, typed optional bodies,
+transports, non-Dropshot pagination conventions, other streamed-input transports, broader typed-body shapes,
 interactive CLI and native-platform transport evidence remain required work. This is
 verified native3.0 pagination, not full CLI or OpenAPI3.1 support.
 
@@ -342,3 +341,31 @@ Toolchain remains Rust/Cargo1.99.0, Progenitor/client0.15.0, reqwest0.13.5 on Li
 the generated helper uses http-body1 and tokio-util0.7 rather than a new transport engine.
 Nonseekable input, text/WebSocket chunking, multipart/other-target large files, concurrent
 content-mutation guarantees, interactive and native-platform execution remain required work.
+
+
+## Native optional JSON and form request bodies
+
+The upstream operation metadata now carries requestBody.required across recognized typed
+and raw bodies. Optional positional bodies use an outer Option, and optional object
+builders default None. Whole-body setters/body_map explicitly create Some and validate
+provided builders before sending. Upstream reqwest JSON/form encoders run only for Some;
+no Content-Type/body is created for omission. Nullable JSON preserves a second inner
+Option, distinguishing an omitted body from a present JSON null. CLI optional bodies do
+not force required property flags/files globally; partial supplied objects still reject
+missing required fields. Required-body behavior remains covered by the same fixture.
+
+Standalone generated CLI and positional SDK projects compiled and passed16 POST requests:
+object omission/provided Unicode fields, explicit empty JSON object, nullable omission/null,
+array omission/provided data, optional form omission/URL-encoded Unicode, and required JSON
+objects. Missing required whole bodies, partial optional objects/forms and invalid JSON
+objects rejected without additional requests. All7 generated-program fixtures passed55
+real requests including raw/binary/pagination/upgrade and96MiB streaming regression; the
+large upload's latest observed Linux RSS was12,904KiB. Generation regression passed72
+cases (20 configured external-tool cases ignored), all11 owned project API cases passed
+with optional JSON/form capped-worker generation and source/privacy boundaries. Scoped
+strict Clippy/formatting passed.
+
+This proves the recorded referenced-object/array/nullable-scalar/plain-form shapes on
+native OpenAPI3.0/Linux. Complex nested/union/form encoding/media variants, CLI file/field
+precedence, templates/interactive workflows and other native platforms remain required
+work. It does not establish full JSON Schema validation or OpenAPI3.1 native support.
