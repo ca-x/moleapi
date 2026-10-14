@@ -26,7 +26,7 @@ Apifox's [model code list](https://docs.apifox.com/generate-code.md), checked202
 
 The specification generation dialog has a separate data-model category, language selection, all/exact component selection and expandable upstream serialization/style settings. Enum choices and booleans retain their types. Preview/copy/file/ZIP downloads, regeneration and owner/content/cancellation guards reuse project artifacts. SQL exports DDL only and requires the existing explicit Java runtime; the18 Quicktype targets work without Java or Node in hosted and offline applications.
 
-Actual evidence: all18 language targets generated recursive/enum/nullable component models in the host-free Rust VM; the capped application worker produced all20 target artifacts, including actual MySQL/PostgreSQL DDL. Generated Python, JavaScript, TypeScript, Go, C#, Java, Rust, Ruby, C++, Kotlin, Dart, Swift, Flow, Elm and Pike models now run recursive/enum/nullable/Unicode serialization roundtrips in OpenAPI3.0.3/3.1.0 fixtures. TypeScript, Go, C#, Java, Rust, C++, Kotlin, Dart, Swift, Flow and Elm compile with real toolchains; Python, JavaScript, Ruby and Pike run through their native runtimes. The other3 model language runtimes and execution of generated SQL DDL are not established by artifact generation. Required/optional/null serialization differences remain those of the upstream target; this is model conversion, not universal schema validation.
+Actual evidence: all18 language targets generated recursive/enum/nullable component models in the host-free Rust VM; the capped application worker produced all20 target artifacts, including actual MySQL/PostgreSQL DDL. Generated Python, JavaScript, TypeScript, Go, C#, Java, Rust, Ruby, C++, Kotlin, Dart, Swift, Flow, Elm, Pike and Crystal models now run recursive/enum/nullable/Unicode serialization roundtrips in OpenAPI3.0.3/3.1.0 fixtures. TypeScript, Go, C#, Java, Rust, C++, Kotlin, Dart, Swift, Flow, Elm and Crystal compile with real toolchains; Python, JavaScript, Ruby and Pike run through their native runtimes. The other2 model language runtimes and execution of generated SQL DDL are not established by artifact generation. Required/optional/null serialization differences remain those of the upstream target; this is model conversion, not universal schema validation.
 
 API evidence covers authenticated ownership, anonymous/cross-owner rejection, default credential-example exclusion, exact component selection, typed-option rejection and unchanged canonical source. Component/UI tests cover typed model settings and existing late-reply fencing; English/Chinese catalogs include model flows.
 
@@ -233,3 +233,48 @@ python3 tools/models/verify-pike.py --fixtures /absolute/pike-models --dialect 3
 Use a separate fresh root per dialect and append containers as the fixture example's
 final argument for the dedicated container cases. The explicit launcher may configure
 its isolated library and Pike paths, without changing host/runtime settings.
+
+
+## Crystal native construction and exact enum tags
+
+Four actual3.0.3/3.1.0 core/enum-tag cases now release-compile and run using
+signature-verified Crystal1.22.0/LLVM23.1.1/Linux. Original class output used
+plain strings for enum properties and accepted an invalid tag; the standard JSON
+module supplied no normal value initializer. The pinned mature renderer now emits
+native enums with exact authored wire mappings and required-first field initializers.
+JSON::Serializable/PullParser/Builder still own class/recursive/JSON conversion;
+generated source remains unchanged during consumer verification. Consumers construct
+real recursive Pet/Status objects, retain declared Int32 zero, nullable native values
+and Unicode/quotes/ampersand/plus, and reject an unknown enum.
+
+The additional enum-tag profile retains ready-state, done/state and the literal
+#{1 + 2} through native decoding/encoding. The pinned string escape utility escapes
+Crystal interpolation syntax for both enum and JSON field literals. No model codec
+substitute or generated-source rewrite was used. Existing enum-string caller code
+should construct native Status members or use Status.from_json; normal class field
+construction is now available. Artifact engine identifies26.0.0+moleapi.1.
+
+Optional nil-valued properties still serialize by omission under the native JSON
+module; missing/explicit-null input membership is not preserved by this representation.
+The target explicitly declares Int32 support, not arbitrary integer range. These
+models remain conversions rather than universal schema validators. Other range,
+nullable/union/container/constraint/naming/options/framework/platform and dependency
+cases require separate evidence.
+
+17 other emitted language outputs match prior bytes;5 existing native regressions,
+80 generation cases,1 owned model API case and scoped format/strict Clippy pass.
+Catalog records16 representative model runtimes. Isolated compiler package signature
+verifies with official Arch keyring signer051EAD6A6155389D69DA02E5EB763B4E9DB887A6;
+actual package/source/hash/compiler/platform/runtime evidence remains in QA. Explicit
+launcher selects that stdlib/cache; host packages remain unchanged and product never
+downloads or executes Crystal. Haskell/Objective-C model runtimes, SQL execution and
+all remaining generation/SDK/product/release requirements stay open.
+
+```sh
+cargo run -p moleapi-generation --example fixture_models -- /absolute/crystal-models /absolute/moleapi-server /absolute/java 3.1.0 model-crystal
+python3 tools/models/verify-crystal.py --fixtures /absolute/crystal-models --dialect 3.1.0 --crystal /absolute/crystal-launcher
+```
+
+Use fresh roots per dialect and append enum-tags to the fixture command for the
+separate authored-wire/interpolation case. Source/license/hash/idempotent build
+patches live in vendor/model-engine/compat; native Apple RPC acceptance is independent.

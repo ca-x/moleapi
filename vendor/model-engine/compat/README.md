@@ -66,3 +66,28 @@ Both3.0.3/3.1.0 core/container cases pass.17 other model target outputs remain
 byte-identical. Pike artifacts identify26.0.0+moleapi.1. Optional/null membership,
 complex union/scalar validation, other input/container shapes and Pike/runtime/
 platform ranges require separate acceptance within the full module.
+
+
+## Crystal nominal enums and field construction
+
+Original Crystal output represented the authored enum as String, accepting invalid
+values at runtime; JSON::Serializable provides only its parser constructor without
+a separately authored initializer. Actual compilation failed on the absent enum API,
+and an original native decode accepted an invalid tag. CrystalRenderer now emits
+native enums and a field initializer (required parameters before optional nil defaults),
+retaining original field names, JSON::Serializable class/recursive decoding and declared
+Int32 range. Native JSON::PullParser/Builder own enum wire I/O; generated mapping cases
+retain exact authored strings rather than relying on enum-name underscore conventions.
+
+CrystalStrings escapes #{ in generated literal text so native string interpolation
+does not alter authored enum/JSON field strings. Actual release cases retain ready-state,
+done/state and the literal #{1 + 2}, reject an unknown value, and preserve recursive
+constructed/decoded/zero/Unicode values. Metadata identifies the target's first
+compatibility variant26.0.0+moleapi.1. Other17 emitted targets match prior bytes.
+
+Migration: enum properties now use Status::Ready/Done (or native Status.from_json)
+in place of unrestricted strings; normal field constructors become available.
+JSON null/absence serialization stays the mature optional-nil policy, not a universal
+schema claim. Constructor option/name/framework/platform and scalar/range cases remain
+separate parent-module scope. Source/version/license/hash guards cover both pinned
+Crystal renderer and string utility files.

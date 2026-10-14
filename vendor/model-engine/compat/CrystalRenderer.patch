@@ -1,0 +1,79 @@
+--- a/dist/esm/language/Crystal/CrystalRenderer.js
++++ b/dist/esm/language/Crystal/CrystalRenderer.js
+@@ -48,7 +48,7 @@
+             "Hash(String, ",
+             this.crystalType(mapType.values, withIssues),
+             ")",
+-        ], (_enumType) => "String", (unionType) => {
++        ], (enumType) => this.nameForNamedType(enumType), (unionType) => {
+             const nullable = nullableFromUnion(unionType);
+             if (nullable !== null)
+                 return this.nullableCrystalType(nullable, withIssues);
+@@ -69,12 +69,19 @@
+     }
+     emitStructDefinition(c, className) {
+         this.emitDescription(this.descriptionForType(c));
+-        const structBody = () => this.forEachClassProperty(c, "none", (name, jsonName, prop) => {
++        const structBody = () => {
++            const required = [], optional = [];
++            this.forEachClassProperty(c, "none", (name, jsonName, prop) => {
++                this.ensureBlankLine();
++                this.emitDescription(this.descriptionForClassProperty(c, jsonName));
++                this.emitRenameAttribute(name, jsonName);
++                this.emitLine("property ", name, " : ", this.crystalType(prop.type, true));
++                (prop.isOptional ? optional : required).push(["@", name, " : ", this.crystalType(prop.type), prop.isOptional ? " = nil" : ""]);
++            });
+             this.ensureBlankLine();
+-            this.emitDescription(this.descriptionForClassProperty(c, jsonName));
+-            this.emitRenameAttribute(name, jsonName);
+-            this.emitLine("property ", name, " : ", this.crystalType(prop.type, true));
+-        });
++            this.emitLine("def initialize(", [required, optional].flatMap(parts => parts).flatMap((part, index) => index === 0 ? [part] : [", ", part]), ")");
++            this.emitLine("end");
++        };
+         this.emitBlock(["class ", className], structBody);
+     }
+     emitBlock(line, f) {
+@@ -90,6 +97,34 @@
+         this.emitLine(line);
+         this.indent(f);
+         this.emitLine("end");
++    }
++    emitEnumDefinition(e, enumName) {
++        this.emitDescription(this.descriptionForType(e));
++        this.emitEnum(["enum ", enumName], () => {
++            this.forEachEnumCase(e, "none", name => this.emitLine(name));
++            this.ensureBlankLine();
++            this.emitLine("def self.new(pull : JSON::PullParser) : self");
++            this.indent(() => {
++                this.emitLine("case pull.read_string");
++                this.forEachEnumCase(e, "none", (name, jsonName) => {
++                    this.emitLine('when "', crystalStringEscape(jsonName), '" then ', name);
++                });
++                this.emitLine('else pull.raise "Invalid enum value"');
++                this.emitLine("end");
++            });
++            this.emitLine("end");
++            this.ensureBlankLine();
++            this.emitLine("def to_json(json : JSON::Builder) : Nil");
++            this.indent(() => {
++                this.emitLine("case self");
++                this.forEachEnumCase(e, "none", (name, jsonName) => {
++                    this.emitLine("when ", name, ' then json.string("', crystalStringEscape(jsonName), '")');
++                });
++                this.emitLine('else raise ArgumentError.new("Invalid enum value")');
++                this.emitLine("end");
++            });
++            this.emitLine("end");
++        });
+     }
+     emitUnion(u, unionName) {
+         const isMaybeWithSingleType = nullableFromUnion(u);
+@@ -125,6 +160,7 @@
+         this.ensureBlankLine();
+         this.emitLine('require "json"');
+         this.forEachTopLevel("leading", (t, name) => this.emitTopLevelAlias(t, name), (t) => this.namedTypeToNameForTopLevel(t) === undefined);
++        this.forEachEnum("leading-and-interposing", (e, name) => this.emitEnumDefinition(e, name));
+         this.forEachObject("leading-and-interposing", (c, name) => this.emitStructDefinition(c, name));
+         this.forEachUnion("leading-and-interposing", (u, name) => this.emitUnion(u, name));
+     }

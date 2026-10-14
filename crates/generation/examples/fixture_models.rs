@@ -19,7 +19,8 @@ async fn main() -> Result<()> {
         profile == "core"
             || profile == "date" && selected == "model-flow"
             || matches!(profile.as_str(), "flat" | "collision") && selected == "model-elm"
-            || profile == "containers" && selected == "model-pike",
+            || profile == "containers" && selected == "model-pike"
+            || profile == "enum-tags" && selected == "model-crystal",
         "Unknown model fixture profile"
     );
     ensure!(
@@ -65,6 +66,10 @@ async fn main() -> Result<()> {
             json!({"type":"array","items":pet.clone()});
         specification["components"]["schemas"]["PetMap"] =
             json!({"type":"object","additionalProperties":pet});
+    }
+    if profile == "enum-tags" {
+        specification["components"]["schemas"]["Pet"]["properties"]["status"]["enum"] =
+            json!(["ready-state", "done/state", "#{1 + 2}"]);
     }
     for target in catalog.into_iter().filter(|target| {
         target.kind == "model" && (selected == "*" || selected.split(',').any(|id| id == target.id))
