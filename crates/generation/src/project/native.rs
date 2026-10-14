@@ -317,3 +317,7 @@ mod typed_body_tests;
 #[cfg(test)]
 #[path = "native_cli_body_input_tests.rs"]
 mod body_input_tests;
+
+#[cfg(test)]
+#[path = "native_cli_namespace_tests.rs"]
+mod namespace_tests;

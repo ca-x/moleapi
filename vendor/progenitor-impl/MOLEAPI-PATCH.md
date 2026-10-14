@@ -57,3 +57,11 @@ non-body property collisions and reserved body keys passed8 real requests, while
 conflicting-file/field inputs rejected before reading missing paths or sending requests.
 This closes silent whole-file replacement of field values; broader control namespaces
 and template behavior remain open.
+
+
+Operation API arguments that collide with json-body/json-body-template/body-file/help
+receive deterministic repeated api- prefixes, avoiding all original API names. The
+actual SDK setter/wire name is retained and help documents the original parameter.
+Body help keys use full JSON files. The adapter disables auto help-subcommand generation
+so an operationId help can execute while --help still displays usage. A standalone
+3-request fixture and all prior consumers passed; broader parser/template modes remain open.

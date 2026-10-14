@@ -67,7 +67,7 @@ impl CliConfig for Output {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let mut command = clap::Command::new(env!("CARGO_PKG_NAME"))
-        .subcommand_required(true).arg_required_else_help(true)
+        .subcommand_required(true).arg_required_else_help(true).disable_help_subcommand(true)
         .arg(clap::Arg::new("base-url").long("base-url").env("MOLEAPI_API_URL").hide_env_values(true).required(true))
         .arg(clap::Arg::new("output-file").long("output-file").value_name("NEW_FILE").help("Stream binary or upgraded response payloads to a new file; refuses overwrite"))
         .arg(clap::Arg::new("upgrade-input").long("upgrade-input").value_name("FILE").help("Send file bytes on an upgraded connection; WebSocket sends one binary message"))

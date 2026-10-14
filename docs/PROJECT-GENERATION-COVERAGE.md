@@ -389,6 +389,31 @@ remained below64MiB. Generation regression passed73 cases (21 external-tool case
 all11 owned project API cases passed with emitted conflict metadata/privacy checks,
 and strict scoped Clippy/formatting passed.
 
-Template flag execution, API parameter names colliding with control flags, nested/union/
+Template flag execution, broader parser namespaces, nested/union/
 custom body encodings, interactive/native-platform workflows and full CLI parity remain
 required work. This slice does not claim unsupported template or namespace capabilities.
+
+
+## Native CLI control/API argument namespaces
+
+Reserved operation controls (`json-body`, `json-body-template`, `body-file`, `help`)
+no longer collide with legitimate API arguments. The emitter reserves all original API
+names, then assigns colliding parameters an `api-` prefix, repeating until unused.
+Help identifies the original API parameter; SDK setters and wire names remain unchanged.
+A body property named help uses full-file input, like other JSON control keys. The
+executable disables Clap's automatic help subcommand so a generated operationId help
+can execute; --help remains available.
+
+A standalone generated CLI passed3 actual requests: JSON control/file alongside colliding
+query/path/header names and existing api- names, binary file control alongside colliding
+query names, and an operation named help. Exact original query/header/path/body/Bearer
+values were asserted, including distinct file and API body_file/json_body values. Help
+showed the prefixed argument and original API name without the supplied token; missing
+required body failed before network. All9 standalone fixtures passed66 real requests;
+96MiB streaming regression observed12,644KiB Linux RSS. Generation74 cases passed
+(22 external-tool cases ignored), all11 owned-worker API cases passed with emitted alias/
+privacy checks, and scoped strict Clippy/formatting passed.
+
+This covers the specified controls and repeated-prefix avoidance, not every sanitized-name,
+short-option, template, interactive or native-platform discovery/namespace behavior.
+Those plus broader body/protocol/pagination semantics remain required CLI module work.

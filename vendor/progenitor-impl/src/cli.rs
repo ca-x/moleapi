@@ -1,6 +1,6 @@
 // Copyright 2026 Oxide Computer Company
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use heck::ToKebabCase;
 use openapiv3::OpenAPI;
@@ -468,6 +468,33 @@ impl Generator {
     fn cli_method_args(&self, method: &crate::method::OperationMethod) -> CliArg {
         let mut args = CliOperationArgs::default();
 
+        let controls = ["json-body", "json-body-template", "body-file", "help"];
+        let api_names = method
+            .params
+            .iter()
+            .filter(|param| !matches!(param.kind, OperationParameterKind::Body(_)))
+            .map(|param| param.name.to_kebab_case())
+            .collect::<BTreeSet<_>>();
+        let mut used = api_names.clone();
+        used.extend(controls.iter().map(|name| name.to_string()));
+        let mut argument_names = BTreeMap::new();
+        for param in method
+            .params
+            .iter()
+            .filter(|param| !matches!(param.kind, OperationParameterKind::Body(_)))
+        {
+            let original = param.name.to_kebab_case();
+            let mut name = original.clone();
+            if controls.contains(&name.as_str()) {
+                name = format!("api-{name}");
+                while used.contains(&name) {
+                    name = format!("api-{name}");
+                }
+                used.insert(name.clone());
+            }
+            argument_names.insert(param.name.clone(), name);
+        }
+
         let first_page_required_set = method
             .dropshot_paginated
             .as_ref()
@@ -502,12 +529,25 @@ impl Generator {
             };
             let arg_type = self.type_space.get_type(arg_type_id).unwrap();
 
-            let arg_name = param.name.to_kebab_case();
+            let arg_name = argument_names[&param.name].clone();
 
             // There should be no conflicting path or query parameters.
             assert!(!args.has_arg(&arg_name));
 
-            let parser = clap_arg(&arg_name, volitionality, &param.description, &arg_type);
+            let description = if arg_name != param.name.to_kebab_case() {
+                Some(format!(
+                    "{}API parameter `{}`",
+                    param
+                        .description
+                        .as_ref()
+                        .map(|text| format!("{text}\n\n"))
+                        .unwrap_or_default(),
+                    param.api_name
+                ))
+            } else {
+                param.description.clone()
+            };
+            let parser = clap_arg(&arg_name, volitionality, &description, &arg_type);
 
             let arg_fn_name = sanitize(&param.name, Case::Snake);
             let arg_fn = format_ident!("{}", arg_fn_name);
@@ -699,7 +739,8 @@ impl Generator {
         let scalar = prop_type.has_impl(TypeSpaceImpl::FromStr);
 
         let prop_name = name.to_kebab_case();
-        let body_control = ["json-body", "json-body-template"].contains(&prop_name.as_str());
+        let body_control =
+            ["json-body", "json-body-template", "help"].contains(&prop_name.as_str());
         if scalar && !body_control && !args.has_arg(&prop_name) {
             let volitionality = if required && body_required {
                 Volitionality::RequiredIfNoBody

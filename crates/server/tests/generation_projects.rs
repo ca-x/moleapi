@@ -556,6 +556,10 @@ async fn upgraded_cli_generation_uses_owned_worker_and_preserves_source_privacy(
             {"in":"query","name":"page_token","schema":{"type":"string"}}
         ],"responses":{"200":{"description":"Page","content":{"application/json":{"schema":{"type":"object","required":["items"],"properties":{"items":{"type":"array","items":{"type":"string"}},"next_page":{"type":"string","nullable":true}}}}}},"400":{"description":"Raw error","content":{"application/octet-stream":{"schema":{"type":"string","format":"binary"}}}}}}},
         "/optional-binary":{"post":{"operationId":"optional_binary","requestBody":{"required":false,"content":{"application/octet-stream":{"schema":{"type":"string","format":"binary"}}}},"responses":{"204":{"description":"Accepted"}}}},
+        "/namespace":{"post":{"operationId":"namespace","parameters":[
+            {"in":"query","name":"json_body","schema":{"type":"string"}},
+            {"in":"query","name":"api_json_body","schema":{"type":"string"}}
+        ],"requestBody":{"required":false,"content":{"application/json":{"schema":{"type":"object","properties":{"id":{"type":"integer"}}}}}},"responses":{"204":{"description":"Accepted"}}}},
         "/optional-json":{"post":{"operationId":"optional_json","requestBody":{"required":false,"content":{"application/json":{"schema":{"type":"object","required":["id"],"properties":{"id":{"type":"integer","format":"int32"},"note":{"type":"string"}}}}}},"responses":{"204":{"description":"Accepted"}}}},
         "/optional-form":{"post":{"operationId":"optional_form","requestBody":{"required":false,"content":{"application/x-www-form-urlencoded":{"schema":{"type":"object","required":["id"],"properties":{"id":{"type":"integer","format":"int32"},"note":{"type":"string"}}}}}},"responses":{"204":{"description":"Accepted"}}}},
         "/optional-text":{"post":{"operationId":"optional_text","requestBody":{"required":false,"content":{"text/plain":{"schema":{"type":"string"}}}},"responses":{"204":{"description":"Accepted"}}}},
@@ -662,6 +666,13 @@ async fn upgraded_cli_generation_uses_owned_worker_and_preserves_source_privacy(
                 .as_str()
                 .unwrap()
                 .contains(".conflicts_with(\"json-body\")")
+    }));
+    assert!(files.iter().any(|file| {
+        file["path"] == "src/cli.rs"
+            && file["content"]
+                .as_str()
+                .unwrap()
+                .contains("api-api-json-body")
     }));
     let (_, saved) = call(
         &router,

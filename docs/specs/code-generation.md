@@ -111,3 +111,9 @@ Native CLI whole JSON-body files and generated body property flags are mutually 
 conflicts fail during parsing before input read or request execution. Path/query/header
 arguments remain independent even when they share property names with the body. Body
 properties reserved by JSON controls use full-file input, preserving their original keys.
+
+
+Generated CLI API arguments reserved by operation body/help controls receive deterministic
+api- prefixes until unused against all original API names. Help shows the source parameter
+name; SDK/wire mappings stay unchanged. OperationId help remains executable, distinct from
+--help. Other sanitized/short-option/template namespaces require their own coverage.
