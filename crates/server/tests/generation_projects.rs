@@ -656,6 +656,13 @@ async fn upgraded_cli_generation_uses_owned_worker_and_preserves_source_privacy(
                 .unwrap()
                 .contains("value.unwrap_or_default()")
     }));
+    assert!(files.iter().any(|file| {
+        file["path"] == "src/cli.rs"
+            && file["content"]
+                .as_str()
+                .unwrap()
+                .contains(".conflicts_with(\"json-body\")")
+    }));
     let (_, saved) = call(
         &router,
         "GET",

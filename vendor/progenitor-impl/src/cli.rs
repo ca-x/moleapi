@@ -699,7 +699,8 @@ impl Generator {
         let scalar = prop_type.has_impl(TypeSpaceImpl::FromStr);
 
         let prop_name = name.to_kebab_case();
-        if scalar && !args.has_arg(&prop_name) {
+        let body_control = ["json-body", "json-body-template"].contains(&prop_name.as_str());
+        if scalar && !body_control && !args.has_arg(&prop_name) {
             let volitionality = if required && body_required {
                 Volitionality::RequiredIfNoBody
             } else {
@@ -711,6 +712,7 @@ impl Generator {
                 &description.map(str::to_string),
                 &prop_type,
             );
+            let parser = quote! { #parser.conflicts_with("json-body") };
 
             let prop_fn = format_ident!("{}", sanitize(name, Case::Snake));
             let prop_type_ident = prop_type.ident();

@@ -48,3 +48,12 @@ applies JSON/form encoding only to Some, preserving omitted/empty/null distincti
 CLI optional body properties/files do not become globally required. Required body fields
 still validate on provided content. Generated CLI/positional SDK16-request fixtures plus
 all previous standalone consumers passed; broader shapes/precedence/interactive cases stay open.
+
+
+Generated body property flags conflict with the whole json-body file control using Clap;
+query/path/header parameters remain separate. Body properties matching JSON control
+names use the existing full-file path rather than duplicate flags. File-only/field-only,
+non-body property collisions and reserved body keys passed8 real requests, while6
+conflicting-file/field inputs rejected before reading missing paths or sending requests.
+This closes silent whole-file replacement of field values; broader control namespaces
+and template behavior remain open.

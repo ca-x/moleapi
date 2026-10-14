@@ -105,3 +105,9 @@ required fields, and nullable JSON distinguishes omission from present null. SDK
 methods use outer Option, builders start without an optional body and explicit setters
 create one. CLI optional body flags/files are not globally required; partial provided bodies
 still fail validation before execution. Existing reqwest/Progenitor encoders own transport.
+
+
+Native CLI whole JSON-body files and generated body property flags are mutually exclusive;
+conflicts fail during parsing before input read or request execution. Path/query/header
+arguments remain independent even when they share property names with the body. Body
+properties reserved by JSON controls use full-file input, preserving their original keys.

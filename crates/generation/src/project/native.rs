@@ -313,3 +313,7 @@ mod stream_tests;
 #[cfg(test)]
 #[path = "native_cli_typed_body_tests.rs"]
 mod typed_body_tests;
+
+#[cfg(test)]
+#[path = "native_cli_body_input_tests.rs"]
+mod body_input_tests;

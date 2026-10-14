@@ -366,6 +366,29 @@ with optional JSON/form capped-worker generation and source/privacy boundaries. 
 strict Clippy/formatting passed.
 
 This proves the recorded referenced-object/array/nullable-scalar/plain-form shapes on
-native OpenAPI3.0/Linux. Complex nested/union/form encoding/media variants, CLI file/field
-precedence, templates/interactive workflows and other native platforms remain required
+native OpenAPI3.0/Linux. Complex nested/union/form encoding/media variants, further CLI parameter namespaces, templates/interactive workflows and other native platforms remain required
 work. It does not establish full JSON Schema validation or OpenAPI3.1 native support.
+
+
+## Native CLI body file and field exclusivity
+
+Generated JSON/form body property flags now conflict with --json-body through Clap.
+Conflicting inputs reject before file access or network rather than silently replacing
+field values with file contents. Path/query/header flags stay separate, including body
+property name collisions; full files can carry body values different from those arguments.
+Body properties named json_body/json_body_template use full JSON input rather than
+creating duplicate control flags. Sole-file/sole-field and required-field validation remain.
+
+A standalone generated CLI passed8 real requests: required/optional JSON and form
+file-only/field-only bodies, different path/header values sharing body property names,
+and full-file reserved body keys. Six file/field conflicts using nonexistent file paths
+rejected with Clap usage errors before reads; missing required body also rejected with
+no extra calls. All8 standalone fixtures passed63 requests including prior JSON/null/
+raw/pagination/upgrade/96MiB upload consumers. Latest large-upload Linux RSS13,488KiB
+remained below64MiB. Generation regression passed73 cases (21 external-tool cases ignored),
+all11 owned project API cases passed with emitted conflict metadata/privacy checks,
+and strict scoped Clippy/formatting passed.
+
+Template flag execution, API parameter names colliding with control flags, nested/union/
+custom body encodings, interactive/native-platform workflows and full CLI parity remain
+required work. This slice does not claim unsupported template or namespace capabilities.
