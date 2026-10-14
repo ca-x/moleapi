@@ -19,7 +19,24 @@ pub(super) fn catalog() -> Result<Vec<ProjectTarget>> {
     let manifest: Value = serde_json::from_str(include_str!(
         "../../../../vendor/model-engine/manifest.json"
     ))?;
-    Ok(serde_json::from_value(manifest["targets"].clone())?)
+    let mut targets: Vec<ProjectTarget> = serde_json::from_value(manifest["targets"].clone())?;
+    for target in &mut targets {
+        if matches!(
+            target.id.as_str(),
+            "model-python"
+                | "model-javascript"
+                | "model-typescript"
+                | "model-go"
+                | "model-cs"
+                | "model-java"
+                | "model-rust"
+                | "model-ruby"
+                | "model-c++"
+        ) {
+            target.validation = "representative-3.0-3.1-native-model-roundtrip-fixture".into();
+        }
+    }
+    Ok(targets)
 }
 
 pub(super) fn validate(input: &ProjectInput) -> Result<()> {
