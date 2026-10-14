@@ -60,3 +60,20 @@ The corrected exact Python trio resolved and downloaded universal2 wheels for bo
 macOS11 ARM and x86_64 / CPython3.13 without conflicts. Actionlint passes with the
 existing Intel runner label declared to the locally older checker. This establishes
 package availability and dependency compatibility, not an Apple build/RPC success.
+
+
+Run38641146152 on94eda9c: actual Intel Mac emitted both Objective-C source/descriptor
+artifacts, then failed generating Python server fixtures. Exact finished job116116660193
+logs prove this boundary; the ARM job is independently still building. Application
+protoc execution intentionally env_clear()s both generation and version queries. The
+CI shell launcher depended on ambient python/PATH, unlike the previously verified
+absolute Python entrypoint. Cleared-env local reproduction fails with the shell
+launcher and passes libprotoc31.1 with the exact selected absolute Python shebang.
+New fixture source/descriptor generation and8 actual Python regression RPCs pass.
+
+CI now persists the selected Python executable via task-specific GITHUB_ENV and uses
+it for the native driver too; startup imports grpc_tools to fail before expensive
+builds if the selected interpreter is wrong. QA Rust cache saves completed compile
+work even when a later acceptance phase fails, preventing repeated cold-build cost.
+Actionlint passes. This fixes QA interpreter selection, not an Apple runtime claim.
+Real Apple compile/call acceptance remains pending corrected job execution.
