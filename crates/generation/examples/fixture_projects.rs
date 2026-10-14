@@ -123,7 +123,8 @@ async fn main() -> Result<()> {
                     "spring",
                     "kotlin",
                     "php",
-                    "dart"
+                    "dart",
+                    "swift6"
                 ]
                 .contains(&target),
                 "Unknown fixture target"

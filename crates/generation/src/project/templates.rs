@@ -101,6 +101,20 @@ pub(super) fn write_builtin(input: &ProjectInput, root: &Path) -> Result<bool> {
                 ),
             )]
         }
+        "swift6"
+            if input
+                .options
+                .get("library")
+                .and_then(Value::as_str)
+                .is_none_or(|library| library == "urlsession") =>
+        {
+            &[(
+                "api.mustache",
+                include_str!(
+                    "../../../../vendor/openapi-generator/compat/swift6-urlsession/api.mustache"
+                ),
+            )]
+        }
         "dart" => &[
             (
                 "api_client.mustache",

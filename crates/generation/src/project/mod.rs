@@ -69,7 +69,7 @@ pub fn project_catalog() -> Result<Vec<ProjectTarget>> {
         // Representative runtime evidence is narrower than full target/dialect parity.
         match target.id.as_str() {
             "javascript" | "python" | "go" | "typescript-fetch" | "csharp" | "java" | "kotlin"
-            | "php" | "dart" => {
+            | "php" | "dart" | "swift6" => {
                 target.validation = "representative-3.0-3.1-compile-call-fixture".into();
             }
             "python-fastapi" | "aspnetcore" | "spring" => {

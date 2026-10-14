@@ -1042,7 +1042,7 @@ def php_static_types(directory, args):
     (directory/'runtime-phpstan-positive.json').write_text(result.stdout)
     assert result.returncode==0, result.stdout+result.stderr
     negative=directory/'static_negative.php'
-    negative.write_text('''<?php
+    negative.write_text(r'''<?php
 use OpenAPI\Client\Api\DefaultApi;
 use OpenAPI\Client\Model\Pet;
 use OpenAPI\Client\Model\Cat;
@@ -1177,6 +1177,51 @@ def dart_client(directory,url,args):
     run([str(executable)],directory,dict(os.environ,FIXTURE_URL=url))
 
 
+SWIFT_CORE = r'''import Foundation
+import OpenAPIClient
+func ensureFixture(_ condition: Bool, _ message: String) throws { if !condition { throw NSError(domain:"RuntimeFixture",code:1,userInfo:[NSLocalizedDescriptionKey:message]) } }
+@main struct RuntimeFixture {
+    static func main() async throws {
+        let config=OpenAPIClientAPIConfiguration(basePath:ProcessInfo.processInfo.environment["FIXTURE_URL"]!,customHeaders:["Authorization":"Bearer fixture-token"],apiResponseQueue:DispatchQueue.global())
+        let pet=try await DefaultAPI.getPet(__SWIFT_GET_ARGS__)
+        try ensureFixture(pet.id==7 && pet.status == .ready && pet.note==nil,"GET enum/null model lost")
+        let body=Pet(id:7,status:.ready,note:"鼹鼠 \"quotes\" & +")
+        let echoed=try await DefaultAPI.replacePet(__SWIFT_POST_ARGS__)
+        try ensureFixture(echoed.note==body.note,"POST quoted Unicode JSON lost")
+        var rejected=false
+        do { try await DefaultAPI.failGet(apiConfiguration:config) }
+        catch let failure {
+            switch failure {
+            case .error(let status, let data, _, _):
+                if status==400, let data { rejected=(try? JSONDecoder().decode(Failure.self,from:data).message)=="expected fixture failure" }
+            }
+        }
+        try ensureFixture(rejected,"HTTP400 response/model lost")
+        print("PASS Swift6 default URLSession SDK")
+    }
+}
+'''
+
+
+def swift_client(directory,url,args):
+    assert args.profile=='core', "Swift extended profiles require dedicated consumers"
+    assert args.swift and args.swift.is_absolute() and args.swift.is_file(), "Configure explicit --swift executable"
+    source=(directory/'Sources/OpenAPIClient/APIs/DefaultAPI.swift').read_text()
+    driver=SWIFT_CORE
+    for method,placeholder,values in [('getPet','__SWIFT_GET_ARGS__',{'id':'id:7','q':'q:'+json.dumps(QUERY,ensure_ascii=False),'xTest':'xTest:'+json.dumps('moleapi-fixture'),'apiConfiguration':'apiConfiguration:config'}),('replacePet','__SWIFT_POST_ARGS__',{'id':'id:7','pet':'pet:body','apiConfiguration':'apiConfiguration:config'})]:
+        match=re.search(r'open class func '+method+r'\(([^)]*)\) async',source)
+        assert match, 'Generated Swift signature missing: '+method
+        names=[part.strip().split(':',1)[0] for part in match.group(1).split(',')]
+        assert set(names)==set(values),names
+        driver=driver.replace(placeholder,','.join(values[name] for name in names))
+    consumer=directory/'runtime-consumer';(consumer/'Sources/RuntimeFixture').mkdir(parents=True,exist_ok=True)
+    (consumer/'Package.swift').write_text('// swift-tools-version:6.0\nimport PackageDescription\nlet package=Package(name:"RuntimeFixture",dependencies:[.package(name:"OpenAPIClient",path:'+json.dumps(str(directory))+')],targets:[.executableTarget(name:"RuntimeFixture",dependencies:[.product(name:"OpenAPIClient",package:"OpenAPIClient")])],swiftLanguageModes:[.v6])\n')
+    (consumer/'Sources/RuntimeFixture/RuntimeFixture.swift').write_text(driver)
+    run([str(args.swift),'build','--configuration','release','--jobs','2'],consumer,timeout=900)
+    (directory/'runtime-consumer-dependencies.json').write_text(subprocess.check_output([str(args.swift),'package','show-dependencies','--format','json'],cwd=consumer,text=True))
+    run([str(consumer/'.build/release/RuntimeFixture')],consumer,dict(os.environ,FIXTURE_URL=url),timeout=120)
+
+
 def client(target, directory, url, args):
     env = dict(os.environ, FIXTURE_URL=url)
     if target == "go":
@@ -1188,6 +1233,8 @@ def client(target, directory, url, args):
         (directory / "runtime_fixture_test.go").write_text(driver)
         run([args.go, "mod", "tidy"], directory)
         run([args.go, "test", "-run", "^TestRuntimeFixture$", "-count=1", "-race", "-v"], directory, env)
+    elif target == "swift6":
+        swift_client(directory,url,args)
     elif target == "dart":
         dart_client(directory,url,args)
     elif target == "php":
@@ -1285,6 +1332,7 @@ def main():
     parser.add_argument("--jdk", type=Path)
     parser.add_argument("--maven", type=Path)
     parser.add_argument("--gradle", type=Path)
+    parser.add_argument("--swift", type=Path)
     parser.add_argument("--dart", type=Path)
     parser.add_argument("--php", type=Path)
     parser.add_argument("--composer", type=Path)
@@ -1299,7 +1347,7 @@ def main():
     assert args.output.is_absolute()
     targets = args.targets.split(",")
     versions = args.versions.split(",")
-    assert all(t in {"javascript", "python", "go", "typescript-fetch", "python-fastapi", "csharp", "aspnetcore", "java", "spring", "kotlin", "php", "dart"} for t in targets)
+    assert all(t in {"javascript", "python", "go", "typescript-fetch", "python-fastapi", "csharp", "aspnetcore", "java", "spring", "kotlin", "php", "dart", "swift6"} for t in targets)
     assert all(v in {"3.0.3", "3.1.0"} for v in versions)
     if args.profile in {"binary","multipart","union"}:
         assert not {"python-fastapi","aspnetcore","spring"}.intersection(targets), "Extended profiles currently validate clients"
@@ -1312,6 +1360,8 @@ def main():
     assert not args.php_async or (targets==['php'] and args.profile=='union'), "Async PHP consumers require PHP union fixtures"
     if 'dart' in targets:
         assert args.profile in {'core','binary','multipart','union'} and args.dart and args.dart.is_absolute() and args.dart.is_file()
+    if 'swift6' in targets:
+        assert args.profile=='core' and args.swift and args.swift.is_absolute() and args.swift.is_file()
     if not args.reuse_generated:
         run(["cargo", "run", "-p", "moleapi-generation", "--example", "fixture_projects", "--", str(args.output), str(args.worker), str(args.java), args.targets, args.versions, args.profile, args.generator_options, args.discriminator_property], REPO, timeout=300)
     evidence_path = args.output / "runtime-evidence.json"
@@ -1328,6 +1378,8 @@ def main():
         tools["gradle"]=subprocess.check_output([str(args.gradle),'--version'],env=java_environment(args),text=True).strip()
     if args.maven:
         tools["maven"]=subprocess.check_output([str(args.maven),"--version"],env=java_environment(args),text=True).strip()
+    if args.swift:
+        tools['swift']=subprocess.check_output([str(args.swift),'--version'],text=True).strip()
     if args.dart:
         tools['dart']=subprocess.check_output([str(args.dart),'--version'],stderr=subprocess.STDOUT,text=True).strip()
     if args.php:

@@ -1013,3 +1013,39 @@ async fn explicit_dart_mapped_wrapper_partial_overrides_union_default() {
         assert!(!model.content.contains("actualInstance"));
     }
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured Java17+ test runtime"]
+async fn explicit_swift_api_template_retains_priority_over_query_encoding_default() {
+    let java = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_JAVA").expect("explicit Java executable"),
+    );
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), Some(java)).unwrap();
+    let specification=serde_json::from_str(r#"{"openapi":"3.0.3","info":{"title":"Swift override","version":"1"},"paths":{"/x":{"get":{"operationId":"x","responses":{"200":{"description":"OK"}}}}}}"#).unwrap();
+    let input = ProjectInput {
+        target: "swift6".into(),
+        options: BTreeMap::new(),
+        include_secrets: false,
+        specification,
+        templates: Some(TemplateBundle {
+            format: "moleapi-codegen-templates-v1".into(),
+            outputs: BTreeMap::new(),
+            files: vec![TemplateFile {
+                path: "api.mustache".into(),
+                content: "// explicit Swift API\n".into(),
+                encoding: None,
+            }],
+        }),
+    };
+    let result = runtime
+        .generate(input, CancellationToken::new())
+        .await
+        .unwrap();
+    let api = result
+        .files
+        .iter()
+        .find(|file| file.path.ends_with("/APIs/DefaultAPI.swift"))
+        .unwrap();
+    assert!(api.content.contains("explicit Swift API"));
+    assert!(!api.content.contains("percentEncodedQuery"));
+}

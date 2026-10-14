@@ -216,3 +216,13 @@ engine discriminator mappings. Subtype fromJson/toJson and upstream list/map hel
 remain in use; required subtype keys and unknown/missing tags reject in release builds.
 Unmapped/ordinary models retain native_class. Default Dart HTTP only; explicit model/
 wrapper partials retain priority. General constraints/untagged unions remain separate.
+
+
+## Swift6 URLSession query plus escaping
+
+Source: swift6/api.mustache, pinned7.26.0 JAR, SHA256
+`b160afb32034c3de16dc6027fb0e440ad5627834d220cdfb9770994652eb9837`; upstream Apache-2.0 notices retained.
+Actual Unicode/query fixture showed URLComponents preserving raw +, decoded as space by
+standard query parsing. Escape raw + in percentEncodedQuery after upstream query-item
+construction, keeping existing encoding/serialization/model/transport. Default URLSession
+only; explicit API overrides retain priority. Broad path/form/other-library semantics remain open.

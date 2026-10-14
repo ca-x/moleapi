@@ -15,7 +15,7 @@ Explicit Mustache overrides now reuse the embedded OpenAPI Generator and mature 
 | javascript, python, go, csharp | Generated3.0/3.1 clients installed/built and passed real GET/POST/Bearer/query/header/nullable/enum/error fixtures; Go also passed race checking; C# default generichost hosting/token/typed400 APIs were called | Broader union/file/dynamic-keyword and library-option compatibility remains required |
 | php | Default Guzzle3.0/3.1 core, binary/multipart and mapped Cat/Dog tagged-oneOf decode/echo passed; original wire discriminator names retained | Static parent annotations/inheritance, advanced unions/constraints/files, other libraries/platforms remain required |
 | dart | Default HTTP3.0/3.1 core/file and mapped Cat/Dog oneOf wrappers/array echoes passed with analysis/AOT | Untagged/advanced unions, files/abort/options, SDK ranges and platforms remain required |
-| swift6 | Actual multi-file engine artifact generation, bounded ZIP, checksums and output collection | Artifact evidence does not establish language compile/run coverage |
+| swift6 | Default URLSession3.0/3.1 Swift6 release packages and actual core calls passed on Linux | Apple/other SDK platforms, files/unions, encoding/options remain required |
 | python-fastapi | Generated3.0/3.1 packages installed; unchanged generated app started, exposed routes/OpenAPI and returned its explicit500 missing-business-handler response | Authentication/business implementations remain consumer work; broader framework/keyword compatibility remains required |
 | aspnetcore | Default .NET10 projects built and started for3.0/3.1; consumer-configured authentication reached generated sample handlers (200) and rejected anonymous requests (401) | Real authentication scheme/validation and business handlers remain consumer work; broader framework/keyword compatibility remains required |
 | kotlin | Default jvm-okhttp4 Gradle3.0/3.1 core/binary/multipart fixtures passed; explicit Retrofit/Gson and Retrofit/kotlinx typed tagged-oneOf cases passed both dialects | Default Moshi unions, advanced union shapes, other libraries/platforms and broader keyword/file coverage remain required |
@@ -745,3 +745,31 @@ This proves referenced tagged mapped-object oneOf wrappers and simple arrays, no
 JSON Schema validation. Untagged/anyOf/nullable/nested/ambiguous/duplicate-alias unions,
 custom field names, empty/large/advanced files, other serialization/libraries, SDK ranges
 and native/browser platforms remain required generation-module work.
+
+
+## Default Swift6 URLSession SDK core
+
+Both3.0.3/3.1.0 original Swift6 packages compiled in release mode as local dependencies
+of a separate typed consumer; no SDK manifest or library switch was used. Six HTTP calls
+preserved path, Unicode query/header/Bearer, quoted JSON, enum/null models and400 status/
+body decoded through the generated Failure Codable model. Actual Swift argument labels/
+order are derived from emitted signatures. The initial call exposed raw plus in URLComponents
+queries; a pinned API template escapes + in percentEncodedQuery after upstream query-item
+construction. Other encoding/serialization/transport stays upstream and overrides keep priority.
+
+Official Swift6.4.1 Ubuntu24.04 archive was downloaded/extracted only into /tmp, with PGP
+signature verified against the official Swift keys file (fingerprint
+52BB7E3DE28A71BE22EC05FFEF80A866B47A981F). Archive SHA256:
+`7d246c7114077ad01dba4ad897628446ada4c489d6c7dbcf39ae3f25cbe17e8b`.
+Arch host lacked matching Ubuntu ncurses/xml2/ICU; official package SHA256s were verified
+and shared libraries staged in the toolchain's existing runtime search path so SwiftPM's
+compiler subprocess could resolve them. Compiler bytes/system libraries remain untouched.
+Tool/source/package integrity and dependency/build metadata remain in isolated QA outputs.
+Generator7.26.0/JRE21, Swift language mode6 and original URLSession runtime were used.
+
+All18 explicit override tests, generation78 cases (34 external-tool cases ignored), all11
+owned project API regressions and scoped strict Clippy/formatting passed. Catalog labels
+representative core evidence; basic mainstream coverage is26 combinations across10 clients/
+3 server skeletons. Product preview/download never installs/executes Swift. Apple-device/
+Darwin, other toolchain/library/platform execution, files/unions/path/form/abort/keyword
+behavior and broad deployment support remain required work. This is Linux core evidence.

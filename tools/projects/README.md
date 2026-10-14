@@ -222,3 +222,18 @@ analysis/AOT and20 core/union/array HTTP calls, release malformed subtype reject
 30 core/file regression requests. Pinned model/wrapper partials reuse engine mappings,
 subtype codecs and original list/map helpers; explicit overrides keep priority. Untagged/
 anyOf/advanced/custom-field/SDK/platform contracts remain separate scopes.
+
+
+## Default Swift6 URLSession SDK
+
+Use --targets swift6 --profile core --swift /absolute/path/to/swift with the standard
+explicit worker/Java/output paths. The driver creates a separate local-package release
+consumer using the unchanged generated Package.swift and typed async DefaultAPI/Pet/Failure.
+Original argument labels/order are inspected rather than changing APIs. Both dialects
+passed6 HTTP requests on Swift6.4.1/Linux. A pinned API template escapes query + through
+URLComponents percentEncodedQuery; custom API templates retain priority.
+
+QA may use a verified official toolchain and distro libraries in isolated directories;
+record signature/hash/source provenance. The application does not acquire Swift. Default
+URLSession only; Apple/other platform/toolchain/library, extended file/union/encoding and
+SDK behavior need their own consumers and remain separate gates.
