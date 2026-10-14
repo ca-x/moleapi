@@ -167,12 +167,13 @@ jobs:
       - name: Install explicit official QA compilers and server libraries
         run: |
           brew install grpc protobuf
-          python -m pip install grpcio==1.84.0 grpcio-tools==1.84.0 protobuf==6.33.6
+          python -m pip install grpcio==1.84.0 grpcio-tools==1.76.0 protobuf==6.33.6
           mkdir -p "$RUNNER_TEMP/objc-tools"
           printf '#!/bin/sh\nexec python -m grpc_tools.protoc "$@"\n' > "$RUNNER_TEMP/objc-tools/protoc"
           chmod +x "$RUNNER_TEMP/objc-tools/protoc"
           brew list --versions grpc protobuf > "$RUNNER_TEMP/objc-tools/versions.txt"
           protoc --version >> "$RUNNER_TEMP/objc-tools/versions.txt"
+          python -m pip freeze >> "$RUNNER_TEMP/objc-tools/versions.txt"
           shasum -a 256 "$(command -v protoc)" "$(command -v grpc_objective_c_plugin)" >> "$RUNNER_TEMP/objc-tools/versions.txt"
       - run: npm --prefix web ci
       - run: npm --prefix web run build

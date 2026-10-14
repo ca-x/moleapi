@@ -47,3 +47,16 @@ ARM job116105065093); both queued at the last check. Official Protobuf5.36.1
 podspec requires macOS12.0, despite gRPC's macOS11 minimum. Set the QA target
 and Podfile to12.0 for this pinned combination; macOS11 runtime support remains
 separate unverified scope. Queue status does not establish runtime success.
+
+Run38639078923 on df02ba9 reached both real macOS workers and failed in Python
+dependency installation: grpcio-tools1.84 requires protobuf>=7.35.1,<8, incompatible
+with pinned6.33.6. No Objective-C build or call ran. The actual previously verified
+Linux fixture environment uses grpcio1.84.0 / grpcio-tools1.76.0 / protobuf6.33.6;
+1.76 requires protobuf>=6.31.1,<7 and grpcio>=1.76. Update only that compiler pin,
+record Python freeze with tool evidence, and resolve macOS Intel/ARM wheels before
+redispatch. Keep native Apple build/call acceptance open until successful jobs.
+
+The corrected exact Python trio resolved and downloaded universal2 wheels for both
+macOS11 ARM and x86_64 / CPython3.13 without conflicts. Actionlint passes with the
+existing Intel runner label declared to the locally older checker. This establishes
+package availability and dependency compatibility, not an Apple build/RPC success.
