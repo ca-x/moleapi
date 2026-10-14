@@ -1084,3 +1084,45 @@ tests and scoped strict Clippy/format passed. Catalog validation names represent
 configured PHP-client four-mode evidence. Product preview/export never installs or runs
 these tools. Other PHP/extension/package/platform ranges, server frameworks, TLS/auth/
 advanced schema/options and remaining language/plugin scope remain open.
+
+
+## Explicit Go message/gRPC plugins and four-mode consumers
+
+protobuf-go now uses mature protoc-gen-go for required message output and optional
+protoc-gen-go-grpc for service interfaces. Local/admin explicit configuration is
+MOLEAPI_CODEGEN_PROTO_GO and MOLEAPI_CODEGEN_GRPC_GO alongside the existing compiler.
+Message-plugin names (no paths) are exposed in the shared hosted/native catalog API.
+Missing required Go message plugins reject before tool execution; messages without gRPC
+remain supported. Plugin languages/path validation and original descriptor/path/file/
+output/deadline/process-group limits apply. Authored go_package import paths remain
+unchanged; upstream Go plugins own package/path generation. Missing authored import paths
+reject instead of being guessed or changed into broken source-relative packages.
+
+A separate trusted Go schema includes explicit go_package options on the shared imported
+enum/model/four-mode service graph. Both source/descriptor original generated Go outputs
+compiled and passed actual unary/server/client/bidi loopback -race tests (8 RPCs), retaining
+Unicode/non-UTF8 bytes, enum/repeated fields, oneof-zero presence and Timestamp. Standard
+protobuf equality checks decoded data; client channels close before stopped/joined server
+workers. Original generated hashes match across inputs and stay unchanged. Go.mod/go.sum,
+resolved module/tool/plugin build/hash/descriptor/runtime evidence remains in isolated QA.
+Recorded Linux tools: Go1.27.1, protoc36.1, protoc-gen-go/protobuf v1.36.12,
+protoc-gen-go-grpc v1.6.2 and grpc-go v1.84.0. Plugins built in isolated GOPATH/module
+cache with sum.golang.org checksum verification; product preview never installs Go,
+fetches plugins/dependencies or executes consumers.
+
+Frontend dependency handling now explains missing Go message plugins adjacent to the
+generator, announces the dependency and disables generation. Kotlin configured coroutine
+plugins without Java helpers likewise show their actual prerequisite and block submission.
+Message-only ready state and reopened ready catalog remain usable; locale changes keep
+state. Protobuf dialog description now names its actual source format. Repeated/keyboard
+flows gained no animation; disabled controls visibly fade. ui-ux-pro-max/emil-design-eng
+were applied. Real embedded-server UI checked English/Chinese at1280px and390px with no
+horizontal overflow, visible dependency text and disabled actions; screenshots retained
+in isolated QA.29 targeted UI/i18n tests, frontend production build,80 generation cases
+(42 external-tool cases ignored),12 owned API cases and scoped strict Clippy/format pass.
+Actual Go plugin/message-only/missing-go_package tests and all8 builtin source/descriptor
+language regressions passed. Web build preceded embedded server build after a concrete
+asset-input race was detected by MBX and correctly rejected.
+
+This adds representative Go SDK/interface runtime evidence. Other Go toolchain/dependency/
+platform/import/options/schema/TLS/auth and remaining full-module/release scopes stay open.

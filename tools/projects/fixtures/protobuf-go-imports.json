@@ -1,0 +1,24 @@
+{
+  "kind": "proto",
+  "entry_files": [
+    "fixture.proto"
+  ],
+  "files": [
+    {
+      "path": "models/common.proto",
+      "content": "syntax=\"proto3\"; package fixture; enum Shade { SHADE_UNSPECIFIED=0; READY=1; } option go_package=\"example.invalid/moleapi/fixture\";"
+    },
+    {
+      "path": "models/types.proto",
+      "content": "syntax=\"proto3\"; package fixture; import \"models/common.proto\"; import \"google/protobuf/timestamp.proto\"; message Echo { string text=1; bytes payload=2; Shade shade=3; repeated string labels=4; oneof detail { string note=5; int32 code=6; } google.protobuf.Timestamp observed=7; } option go_package=\"example.invalid/moleapi/fixture\";"
+    },
+    {
+      "path": "fixture.proto",
+      "content": "syntax=\"proto3\"; package fixture; import \"models/types.proto\"; service EchoService { rpc Call(Echo) returns(Echo); rpc Watch(Echo) returns(stream Echo); rpc Collect(stream Echo) returns(Echo); rpc Chat(stream Echo) returns(stream Echo); } option go_package=\"example.invalid/moleapi/fixture\";"
+    },
+    {
+      "path": "unused.proto",
+      "content": "syntax=\"proto3\"; package unused; message Unused { string value=1; } option go_package=\"example.invalid/moleapi/fixture\";"
+    }
+  ]
+}

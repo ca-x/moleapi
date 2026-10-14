@@ -9,7 +9,7 @@ const call=vi.hoisted(()=>vi.fn());
 const pick=vi.hoisted(()=>vi.fn());
 vi.mock("../workbench/context",()=>({useWorkbench:()=>state}));vi.mock("../../shared/api",()=>({api:call,pickFile:pick,native:false}));
 vi.mock("../../shared/ui",async()=>{const real=await vi.importActual<object>("../../shared/ui");return {...real,Editor:({value}:{value:string})=><textarea aria-label="project-code" value={value} readOnly/>};});
-beforeEach(async()=>{await setLanguage("en");vi.stubGlobal("ResizeObserver",class{observe(){}unobserve(){}disconnect(){}});state.accountId="owner";state.dirty=false;call.mockReset();call.mockImplementation((path:string)=>path.endsWith("catalog")?Promise.resolve({java_available:false,targets:[{id:"rust-progenitor",kind:"client",upstream_stability:"stable",validation:"fixture",options:{packageName:"sdk"}},{id:"go-server",kind:"server",upstream_stability:"stable",options:{}}]}):Promise.resolve({engine:"progenitor",files:[{path:"src/lib.rs",encoding:"utf8",content:"generated-client",sha256:"hash",bytes:16,executable:false}],archive_base64:"AA==",source_sha256:"hash"}));});
+beforeEach(async()=>{await setLanguage("en");vi.stubGlobal("ResizeObserver",class{observe(){}unobserve(){}disconnect(){}});state.accountId="owner";state.dirty=false;state.draft.data.specifications=[{id:"s",name:"Fixture",kind:"openapi",source:"spec",dialect:"3.0.3"}];call.mockReset();call.mockImplementation((path:string)=>path.endsWith("catalog")?Promise.resolve({java_available:false,targets:[{id:"rust-progenitor",kind:"client",upstream_stability:"stable",validation:"fixture",options:{packageName:"sdk"}},{id:"go-server",kind:"server",upstream_stability:"stable",options:{}}]}):Promise.resolve({engine:"progenitor",files:[{path:"src/lib.rs",encoding:"utf8",content:"generated-client",sha256:"hash",bytes:16,executable:false}],archive_base64:"AA==",source_sha256:"hash"}));});
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
 it("includes explicitly loaded templates in generation and hides them when the account changes",async()=>{
  const templates={format:"moleapi-codegen-templates-v1",files:[{path:"models.mustache",content:"{{classname}}"}]};pick.mockResolvedValue(JSON.stringify(templates));
@@ -44,4 +44,32 @@ it("submits typed Kotlin union controls and preserves them across locale changes
  expect(screen.getByRole("checkbox",{name:"生成联合类型包装"}).getAttribute("aria-checked")).toBe("true");
  fireEvent.click(screen.getByRole("button",{name:"生成项目"}));
  await waitFor(()=>expect(call).toHaveBeenCalledWith("/api/generation/projects","POST",expect.objectContaining({target:"kotlin",options:{library:"jvm-retrofit2",serializationLibrary:"gson",generateOneOfAnyOfWrappers:true}})));
+});
+
+it("blocks Go messages without the required plugin and keeps the explanation localized",async()=>{
+ state.draft.data.specifications[0].kind="protobuf";
+ call.mockImplementation(()=>Promise.resolve({java_available:false,protoc_available:true,protobuf_plugins:[],grpc_plugins:["go"],targets:[{id:"protobuf-go",kind:"protobuf",upstream_stability:"stable",options:{}}]}));
+ const view=render(<Theme><ProjectGenerationDialog open specificationId="s" onOpenChange={()=>{}}/></Theme>);
+ const alert=await screen.findByRole("alert");expect(alert.textContent).toContain("Go message plugin");expect(screen.getByText("Generate messages or gRPC interfaces from original Protobuf definitions. Existing code is preserved; generated output is neither executed nor published.")).toBeTruthy();
+ const generate=screen.getByRole("button",{name:"Generate project"});expect(generate.getAttribute("disabled")).not.toBeNull();fireEvent.click(generate);
+ expect(call.mock.calls.filter(([path])=>path==="/api/generation/projects")).toHaveLength(0);
+ await act(()=>setLanguage("zh-CN"));expect(screen.getByRole("alert").textContent).toContain("Go 消息插件");expect(screen.getByRole("button",{name:"生成项目"}).getAttribute("disabled")).not.toBeNull();
+ view.rerender(<Theme><ProjectGenerationDialog open={false} specificationId="s" onOpenChange={()=>{}}/></Theme>);
+ call.mockImplementation(()=>Promise.resolve({java_available:false,protoc_available:true,protobuf_plugins:["go"],grpc_plugins:["go"],targets:[{id:"protobuf-go",kind:"protobuf",upstream_stability:"stable",options:{}}]}));
+ view.rerender(<Theme><ProjectGenerationDialog open specificationId="s" onOpenChange={()=>{}}/></Theme>);
+ await waitFor(()=>expect(screen.getByRole("button",{name:"生成项目"}).getAttribute("disabled")).toBeNull());expect(screen.queryByRole("alert")).toBeNull();
+});
+it("allows explicitly configured Go message-only generation with a visible gRPC prerequisite",async()=>{
+ state.draft.data.specifications[0].kind="protobuf";
+ call.mockImplementation((path:string)=>path.endsWith("catalog")?Promise.resolve({java_available:false,protoc_available:true,protobuf_plugins:["go"],grpc_plugins:[],targets:[{id:"protobuf-go",kind:"protobuf",upstream_stability:"stable",options:{}}]}):Promise.resolve({engine:"fixture",files:[],archive_base64:"AA==",source_sha256:"hash"}));
+ render(<Theme><ProjectGenerationDialog open specificationId="s" onOpenChange={()=>{}}/></Theme>);
+ await screen.findByText("This target currently generates Protobuf message types; gRPC service interfaces require the corresponding language plugin.");
+ const generate=screen.getByRole("button",{name:"Generate project"});expect(generate.getAttribute("disabled")).toBeNull();fireEvent.click(generate);
+ await waitFor(()=>expect(call).toHaveBeenCalledWith("/api/generation/projects","POST",expect.objectContaining({target:"protobuf-go"})));
+});
+it("blocks Kotlin coroutine generation when its Java service helper is absent",async()=>{
+ state.draft.data.specifications[0].kind="protobuf";
+ call.mockImplementation(()=>Promise.resolve({java_available:false,protoc_available:true,grpc_plugins:["kotlin"],targets:[{id:"protobuf-kotlin",kind:"protobuf",upstream_stability:"stable",options:{}}]}));
+ render(<Theme><ProjectGenerationDialog open specificationId="s" onOpenChange={()=>{}}/></Theme>);
+ expect((await screen.findByRole("alert")).textContent).toContain("both Kotlin and Java plugins");expect(screen.getByRole("button",{name:"Generate project"}).getAttribute("disabled")).not.toBeNull();
 });

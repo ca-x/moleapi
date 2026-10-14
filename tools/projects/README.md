@@ -432,3 +432,26 @@ native grpc1.84.0/protoc36.1/Linux; Python regression passed8 further RPCs. Pack
 source/signature/tool/lock evidence is retained; original source hashes stay unchanged.
 This verifies PHP clients; PHP server frameworks and other ranges/options/platforms need
 separate evidence. Product preview/export never acquires or executes these QA dependencies.
+
+
+## Explicit Go protobuf/gRPC plugins
+
+Go needs an explicit message plugin MOLEAPI_CODEGEN_PROTO_GO; optional gRPC output uses
+MOLEAPI_CODEGEN_GRPC_GO. Keep authored go_package options in sources; output follows
+upstream import-path layout. Required message dependency and optional service dependency
+remain distinct in the catalog/dialog. For trusted QA the final go selector takes a
+separate explicit message plugin path after the gRPC plugin path:
+
+```sh
+cargo run -p moleapi-generation --example fixture_protobuf -- /absolute/go-qa-output /absolute/moleapi-server /absolute/protoc /absolute/protoc-gen-go-grpc go /absolute/protoc-gen-go
+python3 tools/projects/verify-protobuf-go.py /absolute/go-qa-output/source --go /absolute/go --cache /absolute/qa-go-cache
+python3 tools/projects/verify-protobuf-go.py /absolute/go-qa-output/descriptor --go /absolute/go --cache /absolute/qa-go-cache
+```
+
+The separate local module consumer copies original package sources unchanged and runs
+actual four-mode tests with -race, verified modules and channel/server/goroutine cleanup.
+Both inputs passed8 RPCs on Go1.27.1/protobuf v1.36.12/grpc-go v1.84.0/protoc36.1/Linux.
+Official message/service plugins v1.36.12/v1.6.2 were built with checksum-db verification
+in isolated cache; module sums/dependency/tool/build/source/hash evidence is retained.
+Other Go package/toolchain/platform/transport/options/schema combinations require their
+own gates. Product preview/export never acquires or runs these QA dependencies.

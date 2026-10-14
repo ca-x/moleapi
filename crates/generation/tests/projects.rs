@@ -1579,3 +1579,148 @@ async fn official_php_plugin_emits_imported_models_and_four_rpc_client_interface
         assert!(service.content.contains(method), "Missing PHP {method}");
     }
 }
+
+#[tokio::test]
+async fn go_message_plugin_configuration_is_explicit_and_required_before_tools() {
+    let executable = std::env::current_exe().unwrap();
+    let runtime = ProjectRuntime::new(executable.clone(), None)
+        .unwrap()
+        .with_protoc(Some(executable.clone()), BTreeMap::new())
+        .unwrap();
+    let specification = serde_json::from_str(include_str!(
+        "../../../tools/projects/fixtures/protobuf-go-imports.json"
+    ))
+    .unwrap();
+    let error = runtime
+        .clone()
+        .generate(
+            ProjectInput {
+                target: "protobuf-go".into(),
+                specification,
+                options: BTreeMap::new(),
+                include_secrets: false,
+                templates: None,
+            },
+            CancellationToken::new(),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("explicitly configured Go message plugin"),
+        "{error}"
+    );
+    assert!(
+        runtime
+            .clone()
+            .with_protobuf_plugins(BTreeMap::from([(
+                "go".into(),
+                PathBuf::from("relative-plugin")
+            )]))
+            .is_err()
+    );
+    assert!(
+        runtime
+            .with_protobuf_plugins(BTreeMap::from([("unsupported".into(), executable)]))
+            .is_err()
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires explicitly configured protoc and official Go message/gRPC plugins"]
+async fn official_go_plugins_emit_authored_import_path_models_and_optional_services() {
+    let compiler =
+        PathBuf::from(std::env::var_os("MOLEAPI_CODEGEN_TEST_PROTOC").expect("explicit protoc"));
+    let message = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_PROTO_GO").expect("explicit Go message plugin"),
+    );
+    let grpc = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_GRPC_GO").expect("explicit Go gRPC plugin"),
+    );
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), None)
+        .unwrap()
+        .with_protoc(
+            Some(compiler.clone()),
+            BTreeMap::from([("go".into(), grpc)]),
+        )
+        .unwrap()
+        .with_protobuf_plugins(BTreeMap::from([("go".into(), message.clone())]))
+        .unwrap();
+    let specification: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../tools/projects/fixtures/protobuf-go-imports.json"
+    ))
+    .unwrap();
+    let input = ProjectInput {
+        target: "protobuf-go".into(),
+        specification: specification.clone(),
+        options: BTreeMap::new(),
+        include_secrets: false,
+        templates: None,
+    };
+    let artifact = runtime
+        .generate(input.clone(), CancellationToken::new())
+        .await
+        .unwrap();
+    assert!(
+        artifact
+            .files
+            .iter()
+            .any(|file| file.path == "example.invalid/moleapi/fixture/types.pb.go")
+    );
+    assert!(
+        artifact
+            .files
+            .iter()
+            .any(|file| file.path == "example.invalid/moleapi/fixture/common.pb.go")
+    );
+    let service = artifact
+        .files
+        .iter()
+        .find(|file| file.path == "example.invalid/moleapi/fixture/fixture_grpc.pb.go")
+        .unwrap();
+    for method in ["Call", "Watch", "Collect", "Chat"] {
+        assert!(service.content.contains(method), "Missing Go {method}");
+    }
+    assert!(
+        artifact
+            .files
+            .iter()
+            .any(|file| file.path == "protobuf-source.json"
+                && serde_json::from_str::<serde_json::Value>(&file.content).unwrap()
+                    == specification)
+    );
+    let messages = ProjectRuntime::new(std::env::current_exe().unwrap(), None)
+        .unwrap()
+        .with_protoc(Some(compiler), BTreeMap::new())
+        .unwrap()
+        .with_protobuf_plugins(BTreeMap::from([("go".into(), message)]))
+        .unwrap()
+        .generate(input.clone(), CancellationToken::new())
+        .await
+        .unwrap();
+    assert!(
+        messages
+            .files
+            .iter()
+            .any(|file| file.path.ends_with("/types.pb.go"))
+    );
+    assert!(
+        !messages
+            .files
+            .iter()
+            .any(|file| file.path.ends_with("_grpc.pb.go"))
+    );
+    let mut invalid = input;
+    invalid.specification = serde_json::from_str(include_str!(
+        "../../../tools/projects/fixtures/protobuf-imports.json"
+    ))
+    .unwrap();
+    assert!(
+        runtime
+            .generate(invalid, CancellationToken::new())
+            .await
+            .is_err(),
+        "Missing authored go_package must not be guessed"
+    );
+}

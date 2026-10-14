@@ -22,7 +22,7 @@ async fn main() -> Result<()> {
         ensure!(
             matches!(
                 language.as_str(),
-                "python" | "java" | "csharp" | "kotlin" | "ruby" | "cpp" | "php"
+                "python" | "java" | "csharp" | "kotlin" | "ruby" | "cpp" | "php" | "go"
             ),
             "Unsupported QA consumer language"
         );
@@ -36,7 +36,13 @@ async fn main() -> Result<()> {
                 ),
             );
         }
-        let runtime = ProjectRuntime::new(worker, None)?.with_protoc(Some(compiler), plugins)?;
+        let mut runtime =
+            ProjectRuntime::new(worker, None)?.with_protoc(Some(compiler), plugins)?;
+        if language == "go" {
+            let message =
+                PathBuf::from(args.next().context("Explicit Go message plugin required")?);
+            runtime = runtime.with_protobuf_plugins(BTreeMap::from([("go".into(), message)]))?;
+        }
         (runtime, format!("protobuf-{language}"))
     };
     ensure!(args.next().is_none(), "Unexpected argument");
@@ -44,9 +50,12 @@ async fn main() -> Result<()> {
         output.is_absolute() && !output.exists(),
         "Use a fresh absolute QA output root"
     );
-    let mut specification = serde_json::from_str(include_str!(
-        "../../../tools/projects/fixtures/protobuf-imports.json"
-    ))?;
+    let source = if target == "protobuf-go" {
+        include_str!("../../../tools/projects/fixtures/protobuf-go-imports.json")
+    } else {
+        include_str!("../../../tools/projects/fixtures/protobuf-imports.json")
+    };
+    let mut specification = serde_json::from_str(source)?;
     for representation in ["source", "descriptor"] {
         let artifact = runtime
             .generate(

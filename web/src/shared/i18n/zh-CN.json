@@ -1724,5 +1724,8 @@
   "自托管目标通过执行器队列派发，等待机器连接；不会退回服务端运行。每次计划只尝试一次。": "自托管目标通过执行器队列派发，等待机器连接；不会退回服务端运行。每次计划只尝试一次。",
   "序列化库": "序列化库",
   "生成联合类型包装": "生成联合类型包装",
-  "Kotlin 联合类型需要启用包装，并选择 jvm-retrofit2 和 gson 或 kotlinx_serialization。默认 Moshi 不支持。": "Kotlin 联合类型需要启用包装，并选择 jvm-retrofit2 和 gson 或 kotlinx_serialization。默认 Moshi 不支持。"
+  "Kotlin 联合类型需要启用包装，并选择 jvm-retrofit2 和 gson 或 kotlinx_serialization。默认 Moshi 不支持。": "Kotlin 联合类型需要启用包装，并选择 jvm-retrofit2 和 gson 或 kotlinx_serialization。默认 Moshi 不支持。",
+  "Go 消息生成需要部署方配置 Go 消息插件。": "Go 消息生成需要部署方配置 Go 消息插件。",
+  "Kotlin gRPC 接口需要同时配置 Kotlin 和 Java 插件。": "Kotlin gRPC 接口需要同时配置 Kotlin 和 Java 插件。",
+  "基于原始 Protobuf 定义生成消息或 gRPC 接口，不覆盖已有代码，也不执行或发布生成结果。": "基于原始 Protobuf 定义生成消息或 gRPC 接口，不覆盖已有代码，也不执行或发布生成结果。"
 }

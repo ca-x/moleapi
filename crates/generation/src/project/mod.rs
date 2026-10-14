@@ -150,7 +150,7 @@ pub fn project_catalog() -> Result<Vec<ProjectTarget>> {
         },
     );
     for language in [
-        "cpp", "csharp", "java", "kotlin", "objc", "php", "python", "ruby",
+        "cpp", "csharp", "java", "kotlin", "objc", "php", "python", "ruby", "go",
     ] {
         targets.push(ProjectTarget {
             id: format!("protobuf-{language}"),
@@ -166,6 +166,7 @@ pub fn project_catalog() -> Result<Vec<ProjectTarget>> {
                 "ruby" => "representative-ruby-four-mode-configured-plugin-fixture",
                 "cpp" => "representative-cpp-four-mode-configured-plugin-fixture",
                 "php" => "representative-php-four-mode-client-configured-plugin-fixture",
+                "go" => "representative-go-four-mode-configured-plugins-fixture",
                 _ => "representative-protoc-message-source-descriptor-fixture",
             }
             .into(),

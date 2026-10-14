@@ -731,3 +731,33 @@ async fn upgraded_cli_generation_uses_owned_worker_and_preserves_source_privacy(
             .contains("private-named-template-fixture")
     );
 }
+
+#[tokio::test]
+async fn project_catalog_reports_go_message_plugin_dependency_without_executable_paths() {
+    let temp = tempfile::tempdir().unwrap();
+    let router = local(&temp.path().join("go-catalog.db")).await.unwrap();
+    let (status, body) = call(
+        &router,
+        "GET",
+        "/api/generation/projects/catalog",
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body["protobuf_plugins"].is_array());
+    assert!(
+        body["targets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|target| target["id"] == "protobuf-go" && target["kind"] == "protobuf")
+    );
+    assert!(
+        body["protobuf_plugins"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|name| name == "go")
+    );
+}

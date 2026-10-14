@@ -11,6 +11,7 @@ pub struct ProjectRuntime {
     pub worker: PathBuf,
     pub java: Option<PathBuf>,
     pub protoc: Option<PathBuf>,
+    pub protobuf_plugins: std::collections::BTreeMap<String, PathBuf>,
     pub grpc_plugins: std::collections::BTreeMap<String, PathBuf>,
 }
 impl ProjectRuntime {
@@ -29,6 +30,7 @@ impl ProjectRuntime {
             worker,
             java,
             protoc: None,
+            protobuf_plugins: std::collections::BTreeMap::new(),
             grpc_plugins: std::collections::BTreeMap::new(),
         })
     }
@@ -341,7 +343,7 @@ impl ProjectRuntime {
         for (language, path) in &plugins {
             ensure!(
                 [
-                    "cpp", "csharp", "java", "kotlin", "objc", "php", "python", "ruby"
+                    "cpp", "csharp", "java", "kotlin", "objc", "php", "python", "ruby", "go"
                 ]
                 .contains(&language.as_str())
                     && path.is_absolute()
@@ -353,11 +355,24 @@ impl ProjectRuntime {
         self.grpc_plugins = plugins;
         Ok(self)
     }
+    pub fn with_protobuf_plugins(
+        mut self,
+        plugins: std::collections::BTreeMap<String, PathBuf>,
+    ) -> Result<Self> {
+        for (language, path) in &plugins {
+            ensure!(
+                language == "go" && path.is_absolute() && path.is_file(),
+                "Protobuf message plugins require a known language and explicit executable path"
+            );
+        }
+        self.protobuf_plugins = plugins;
+        Ok(self)
+    }
     pub fn from_environment(worker: PathBuf) -> Result<Self> {
         let java = std::env::var_os("MOLEAPI_CODEGEN_JAVA").map(PathBuf::from);
         let protoc = std::env::var_os("MOLEAPI_CODEGEN_PROTOC").map(PathBuf::from);
         let plugins = [
-            "cpp", "csharp", "java", "kotlin", "objc", "php", "python", "ruby",
+            "cpp", "csharp", "java", "kotlin", "objc", "php", "python", "ruby", "go",
         ]
         .into_iter()
         .filter_map(|language| {
@@ -368,6 +383,11 @@ impl ProjectRuntime {
             .map(|path| (language.into(), PathBuf::from(path)))
         })
         .collect();
-        Self::new(worker, java)?.with_protoc(protoc, plugins)
+        let messages = std::env::var_os("MOLEAPI_CODEGEN_PROTO_GO")
+            .map(|path| std::collections::BTreeMap::from([("go".into(), PathBuf::from(path))]))
+            .unwrap_or_default();
+        Self::new(worker, java)?
+            .with_protoc(protoc, plugins)?
+            .with_protobuf_plugins(messages)
     }
 }

@@ -22,10 +22,14 @@ impl ProjectRuntime {
             .context("Invalid protobuf target")?;
         ensure!(
             [
-                "cpp", "csharp", "java", "kotlin", "objc", "php", "python", "ruby"
+                "cpp", "csharp", "java", "kotlin", "objc", "php", "python", "ruby", "go"
             ]
             .contains(&language),
             "Unsupported protoc language"
+        );
+        ensure!(
+            language != "go" || self.protobuf_plugins.contains_key("go"),
+            "Go protobuf generation requires an explicitly configured Go message plugin"
         );
         ensure!(
             language != "kotlin"
@@ -82,6 +86,14 @@ impl ProjectRuntime {
             .stderr(Stdio::null())
             .arg(format!("--descriptor_set_in={}", fds.display()))
             .arg(format!("--{language}_out={}", output.display()));
+        if let Some(plugin) = self.protobuf_plugins.get(language)
+            && plugin.canonicalize()? != compiler.canonicalize()?
+        {
+            command.arg(format!(
+                "--plugin=protoc-gen-{language}={}",
+                plugin.display()
+            ));
+        }
         if language == "kotlin" {
             command.arg(format!("--java_out={}", output.display()));
         }
@@ -137,12 +149,17 @@ impl ProjectRuntime {
         );
         files.insert("descriptor-set.bin".into(), bytes.into());
         let grpc = self.grpc_plugins.contains_key(language);
+        let go_dependency = if language == "go" {
+            " Go output paths follow the authored go_package import paths; use matching Go protobuf/gRPC runtimes in an explicitly created Go module."
+        } else {
+            ""
+        };
         let grpc_dependency = if language == "kotlin" && grpc {
             " Kotlin coroutine interfaces use the included Java gRPC service classes; install matching Java/Kotlin protobuf and gRPC coroutine runtimes."
         } else {
             ""
         };
-        files.insert("README.md".into(),format!("Generated with the explicitly configured official protoc for {language}. gRPC plugin output: {grpc}. Install the matching language protobuf{} runtime before compiling.{grpc_dependency} This artifact does not execute target code, download plugins or overwrite authored files. Original source and descriptor are included.\n",if grpc {" and gRPC"}else{""}).into_bytes().into());
+        files.insert("README.md".into(),format!("Generated with the explicitly configured official protoc for {language}. gRPC plugin output: {grpc}. Install the matching language protobuf{} runtime before compiling.{grpc_dependency}{go_dependency} This artifact does not execute target code, download plugins or overwrite authored files. Original source and descriptor are included.\n",if grpc {" and gRPC"}else{""}).into_bytes().into());
         // Query only this explicitly configured executable; no ambient tool discovery.
         let mut version = Command::new(compiler)
             .arg("--version")

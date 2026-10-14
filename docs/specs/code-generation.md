@@ -140,3 +140,14 @@ Native builder public operation names remain stable when they match standard/SDK
 types. Syn AST qualification and anonymous helper-trait imports protect generated Result/
 Option/variant and SDK support references without renaming operations. Broader identifier,
 model/hook/tag namespaces and platform execution need separate evidence.
+
+
+Go protobuf/gRPC artifacts use explicitly configured official protoc-gen-go message and
+protoc-gen-go-grpc service plugins. MOLEAPI_CODEGEN_PROTO_GO is required for protobuf-go;
+MOLEAPI_CODEGEN_GRPC_GO is optional for message-only output. Original go_package import
+paths are supplied by authored source and preserved through the checked descriptor graph;
+no application naming/emitter/path rewrite substitutes for mature plugin behavior.
+Shared catalog dependency names separate message and service plugins without executable
+paths; hosted/native UI blocks missing required message plugins and explains prerequisites.
+Representative source/descriptor four-mode -race evidence and wider remaining scope are
+recorded in PROJECT-GENERATION-COVERAGE.md.
