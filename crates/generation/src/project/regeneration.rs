@@ -299,6 +299,7 @@ pub(crate) fn dispatch_diff_worker(limit: impl FnOnce() -> Result<()>) -> Result
         Regenerate(RegenerationInput),
         Import(ProjectImportInput),
         Bundle(OpenapiSourceBundle),
+        Single(OpenapiSingleSource),
     }
     let input: WorkerInput = serde_json::from_slice(&bytes)?;
     let result = match input {
@@ -310,6 +311,9 @@ pub(crate) fn dispatch_diff_worker(limit: impl FnOnce() -> Result<()>) -> Result
         }
         WorkerInput::Bundle(input) => {
             bundle_openapi(input).and_then(|result| Ok(serde_json::to_value(result)?))
+        }
+        WorkerInput::Single(input) => {
+            prepare_single_openapi(input).and_then(|result| Ok(serde_json::to_value(result)?))
         }
     };
     let reply = match result {

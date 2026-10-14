@@ -163,6 +163,168 @@ async fn source_bundle_worker_case(
     );
 }
 #[tokio::test]
+async fn ordinary_single_json_and_yaml_resources_use_worker_privacy_and_keep_raw_source() {
+    for yaml in [false, true] {
+        let temp = tempfile::tempdir().unwrap();
+        let router = local(&temp.path().join("single.db")).await.unwrap();
+        let root = json!({"openapi":"3.1.0","info":{"title":"Single resources","version":"1"},"paths":{},"components":{"schemas":{
+            "Pet":{"$id":"https://schemas.test/single","$anchor":"pet","type":"object","properties":{"name":{"type":"string"},"password":{"type":"string","format":"password","example":"ordinary_private_password"}}},
+            "Alias":{"$ref":"https://schemas.test/single#pet"}
+        }}});
+        let source = if yaml {
+            format!(
+                "# preserve original YAML comment\n{}\n# preserve trailing comment\n",
+                root
+            )
+        } else {
+            root.to_string()
+        };
+        let mut data = example_data();
+        // Stored version metadata must not override the actual source dialect.
+        data["specifications"] = json!([{"id":"single","name":"Single","kind":"openapi","dialect":"3.0.3","source":source}]);
+        let (status, _) = call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            None,
+            Some(json!({"id":"single","name":"Single","data":data})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let input = json!({"workspace_id":"single","specification_id":"single","job_id":"single-safe","target":"model-go"});
+        let (status, safe) = call(
+            &router,
+            "POST",
+            "/api/generation/projects",
+            None,
+            Some(input.clone()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{safe}");
+        assert!(!safe.to_string().contains("ordinary_private_password"));
+        assert!(
+            !safe
+                .to_string()
+                .contains("x-moleapi-source-bundle-privacy-documents")
+        );
+        assert!(safe["files"].as_array().unwrap().iter().any(|file| {
+            file["content"]
+                .as_str()
+                .unwrap()
+                .contains("type Pet struct")
+        }));
+        let mut copied = input.clone();
+        copied["job_id"] = "single-copy".into();
+        copied["options"] = json!({"package":"ordinary_private_password"});
+        let (status, _) = call(
+            &router,
+            "POST",
+            "/api/generation/projects",
+            None,
+            Some(copied.clone()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        copied["job_id"] = "single-explicit".into();
+        copied["include_secrets"] = true.into();
+        let (status, included) = call(
+            &router,
+            "POST",
+            "/api/generation/projects",
+            None,
+            Some(copied),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{included}");
+        assert!(included.to_string().contains("ordinary_private_password"));
+        let (_, saved) = call(&router, "GET", "/api/workspaces/single", None, None).await;
+        assert_eq!(saved["data"]["specifications"][0]["source"], source);
+        let mut invalid = root.clone();
+        invalid["components"]["schemas"]["Alias"]["$ref"] = "https://outside.test/missing".into();
+        let revision = saved["revision"].as_u64().unwrap();
+        let mut changed = saved["data"].clone();
+        changed["specifications"][0]["source"] = invalid.to_string().into();
+        let (status, _) = call(
+            &router,
+            "PUT",
+            "/api/workspaces/single",
+            None,
+            Some(json!({"name":"Single","expected_revision":revision,"data":changed})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let mut missing = input;
+        missing["job_id"] = "single-missing".into();
+        let (status, _) = call(
+            &router,
+            "POST",
+            "/api/generation/projects",
+            None,
+            Some(missing),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+}
+
+#[tokio::test]
+async fn hosted_single_source_preparation_stays_owner_bound_before_resource_work() {
+    let temp = tempfile::tempdir().unwrap();
+    let router = hosted(config(
+        format!(
+            "sqlite://{}?mode=rwc",
+            temp.path().join("single-owner.db").display()
+        ),
+        true,
+    ))
+    .await
+    .unwrap();
+    let owner = register(&router, "single-owner").await;
+    let other = register(&router, "single-other").await;
+    let source=json!({"openapi":"3.1.0","info":{"title":"Private","version":"1"},"paths":{},"components":{"schemas":{"Pet":{"$id":"https://schemas.test/private","$anchor":"pet","type":"object","properties":{"name":{"type":"string"}}},"Alias":{"$ref":"https://schemas.test/private#pet"}}}}).to_string();
+    let mut data = example_data();
+    data["specifications"] =
+        json!([{"id":"spec","name":"Private","kind":"openapi","dialect":"3.1.0","source":source}]);
+    let (status, _) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        Some(&owner),
+        Some(json!({"id":"private-single","name":"Private","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let input = json!({"workspace_id":"private-single","specification_id":"spec","job_id":"owner-single","target":"model-go"});
+    let (status, _) = call(
+        &router,
+        "POST",
+        "/api/generation/projects",
+        Some(&other),
+        Some(input.clone()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = call(
+        &router,
+        "POST",
+        "/api/generation/projects",
+        None,
+        Some(input.clone()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    let (status, result) = call(
+        &router,
+        "POST",
+        "/api/generation/projects",
+        Some(&owner),
+        Some(input),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{result}");
+}
+
+#[tokio::test]
 async fn native_project_api_uses_original_owned_definition_and_excludes_credential_examples() {
     let temp = tempfile::tempdir().unwrap();
     let router = moleapi_server::local_with_worker(

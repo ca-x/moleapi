@@ -34,6 +34,47 @@ pub fn parse_openapi_source_bundle(source: &str) -> Result<Option<OpenapiSourceB
     }
     Ok(Some(serde_json::from_value(value)?))
 }
+pub const SINGLE_SOURCE_FORMAT: &str = "moleapi-openapi-single-v1";
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OpenapiSingleSource {
+    pub format: String,
+    pub source: String,
+}
+
+pub fn prepare_single_openapi(input: OpenapiSingleSource) -> Result<BundledOpenapi> {
+    ensure!(
+        input.format == SINGLE_SOURCE_FORMAT,
+        "Unknown single OpenAPI source format"
+    );
+    ensure!(
+        input.source.len() <= SPEC_LIMIT,
+        "OpenAPI source exceeds 1 MiB"
+    );
+    let document: Value =
+        serde_yaml_ng::from_str(&input.source).context("Invalid single-file OpenAPI JSON/YAML")?;
+    check_document(&document)?;
+    if document["openapi"]
+        .as_str()
+        .is_some_and(|version| version.starts_with("3.1."))
+    {
+        bundle_openapi(OpenapiSourceBundle {
+            format: SOURCE_BUNDLE_FORMAT.into(),
+            entry_file: "openapi.json".into(),
+            files: vec![OpenapiSourceFile {
+                path: "openapi.json".into(),
+                content: input.source,
+            }],
+        })
+    } else {
+        validate_project_specification(&document)?;
+        Ok(BundledOpenapi {
+            specification: document.clone(),
+            documents: vec![document],
+        })
+    }
+}
+
 fn uri(path: &str) -> Result<Url> {
     artifact::safe_path(path)?;
     let mut url = Url::parse("moleapi://source-bundle/")?;
@@ -962,5 +1003,100 @@ mod tests {
                 .to_string()
                 .contains("alias limit")
         );
+    }
+    fn single(source: String) -> OpenapiSingleSource {
+        OpenapiSingleSource {
+            format: SINGLE_SOURCE_FORMAT.into(),
+            source,
+        }
+    }
+    #[test]
+    fn ordinary_single_31_ids_anchors_recursion_and_literals_reuse_resource_projection() {
+        let literal = serde_json::json!({"$id":"literal","$ref":"https://outside.test/literal"});
+        let root = serde_json::json!({"openapi":"3.1.0","info":{"title":"Single","version":"1"},"paths":{},"components":{"schemas":{
+            "Pet":{"$id":"https://schemas.test/pet/","$anchor":"pet","type":"object","$defs":{"Name":{"$id":"name","$anchor":"name","type":"string"}},"properties":{"next":{"$ref":"#pet"},"name":{"$ref":"name#name"}},"example":literal},
+            "Alias":{"$ref":"https://schemas.test/pet/#pet"},
+            "Retrieved":{"$ref":"openapi.json#%2Fcomponents%2Fschemas%2FPet"}
+        }}});
+        let result = prepare_single_openapi(single(root.to_string())).unwrap();
+        let schemas = &result.specification["components"]["schemas"];
+        assert_eq!(schemas["Alias"]["$ref"], "#/components/schemas/Pet");
+        assert_eq!(schemas["Retrieved"]["$ref"], "#/components/schemas/Pet");
+        assert_eq!(
+            schemas["Pet"]["properties"]["next"]["$ref"],
+            "#/components/schemas/Pet"
+        );
+        assert_eq!(
+            schemas["Pet"]["properties"]["name"]["$ref"],
+            "#/components/schemas/Pet/%24defs/Name"
+        );
+        assert_eq!(schemas["Pet"]["example"], literal);
+        assert!(schemas["Pet"].get("$id").is_none());
+        assert_eq!(result.documents, vec![root]);
+    }
+    #[test]
+    fn single_yaml_comments_and_reference_siblings_preserve_original_semantics() {
+        let raw = "# original comment\nopenapi: 3.1.0\ninfo: {title: Single, version: '1'}\npaths: {}\ncomponents:\n  schemas:\n    Text: {$id: 'https://schemas.test/text', type: string, minLength: 1}\n    Short: {$ref: 'https://schemas.test/text', maxLength: 3}\n";
+        let original: Value = serde_yaml_ng::from_str(raw).unwrap();
+        let result = prepare_single_openapi(single(raw.into())).unwrap();
+        assert_eq!(result.documents, vec![original]);
+        assert_eq!(
+            result.specification["components"]["schemas"]["Short"]["maxLength"],
+            3
+        );
+        assert_eq!(
+            result.specification["components"]["schemas"]["Short"]["allOf"][0]["$ref"],
+            "#/components/schemas/Text"
+        );
+    }
+    #[test]
+    fn single_30_retains_legacy_reference_siblings_without_bundle_restrictions() {
+        let root = serde_json::json!({"openapi":"3.0.3","info":{"title":"Legacy","version":"1"},"paths":{},"components":{"schemas":{"Pet":{"type":"object"},"NullablePet":{"$ref":"#/components/schemas/Pet","nullable":true}}}});
+        let result = prepare_single_openapi(single(root.to_string())).unwrap();
+        assert_eq!(result.specification, root);
+        assert_eq!(result.documents, vec![root]);
+    }
+    #[test]
+    fn single_source_worker_contract_rejects_limits_bad_ids_dynamic_and_missing_resources() {
+        assert!(
+            prepare_single_openapi(OpenapiSingleSource {
+                format: "wrong".into(),
+                source: "{}".into()
+            })
+            .is_err()
+        );
+        assert!(prepare_single_openapi(single("x".repeat(SPEC_LIMIT + 1))).is_err());
+        for schema in [
+            serde_json::json!({"$ref":"https://outside.test/missing"}),
+            serde_json::json!({"$ref":"missing.json"}),
+            serde_json::json!({"$ref":"#missing"}),
+            serde_json::json!({"$dynamicRef":"#node"}),
+            serde_json::json!({"$recursiveRef":"#"}),
+            serde_json::json!({"$id":"https://schemas.test/x#bad"}),
+            serde_json::json!({"$anchor":"invalid space"}),
+            serde_json::json!({"$schema":"https://outside.test/dialect"}),
+        ] {
+            let root = serde_json::json!({"openapi":"3.1.0","info":{"title":"Invalid","version":"1"},"paths":{},"components":{"schemas":{"Invalid":schema}}});
+            assert!(prepare_single_openapi(single(root.to_string())).is_err());
+        }
+        let duplicate = serde_json::json!({"openapi":"3.1.0","info":{"title":"Duplicate","version":"1"},"paths":{},"components":{"schemas":{"A":{"$id":"https://schemas.test/x"},"B":{"$id":"https://schemas.test/x"}}}});
+        assert!(prepare_single_openapi(single(duplicate.to_string())).is_err());
+        assert!(prepare_single_openapi(single("openapi: [invalid".into())).is_err());
+    }
+    #[test]
+    fn single_source_complexity_limits_include_literal_extensions() {
+        let base = serde_json::json!({"openapi":"3.1.0","info":{"title":"Bounded","version":"1"},"paths":{}});
+        let mut nested = Value::Null;
+        for _ in 0..70 {
+            nested = serde_json::json!({"child":nested});
+        }
+        for literal in [nested, Value::Array(vec![Value::Bool(true); 50001])] {
+            let mut root = base.clone();
+            root["x-literal"] = literal;
+            let raw = root.to_string();
+            assert!(raw.len() < SPEC_LIMIT);
+            let error = prepare_single_openapi(single(raw)).unwrap_err();
+            assert!(error.to_string().contains("complexity limit"), "{error}");
+        }
     }
 }

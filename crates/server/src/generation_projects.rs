@@ -195,36 +195,31 @@ pub(crate) async fn generate(
             .iter()
             .find(|spec| spec.id == c.specification_id && spec.kind == "openapi")
             .ok_or_else(|| ApiError::bad("OpenAPI specification not found"))?;
-        let bundle = moleapi_generation::project::parse_openapi_source_bundle(&selected.source)
+        let result = s
+            .project_runtime
+            .prepare_openapi(&selected.source, lease.cancel.clone())
+            .await
             .map_err(|error| ApiError::bad(error.to_string()))?;
-        let bundled = bundle.is_some();
-        let mut projection = w.clone();
-        if let Some(bundle) = bundle {
-            let result = s
-                .project_runtime
-                .bundle_openapi(bundle, lease.cancel.clone())
-                .await
-                .map_err(|error| ApiError::bad(error.to_string()))?;
-            let admission = gate.lock().await;
-            if *admission != generation || lease.cancel.is_cancelled() {
-                return Err(ApiError::bad("Generation owner changed or cancelled"));
-            }
-            owned(&s, &owner.0, &w.id).await?;
-            drop(admission);
-            let mut document = result.specification;
-            if document.get(PRIVACY_DOCUMENTS).is_some() {
-                return Err(ApiError::bad("Reserved source-bundle privacy field"));
-            }
-            document[PRIVACY_DOCUMENTS] =
-                serde_json::to_value(result.documents).map_err(|_| ApiError::internal())?;
-            let spec = projection
-                .data
-                .specifications
-                .iter_mut()
-                .find(|spec| spec.id == c.specification_id)
-                .unwrap();
-            spec.source = serde_json::to_string(&document).map_err(|_| ApiError::internal())?;
+        let admission = gate.lock().await;
+        if *admission != generation || lease.cancel.is_cancelled() {
+            return Err(ApiError::bad("Generation owner changed or cancelled"));
         }
+        owned(&s, &owner.0, &w.id).await?;
+        drop(admission);
+        let mut document = result.specification;
+        if document.get(PRIVACY_DOCUMENTS).is_some() {
+            return Err(ApiError::bad("Reserved source-bundle privacy field"));
+        }
+        document[PRIVACY_DOCUMENTS] =
+            serde_json::to_value(result.documents).map_err(|_| ApiError::internal())?;
+        let mut projection = w.clone();
+        projection
+            .data
+            .specifications
+            .iter_mut()
+            .find(|spec| spec.id == c.specification_id)
+            .unwrap()
+            .source = serde_json::to_string(&document).map_err(|_| ApiError::internal())?;
         if !c.include_secrets {
             moleapi_formats::validate_generation_options(
                 &projection,
@@ -239,20 +234,15 @@ pub(crate) async fn generate(
             c.include_secrets,
         )
         .map_err(|e| ApiError::bad(e.to_string()))?;
-        if bundled {
-            let mut value: Value = serde_json::from_str(&specification.source)
-                .map_err(|_| ApiError::bad("Invalid bundled OpenAPI projection"))?;
-            value
-                .as_object_mut()
-                .ok_or_else(|| ApiError::bad("Invalid bundled OpenAPI object"))?
-                .remove(PRIVACY_DOCUMENTS);
-            moleapi_generation::project::validate_project_specification(&value)
-                .map_err(|error| ApiError::bad(error.to_string()))?;
-            value
-        } else {
-            moleapi_generation::project::parse_project_specification(&specification.source)
-                .map_err(|e| ApiError::bad(e.to_string()))?
-        }
+        let mut value: Value = serde_json::from_str(&specification.source)
+            .map_err(|_| ApiError::bad("Invalid prepared OpenAPI projection"))?;
+        value
+            .as_object_mut()
+            .ok_or_else(|| ApiError::bad("Invalid prepared OpenAPI object"))?
+            .remove(PRIVACY_DOCUMENTS);
+        moleapi_generation::project::validate_project_specification(&value)
+            .map_err(|error| ApiError::bad(error.to_string()))?;
+        value
     };
     let result = s
         .project_runtime

@@ -252,6 +252,23 @@ impl ProjectRuntime {
     ) -> Result<BundledOpenapi> {
         self.file_worker(input, cancel).await
     }
+    pub async fn prepare_openapi(
+        &self,
+        source: &str,
+        cancel: CancellationToken,
+    ) -> Result<BundledOpenapi> {
+        if let Some(bundle) = parse_openapi_source_bundle(source)? {
+            return self.bundle_openapi(bundle, cancel).await;
+        }
+        self.file_worker(
+            OpenapiSingleSource {
+                format: SINGLE_SOURCE_FORMAT.into(),
+                source: source.into(),
+            },
+            cancel,
+        )
+        .await
+    }
     async fn file_worker<I: Serialize, O: serde::de::DeserializeOwned>(
         &self,
         input: I,
