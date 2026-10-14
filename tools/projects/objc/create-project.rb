@@ -4,7 +4,7 @@ require 'xcodeproj'
 root = File.expand_path(ARGV.fetch(0))
 consumer = File.join(root, 'runtime-consumer')
 project = Xcodeproj::Project.new(File.join(consumer, 'FixtureQA.xcodeproj'))
-target = project.new_target(:command_line_tool, 'FixtureQA', :osx, '11.0')
+target = project.new_target(:command_line_tool, 'FixtureQA', :osx, '12.0')
 target.add_system_framework('Foundation')
 sources = Dir.glob(File.join(root, '**', '*.{h,m}')).reject { |p| p.start_with?(consumer + '/') }
 sources << File.join(consumer, 'RuntimeFixture.m')

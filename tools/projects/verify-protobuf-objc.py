@@ -35,7 +35,7 @@ def verify(args):
     scripts = Path(__file__).resolve().parent / 'objc'
     shutil.copyfile(scripts / 'RuntimeFixture.m', consumer / 'RuntimeFixture.m')
     (consumer / 'Podfile').write_text("""source 'https://cdn.cocoapods.org/'
-platform :osx, '11.0'
+platform :osx, '12.0'
 project 'FixtureQA.xcodeproj'
 target 'FixtureQA' do
   pod 'gRPC-ProtoRPC', '1.84.0'

@@ -41,3 +41,9 @@ other functional generation slices remain independent work if runner state block
 - Full workspace formatting hits an existing vendored mustache workspace-layout
   error; package-scoped generation formatting passes.
 - Apple compilation and runtime evidence remain pending actual macOS jobs.
+
+Apple dispatch: run38637719998 validates d0f059a (Intel job116105064831 and
+ARM job116105065093); both queued at the last check. Official Protobuf5.36.1
+podspec requires macOS12.0, despite gRPC's macOS11 minimum. Set the QA target
+and Podfile to12.0 for this pinned combination; macOS11 runtime support remains
+separate unverified scope. Queue status does not establish runtime success.
