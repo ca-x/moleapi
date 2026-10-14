@@ -114,3 +114,16 @@ toMultiValue/collection-format metadata for non-multi non-file arrays, preservin
 multi/file/scalar parts and the existing transport. Default jvm-okhttp4 only;
 explicit API templates keep priority. The tested string-array contract does not
 establish nested/custom-part or every encoding/platform behavior.
+
+
+## Kotlin jvm-retrofit2 path parameter order
+
+Source: `kotlin-client/libraries/jvm-retrofit2/api.mustache`, pinned7.26.0 JAR,
+Apache-2.0. Original SHA256: `22c857f2d23a1b4f52665b2c196d83d4c584ffbb85415476569b228b82cc71f0`.
+
+The3.1 fixture emitted query parameters before a path-item path parameter.
+Retrofit rejects this interface at invocation: `A @Path parameter must not come after a @Query`.
+The compatibility signature renders upstream path parameters first, then remaining
+parameters, using Kotlin trailing commas. Upstream annotations, parameter partials,
+transport, serializers and return types remain intact. Retrofit only; explicit
+API templates keep precedence. Both dialect fixtures use actual typed wrappers.

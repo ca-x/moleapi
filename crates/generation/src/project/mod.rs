@@ -87,6 +87,14 @@ pub fn project_catalog() -> Result<Vec<ProjectTarget>> {
                 .into(),
             );
         }
+        if target.id == "kotlin" {
+            target
+                .options
+                .insert("serializationLibrary".into(), Value::String("moshi".into()));
+            target
+                .options
+                .insert("generateOneOfAnyOfWrappers".into(), Value::Bool(false));
+        }
         if target.options.get("npmName") == Some(&Value::Null) {
             target.options.insert(
                 "npmName".into(),
@@ -190,10 +198,26 @@ pub(crate) fn validate_options(input: &ProjectInput) -> Result<()> {
                 "npmName",
                 "npmVersion",
                 "groupId",
+                "serializationLibrary",
+                "generateOneOfAnyOfWrappers",
             ]
             .contains(&key.as_str()),
             "Unsupported or unsafe generator option"
         );
+        if key == "generateOneOfAnyOfWrappers" {
+            ensure!(
+                value.is_boolean(),
+                "Union wrapper option requires a boolean"
+            );
+        } else if key == "serializationLibrary" {
+            ensure!(
+                matches!(
+                    value.as_str(),
+                    Some("moshi" | "gson" | "jackson" | "kotlinx_serialization")
+                ),
+                "Unsupported Kotlin serialization library"
+            );
+        }
         if let Some(text) = value.as_str() {
             ensure!(
                 !text.is_empty() && text.len() <= 128 && !text.contains(".."),
@@ -235,6 +259,52 @@ pub(crate) fn validate_options(input: &ProjectInput) -> Result<()> {
                 "Generator options require bounded strings or booleans"
             );
         }
+    }
+    if input.target == "kotlin" {
+        let wrappers = input
+            .options
+            .get("generateOneOfAnyOfWrappers")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let library = input
+            .options
+            .get("library")
+            .and_then(Value::as_str)
+            .unwrap_or("jvm-okhttp4");
+        let serializer = input
+            .options
+            .get("serializationLibrary")
+            .and_then(Value::as_str)
+            .unwrap_or("moshi");
+        if wrappers {
+            ensure!(
+                library == "jvm-retrofit2"
+                    && matches!(serializer, "gson" | "kotlinx_serialization"),
+                "Kotlin union wrappers require jvm-retrofit2 with gson or kotlinx_serialization"
+            );
+        }
+        let nodes = schema_resources::openapi_schema_nodes(&input.specification);
+        fn has_union(value: &Value, nodes: &std::collections::HashSet<usize>) -> bool {
+            if nodes.contains(&(std::ptr::from_ref(value) as usize))
+                && ["oneOf", "anyOf"].iter().any(|key| {
+                    value
+                        .get(key)
+                        .and_then(Value::as_array)
+                        .is_some_and(|items| !items.is_empty())
+                })
+            {
+                return true;
+            }
+            match value {
+                Value::Object(object) => object.values().any(|child| has_union(child, nodes)),
+                Value::Array(array) => array.iter().any(|child| has_union(child, nodes)),
+                _ => false,
+            }
+        }
+        ensure!(
+            !has_union(&input.specification, &nodes) || wrappers,
+            "Kotlin oneOf/anyOf schemas require explicit union wrappers and a supported library/serializer combination"
+        );
     }
     Ok(())
 }

@@ -76,6 +76,9 @@ async fn main() -> Result<()> {
         matches!(profile.as_str(), "core" | "binary" | "multipart" | "union"),
         "Unknown fixture profile"
     );
+    let options: BTreeMap<String, Value> =
+        serde_json::from_str(&args.next().unwrap_or_else(|| "{}".into()))?;
+    ensure!(args.next().is_none(), "Unexpected fixture argument");
     let runtime = ProjectRuntime::new(worker, Some(java))?;
     for version in versions.split(',') {
         ensure!(
@@ -102,7 +105,7 @@ async fn main() -> Result<()> {
             let input = ProjectInput {
                 target: target.into(),
                 specification: specification(version, &profile),
-                options: BTreeMap::new(),
+                options: options.clone(),
                 include_secrets: false,
                 templates: None,
             };

@@ -1721,5 +1721,8 @@
   "托管响应预览": "Hosted response preview",
   "删除托管计划任务及其待执行任务。": "Delete this hosted schedule and cancel its pending task.",
   "确认删除": "Confirm delete",
-  "自托管目标通过执行器队列派发，等待机器连接；不会退回服务端运行。每次计划只尝试一次。": "Self-hosted targets dispatch through the runner queue and wait for the machine to connect. They never fall back to server execution. Each occurrence attempts execution once."
+  "自托管目标通过执行器队列派发，等待机器连接；不会退回服务端运行。每次计划只尝试一次。": "Self-hosted targets dispatch through the runner queue and wait for the machine to connect. They never fall back to server execution. Each occurrence attempts execution once.",
+  "序列化库": "Serialization library",
+  "生成联合类型包装": "Generate union wrappers",
+  "Kotlin 联合类型需要启用包装，并选择 jvm-retrofit2 和 gson 或 kotlinx_serialization。默认 Moshi 不支持。": "Kotlin unions require wrappers with jvm-retrofit2 and gson or kotlinx_serialization. Default Moshi is unsupported."
 }

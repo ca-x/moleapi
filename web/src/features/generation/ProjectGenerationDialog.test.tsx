@@ -31,3 +31,17 @@ it("close and reopen discard a late project reply even when source and target ar
  view.rerender(<Theme><ProjectGenerationDialog open={false} specificationId="s" onOpenChange={()=>{}}/></Theme>);view.rerender(<Theme><ProjectGenerationDialog open specificationId="s" onOpenChange={()=>{}}/></Theme>);
  await act(async()=>finish({engine:"old",source_sha256:"old",archive_base64:"AA==",files:[{path:"old.rs",encoding:"utf8",content:"old-private-project",sha256:"h",bytes:19}]}));expect(screen.queryByDisplayValue("old-private-project")).toBeNull();expect(call.mock.calls.some(([path])=>path==="/api/generation/projects/cancel")).toBe(true);
 });
+it("submits typed Kotlin union controls and preserves them across locale changes",async()=>{
+ call.mockImplementation((path:string)=>path.endsWith("catalog")?Promise.resolve({java_available:true,targets:[{id:"kotlin",kind:"client",upstream_stability:"stable",options:{library:"jvm-okhttp4",serializationLibrary:"moshi",generateOneOfAnyOfWrappers:false}}]}):Promise.resolve({engine:"fixture",files:[],archive_base64:"AA==",source_sha256:"hash"}));
+ render(<Theme><ProjectGenerationDialog open specificationId="s" onOpenChange={()=>{}}/></Theme>);
+ const checkbox=await screen.findByRole("checkbox",{name:"Generate union wrappers"});
+ expect(checkbox.getAttribute("aria-checked")).toBe("false");
+ fireEvent.click(checkbox);
+ const fields=screen.getAllByRole("textbox");
+ fireEvent.change(fields.find(field=>field.getAttribute("placeholder")==="jvm-okhttp4")!,{target:{value:"jvm-retrofit2"}});
+ fireEvent.change(fields.find(field=>field.getAttribute("placeholder")==="moshi")!,{target:{value:"gson"}});
+ await act(()=>setLanguage("zh-CN"));
+ expect(screen.getByRole("checkbox",{name:"生成联合类型包装"}).getAttribute("aria-checked")).toBe("true");
+ fireEvent.click(screen.getByRole("button",{name:"生成项目"}));
+ await waitFor(()=>expect(call).toHaveBeenCalledWith("/api/generation/projects","POST",expect.objectContaining({target:"kotlin",options:{library:"jvm-retrofit2",serializationLibrary:"gson",generateOneOfAnyOfWrappers:true}})));
+});

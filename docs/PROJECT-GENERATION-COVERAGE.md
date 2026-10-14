@@ -183,3 +183,33 @@ Default Kotlin jvm-okhttp4 consumers passed all4 binary/multipart3.0.3/3.1.0 cas
 An actual multipart failure showed the API passing an explode=false list into the transport's repeated-part path. The pinned Apache-2.0 API compatibility template now uses the upstream collection helper for non-multi non-file arrays, retaining other form parts and mature transport/model behavior. Default jvm-okhttp4 only; explicit API overrides render with priority and preserve source. Both binary cases were regenerated/rerun after the change and passed. Generation65 passed (13 configured external-tool cases ignored), all8 explicit template rendering/override tests passed, and scoped strict Clippy/format/diff gates passed.
 
 This is bounded one-file/string-array evidence, not Kotlin union/other-library, multi-file/nested/custom part, delimiter/streaming/nonseekable/resume/browser/Android/platform coverage. These and remaining ecosystems/dynamic/schema/install requirements remain open. Source/license/digest and the reproduced defect are in `vendor/openapi-generator/compat/README.md`; the7.26.0 JAR remains unchanged.
+
+
+## Explicit Kotlin Retrofit/Gson tagged unions
+
+The catalog/dialog expose upstream `serializationLibrary` (default Moshi) and boolean
+`generateOneOfAnyOfWrappers` (default false). Union schemas require an explicit wrapper
+configuration; upstream supports `jvm-retrofit2` with `gson` or `kotlinx_serialization`.
+Unsupported combinations reject before emitter execution. Schema-node detection ignores
+literal examples/defaults and dictionary names. Defaults remain unchanged; default
+jvm-okhttp4/Moshi unions remain unsupported.
+
+Actual generated Retrofit/Gson wrappers passed3.0.3 and3.1.0 Gradle compile/call cases:
+14 real requests preserved the shared core wire contract and typed Cat/Dog decode/echo
+roundtrips. Generated Gson adapters rejected missing/unknown tags, missing variant fields
+and object-valued boolean fields. A pinned Retrofit API template moves path parameters
+before query parameters after reproducing Retrofit's runtime rejection of the upstream3.1
+signature. Named consumer arguments handle dialect-specific ordering; generated builds,
+serializers and transport stay upstream. Explicit API templates retain precedence.
+
+Tools: Generator7.26.0, Kotlin2.4.0, Retrofit3.0.0, Gson2.14.0, OkHttp5.4.0,
+Gradle8.14.5 and Temurin JDK21 on Linux. Generation regressions passed66 cases
+(14 configured external-tool cases ignored after adding the Retrofit override test),
+9 explicit template tests and10 owned project API tests passed. Four dialog tests,
+production frontend build and scoped strict Clippy/format checks passed. The actual dialog
+was exercised in Chromium in English and Chinese at390px; wrapper/library values persisted
+and the dialog stayed within the viewport. Catalog responses used trusted fixture data.
+
+This proves simple referenced tagged-oneOf with explicitly selected Retrofit/Gson.
+Kotlinx serialization runtime, default Moshi support, anyOf/nullable/nested/ambiguous
+unions and other Kotlin libraries/platforms remain required work.

@@ -86,3 +86,21 @@ Both3.0/3.1 cases passed using Gradle/JDK21 on Linux. The consumer bounds timeou
 
 
 Default Kotlin `jvm-okhttp4` also supports the trusted `binary` and `multipart` QA profiles. Consumers use its actual File APIs, named parameters and escaped `propertySize` receipt field; generated Gradle/source stays unchanged. All4 profile/dialect cases passed. Raw bytes, file name/MIME, Unicode text, required/optional repeated arrays and non-multi CSV use the same exact assertions as other clients. A pinned API compatibility template reuses upstream toMultiValue for non-multi non-file arrays instead of repeating them; explicit API overrides and other libraries retain their behavior. Kotlin union and broader file/platform scenarios remain separate gates.
+
+
+## Explicit Kotlin tagged union configuration
+
+For the supported upstream wrapper combination, generate fresh fixtures with:
+
+```sh
+python3 tools/projects/verify-runtime.py --worker /absolute/path/to/moleapi-server --java /absolute/path/to/java --output /absolute/path/to/new-fixtures --targets kotlin --profile union --generator-options '{"library":"jvm-retrofit2","serializationLibrary":"gson","generateOneOfAnyOfWrappers":true}' --jdk /absolute/path/to/jdk --gradle /absolute/path/to/gradle
+```
+
+Both3.0/3.1 cases compile the original Gradle build and use generated Retrofit services,
+Animal wrappers and registered Gson adapters. Core wire behavior plus Cat/Dog decode/echo
+and malformed variant rejection passed;14 actual requests. A library-specific compatibility
+API template orders path parameters before query parameters. Explicit templates keep priority.
+The fixture example accepts the same JSON options as its final positional argument;
+evidence records capture actual manifest options, including when reusing generated output.
+Default Moshi unions reject explicitly. Kotlinx serialization is exposed as an upstream
+supported wrapper choice but runtime parity is unverified; broader union shapes remain open.

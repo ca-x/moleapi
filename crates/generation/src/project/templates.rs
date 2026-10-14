@@ -91,6 +91,16 @@ pub(super) fn write_builtin(input: &ProjectInput, root: &Path) -> Result<bool> {
                 ),
             )]
         }
+        "kotlin"
+            if input.options.get("library").and_then(Value::as_str) == Some("jvm-retrofit2") =>
+        {
+            &[(
+                "api.mustache",
+                include_str!(
+                    "../../../../vendor/openapi-generator/compat/kotlin-jvm-retrofit2/api.mustache"
+                ),
+            )]
+        }
         _ => return Ok(false),
     };
     std::fs::create_dir_all(root)?;

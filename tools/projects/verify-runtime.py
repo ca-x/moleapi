@@ -498,11 +498,52 @@ KOTLIN_MULTIPART = r'''val bytes=byteArrayOf(0,1,2,13,10,255.toByte(),128.toByte
 '''
 
 
+KOTLIN_UNION = r'''import org.openapitools.client.apis.DefaultApi
+import org.openapitools.client.infrastructure.ApiClient
+import org.openapitools.client.auth.HttpBearerAuth
+import org.openapitools.client.models.*
+import okhttp3.OkHttpClient
+
+fun main() {
+    val http=OkHttpClient.Builder().connectTimeout(10,java.util.concurrent.TimeUnit.SECONDS).readTimeout(10,java.util.concurrent.TimeUnit.SECONDS)
+    val client=ApiClient(baseUrl=System.getenv("FIXTURE_URL"),okHttpClientBuilder=http)
+    val auth=HttpBearerAuth("bearer")
+    auth.bearerToken="fixture-token"
+    client.addAuthorization("bearerAuth",auth)
+    val api=client.createService(DefaultApi::class.java)
+    val pet=api.getPet(id=7,q="space & + 鼹鼠",xTest="moleapi-fixture").execute().body()!!
+    check(pet.id==7 && pet.status==Pet.Status.ready && pet.note==null)
+    val echoed=api.replacePet(id=7,pet=Pet(id=7,status=Pet.Status.ready,note="鼹鼠 \"quotes\" & +")).execute().body()!!
+    check(echoed.note=="鼹鼠 \"quotes\" & +")
+    val failure=api.failGet().execute()
+    check(failure.code()==400 && failure.errorBody()!!.string().contains("expected fixture failure"))
+    val cat=api.getAnimal("cat").execute().body()!!
+    check(cat.actualInstance is Cat && (cat.actualInstance as Cat).kind==Cat.Kind.cat && (cat.actualInstance as Cat).name=="鼹鼠 \"quotes\" & +")
+    val dog=api.getAnimal("dog").execute().body()!!
+    check(dog.actualInstance is Dog && (dog.actualInstance as Dog).kind==Dog.Kind.dog && (dog.actualInstance as Dog).barks)
+    check(api.echoAnimal(cat).execute().body()!!.actualInstance==cat.actualInstance)
+    check(api.echoAnimal(dog).execute().body()!!.actualInstance==dog.actualInstance)
+    val gson=client.getSerializerBuilder().create()
+    for (malformed in listOf("{}", "{\"kind\":\"bird\",\"name\":\"bad\"}", "{\"kind\":\"cat\"}", "{\"kind\":\"dog\",\"barks\":{}}")) {
+        var rejected=false
+        try { gson.fromJson(malformed,Animal::class.java) } catch (_:Exception) { rejected=true }
+        check(rejected) { "Malformed variant accepted: $malformed" }
+    }
+    val transport=http.build()
+    transport.connectionPool.evictAll()
+    transport.dispatcher.executorService.shutdown()
+    println("PASS Kotlin jvm-retrofit2 gson tagged union")
+}
+'''
+
 def kotlin_client(directory,url,args):
-    assert args.profile in {'core','binary','multipart'}, "Kotlin union profiles require their own consumers"
     assert args.gradle and args.gradle.is_file(), "Configure an explicit --gradle executable"
-    extra={'core':'','binary':KOTLIN_BINARY,'multipart':KOTLIN_MULTIPART}[args.profile]
-    (directory/'src/main/kotlin/RuntimeFixture.kt').write_text(KOTLIN_CORE.replace('__KOTLIN_EXTENDED__',extra))
+    if args.profile=='union':
+        source=KOTLIN_UNION
+    else:
+        extra={'core':'','binary':KOTLIN_BINARY,'multipart':KOTLIN_MULTIPART}[args.profile]
+        source=KOTLIN_CORE.replace('__KOTLIN_EXTENDED__',extra)
+    (directory/'src/main/kotlin/RuntimeFixture.kt').write_text(source)
     (directory/'runtime-fixture.init.gradle').write_text('''gradle.projectsEvaluated {
     rootProject.tasks.register('runtimeFixture', JavaExec) {
         dependsOn rootProject.tasks.named('classes')
@@ -847,6 +888,7 @@ def main():
     parser.add_argument("--jdk", type=Path)
     parser.add_argument("--maven", type=Path)
     parser.add_argument("--gradle", type=Path)
+    parser.add_argument("--generator-options", default="{}", help="Explicit JSON object passed to the fixture generator")
     parser.add_argument("--reuse-generated", action="store_true", help="Use only previously generated isolated fixtures")
     args = parser.parse_args()
     assert args.worker.is_absolute() and args.worker.is_file()
@@ -859,7 +901,7 @@ def main():
     if args.profile in {"binary","multipart","union"}:
         assert not {"python-fastapi","aspnetcore","spring"}.intersection(targets), "Extended profiles currently validate clients"
     if not args.reuse_generated:
-        run(["cargo", "run", "-p", "moleapi-generation", "--example", "fixture_projects", "--", str(args.output), str(args.worker), str(args.java), args.targets, args.versions, args.profile], REPO, timeout=300)
+        run(["cargo", "run", "-p", "moleapi-generation", "--example", "fixture_projects", "--", str(args.output), str(args.worker), str(args.java), args.targets, args.versions, args.profile, args.generator_options], REPO, timeout=300)
     evidence_path = args.output / "runtime-evidence.json"
     evidence = json.loads(evidence_path.read_text()) if evidence_path.exists() else []
     evidence = [record for record in evidence if (record["target"], record["dialect"], record.get("profile","core")) not in {(t,v,args.profile) for t in targets for v in versions}]
@@ -903,7 +945,7 @@ def main():
                     assert Fixture.observations == expected, Fixture.observations
                 manifest = json.loads((directory / "moleapi-generation.json").read_text())
                 source_digest = hashlib.sha256((directory / "fixture-source.json").read_bytes()).hexdigest()
-                evidence.append({"target": target, "dialect": version, "profile": args.profile, "engine": manifest["engine"], "fixture_sha256": source_digest, "result": "passed"})
+                evidence.append({"target": target, "dialect": version, "profile": args.profile, "engine": manifest["engine"], "options": manifest["options"], "fixture_sha256": source_digest, "result": "passed"})
                 (args.output / "runtime-evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
                 print(f"PASS {target}/{version}", flush=True)
     finally:

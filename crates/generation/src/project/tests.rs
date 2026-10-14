@@ -65,3 +65,64 @@ fn target_options_do_not_allow_paths_or_unsupported_properties() {
     input.options = BTreeMap::from([("templateDir".into(), Value::String("outside".into()))]);
     assert!(validate_options(&input).is_err());
 }
+
+#[test]
+fn kotlin_union_options_and_schema_guards_are_typed_and_literal_aware() {
+    let target = project_catalog()
+        .unwrap()
+        .into_iter()
+        .find(|t| t.id == "kotlin")
+        .unwrap();
+    assert_eq!(target.options["serializationLibrary"], "moshi");
+    assert_eq!(target.options["generateOneOfAnyOfWrappers"], false);
+    let mut input = ProjectInput {
+        target: "kotlin".into(),
+        specification: serde_json::json!({"openapi":"3.1.0", "components":{"schemas":{"Animal":{"oneOf":[{"type":"string"},{"type":"integer"}]}}}}),
+        options: BTreeMap::new(),
+        include_secrets: false,
+        templates: None,
+    };
+    assert!(validate_options(&input).is_err());
+    input
+        .options
+        .insert("generateOneOfAnyOfWrappers".into(), true.into());
+    assert!(validate_options(&input).is_err());
+    input
+        .options
+        .insert("library".into(), "jvm-retrofit2".into());
+    input
+        .options
+        .insert("serializationLibrary".into(), "gson".into());
+    validate_options(&input).unwrap();
+    input.options.insert(
+        "serializationLibrary".into(),
+        "kotlinx_serialization".into(),
+    );
+    validate_options(&input).unwrap();
+    for value in [
+        serde_json::json!(true),
+        serde_json::json!("unknown"),
+        serde_json::json!("../gson"),
+    ] {
+        input.options.insert("serializationLibrary".into(), value);
+        assert!(validate_options(&input).is_err());
+    }
+    input
+        .options
+        .insert("serializationLibrary".into(), "gson".into());
+    input
+        .options
+        .insert("generateOneOfAnyOfWrappers".into(), "true".into());
+    assert!(validate_options(&input).is_err());
+    input.options.clear();
+    input.specification = serde_json::json!({"openapi":"3.1.0","components":{"schemas":{"oneOf":{"type":"object","properties":{"anyOf":{"type":"string"}},"example":{"oneOf":[{},{}]},"default":{"anyOf":[{},{}]}}}},"paths":{"/oneOf":{"get":{"responses":{"200":{"content":{"application/json":{"example":{"oneOf":[{},{}]}}}}}}}}});
+    validate_options(&input).unwrap();
+    input.specification["components"]["schemas"]["oneOf"]["properties"]["nested"] =
+        serde_json::json!({"items":{"anyOf":[{"type":"string"},{"type":"integer"}]}});
+    assert!(validate_options(&input).is_err());
+    input.target = "java".into();
+    input
+        .options
+        .insert("serializationLibrary".into(), "gson".into());
+    assert!(validate_options(&input).is_err());
+}
