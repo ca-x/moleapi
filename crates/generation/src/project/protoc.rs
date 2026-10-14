@@ -28,6 +28,12 @@ impl ProjectRuntime {
             "Unsupported protoc language"
         );
         ensure!(
+            language != "kotlin"
+                || !self.grpc_plugins.contains_key("kotlin")
+                || self.grpc_plugins.contains_key("java"),
+            "Kotlin gRPC generation requires an explicitly configured Java gRPC plugin"
+        );
+        ensure!(
             serde_json::to_vec(&input.specification)?.len() <= SPEC_LIMIT,
             "Protobuf generation source limit exceeded"
         );
@@ -79,14 +85,21 @@ impl ProjectRuntime {
         if language == "kotlin" {
             command.arg(format!("--java_out={}", output.display()));
         }
-        if let Some(plugin) = self.grpc_plugins.get(language) {
-            if plugin.canonicalize()? != compiler.canonicalize()? {
-                command.arg(format!(
-                    "--plugin=protoc-gen-grpc_{language}={}",
-                    plugin.display()
-                ));
+        let mut plugin_languages = vec![language];
+        if language == "kotlin" && self.grpc_plugins.contains_key("kotlin") {
+            // Coroutine stubs use Java gRPC method descriptors in addition to Java messages.
+            plugin_languages.push("java");
+        }
+        for plugin_language in plugin_languages {
+            if let Some(plugin) = self.grpc_plugins.get(plugin_language) {
+                if plugin.canonicalize()? != compiler.canonicalize()? {
+                    command.arg(format!(
+                        "--plugin=protoc-gen-grpc_{plugin_language}={}",
+                        plugin.display()
+                    ));
+                }
+                command.arg(format!("--grpc_{plugin_language}_out={}", output.display()));
             }
-            command.arg(format!("--grpc_{language}_out={}", output.display()));
         }
         command.args(&entries);
         #[cfg(windows)]
@@ -124,7 +137,12 @@ impl ProjectRuntime {
         );
         files.insert("descriptor-set.bin".into(), bytes.into());
         let grpc = self.grpc_plugins.contains_key(language);
-        files.insert("README.md".into(),format!("Generated with the explicitly configured official protoc for {language}. gRPC plugin output: {grpc}. Install the matching language protobuf{} runtime before compiling. This artifact does not execute target code, download plugins or overwrite authored files. Original source and descriptor are included.\n",if grpc {" and gRPC"}else{""}).into_bytes().into());
+        let grpc_dependency = if language == "kotlin" && grpc {
+            " Kotlin coroutine interfaces use the included Java gRPC service classes; install matching Java/Kotlin protobuf and gRPC coroutine runtimes."
+        } else {
+            ""
+        };
+        files.insert("README.md".into(),format!("Generated with the explicitly configured official protoc for {language}. gRPC plugin output: {grpc}. Install the matching language protobuf{} runtime before compiling.{grpc_dependency} This artifact does not execute target code, download plugins or overwrite authored files. Original source and descriptor are included.\n",if grpc {" and gRPC"}else{""}).into_bytes().into());
         // Query only this explicitly configured executable; no ambient tool discovery.
         let mut version = Command::new(compiler)
             .arg("--version")

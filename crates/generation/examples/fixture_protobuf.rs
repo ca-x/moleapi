@@ -20,11 +20,20 @@ async fn main() -> Result<()> {
         let plugin = PathBuf::from(args.next().context("Absolute gRPC plugin required")?);
         let language = args.next().unwrap_or_else(|| "python".into());
         ensure!(
-            matches!(language.as_str(), "python" | "java" | "csharp"),
+            matches!(language.as_str(), "python" | "java" | "csharp" | "kotlin"),
             "Unsupported QA consumer language"
         );
-        let runtime = ProjectRuntime::new(worker, None)?
-            .with_protoc(Some(compiler), BTreeMap::from([(language.clone(), plugin)]))?;
+        let mut plugins = BTreeMap::from([(language.clone(), plugin)]);
+        if language == "kotlin" {
+            plugins.insert(
+                "java".into(),
+                PathBuf::from(
+                    args.next()
+                        .context("Explicit Java gRPC helper plugin required for Kotlin")?,
+                ),
+            );
+        }
+        let runtime = ProjectRuntime::new(worker, None)?.with_protoc(Some(compiler), plugins)?;
         (runtime, format!("protobuf-{language}"))
     };
     ensure!(args.next().is_none(), "Unexpected argument");

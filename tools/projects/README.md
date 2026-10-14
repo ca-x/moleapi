@@ -345,3 +345,27 @@ Unicode/oneof-zero/Timestamp data. Recorded tools: .NET10.0.401/Linux, protoc36.
 Grpc.Tools2.84.0 plugin (NuGet repository signature verified), Google.Protobuf3.36.1 and
 gRPC.NET2.84.0. Python regression passed8 further RPCs. Other ranges/options/platforms
 require separate evidence; product preview/export never executes this tool.
+
+
+## Explicit Kotlin + Java protobuf/gRPC consumer
+
+Kotlin gRPC coroutine stubs need Java gRPC service classes as well as Java messages.
+Configure both MOLEAPI_CODEGEN_GRPC_KOTLIN and MOLEAPI_CODEGEN_GRPC_JAVA for product
+runtime; missing Java helpers fail before tool execution. Kotlin message-only targets
+need neither plugin. For trusted QA use the final kotlin selector and explicit Java
+helper path, then build/call original outputs with the separate Gradle consumer:
+
+```sh
+cargo run -p moleapi-generation --example fixture_protobuf -- /absolute/kotlin-qa-output /absolute/moleapi-server /absolute/protoc /absolute/kotlin-plugin-launcher kotlin /absolute/protoc-gen-grpc-java
+python3 tools/projects/verify-protobuf-kotlin.py /absolute/kotlin-qa-output/source --jdk /absolute/jdk --gradle /absolute/gradle
+python3 tools/projects/verify-protobuf-kotlin.py /absolute/kotlin-qa-output/descriptor --jdk /absolute/jdk --gradle /absolute/gradle
+```
+
+The official Kotlin plugin is a JAR; use an explicit executable launcher selecting an
+absolute trusted JDK/JAR, as documented by grpc-kotlin. No ambient Java discovery or
+product download is introduced. Verified Kotlin1.5.0 JAR/Java1.84.1 plugin/protoc36.1
+outputs passed8 coroutine RPCs across source/descriptor with unchanged source hashes,
+Gradle dependency locks and resolved tool/runtime evidence. Recorded Linux tools:
+Gradle8.14.5/Kotlin2.4.0/JDK21.0.12.1+1, protobuf Java/Kotlin4.36.1,
+gRPC Java1.84.1/grpc-kotlin-stub1.5.0/coroutines1.10.2. Other ranges/options/platforms
+remain their own gates; product preview/export never executes this consumer.

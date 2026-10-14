@@ -1321,3 +1321,105 @@ async fn official_csharp_plugin_emits_imported_models_and_four_rpc_service_inter
     );
     assert!(artifact.engine.contains("grpc-plugin=true"));
 }
+
+#[tokio::test]
+async fn kotlin_grpc_requires_java_service_plugin_before_tool_execution() {
+    let executable = std::env::current_exe().unwrap();
+    let runtime = ProjectRuntime::new(executable.clone(), None)
+        .unwrap()
+        .with_protoc(
+            Some(executable.clone()),
+            BTreeMap::from([("kotlin".into(), executable)]),
+        )
+        .unwrap();
+    let specification = serde_json::from_str(include_str!(
+        "../../../tools/projects/fixtures/protobuf-imports.json"
+    ))
+    .unwrap();
+    let error = runtime
+        .generate(
+            ProjectInput {
+                target: "protobuf-kotlin".into(),
+                specification,
+                options: BTreeMap::new(),
+                include_secrets: false,
+                templates: None,
+            },
+            CancellationToken::new(),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("explicitly configured Java gRPC plugin"),
+        "{error}"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires explicitly configured protoc and official Kotlin/Java gRPC plugins"]
+async fn official_kotlin_plugin_emits_coroutine_and_java_service_interfaces() {
+    let compiler =
+        PathBuf::from(std::env::var_os("MOLEAPI_CODEGEN_TEST_PROTOC").expect("explicit protoc"));
+    let kotlin = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_GRPC_KOTLIN").expect("explicit Kotlin plugin"),
+    );
+    let java = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_GRPC_JAVA").expect("explicit Java plugin"),
+    );
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), None)
+        .unwrap()
+        .with_protoc(
+            Some(compiler),
+            BTreeMap::from([("kotlin".into(), kotlin), ("java".into(), java)]),
+        )
+        .unwrap();
+    let specification = serde_json::from_str(include_str!(
+        "../../../tools/projects/fixtures/protobuf-imports.json"
+    ))
+    .unwrap();
+    let artifact = runtime
+        .generate(
+            ProjectInput {
+                target: "protobuf-kotlin".into(),
+                specification,
+                options: BTreeMap::new(),
+                include_secrets: false,
+                templates: None,
+            },
+            CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert!(
+        artifact
+            .files
+            .iter()
+            .any(|file| file.path == "fixture/Types.java")
+    );
+    assert!(
+        artifact
+            .files
+            .iter()
+            .any(|file| file.path == "fixture/EchoKt.kt")
+    );
+    assert!(
+        artifact
+            .files
+            .iter()
+            .any(|file| file.path == "fixture/EchoServiceGrpc.java")
+    );
+    let service = artifact
+        .files
+        .iter()
+        .find(|file| file.path == "fixture/FixtureGrpcKt.kt")
+        .unwrap();
+    assert!(
+        service.content.contains("EchoServiceCoroutineStub")
+            && service.content.contains("EchoServiceCoroutineImplBase")
+    );
+    for method in ["call", "watch", "collect", "chat"] {
+        assert!(service.content.contains(method), "Missing Kotlin {method}");
+    }
+}

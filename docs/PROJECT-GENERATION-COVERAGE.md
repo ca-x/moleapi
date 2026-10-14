@@ -943,3 +943,41 @@ configured C#-plugin four-mode fixture separately from message-only integration.
 Product preview/export never installs SDKs/plugins/packages or executes consumers. Other
 .NET/plugin/runtime/dependency ranges, libraries/platforms, TLS/auth/advanced schemas/
 options and remaining languages/plugins stay full-module work.
+
+
+## Kotlin protobuf/gRPC Java service dependencies and coroutine calls
+
+A real configured Kotlin-plugin generation test reproduced missing
+fixture/EchoServiceGrpc.java: the Kotlin coroutine output references Java gRPC method
+and service descriptors, while the old route invoked only the Kotlin plugin despite a
+configured Java helper. Kotlin gRPC now requires explicit MOLEAPI_CODEGEN_GRPC_KOTLIN
+and MOLEAPI_CODEGEN_GRPC_JAVA executables, invoking both in one bounded protoc process.
+Absent Java helpers reject before tool execution. Kotlin message-only output still uses
+builtin Java/Kotlin messages without gRPC plugins; unrelated targets retain their own
+selection. Original descriptor/path/file-count/output/deadline/process-group fences
+cover both plugin children. Generated README documents the Java/Kotlin runtime dependency.
+No custom service descriptor, model codec or plugin emitter replaced mature generation.
+
+Official Kotlin plugin1.5.0 JAR published SHA256 was verified:
+`da938e9047a7973d53916eee33a1465adce1e72dce75127474b8808388023026`.
+A trusted QA launcher selects the existing absolute JDK21 with a256MiB heap; it follows
+the official executable-wrapper instructions at
+https://github.com/grpc/grpc-kotlin/blob/master/compiler/README.md. Original JAR/plugin
+bytes are retained; Java plugin1.84.1 integrity is recorded in its earlier section.
+QA uses explicit protoc36.1 and unchanged generated Java messages/gRPC helpers plus
+Kotlin model DSL/coroutine stubs and server interfaces.
+
+Both source/descriptor separate consumers compiled on Gradle8.14.5/Kotlin2.4.0 /
+Temurin21.0.12.1+1/Linux with protobuf Java/Kotlin4.36.1, gRPC Java1.84.1,
+grpc-kotlin-stub1.5.0 and coroutines1.10.2. Eight actual Netty loopback coroutine unary/
+server-stream/client-stream/bidirectional RPCs preserved typed enum/repeated/Unicode/
+non-UTF8 bytes, oneof-zero presence and Timestamp. Original source hashes remain unchanged
+and match across representations; resolved dependency locks, tool/hash/descriptor/runtime
+evidence remain in isolated QA. Channels/servers terminate after completed streams.
+
+Python default fixture regression passed8 RPCs; all5 explicitly configured plugin/builtin
+checks,79 normal generation cases (38 external-tool cases ignored),11 owned API cases,
+fixture parser tests and scoped strict Clippy/format passed. Catalog validation names
+representative configured Kotlin+Java four-mode evidence. Product preview never acquires
+plugins/JDKs/dependencies or executes consumers. Other Kotlin toolchain/runtime/library/
+platform/options/schema/TLS/auth behavior and remaining plugins stay full-module scope.
