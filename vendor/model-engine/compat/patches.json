@@ -1,0 +1,24 @@
+{
+  "package": "quicktype-core",
+  "version": "26.0.0",
+  "patches": [
+    {
+      "file": "dist/esm/language/TypeScriptFlow/FlowRenderer.js",
+      "patch": "FlowRenderer.patch",
+      "original_sha256": "588cd9b99534f736728800645de98452d4c58941cf47c75fa66d8b26160a1688",
+      "patched_sha256": "dc1feb0a7c23a04688dd62de8836903dd3e2a2f2c92615ab57154a089ed6f20b"
+    },
+    {
+      "file": "dist/esm/language/JavaScript/JavaScriptRenderer.js",
+      "patch": "JavaScriptRenderer.patch",
+      "original_sha256": "7d0562b94218569b96463d110307f800bfb35e56263a4b8b0fd55a5ab0bdbe67",
+      "patched_sha256": "910bbc260f8a72c33b877ad89b4d69749e63411058ba70237eea377c73bbe9e9"
+    },
+    {
+      "file": "dist/esm/language/Elm/ElmRenderer.js",
+      "patch": "ElmRenderer.patch",
+      "original_sha256": "1eb9b5af13cbc49db710f45230edb648ecf840e0828d9e1e3db624fa54b02893",
+      "patched_sha256": "adb0a6026795505143b4c9d71d213ccd5babc711495c2b37ca8d6286c5c2721f"
+    }
+  ]
+}

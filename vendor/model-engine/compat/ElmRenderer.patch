@@ -1,0 +1,140 @@
+--- a/dist/esm/language/Elm/ElmRenderer.js
++++ b/dist/esm/language/Elm/ElmRenderer.js
+@@ -1,7 +1,7 @@
+ import { arrayIntercalate, mapContains } from "collection-utils";
+ import { anyTypeIssueAnnotation, nullTypeIssueAnnotation, } from "../../Annotation.js";
+ import { ConvenienceRenderer, } from "../../ConvenienceRenderer.js";
+-import { DependencyName } from "../../Naming.js";
++import { DependencyName, Namespace } from "../../Naming.js";
+ import { annotated, multiWord, parenIfNeeded, singleWord, } from "../../Source.js";
+ import { decapitalize } from "../../support/Strings.js";
+ import { defined } from "../../support/Support.js";
+@@ -14,6 +14,8 @@
+         this._options = _options;
+         this._topLevelDependents = new Map();
+         this._namedTypeDependents = new Map();
++        this._constructorNamespaces = new Map();
++        this._constructorArguments = new Map();
+     }
+     forbiddenNamesForGlobalNamespace() {
+         return forbiddenNames;
+@@ -39,6 +41,18 @@
+         this._namedTypeDependents.set(typeName, { encoder, decoder });
+         return [encoder, decoder];
+     }
++    makePropertyDependencyNames(c, _className, _property, _jsonName, name) {
++        if (!this.isCycleBreakerType(c)) return [];
++        let namespace = this._constructorNamespaces.get(c);
++        if (namespace === undefined) {
++            namespace = new Namespace("elm-constructor", this.globalNamespace, new Set([this.globalNamespace]), []);
++            this._constructorNamespaces.set(c, namespace);
++        }
++        const argument = new DependencyName(lowerNamingFunction, name.order, lookup => `${lookup(name)}_value`);
++        namespace.add(argument);
++        this._constructorArguments.set(name, argument);
++        return [];
++    }
+     namerForObjectProperty() {
+         return lowerNamingFunction;
+     }
+@@ -80,6 +94,13 @@
+     }
+     get arrayType() {
+         return this._options.useList ? "List" : "Array";
++    }
++    // Elm aliases cannot be recursive; reuse Quicktype's graph cycle analysis.
++    isImplicitCycleBreaker(t) {
++        return t.kind === "union" && nullableFromUnion(t) === null;
++    }
++    canBreakCycles(t) {
++        return t.kind === "class";
+     }
+     elmType(t, noOptional = false) {
+         return matchType(t, (_anyType) => singleWord(annotated(anyTypeIssueAnnotation, "Jdec.Value")), (_nullType) => singleWord(annotated(nullTypeIssueAnnotation, "()")), (_boolType) => singleWord("Bool"), (_integerType) => singleWord("Int"), (_doubleType) => singleWord("Float"), (_stringType) => singleWord("String"), (arrayType) => multiWord(" ", this.arrayType, parenIfNeeded(this.elmType(arrayType.items))), (classType) => singleWord(this.nameForNamedType(classType)), (mapType) => multiWord(" ", "Dict String", parenIfNeeded(this.elmType(mapType.values))), (enumType) => singleWord(this.nameForNamedType(enumType)), (unionType) => {
+@@ -104,7 +125,7 @@
+         return defined(this._namedTypeDependents.get(name)).decoder;
+     }
+     decoderNameForType(t, noOptional = false) {
+-        return matchType(t, (_anyType) => singleWord("Jdec.value"), (_nullType) => multiWord(" ", "Jdec.null", "()"), (_boolType) => singleWord("Jdec.bool"), (_integerType) => singleWord("Jdec.int"), (_doubleType) => singleWord("Jdec.float"), (_stringType) => singleWord("Jdec.string"), (arrayType) => multiWord(" ", ["Jdec.", decapitalize(this.arrayType)], parenIfNeeded(this.decoderNameForType(arrayType.items))), (classType) => singleWord(this.decoderNameForNamedType(classType)), (mapType) => multiWord(" ", "Jdec.dict", parenIfNeeded(this.decoderNameForType(mapType.values))), (enumType) => singleWord(this.decoderNameForNamedType(enumType)), (unionType) => {
++        return matchType(t, (_anyType) => singleWord("Jdec.value"), (_nullType) => multiWord(" ", "Jdec.null", "()"), (_boolType) => singleWord("Jdec.bool"), (_integerType) => singleWord("Jdec.int"), (_doubleType) => singleWord("Jdec.float"), (_stringType) => singleWord("Jdec.string"), (arrayType) => multiWord(" ", ["Jdec.", decapitalize(this.arrayType)], parenIfNeeded(this.decoderNameForType(arrayType.items))), (classType) => multiWord(" ", "Jdec.lazy", ["(\\_ -> ", this.decoderNameForNamedType(classType), ")"]), (mapType) => multiWord(" ", "Jdec.dict", parenIfNeeded(this.decoderNameForType(mapType.values))), (enumType) => singleWord(this.decoderNameForNamedType(enumType)), (unionType) => {
+             const nullable = nullableFromUnion(unionType);
+             if (nullable !== null) {
+                 const nullableDecoder = this.decoderNameForType(nullable);
+@@ -162,8 +183,9 @@
+             description.push(...propertyDescription);
+         });
+         this.emitDescription(description);
+-        this.emitLine("type alias ", className, " =");
+-        this.indent(() => {
++        const wrapped = this.isCycleBreakerType(c);
++        this.emitLine(wrapped ? "type " : "type alias ", className, " =");
++        const emitFields = () => {
+             let onFirst = true;
+             this.forEachClassProperty(c, "none", (name, _jsonName, p) => {
+                 this.emitLine(onFirst ? "{" : ",", " ", name, " : ", this.elmProperty(p));
+@@ -173,6 +195,14 @@
+                 this.emitLine("{");
+             }
+             this.emitLine("}");
++        };
++        this.indent(() => {
++            if (wrapped) {
++                this.emitLine(className);
++                this.indent(emitFields);
++            } else {
++                emitFields();
++            }
+         });
+     }
+     emitEnumDefinition(e, enumName) {
+@@ -215,11 +245,19 @@
+         this.emitLine(encoder, " r = Jenc.encode 0 (", this.encoderNameForType(t).source, " r)");
+     }
+     emitClassFunctions(c, className) {
++        const wrapped = this.isCycleBreakerType(c);
+         const decoderName = this.decoderNameForNamedType(c);
+         this.emitLine(decoderName, " : Jdec.Decoder ", className);
+         this.emitLine(decoderName, " =");
+         this.indent(() => {
+-            this.emitLine("Jdec.succeed ", className);
++            if (wrapped) {
++                const fields = [];
++                this.forEachClassProperty(c, "none", (name) => fields.push({name, argument: defined(this._constructorArguments.get(name))}));
++                this.emitLine("Jdec.succeed (\\", arrayIntercalate(" ", fields.map(field => field.argument)), " -> ", className,
++                    " { ", arrayIntercalate(", ", fields.map(field => [field.name, " = ", field.argument])), " })");
++            } else {
++                this.emitLine("Jdec.succeed ", className);
++            }
+             this.indent(() => {
+                 this.forEachClassProperty(c, "none", (_, jsonName, p) => {
+                     const propDecoder = parenIfNeeded(this.decoderNameForProperty(p));
+@@ -231,7 +269,7 @@
+         this.ensureBlankLine();
+         const encoderName = this.encoderNameForNamedType(c);
+         this.emitLine(encoderName, " : ", className, " -> Jenc.Value");
+-        this.emitLine(encoderName, " x =");
++        this.emitLine(encoderName, " ", wrapped ? ["(", className, " x)"] : "x", " =");
+         this.indent(() => {
+             this.emitLine("Jenc.object");
+             this.indent(() => {
+@@ -333,17 +371,17 @@
+     emitSourceStructure() {
+         const exports = [];
+         const topLevelDecoders = [];
+-        this.forEachTopLevel("none", (_, name) => {
++        this.forEachTopLevel("none", (t, name) => {
+             let { encoder, decoder } = defined(this._topLevelDependents.get(name));
+             if (decoder === undefined) {
+                 decoder = defined(this._namedTypeDependents.get(name)).decoder;
+             }
+             topLevelDecoders.push(decoder);
+-            exports.push(name, encoder, decoder);
++            exports.push(t.kind === "class" && this.isCycleBreakerType(t) ? [name, "(..)"] : name, encoder, decoder);
+         });
+         this.forEachObject("none", (t, name) => {
+             if (!mapContains(this.topLevels, t))
+-                exports.push(name);
++                exports.push(this.isCycleBreakerType(t) ? [name, "(..)"] : name);
+         });
+         this.forEachEnum("none", (t, name) => {
+             if (!mapContains(this.topLevels, t))

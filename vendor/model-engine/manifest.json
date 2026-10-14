@@ -2,7 +2,7 @@
   "engine": "quicktype-core",
   "version": "26.0.0",
   "schema_converter": "@openapi-contrib/openapi-schema-to-json-schema@5.1.0",
-  "sha256": "1f3c0dd2b192c45165ed0b6bfa0dfb01850426164be20b60944f6fbc22c339fc",
+  "sha256": "8522583820e9924a37659010afd0b04bc5a25a56ebf0ba8eecfaaa12656834c3",
   "targets": [
     {
       "id": "model-c++",

@@ -1,0 +1,34 @@
+--- a/dist/esm/language/JavaScript/JavaScriptRenderer.js
++++ b/dist/esm/language/JavaScript/JavaScriptRenderer.js
+@@ -266,11 +266,11 @@
+         const result${anyAnnotation} = {};
+         Object.getOwnPropertyNames(props).forEach(key => {
+             const prop = props[key];
+-            const v = Object.prototype.hasOwnProperty.call(val, key) ? val[key] : undefined;
++            const v = ${this.targetLanguage.name === "flow" ? "Object.hasOwn(val, key)" : "Object.prototype.hasOwnProperty.call(val, key)"} ? val[key] : undefined;
+             result[prop.key] = transform(v, prop.typ, getProps, key, ref);
+         });
+         Object.getOwnPropertyNames(val).forEach(key => {
+-            if (!Object.prototype.hasOwnProperty.call(props, key)) {
++            if (!${this.targetLanguage.name === "flow" ? "Object.hasOwn(props, key)" : "Object.prototype.hasOwnProperty.call(props, key)"}) {
+                 result[key] = ${this._jsOptions.runtimeTypecheckIgnoreUnknownProperties
+                 ? "val[key]"
+                 : "transform(val[key], additional, getProps, key, ref)"};
+@@ -291,15 +291,13 @@
+         typ = typeMap[typ.ref];
+     }
+     if (Array.isArray(typ)) return transformEnum(typ, val);
+-    if (typeof typ === "object") {
++${this.targetLanguage.name === "flow" ? '    // Check Date before object refinement in modern Flow.\n    if (Object.is(typ, Date) && typeof val !== "number") return transformDate(val);\n' : ""}    if (typeof typ === "object") {
+         return typ.hasOwnProperty("unionMembers") ? transformUnion(typ.unionMembers, val)
+             : typ.hasOwnProperty("arrayItems")    ? transformArray(typ.arrayItems, val)
+             : typ.hasOwnProperty("props")         ? transformObject(getProps(typ), typ.additional, val)
+             : invalidValue(typ, val, key, parent);
+     }
+-    // Numbers can be parsed by Date but shouldn't be.
+-    if (typ === Date && typeof val !== "number") return transformDate(val);
+-    return transformPrimitive(typ, val);
++${this.targetLanguage.name === "flow" ? "" : '    // Numbers can be parsed by Date but shouldn\'t be.\n    if (typ === Date && typeof val !== "number") return transformDate(val);\n'}    return transformPrimitive(typ, val);
+ }
+ 
+ ${this.castFunctionLines[0]} {
