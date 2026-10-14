@@ -42,3 +42,27 @@ require separate acceptance; do not infer blanket Elm/schema compatibility.
 
 Both changed targets identify quicktype-core@26.0.0+moleapi.1 in generation artifacts.
 Other16 Quicktype model target outputs match their original sources byte for byte.
+
+
+## Pike native property and container conversion
+
+Actual Pike8.0.1956 compiled the original source but retained JSON mappings for nested
+Pet properties and accepted an unknown Status value. The original PikeRenderer SHA
+and patched SHA are recorded in patches.json. Property conversion now invokes the
+mature generated model/enum converters, reusing Pike's native map operation for
+array/map members. Top-level container conversion uses the same expression rather
+than the old one-level class-only dispatch. Native JSON encoding, member naming,
+class shapes, primitive representation and nonnullable union behavior remain upstream.
+
+Nullable properties preserve native Standards.JSON.null and UNDEFINED; optional
+missing fields remain UNDEFINED rather than attempting model conversion. Enum
+converters compare the existing generated constants and reject unmapped values
+without exposing the source payload. A dedicated actual consumer requires native
+nested model objects in direct/array/map/top-level containers and verifies zero,
+Unicode, explicit null and enum-array rejection. Standard UTF8 conversion is performed
+at the QA file/console boundary; the model codec itself is not replaced.
+
+Both3.0.3/3.1.0 core/container cases pass.17 other model target outputs remain
+byte-identical. Pike artifacts identify26.0.0+moleapi.1. Optional/null membership,
+complex union/scalar validation, other input/container shapes and Pike/runtime/
+platform ranges require separate acceptance within the full module.

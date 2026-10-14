@@ -19,6 +19,12 @@
       "patch": "ElmRenderer.patch",
       "original_sha256": "1eb9b5af13cbc49db710f45230edb648ecf840e0828d9e1e3db624fa54b02893",
       "patched_sha256": "adb0a6026795505143b4c9d71d213ccd5babc711495c2b37ca8d6286c5c2721f"
+    },
+    {
+      "file": "dist/esm/language/Pike/PikeRenderer.js",
+      "patch": "PikeRenderer.patch",
+      "original_sha256": "88f86469d8c0c992a18561185352646b79761f4e27521bc55b9110d02a54f684",
+      "patched_sha256": "7c4772e97856a7ab96f9009245ba20bd5dd133511a6fa124db65d85186051e13"
     }
   ]
 }

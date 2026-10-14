@@ -37,6 +37,7 @@ pub(super) fn catalog() -> Result<Vec<ProjectTarget>> {
                 | "model-swift"
                 | "model-flow"
                 | "model-elm"
+                | "model-pike"
         ) {
             target.validation = "representative-3.0-3.1-native-model-roundtrip-fixture".into();
         }
@@ -120,7 +121,10 @@ pub(super) fn generate(input: &ProjectInput) -> Result<ProjectArtifact> {
     })?;
     ensure!(rendered.len() <= IPC_LIMIT, "Model output limit exceeded");
     let files: BTreeMap<String, String> = serde_json::from_str(&rendered)?;
-    let engine = if matches!(input.target.as_str(), "model-flow" | "model-elm") {
+    let engine = if matches!(
+        input.target.as_str(),
+        "model-flow" | "model-elm" | "model-pike"
+    ) {
         format!("{ENGINE}+moleapi.1")
     } else {
         ENGINE.to_owned()
