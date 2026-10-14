@@ -721,3 +721,61 @@ async fn explicit_php_api_template_overrides_form_collection_compatibility_defau
             .contains("explicit PHP API")
     );
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured Java17+ test runtime"]
+async fn explicit_php_model_and_serializer_templates_override_union_compatibility_defaults() {
+    let java = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_JAVA").expect("explicit Java executable"),
+    );
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), Some(java)).unwrap();
+    let input = ProjectInput {
+        target: "php".into(),
+        options: BTreeMap::new(),
+        include_secrets: false,
+        specification: json!({"openapi":"3.0.3","info":{"title":"PHP union override","version":"1"},"paths":{},"components":{"schemas":{"Cat":{"type":"object","properties":{"kind":{"type":"string"}}},"Dog":{"type":"object","properties":{"kind":{"type":"string"}}},"Animal":{"oneOf":[{"$ref":"#/components/schemas/Cat"},{"$ref":"#/components/schemas/Dog"}],"discriminator":{"propertyName":"kind","mapping":{"cat":"#/components/schemas/Cat","dog":"#/components/schemas/Dog"}}}}}}),
+        templates: Some(TemplateBundle {
+            format: "moleapi-codegen-templates-v1".into(),
+            outputs: BTreeMap::new(),
+            files: vec![
+                TemplateFile {
+                    path: "model_generic.mustache".into(),
+                    content: "// explicit PHP model {{classname}}\n".into(),
+                    encoding: None,
+                },
+                TemplateFile {
+                    path: "ObjectSerializer.mustache".into(),
+                    content: "<?php // explicit PHP serializer\n".into(),
+                    encoding: None,
+                },
+            ],
+        }),
+    };
+    let result = runtime
+        .generate(input, CancellationToken::new())
+        .await
+        .unwrap();
+    let model = result
+        .files
+        .iter()
+        .find(|file| file.path.ends_with("/Model/Animal.php"))
+        .unwrap();
+    assert!(model.content.contains("explicit PHP model Animal"));
+    assert!(!model.content.contains("DISCRIMINATOR_MAPPING"));
+    let serializer = result
+        .files
+        .iter()
+        .find(|file| file.path.ends_with("ObjectSerializer.php"))
+        .unwrap();
+    assert!(serializer.content.contains("explicit PHP serializer"));
+    assert!(!serializer.content.contains("mappedOneOf"));
+    assert!(
+        result
+            .files
+            .iter()
+            .find(|file| file.path == "moleapi-templates.json")
+            .unwrap()
+            .content
+            .contains("explicit PHP serializer")
+    );
+}

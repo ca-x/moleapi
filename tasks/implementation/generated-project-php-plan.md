@@ -39,3 +39,20 @@ with2 focused protocol/ownership regressions. Actual multipart array flattening 
 through pinned default-Guzzle API metadata/collection serializer, scoped to selected
 multipart.10 explicit override tests,78 generation cases,11 API cases and strict scoped
 Clippy/formatting passed. Other libraries, unions and advanced file/platform scope remain open.
+
+
+Continuation: inspect/verify default referenced tagged-oneOf models and real Cat/Dog
+GET/decode/model POST echoes in3.0/3.1. Consumers must assert actual generated variants,
+not merged parent fields. Add missing/unknown discriminator and required subtype-field
+rejection. Repair mature mapped-model serializer seams after reproducing failures;
+preserve default library and explicit model/serializer overrides. Record class/annotation
+limitations and broader union/constraint requirements rather than full parity.
+
+
+Union continuation verified: reproduced Cat failing merged Dog enum, repaired mapped
+model selection through upstream metadata and generated valid/required checks. Original
+wire property metadata fixes normalized/falsy name lookup; kind/animal-kind/0 ×3.0/3.1
+passed42 union requests and missing/unknown/subtype-required rejection.24 core/file
+regression requests passed.11 template override tests,78 generation/11 API cases and
+strict scoped Clippy/formatting passed. Parent PHPDoc/inheritance, general JSON Schema/
+coercion validation and advanced union/library/platform scope stay open explicitly.

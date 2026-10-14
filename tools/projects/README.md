@@ -144,3 +144,22 @@ python3 tools/projects/test_verify_runtime.py
 This checks binary framing/extensions/trailers/stream ownership and incomplete-body
 rejection. PHP unions, custom/nested/multiple files, streaming size/platform/other-library
 contracts remain separate profiles, not implied by these finite file consumers.
+
+
+## Default PHP mapped tagged unions
+
+Use --targets php --profile union with the same explicit PHP/Composer paths. Default
+referenced Cat/Dog mappings now decode actual generated variants and echo model objects.
+The pinned default-Guzzle model/serializer templates retain upstream mappings, original
+wire field names and existing required-field validation. Missing/unknown tags and missing
+subtype fields reject. Explicit templates retain priority.
+
+Optional --discriminator-property animal-kind (or 0) exercises PHP normalized/falsy wire
+names; the fixture example accepts the same wire name after its JSON options argument.
+These alternate fields currently have PHP consumers only. Three field names × two dialects
+passed42 union requests; unchanged core/binary/multipart passed24 regression requests.
+Reuse runs must select the same wire name as the generated fixture.
+
+The models remain ModelInterface implementations; merged Animal/static parent PHPDoc and
+inheritance are separate incomplete contracts. AnyOf/untagged/advanced shapes, strict
+primitive/schema validation, other libraries/platforms require further evidence.

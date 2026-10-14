@@ -62,6 +62,7 @@ def read_chunked_body(stream):
 class Fixture(http.server.BaseHTTPRequestHandler):
     observations = []
     errors = []
+    discriminator_property = "kind"
 
     def log_message(self, *_):
         pass
@@ -87,13 +88,13 @@ class Fixture(http.server.BaseHTTPRequestHandler):
             if parsed.path.startswith("/animals/"):
                 assert self.command == "GET"
                 assert parsed.path in {"/animals/cat","/animals/dog"}
-                self.respond(200,{"kind":"cat","name":NOTE} if parsed.path.endswith("cat") else {"kind":"dog","barks":True})
+                self.respond(200,{self.discriminator_property:"cat","name":NOTE} if parsed.path.endswith("cat") else {self.discriminator_property:"dog","barks":True})
                 return
             if parsed.path == "/animals":
                 assert self.command == "POST"
                 assert self.headers.get_content_type() == "application/json"
                 animal=json.loads(body)
-                assert animal in [{"kind":"cat","name":NOTE},{"kind":"dog","barks":True}], animal
+                assert animal in [{self.discriminator_property:"cat","name":NOTE},{self.discriminator_property:"dog","barks":True}], animal
                 self.respond(200,animal)
                 return
             if parsed.path == "/multipart":
@@ -909,19 +910,42 @@ try {
 } finally { unlink($file);rmdir($directory); }
 '''
 
+PHP_UNION = r'''$tagProperty = getenv('FIXTURE_DISCRIMINATOR_PROPERTY');
+if ($tagProperty === false) $tagProperty = 'kind';
+$getTag = static function($model) use ($tagProperty) {
+    foreach ($model::attributeMap() as $name => $wireName) {
+        if ($wireName === $tagProperty) { $getter = $model::getters()[$name]; return $model->$getter(); }
+    }
+    throw new RuntimeException('Generated discriminator field missing');
+};
+$cat = $api->getAnimal(kind: 'cat');
+ensureFixture($cat instanceof OpenAPI\Client\Model\Cat && $getTag($cat) === 'cat' && $cat->getName() === $note, 'Tagged cat did not decode as its generated variant');
+$dog = $api->getAnimal(kind: 'dog');
+ensureFixture($dog instanceof OpenAPI\Client\Model\Dog && $getTag($dog) === 'dog' && $dog->getBarks() === true, 'Tagged dog did not decode as its generated variant');
+$catEcho = $api->echoAnimal(animal: $cat);
+$dogEcho = $api->echoAnimal(animal: $dog);
+ensureFixture($catEcho instanceof OpenAPI\Client\Model\Cat && $catEcho->getName() === $note, 'Cat model echo lost its variant');
+ensureFixture($dogEcho instanceof OpenAPI\Client\Model\Dog && $dogEcho->getBarks() === true, 'Dog model echo lost its variant');
+foreach (['{}', json_encode([$tagProperty => 'bird', 'name' => 'bad']), json_encode([$tagProperty => 'cat']), json_encode([$tagProperty => 'dog'])] as $malformed) {
+    $rejected = false;
+    try { OpenAPI\Client\ObjectSerializer::deserialize($malformed, '\\OpenAPI\\Client\\Model\\Animal', []); } catch (InvalidArgumentException $error) { $rejected = true; }
+    ensureFixture($rejected, 'Invalid tagged variant was accepted');
+}
+'''
+
 def php_client(directory, url, args):
-    assert args.profile in {'core','binary','multipart'}, "PHP union profile requires its own generated-model consumer"
+    assert args.profile in {'core','binary','multipart','union'}
     assert args.php and args.php.is_absolute() and args.php.is_file(), "Configure an explicit --php executable"
     assert args.composer and args.composer.is_absolute() and args.composer.is_file(), "Configure an explicit --composer PHP entrypoint"
     composer=[str(args.php),str(args.composer)]
     run([*composer,'install','--no-dev','--no-interaction','--no-plugins','--no-scripts','--prefer-dist'],directory,timeout=600)
     dependencies=subprocess.check_output([*composer,'show','--format=json','--no-plugins'],cwd=directory,text=True)
     (directory/'runtime-consumer-dependencies.json').write_text(dependencies)
-    (directory/'runtime_fixture.php').write_text(PHP_CORE.replace('__PHP_EXTENDED__', {'core':'','binary':PHP_BINARY,'multipart':PHP_MULTIPART}[args.profile]))
+    (directory/'runtime_fixture.php').write_text(PHP_CORE.replace('__PHP_EXTENDED__', {'core':'','binary':PHP_BINARY,'multipart':PHP_MULTIPART,'union':PHP_UNION}[args.profile]))
     for source in sorted(directory.glob('lib/**/*.php')):
         result=subprocess.run([str(args.php),'-l',str(source)],cwd=directory,text=True,capture_output=True,check=True,timeout=30)
         assert 'No syntax errors detected' in result.stdout, result.stdout
-    run([str(args.php),'runtime_fixture.php'],directory,dict(os.environ,FIXTURE_URL=url))
+    run([str(args.php),'runtime_fixture.php'],directory,dict(os.environ,FIXTURE_URL=url,FIXTURE_DISCRIMINATOR_PROPERTY=args.discriminator_property))
 
 
 def client(target, directory, url, args):
@@ -1032,6 +1056,7 @@ def main():
     parser.add_argument("--gradle", type=Path)
     parser.add_argument("--php", type=Path)
     parser.add_argument("--composer", type=Path)
+    parser.add_argument("--discriminator-property", default="kind", help="PHP union fixture wire field (default kind)")
     parser.add_argument("--generator-options", default="{}", help="Explicit JSON object passed to the fixture generator")
     parser.add_argument("--reuse-generated", action="store_true", help="Use only previously generated isolated fixtures")
     args = parser.parse_args()
@@ -1045,11 +1070,13 @@ def main():
     if args.profile in {"binary","multipart","union"}:
         assert not {"python-fastapi","aspnetcore","spring"}.intersection(targets), "Extended profiles currently validate clients"
     if 'php' in targets:
-        assert args.profile in {'core','binary','multipart'}, "PHP union profile requires a dedicated consumer"
+        assert args.profile in {'core','binary','multipart','union'}
         assert args.php and args.php.is_absolute() and args.php.is_file()
         assert args.composer and args.composer.is_absolute() and args.composer.is_file()
+    assert args.discriminator_property and len(args.discriminator_property.encode())<=128
+    assert args.discriminator_property=='kind' or (targets==['php'] and args.profile=='union'), "Alternate union wire fields currently have PHP consumers only"
     if not args.reuse_generated:
-        run(["cargo", "run", "-p", "moleapi-generation", "--example", "fixture_projects", "--", str(args.output), str(args.worker), str(args.java), args.targets, args.versions, args.profile, args.generator_options], REPO, timeout=300)
+        run(["cargo", "run", "-p", "moleapi-generation", "--example", "fixture_projects", "--", str(args.output), str(args.worker), str(args.java), args.targets, args.versions, args.profile, args.generator_options, args.discriminator_property], REPO, timeout=300)
     evidence_path = args.output / "runtime-evidence.json"
     evidence = json.loads(evidence_path.read_text()) if evidence_path.exists() else []
     evidence = [record for record in evidence if (record["target"], record["dialect"], record.get("profile","core")) not in {(t,v,args.profile) for t in targets for v in versions}]
@@ -1071,6 +1098,7 @@ def main():
     if args.dotnet:
         tools["dotnet"] = subprocess.check_output([args.dotnet, "--info"], text=True).strip()
     (args.output / "runtime-tools.json").write_text(json.dumps(tools, indent=2) + "\n")
+    Fixture.discriminator_property=args.discriminator_property
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Fixture)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -1097,7 +1125,7 @@ def main():
                     assert Fixture.observations == expected, Fixture.observations
                 manifest = json.loads((directory / "moleapi-generation.json").read_text())
                 source_digest = hashlib.sha256((directory / "fixture-source.json").read_bytes()).hexdigest()
-                evidence.append({"target": target, "dialect": version, "profile": args.profile, "engine": manifest["engine"], "options": manifest["options"], "fixture_sha256": source_digest, "result": "passed"})
+                evidence.append({"target": target, "dialect": version, "profile": args.profile, "discriminator_property": args.discriminator_property, "engine": manifest["engine"], "options": manifest["options"], "fixture_sha256": source_digest, "result": "passed"})
                 (args.output / "runtime-evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
                 print(f"PASS {target}/{version}", flush=True)
     finally:

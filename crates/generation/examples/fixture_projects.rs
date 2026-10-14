@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use std::{collections::BTreeMap, path::PathBuf};
 use tokio_util::sync::CancellationToken;
 
-fn specification(version: &str, profile: &str) -> Value {
+fn specification(version: &str, profile: &str, discriminator_property: &str) -> Value {
     let mut note = json!({"type":"string","nullable":true});
     if version == "3.1.0" {
         note = json!({"type":["string","null"]});
@@ -57,6 +57,20 @@ fn specification(version: &str, profile: &str) -> Value {
         specification["paths"]["/animals/{kind}"] = json!({"get":{"operationId":"getAnimal","parameters":[{"name":"kind","in":"path","required":true,"schema":{"type":"string"}}],"responses":{"200":{"description":"Tagged animal","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Animal"}}}}}}});
         specification["paths"]["/animals"] = json!({"post":{"operationId":"echoAnimal","requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/Animal"}}}},"responses":{"200":{"description":"Tagged echo","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Animal"}}}}}}});
     }
+    if profile == "union" && discriminator_property != "kind" {
+        for name in ["Cat", "Dog"] {
+            let schema = &mut specification["components"]["schemas"][name];
+            let property = schema["properties"]
+                .as_object_mut()
+                .unwrap()
+                .remove("kind")
+                .unwrap();
+            schema["properties"][discriminator_property] = property;
+            schema["required"][0] = discriminator_property.into();
+        }
+        specification["components"]["schemas"]["Animal"]["discriminator"]["propertyName"] =
+            discriminator_property.into();
+    }
     specification
 }
 
@@ -78,6 +92,11 @@ async fn main() -> Result<()> {
     );
     let options: BTreeMap<String, Value> =
         serde_json::from_str(&args.next().unwrap_or_else(|| "{}".into()))?;
+    let discriminator_property = args.next().unwrap_or_else(|| "kind".into());
+    ensure!(
+        !discriminator_property.is_empty() && discriminator_property.len() <= 128,
+        "Invalid fixture discriminator property"
+    );
     ensure!(args.next().is_none(), "Unexpected fixture argument");
     let runtime = ProjectRuntime::new(worker, Some(java))?;
     for version in versions.split(',') {
@@ -105,7 +124,7 @@ async fn main() -> Result<()> {
             );
             let input = ProjectInput {
                 target: target.into(),
-                specification: specification(version, &profile),
+                specification: specification(version, &profile, &discriminator_property),
                 options: options.clone(),
                 include_secrets: false,
                 templates: None,

@@ -13,7 +13,7 @@ Explicit Mustache overrides now reuse the embedded OpenAPI Generator and mature 
 | typescript-fetch | Generated3.0/3.1 npm projects compiled for CommonJS/ESM; real GET/POST/Bearer/query/header/nullable/enum/error fixtures passed | Broader union/file/dynamic-keyword and library-option compatibility remains required |
 | go-server | Generated skeleton compiled after `go mod tidy`; generated router/service started on a controlled loopback test harness and returned its expected501 business-handler placeholder | A skeleton intentionally needs application handler implementations; dependency installation is a consumer build step |
 | javascript, python, go, csharp | Generated3.0/3.1 clients installed/built and passed real GET/POST/Bearer/query/header/nullable/enum/error fixtures; Go also passed race checking; C# default generichost hosting/token/typed400 APIs were called | Broader union/file/dynamic-keyword and library-option compatibility remains required |
-| php | Default Guzzle3.0/3.1 Composer/PHP core, raw binary and multipart file/array calls passed | Union, nested/custom/large-file cases, other libraries, advanced constraints and platforms remain required |
+| php | Default Guzzle3.0/3.1 core, binary/multipart and mapped Cat/Dog tagged-oneOf decode/echo passed; original wire discriminator names retained | Static parent annotations/inheritance, advanced unions/constraints/files, other libraries/platforms remain required |
 | swift6, dart | Actual multi-file engine artifact generation, bounded ZIP, checksums and output collection | Artifact evidence does not establish language compile/run coverage |
 | python-fastapi | Generated3.0/3.1 packages installed; unchanged generated app started, exposed routes/OpenAPI and returned its explicit500 missing-business-handler response | Authentication/business implementations remain consumer work; broader framework/keyword compatibility remains required |
 | aspnetcore | Default .NET10 projects built and started for3.0/3.1; consumer-configured authentication reached generated sample handlers (200) and rejected anonymous requests (401) | Real authentication scheme/validation and business handlers remain consumer work; broader framework/keyword compatibility remains required |
@@ -568,3 +568,33 @@ Clippy/formatting passed. Tools remain PHP8.5.11/Composer2.10.3, Guzzle7.15.5/PS
 on Linux, Generator7.26.0/JRE21. Finite one-file/primitive string-array evidence does not
 complete PHP unions, custom/nested/multiple-file/MIME/streaming/resume/platform behavior.
 Those and full module parity remain required work.
+
+
+## PHP mapped referenced tagged-oneOf runtime
+
+The default PHP serializer originally required inheritance and concatenated raw tags as
+model names; Cat payloads stayed on merged Animal and failed its Dog-only enum. A pinned
+model partial now retains upstream mapped classes and the original discriminator wire
+property for oneOf. The serializer selects those ModelInterface implementations and uses
+their existing valid/listInvalidProperties checks before returning. Missing/unknown tags
+and missing required subtype fields reject. Other model paths retain upstream processing.
+No handcrafted transport/JSON serializer or switch to another PHP library is introduced.
+
+Both3.0.3/3.1.0 cases passed actual generated Cat/Dog GET decoding and model POST echoes,
+including exact quoted Unicode/name/barks fields. Additional animal-kind and numeric-string
+0 wire properties passed both dialects, covering normalized-property lookup and falsy-name
+handling. Six union cases passed42 requests; core/binary/multipart regression cases passed
+24 more, totaling66 PHP requests across12 cases. Consumers inspect actual generated getter/
+attribute metadata for the selected wire field rather than fabricate variants. Named source
+fixtures retain original engine/options/source hashes and discriminator-property evidence.
+
+All11 explicit template override cases passed, including model partial and serializer
+priority/source retention. Generation78 cases passed (27 external-tool cases ignored),
+all11 owned project API regressions, focused framing tests and strict scoped Clippy/formatting
+passed. Tools remain Generator7.26.0, PHP8.5.11/Composer2.10.3/Guzzle7.15.5 on Linux.
+
+Cat/Dog implement ModelInterface but do not inherit the generated Animal class; upstream
+parent PHPDoc/static return annotations and merged parent models are not complete nominal
+oneOf typing. This establishes mapped variant decoding/echo/required checks. Static parent
+annotation/interface parity, anyOf/untagged/nested/ambiguous/nullable unions, primitive
+coercion/full schema validation, custom libraries and native platforms remain required work.

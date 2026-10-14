@@ -142,3 +142,18 @@ Guzzle only. Explicit API templates retain priority. This is finite primitive-ar
 evidence, not every nested/file/encoding/library case. Raw binary SplFileObject upload
 is already a correct unknown-length chunked stream; the QA server now decodes that
 framing through the Python standard HTTP decoder rather than counting it as an empty body.
+
+
+## PHP Guzzle mapped tagged oneOf variants
+
+Sources: php/model_generic.mustache and php/ObjectSerializer.mustache, pinned7.26.0 JAR,
+Apache-2.0/upstream notices retained. Original SHA256s: model `c8ed16cb1d244c51ac7a650bf6fcb1785e0239308ce9646d39f3f33250f3bcbc`;
+serializer `42e663301eda871d3a0aff128ff92bd8eb6de18456817c7bc8bf519cc9e1eecf`.
+
+Actual Cat wire data failed the merged Animal's Dog-only enum because the serializer
+required inheritance and constructed model names from raw tags instead of using the
+engine's mapped models. The model partial emits mapped oneOf classes and original discriminator wire names; the serializer
+selects those ModelInterface implementations and applies their existing valid/required
+checks. Missing/unknown tags reject. Other model paths retain upstream behavior; default
+Guzzle only, explicit model/serializer templates retain priority. This does not provide
+general JSON Schema validation or oneOf-parent PHP inheritance/static annotation parity.

@@ -108,10 +108,26 @@ pub(super) fn write_builtin(input: &ProjectInput, root: &Path) -> Result<bool> {
                 .and_then(Value::as_str)
                 .is_none_or(|library| library == "guzzle") =>
         {
-            &[(
-                "api.mustache",
-                include_str!("../../../../vendor/openapi-generator/compat/php-guzzle/api.mustache"),
-            )]
+            &[
+                (
+                    "api.mustache",
+                    include_str!(
+                        "../../../../vendor/openapi-generator/compat/php-guzzle/api.mustache"
+                    ),
+                ),
+                (
+                    "model_generic.mustache",
+                    include_str!(
+                        "../../../../vendor/openapi-generator/compat/php-guzzle/model_generic.mustache"
+                    ),
+                ),
+                (
+                    "ObjectSerializer.mustache",
+                    include_str!(
+                        "../../../../vendor/openapi-generator/compat/php-guzzle/ObjectSerializer.mustache"
+                    ),
+                ),
+            ]
         }
         _ => return Ok(false),
     };
