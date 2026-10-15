@@ -20,7 +20,7 @@ This is usable request-example generation, separate from typed OpenAPI SDK/serve
 | OCaml | cohttp | Engine smoke only |
 | PHP | curl, guzzle, laravel, httprequest2, pecl_http | Engine smoke only |
 | PowerShell | webrequest, restmethod | Engine smoke only |
-| Python | python3, requests, aiohttp, httpx_sync, httpx_async | python3/http.client POST fixture |
+| Python | python3, requests, aiohttp, httpx_sync, httpx_async | python3/http.client POST fixture;39 original-code Requests2.34.2 / HTTPX0.28.1 sync+async HTTP cases on Python3.14.8 |
 | R | httr2, httr, rcurl | Engine smoke only |
 | Ruby | native |8 original-code syntax/native HTTP cases on Ruby3.4.7: JSON/form/text/files/MIME/multipart/dollar and Ruby interpolation literals |
 | Rust | reqwest | reqwest POST fixture, generated snippet wrapped in async main |
@@ -248,3 +248,53 @@ localized prerequisites and default credential/saved-byte exclusion in1280px Eng
 light and375px Chinese/dark. Both rendered scopes show0 verified axe violations
 (1 manual check each), with no document horizontal overflow. This is not proof of
 other Ruby/OS/runtime combinations.
+
+
+## Python Requests and HTTPX native bodies
+
+The pinned Scalar requestsLike emitter now converts bare JSON true/false/null
+without altering quoted strings, including root false. JSON null is sent as raw
+UTF-8 bytes because json=None means no body in the native libraries. Other raw
+text also uses UTF-8 bytes; its MIME is retained unless an explicit Content-Type
+was supplied. Raw files use pathlib.Path.read_bytes(), with data= for Requests
+and content= for HTTPX sync/async. Native data=/files= builders preserve repeated
+form and multipart fields. HTTPX methods without body shortcut arguments use
+its generic request method when a saved body is present.
+
+`verify-python.py` runs39 original-code syntax/native HTTP combinations:
+three libraries ×13 profiles (JSON Unicode/quotes, repeated form/empty fields,
+raw text/control bytes, binary, explicit binary MIME, multipart duplicate fields
+and file bytes/filename/MIME/disabled exclusion, literal dollar text, nested JSON
+boolean/null/string lexical traps, root false/null/empty string, GET file body,
+DELETE JSON body). Native Node HTTP observes framing and bytes; the driver only
+supplies package imports and an async entry point. The source/engine/snippet/tool
+hashes, exact installed package versions and real wire observations are recorded.
+Old embedded output reproduced nine failures across the three libraries: root
+false NameError, modified JSON string contents and omitted raw text.
+
+QA uses Python3.14.8/Linux, Requests2.34.2 and HTTPX0.28.1 in a private venv;
+`tools/snippets/python-requirements.txt` pins all installed QA dependencies.
+These are consumer/QA requirements, not MoleAPI runtime dependencies. Raw file
+support now covers21 adapters. Generation retains filename-only source and never
+reads the referenced files or embeds saved file bytes; read_bytes materializes
+the file in the consumer process. Multipart open files must be closed after use.
+Localized post-generation guidance explains imports/packages/async entry/file
+preparation. Real owned-API Chromium checks cover English/light1280×900 HTTPX
+async and Chinese/dark375×812 Requests, with no document horizontal overflow or
+saved token/base64 exposure. Scoped axe reports0 verified violations and1 manual
+line-number contrast check on each; screenshots were visually inspected.
+
+95 generation cases, three owned/local snippet API cases (including all three
+Python file libraries),39 focused UI/i18n cases, strict scoped Clippy, formatting,
+frontend/server builds and deterministic engine rebuild passed. All50 other
+non-Python representative outputs remain byte-identical. Historical core evidence
+for http.client remains; its extended bodies and aiohttp native verification are
+still pending. Other OS/dependency ranges, advanced form/file ordering/types,
+streaming, remaining methods/auth/transport and full generation parity stay open.
+
+Reproduce with an isolated Python environment and explicit tools:
+
+```sh
+/absolute/venv/bin/python -m pip install -r tools/snippets/python-requirements.txt
+python3 tools/snippets/verify-python.py --python /absolute/venv/bin/python --node /absolute/node --output /absolute/fresh-output
+```

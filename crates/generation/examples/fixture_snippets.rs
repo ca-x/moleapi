@@ -16,18 +16,46 @@ fn main() -> Result<()> {
     ensure!(args.next().is_none(), "Unexpected fixture arguments");
     ensure!(
         profile == "core"
-            || matches!(mode.as_deref(), Some("java" | "kotlin" | "dart" | "ruby"))
-                && ["form", "text", "binary", "binary-mime", "multipart"]
-                    .contains(&profile.as_str())
-            || matches!(mode.as_deref(), Some("kotlin" | "dart" | "ruby")) && profile == "dollar"
-            || mode.as_deref() == Some("ruby") && profile == "interpolation",
+            || matches!(
+                mode.as_deref(),
+                Some("java" | "kotlin" | "dart" | "ruby" | "python")
+            ) && ["form", "text", "binary", "binary-mime", "multipart"]
+                .contains(&profile.as_str())
+            || matches!(mode.as_deref(), Some("kotlin" | "dart" | "ruby" | "python"))
+                && profile == "dollar"
+            || mode.as_deref() == Some("ruby") && profile == "interpolation"
+            || mode.as_deref() == Some("python")
+                && [
+                    "json-values",
+                    "json-scalar",
+                    "json-null",
+                    "json-empty",
+                    "get-binary",
+                    "delete-json"
+                ]
+                .contains(&profile.as_str()),
         "Unknown snippet fixture profile"
     );
-    let body_profile = if matches!(mode.as_deref(), Some("java" | "kotlin" | "dart" | "ruby")) {
-        profile.as_str()
+    let body_profile = if matches!(
+        mode.as_deref(),
+        Some("java" | "kotlin" | "dart" | "ruby" | "python")
+    ) {
+        if profile == "get-binary" {
+            "binary"
+        } else if profile == "delete-json" {
+            "core"
+        } else {
+            profile.as_str()
+        }
     } else {
         mode.as_deref().unwrap_or("core")
     };
+    if profile == "get-binary" {
+        workspace.data.collections[0].requests[0].method = "GET".into();
+    }
+    if profile == "delete-json" {
+        workspace.data.collections[0].requests[0].method = "DELETE".into();
+    }
     if body_profile == "form" {
         let request = &mut workspace.data.collections[0].requests[0];
         request.body_kind = "form".into();
@@ -47,6 +75,18 @@ fn main() -> Result<()> {
         let request = &mut workspace.data.collections[0].requests[0];
         request.body_kind = "json".into();
         request.body = json!({"message":"literal #{1 + 2} #@value #$value"}).to_string();
+    }
+    if body_profile == "json-values" {
+        workspace.data.collections[0].requests[0].body = json!({"yes":true,"no":false,"nil":null,"list":[true,false,null],"strings":["x: true, text","x: false, text","x: null, text","\"true\"", "\\false"]}).to_string();
+    }
+    if body_profile == "json-scalar" {
+        workspace.data.collections[0].requests[0].body = "false".into();
+    }
+    if body_profile == "json-null" {
+        workspace.data.collections[0].requests[0].body = "null".into();
+    }
+    if body_profile == "json-empty" {
+        workspace.data.collections[0].requests[0].body = "\"\"".into();
     }
     if matches!(body_profile, "binary" | "binary-mime") {
         let request = &mut workspace.data.collections[0].requests[0];
@@ -70,7 +110,13 @@ fn main() -> Result<()> {
         request.body_kind = "multipart".into();
         request.body=json!({"parts":[{"id":"one","name":"label","value":{"kind":"text","text":"鼹鼠 'quotes' & +","mime":""}},{"id":"two","name":"label","value":{"kind":"text","text":"second","mime":""}},{"id":"upload","name":"upload","value":{"kind":"file","file":{"file_name":"upload.bin","mime":"application/octet-stream","base64":"AP+AClg="}}},{"id":"off","name":"disabled","enabled":false,"value":{"kind":"text","text":"must-not-send","mime":""}}]}).to_string();
     }
-    let targets = if mode.as_deref() == Some("ruby") {
+    let targets = if mode.as_deref() == Some("python") {
+        vec![
+            ("python", "requests", "requests.py"),
+            ("python", "httpx_sync", "httpx_sync.py"),
+            ("python", "httpx_async", "httpx_async.py"),
+        ]
+    } else if mode.as_deref() == Some("ruby") {
         vec![("ruby", "native", "snippet.rb")]
     } else if mode.as_deref() == Some("dart") {
         vec![("dart", "http", "http.dart"), ("dart", "dio", "dio.dart")]
@@ -144,7 +190,10 @@ fn main() -> Result<()> {
         );
         std::fs::write(std::path::Path::new(&output).join(filename), code)?;
     }
-    if matches!(mode.as_deref(), Some("java" | "kotlin" | "dart" | "ruby")) {
+    if matches!(
+        mode.as_deref(),
+        Some("java" | "kotlin" | "dart" | "ruby" | "python")
+    ) {
         let source = serde_json::to_vec(&workspace)?;
         std::fs::write(
             std::path::Path::new(&output).join("fixture-request.json"),

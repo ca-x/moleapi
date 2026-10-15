@@ -35,46 +35,52 @@ async fn binary_snippets_preserve_mime_and_ownership_without_exporting_saved_byt
         .0,
         StatusCode::OK
     );
-    let payload =
-        json!({"workspace_id":"w","request_id":"r","target":"csharp","client":"restsharp"});
-    assert_eq!(
-        call(
-            &router,
-            "POST",
-            "/api/generation/snippets",
-            Some(&other),
-            Some(payload.clone())
-        )
-        .await
-        .0,
-        StatusCode::NOT_FOUND
-    );
-    for include in [false, true] {
-        let mut payload = payload.clone();
-        payload["include_secrets"] = include.into();
-        let (status, result) = call(
-            &router,
-            "POST",
-            "/api/generation/snippets",
-            Some(&owner),
-            Some(payload),
-        )
-        .await;
-        assert_eq!(status, StatusCode::OK, "{result}");
-        assert!(
-            result["code"].as_str().unwrap().contains("upload.bin")
-                && result["code"]
+    for (target, client) in [
+        ("csharp", "restsharp"),
+        ("python", "requests"),
+        ("python", "httpx_sync"),
+        ("python", "httpx_async"),
+    ] {
+        let payload = json!({"workspace_id":"w","request_id":"r","target":target,"client":client});
+        assert_eq!(
+            call(
+                &router,
+                "POST",
+                "/api/generation/snippets",
+                Some(&other),
+                Some(payload.clone())
+            )
+            .await
+            .0,
+            StatusCode::NOT_FOUND
+        );
+        for include in [false, true] {
+            let mut payload = payload.clone();
+            payload["include_secrets"] = include.into();
+            let (status, result) = call(
+                &router,
+                "POST",
+                "/api/generation/snippets",
+                Some(&owner),
+                Some(payload),
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK, "{result}");
+            assert!(
+                result["code"].as_str().unwrap().contains("upload.bin")
+                    && result["code"]
+                        .as_str()
+                        .unwrap()
+                        .contains("application/x-header-file")
+            );
+            assert!(!result.to_string().contains("AP+AClg="));
+            assert!(
+                !result["code"]
                     .as_str()
                     .unwrap()
-                    .contains("application/x-header-file")
-        );
-        assert!(!result.to_string().contains("AP+AClg="));
-        assert!(
-            !result["code"]
-                .as_str()
-                .unwrap()
-                .contains("application/x-moleapi-file")
-        );
+                    .contains("application/x-moleapi-file")
+            );
+        }
     }
     assert_eq!(
         call(&router, "GET", "/api/workspaces/w", Some(&owner), None)

@@ -51,26 +51,131 @@ diff --git a/node_modules/@scalar/snippetz/dist/plugins/go/native/native.js b/no
 diff --git a/node_modules/@scalar/snippetz/dist/plugins/python/requestsLike.js b/node_modules/@scalar/snippetz/dist/plugins/python/requestsLike.js
 --- a/node_modules/@scalar/snippetz/dist/plugins/python/requestsLike.js
 +++ b/node_modules/@scalar/snippetz/dist/plugins/python/requestsLike.js
-@@ -58,7 +58,8 @@
+@@ -2,19 +2,10 @@
+ export const LENGTH_CONSIDERED_AS_SHORT = 40;
+ // Function to convert JavaScript boolean and null values to Python equivalents
+ function convertToPythonSyntax(str) {
+-    const replacements = [
+-        ['true', 'True'],
+-        ['false', 'False'],
+-        ['null', 'None'],
+-    ];
+-    let result = str;
+-    for (const [jsonVal, pythonVal] of replacements) {
+-        const patterns = [`(: )${jsonVal}(?=,|\\n)`, `^( +)${jsonVal}(?=,|\\n)`];
+-        for (const pattern of patterns) {
+-            result = result.replace(new RegExp(pattern, 'gm'), `$1${pythonVal}`);
+-        }
+-    }
+-    return result;
++    // Match JSON string tokens first so literal words inside them stay unchanged.
++    const literals = { true: 'True', false: 'False', null: 'None' };
++    return str.replace(/"(?:\\.|[^"\\])*"|\b(?:true|false|null)\b/g,
++        (token) => literals[token] ?? token);
+ }
+ export function formatPythonValue(value, indentation = 4) {
+     return convertToPythonSyntax(JSON.stringify(value, null, 2)
+@@ -34,6 +25,7 @@
+     const method = wireMethod.toLowerCase();
+     // Build options object
+     const options = {};
++    const rawKey = clientVar === 'requests' ? 'data' : 'content';
+     // Add headers if present
+     if (normalizedRequest.headers?.length) {
+         options.headers = normalizedRequest.headers.reduce((acc, header) => {
+@@ -42,6 +34,11 @@
+             }
+             return acc;
+         }, {});
++    }
++    // Raw bytes do not infer a content type in Requests/HTTPX. Preserve explicit headers.
++    if (normalizedRequest.postData?.mimeType && normalizedRequest.postData.mimeType !== 'multipart/form-data'
++        && !Object.keys(options.headers ?? {}).some((name) => name.toLowerCase() === 'content-type')) {
++        options.headers = { ...options.headers, 'Content-Type': normalizedRequest.postData.mimeType };
+     }
+     // Add query parameters if present
+     if (normalizedRequest.queryString?.length) {
+@@ -58,16 +55,20 @@
      // Handle request body
      if (normalizedRequest.postData) {
          const { mimeType, text, params } = normalizedRequest.postData;
 -        if (mimeType === 'application/json' && text) {
-+        if (normalizedRequest.postData.fileName !== undefined) { options.data = normalizedRequest.postData.fileName; }
++        if (normalizedRequest.postData.fileName !== undefined) { options[rawKey] = normalizedRequest.postData.fileName; }
 +        else if (mimeType === 'application/json' && text) {
              try {
-                 options.json = JSON.parse(text);
+-                options.json = JSON.parse(text);
++                const parsed = JSON.parse(text);
++                // None is the libraries' sentinel for no JSON body. Serialize JSON null as raw bytes.
++                if (parsed === null) options[rawKey] = text;
++                else options.json = parsed;
              }
-@@ -137,6 +138,9 @@
+             catch {
+-                options.data = text;
++                options[rawKey] = text;
+             }
+         }
+         else if (mimeType === 'application/octet-stream' && text) {
+-            options.data = text; // Store raw text, we'll handle the b"..." formatting later
++            options[rawKey] = text;
+         }
+         else if (mimeType === 'multipart/form-data' && params) {
+             const files = [];
+@@ -111,11 +112,15 @@
+             });
+             options.data = formData;
+         }
++        else if (text !== undefined) {
++            options[rawKey] = text;
++        }
+     }
++    const prelude = normalizedRequest.postData?.fileName !== undefined ? 'from pathlib import Path\n\n' : '';
+     // Format all parameters
+     const formattedParams = [];
+     // Format URL based on length
+-    const urlParam = `"${normalizedRequest.url}"`;
++    const urlParam = JSON.stringify(normalizedRequest.url);
+     if (normalizedRequest.url.length > LENGTH_CONSIDERED_AS_SHORT) {
+         formattedParams.push(urlParam);
+     }
+@@ -137,26 +142,30 @@
              const jsonString = formatPythonValue(value);
              formattedParams.push(`${key}=${jsonString}`);
          }
-+        else if (key === 'data' && normalizedRequest.postData?.fileName !== undefined) {
-+            formattedParams.push(`${key}=open(${JSON.stringify(normalizedRequest.postData.fileName)}, "rb")`);
+-        else if (key === 'data' && normalizedRequest.postData?.mimeType === 'application/octet-stream') {
+-            // Special handling for binary data
+-            formattedParams.push(`${key}=b"${value}"`);
++        else if (key === rawKey && normalizedRequest.postData?.fileName !== undefined) {
++            formattedParams.push(`${key}=Path(${JSON.stringify(normalizedRequest.postData.fileName)}).read_bytes()`);
 +        }
-         else if (key === 'data' && normalizedRequest.postData?.mimeType === 'application/octet-stream') {
-             // Special handling for binary data
-             formattedParams.push(`${key}=b"${value}"`);
++        else if (key === rawKey && typeof value === 'string') {
++            formattedParams.push(`${key}=${formatPythonValue(value)}.encode("utf-8")`);
+         }
+         else {
+             const str = formatPythonValue(value);
+             formattedParams.push(`${key}=${str}`);
+         }
+     }
+-    if (!['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'].includes(wireMethod)) {
+-        return `${clientVar}.request(${[JSON.stringify(wireMethod), urlParam, ...formattedParams.slice(1)].join(', ')})`;
++    const httpxBody = clientVar !== 'requests' && normalizedRequest.postData
++        && !['POST', 'PUT', 'PATCH'].includes(wireMethod);
++    if (httpxBody || !['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'].includes(wireMethod)) {
++        return `${prelude}${clientVar}.request(${[JSON.stringify(wireMethod), urlParam, ...formattedParams.slice(1)].join(', ')})`;
+     }
+     // Build the final request string with conditional URL formatting
+     if (normalizedRequest.url.length > LENGTH_CONSIDERED_AS_SHORT) {
+-        return `${clientVar}.${method}(\n    ${formattedParams.join(',\n    ')}\n)`;
++        return `${prelude}${clientVar}.${method}(\n    ${formattedParams.join(',\n    ')}\n)`;
+     }
+     // For short URLs with no additional parameters, return a single-line format
+     if (formattedParams.length <= 1) {
+-        return `${clientVar}.${method}(${urlParam})`;
++        return `${prelude}${clientVar}.${method}(${urlParam})`;
+     }
+     // For short URLs with parameters, maintain the multi-line format
+-    return `${clientVar}.${method}(${urlParam}${formattedParams.length > 1 ? ',' : ''}\n    ${formattedParams.slice(1).join(',\n    ')}\n)`;
++    return `${prelude}${clientVar}.${method}(${urlParam}${formattedParams.length > 1 ? ',' : ''}\n    ${formattedParams.slice(1).join(',\n    ')}\n)`;
+ }
 diff --git a/node_modules/@scalar/snippetz/dist/plugins/csharp/restsharp/restsharp.js b/node_modules/@scalar/snippetz/dist/plugins/csharp/restsharp/restsharp.js
 --- a/node_modules/@scalar/snippetz/dist/plugins/csharp/restsharp/restsharp.js
 +++ b/node_modules/@scalar/snippetz/dist/plugins/csharp/restsharp/restsharp.js
