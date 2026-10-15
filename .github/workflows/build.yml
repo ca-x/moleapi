@@ -214,6 +214,12 @@ jobs:
         run: |
           bundle exec "$MOLEAPI_OBJC_QA_PYTHON" tools/projects/verify-protobuf-objc.py "$RUNNER_TEMP/objc-clients/source" --server-dir "$RUNNER_TEMP/objc-server/source"
           bundle exec "$MOLEAPI_OBJC_QA_PYTHON" tools/projects/verify-protobuf-objc.py "$RUNNER_TEMP/objc-clients/descriptor" --server-dir "$RUNNER_TEMP/objc-server/descriptor"
+      - name: Compile and run original Objective-C models with Foundation
+        run: |
+          for dialect in 3.0.3 3.1.0; do
+            cargo run --locked -p moleapi-generation --example fixture_models -- "$RUNNER_TEMP/objc-models-$dialect" "$PWD/target/debug/moleapi-server" "$(command -v java)" "$dialect" model-objc
+            python tools/models/verify-objc.py --fixtures "$RUNNER_TEMP/objc-models-$dialect" --dialect "$dialect" --xcrun /usr/bin/xcrun
+          done
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -223,4 +229,6 @@ jobs:
             ${{ runner.temp }}/objc-clients/**/Podfile.lock
             ${{ runner.temp }}/objc-clients/**/moleapi-generation.json
             ${{ runner.temp }}/objc-tools/versions.txt
+            ${{ runner.temp }}/objc-models-*/**/runtime-evidence.json
+            ${{ runner.temp }}/objc-models-*/**/moleapi-generation.json
           if-no-files-found: warn
