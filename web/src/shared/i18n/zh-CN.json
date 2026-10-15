@@ -1727,5 +1727,11 @@
   "Kotlin 联合类型需要启用包装，并选择 jvm-retrofit2 和 gson 或 kotlinx_serialization。默认 Moshi 不支持。": "Kotlin 联合类型需要启用包装，并选择 jvm-retrofit2 和 gson 或 kotlinx_serialization。默认 Moshi 不支持。",
   "Go 消息生成需要部署方配置 Go 消息插件。": "Go 消息生成需要部署方配置 Go 消息插件。",
   "Kotlin gRPC 接口需要同时配置 Kotlin 和 Java 插件。": "Kotlin gRPC 接口需要同时配置 Kotlin 和 Java 插件。",
-  "基于原始 Protobuf 定义生成消息或 gRPC 接口，不覆盖已有代码，也不执行或发布生成结果。": "基于原始 Protobuf 定义生成消息或 gRPC 接口，不覆盖已有代码，也不执行或发布生成结果。"
+  "基于原始 Protobuf 定义生成消息或 gRPC 接口，不覆盖已有代码，也不执行或发布生成结果。": "基于原始 Protobuf 定义生成消息或 gRPC 接口，不覆盖已有代码，也不执行或发布生成结果。",
+  "正在选择并检查 Java…": "正在选择并检查 Java…",
+  "Java 已配置，将用于新建的生成任务。": "Java 已配置，将用于新建的生成任务。",
+  "选择已安装的 Java 17+ 可执行文件，配置会保存在此设备。": "选择已安装的 Java 17+ 可执行文件，配置会保存在此设备。",
+  "更换 Java…": "更换 Java…",
+  "选择 Java…": "选择 Java…",
+  "无法配置 Java，请选择 Java 17+ 可执行文件，并检查应用设置的写入权限。": "无法配置 Java，请选择 Java 17+ 可执行文件，并检查应用设置的写入权限。"
 }

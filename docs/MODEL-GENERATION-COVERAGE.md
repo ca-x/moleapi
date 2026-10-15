@@ -338,8 +338,9 @@ in finally. Credentials never become command arguments or evidence. It checks ex
 canonical source/dialect/manifest/file hashes before and after execution and records
 actual server versions and columns. QA connections require CREATE/DROP DATABASE
 privileges. Product generation never connects to or runs SQL against a database.
-The existing database CI adds these same cases against its PostgreSQL16/MySQL8.4
-services; local18.6/8.4.11 evidence does not assert those CI results in advance.
+The existing database CI passes these same4 cases on PostgreSQL16.15/MySQL8.4.11
+services in run38688180724, database job116267801306 at main f0a07f4. Its existing
+three-engine migration/auth/isolation/CAS suite also passes2 tests.
 
 Local services run from isolated native prefixes with private data and Unix sockets,
 without TCP listeners or host package changes. Official Arch PostgreSQL package

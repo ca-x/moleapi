@@ -2,6 +2,7 @@
 mod artifact;
 mod discriminator;
 mod import;
+mod java_selection;
 pub use import::*;
 mod models;
 mod native;

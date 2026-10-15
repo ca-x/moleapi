@@ -1,11 +1,12 @@
 import RegenerationDialog from "./RegenerationDialog";
 import ProjectTemplatePanel, {type TemplateBundle} from "./ProjectTemplatePanel";
 import ProjectModelOptions, {type ProjectOptions} from "./ProjectModelOptions";
+import NativeJavaRuntime from "./NativeJavaRuntime";
 import {useEffect,useRef,useState} from "react";
 import stableStringify from "fast-json-stable-stringify";
 import {Button,Callout,Checkbox,Dialog,Flex,Text,TextField,ScrollArea} from "@radix-ui/themes";
 import {Code2,Copy,Download,Square} from "lucide-react";
-import {api} from "../../shared/api";
+import {api,native} from "../../shared/api";
 import {Choice,Editor,Field} from "../../shared/ui";
 import {t,useLanguage,message,translateCopy,type LocalizedCopy} from "../../shared/i18n";
 import {useWorkbench} from "../workbench/context";
@@ -29,7 +30,8 @@ export default function ProjectGenerationDialog({open,specificationId,onOpenChan
  const goMessageMissing=target==="protobuf-go"&&!!catalog&&!catalog.protobuf_plugins?.includes("go");
  const kotlinHelperMissing=target==="protobuf-kotlin"&&!!catalog?.grpc_plugins?.includes("kotlin")&&!catalog.grpc_plugins.includes("java");
  const dependencyMissing=protocMissing||goMessageMissing||kotlinHelperMissing;
- const javaMissing=!target.startsWith("model-")&&!target.startsWith("protobuf-")&&!["rust-progenitor","rust-progenitor-cli","rust-tonic"].includes(target)&&!catalog?.java_available;
+ const requiresJava=!target.startsWith("model-")&&!target.startsWith("protobuf-")&&!["rust-progenitor","rust-progenitor-cli","rust-tonic"].includes(target);
+ const javaMissing=requiresJava&&!catalog?.java_available;
  const native31=["rust-progenitor","rust-progenitor-cli"].includes(target)&&spec?.dialect?.startsWith("3.1");
  function stop(){const previous=job.current;job.current=null;if(previous)void api("/api/generation/projects/cancel","POST",{job_id:previous}).catch(()=>{});setPending(null);}
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;const previous=job.current;if(previous)void api("/api/generation/projects/cancel","POST",{job_id:previous}).catch(()=>{});};},[]);
@@ -61,13 +63,14 @@ export default function ProjectGenerationDialog({open,specificationId,onOpenChan
  {kotlinHelperMissing&&<Callout.Root><Callout.Text role="alert">{t("Kotlin gRPC 接口需要同时配置 Kotlin 和 Java 插件。")}</Callout.Text></Callout.Root>}
  {target.startsWith("protobuf-")&&!goMessageMissing&&!kotlinHelperMissing&&!catalog?.grpc_plugins?.includes(target.slice("protobuf-".length))&&<Text size="1" color="gray">{t("当前生成 Protobuf 消息类型；gRPC 服务接口需要配置对应语言的插件。")}</Text>}
  {native31&&<Callout.Root><Callout.Text>{t("原生 Rust 生成器支持 OpenAPI 3.0；3.1 请使用其他生成器。")}</Callout.Text></Callout.Root>}
- {javaMissing&&<Callout.Root><Callout.Text>{t("此生成器需要部署方配置 Java 17+。原生 Rust SDK 不需要 Java。")}</Callout.Text></Callout.Root>}
+ {requiresJava&&native&&<NativeJavaRuntime key={`java:${templateScope}`} available={!!catalog?.java_available} disabled={busy||!catalog} onConfigured={setCatalog}/>}
+ {javaMissing&&!native&&<Callout.Root><Callout.Text>{t("此生成器需要部署方配置 Java 17+。原生 Rust SDK 不需要 Java。")}</Callout.Text></Callout.Root>}
  <Text size="1" color="gray">{t("上游生成器目录不代表每个目标都经过编译验证；请验证生成项目后再使用。")}</Text>
  {target.startsWith("model-")&&selected?<ProjectModelOptions target={selected} options={options} disabled={busy} onChange={setOptions}/>:<Flex gap="3" wrap="wrap">{Object.entries(selected?.options??(target==="rust-progenitor"?{packageName:"moleapi_sdk",packageVersion:"0.1.0",interface:"positional"}:{})).map(([name,value])=>typeof value==="boolean"?<label key={name} className="checkbox-label"><Checkbox checked={(options[name]??value)===true} disabled={busy} onCheckedChange={checked=>setOptions({...options,[name]:checked===true})}/>{optionLabels[name]?.()??name}</label>:<Field key={name} label={optionLabels[name]?.()??name}><TextField.Root disabled={busy} maxLength={128} autoComplete="off" value={String(options[name]??"")} placeholder={String(value??"")} onChange={e=>setOptions({...options,[name]:e.target.value})}/></Field>)}</Flex>}
  {target==="kotlin"&&<Text size="1" color="gray">{t("Kotlin 联合类型需要启用包装，并选择 jvm-retrofit2 和 gson 或 kotlinx_serialization。默认 Moshi 不支持。")}</Text>}
  {!target.startsWith("model-")&&!target.startsWith("protobuf-")&&!["rust-progenitor","rust-progenitor-cli","rust-tonic"].includes(target)&&state.draft&&<ProjectTemplatePanel key={templateScope} workspaceId={state.draft.id} scope={identity} value={templates} disabled={!!pending} dark={state.dark} onChange={setTemplates} onBusyChange={setTemplateBusy}/>}
  <label className="checkbox-label"><Checkbox checked={include} disabled={busy} onCheckedChange={v=>setInclude(v===true)}/>{t("包含敏感信息（生成文件可能包含凭据）")}</label>
- <Flex gap="2"><Button disabled={busy||!catalog||!spec||javaMissing||native31||dependencyMissing} style={dependencyMissing?{opacity:0.5,cursor:"not-allowed"}:undefined} onClick={()=>void generate()}>{t("生成项目")}</Button>{pending&&<Button highContrast variant="soft" onClick={stop}><Square size={15}/>{t("停止生成")}</Button>}<Button highContrast variant="soft" disabled={!artifact} onClick={()=>void download(true)}><Download size={15}/>{t("下载项目 ZIP")}</Button></Flex>
+ <Flex gap="2"><Button disabled={busy||!catalog||!spec||javaMissing||native31||dependencyMissing} style={dependencyMissing||javaMissing||native31?{opacity:0.5,cursor:"not-allowed"}:undefined} onClick={()=>void generate()}>{t("生成项目")}</Button>{pending&&<Button highContrast variant="soft" onClick={stop}><Square size={15}/>{t("停止生成")}</Button>}<Button highContrast variant="soft" disabled={!artifact} onClick={()=>void download(true)}><Download size={15}/>{t("下载项目 ZIP")}</Button></Flex>
  {busy&&<Text role="status" size="2">{t("正在生成项目…")}</Text>}{error&&<Callout.Root color="red"><Callout.Text role="alert">{translateCopy(error)}</Callout.Text></Callout.Root>}
  {artifact&&<><Text size="1" color="gray">{artifact.engine} · {artifact.files.length} {t("个文件")} · SHA256 {artifact.source_sha256.slice(0,12)}</Text><div className="project-artifact-grid"><ScrollArea className="project-artifact-files"><Flex direction="column" gap="1">{artifact.files.map(f=><Button highContrast key={f.path} variant={file?.path===f.path?"soft":"ghost"} onClick={()=>setPath(f.path)} style={{justifyContent:"flex-start",whiteSpace:"normal",height:"auto",textAlign:"left",overflowWrap:"anywhere"}}>{f.path}</Button>)}</Flex></ScrollArea><Flex direction="column" gap="2" style={{minWidth:0,flex:1}}><Flex gap="2" wrap="wrap"><Text size="1" style={{overflowWrap:"anywhere"}}>{file?.path}</Text><Button variant="ghost" disabled={file?.encoding!=="utf8"} onClick={()=>void copy()}><Copy size={14}/>{t("复制")}</Button><Button variant="ghost" onClick={()=>void download(false)}>{t("下载文件")}</Button></Flex>{file?.encoding==="utf8"?<Editor value={file.content} readOnly dark={state.dark} height="40vh" jsonMode={file.path.endsWith(".json")}/>:<Text>{t("二进制文件可下载查看。")}</Text>}</Flex></div></>}
  <Flex gap="2" wrap="wrap"><Button highContrast variant="soft" disabled={!artifact||busy} onClick={()=>void saveSnapshot()}>{t("保存生成快照 JSON")}</Button><Button highContrast variant="soft" disabled={!artifact||busy} onClick={()=>setCompare(true)}>{t("再生成差异与合并")}</Button></Flex>

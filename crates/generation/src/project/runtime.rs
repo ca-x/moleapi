@@ -1,6 +1,11 @@
 use super::*;
 use anyhow::{Context, bail, ensure};
-use std::{path::PathBuf, process::Stdio, time::Duration};
+use std::{
+    path::PathBuf,
+    process::Stdio,
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     process::Command,
@@ -9,7 +14,7 @@ use tokio_util::sync::CancellationToken;
 #[derive(Clone)]
 pub struct ProjectRuntime {
     pub worker: PathBuf,
-    pub java: Option<PathBuf>,
+    java: Arc<RwLock<Option<PathBuf>>>,
     pub protoc: Option<PathBuf>,
     pub protobuf_plugins: std::collections::BTreeMap<String, PathBuf>,
     pub grpc_plugins: std::collections::BTreeMap<String, PathBuf>,
@@ -28,14 +33,23 @@ impl ProjectRuntime {
         }
         Ok(Self {
             worker,
-            java,
+            java: Arc::new(RwLock::new(java)),
             protoc: None,
             protobuf_plugins: std::collections::BTreeMap::new(),
             grpc_plugins: std::collections::BTreeMap::new(),
         })
     }
     pub fn java_available(&self) -> bool {
-        self.java.is_some() && !JAR.is_empty()
+        self.java_path().is_some_and(|path| path.is_file()) && !JAR.is_empty()
+    }
+    pub fn java_path(&self) -> Option<PathBuf> {
+        self.java
+            .read()
+            .expect("Java selection lock poisoned")
+            .clone()
+    }
+    pub(super) fn replace_java(&self, path: PathBuf) {
+        *self.java.write().expect("Java selection lock poisoned") = Some(path);
     }
     pub async fn generate(
         &self,
@@ -120,8 +134,7 @@ impl ProjectRuntime {
         cancel: CancellationToken,
     ) -> Result<ProjectArtifact> {
         let java = self
-            .java
-            .as_ref()
+            .java_path()
             .context("Configure an explicit Java17+ executable for this generator")?;
         ensure!(
             !JAR.is_empty(),

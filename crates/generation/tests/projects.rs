@@ -2,6 +2,72 @@ use moleapi_generation::project::*;
 use serde_json::json;
 use std::{collections::BTreeMap, path::PathBuf};
 use tokio_util::sync::CancellationToken;
+#[cfg(unix)]
+#[tokio::test]
+#[ignore = "requires explicitly configured Java17+ test runtime"]
+async fn native_java_selection_generates_immediately_keeps_running_jobs_and_survives_restart() {
+    use std::os::unix::fs::PermissionsExt;
+    let java = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_JAVA").expect("explicit Java executable"),
+    );
+    let directory = tempfile::tempdir().unwrap();
+    let preference = directory.path().join("java-runtime.json");
+    let entered = directory.path().join("entered");
+    let release = directory.path().join("release");
+    let quote =
+        |path: &std::path::Path| format!("'{}'", path.to_str().unwrap().replace('\'', "'\\''"));
+    let wrapper = directory.path().join("selected java");
+    std::fs::write(&wrapper, format!("#!/bin/sh\nif [ \"$1\" != -version ]; then\nprintf started > {}\nwhile [ ! -f {} ]; do /bin/sleep 0.01; done\nfi\nexec {} \"$@\"\n", quote(&entered), quote(&release), quote(&java))).unwrap();
+    std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), None).unwrap();
+    let shared = runtime.clone();
+    runtime
+        .select_native_java(wrapper, &preference)
+        .await
+        .unwrap();
+    let input = ProjectInput {
+        specification: json!({"openapi":"3.1.0","info":{"title":"Native runtime selection","version":"1"},"paths":{},"components":{"schemas":{"Pet":{"type":"object","properties":{"id":{"type":"integer"}}}}}}),
+        target: "go".into(),
+        options: BTreeMap::new(),
+        include_secrets: false,
+        templates: None,
+    };
+    let first_input = input.clone();
+    let running =
+        tokio::spawn(async move { shared.generate(first_input, CancellationToken::new()).await });
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while !entered.is_file() {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    runtime
+        .select_native_java(java.clone(), &preference)
+        .await
+        .unwrap();
+    std::fs::write(release, "continue").unwrap();
+    let first = running.await.unwrap().unwrap();
+    assert_eq!(runtime.java_path(), Some(java));
+    let restarted = ProjectRuntime::new(std::env::current_exe().unwrap(), None).unwrap();
+    restarted.restore_native_java(&preference).unwrap();
+    let second = restarted
+        .generate(input, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(first.engine, "openapi-generator@7.26.0");
+    assert_eq!(first.source_sha256, second.source_sha256);
+    let model = |artifact: &ProjectArtifact| {
+        artifact
+            .files
+            .iter()
+            .find(|file| file.path == "model_pet.go")
+            .unwrap()
+            .content
+            .clone()
+    };
+    assert_eq!(model(&first), model(&second));
+}
 #[tokio::test]
 #[ignore = "requires explicitly configured Java17+ test runtime"]
 async fn explicit_templates_override_upstream_rendering_and_preserve_repeatable_source() {

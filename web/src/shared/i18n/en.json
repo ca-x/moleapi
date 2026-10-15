@@ -1727,5 +1727,11 @@
   "Kotlin 联合类型需要启用包装，并选择 jvm-retrofit2 和 gson 或 kotlinx_serialization。默认 Moshi 不支持。": "Kotlin unions require wrappers with jvm-retrofit2 and gson or kotlinx_serialization. Default Moshi is unsupported.",
   "Go 消息生成需要部署方配置 Go 消息插件。": "Go message generation requires a Go message plugin configured by the deployment administrator.",
   "Kotlin gRPC 接口需要同时配置 Kotlin 和 Java 插件。": "Kotlin gRPC interfaces require both Kotlin and Java plugins to be configured.",
-  "基于原始 Protobuf 定义生成消息或 gRPC 接口，不覆盖已有代码，也不执行或发布生成结果。": "Generate messages or gRPC interfaces from original Protobuf definitions. Existing code is preserved; generated output is neither executed nor published."
+  "基于原始 Protobuf 定义生成消息或 gRPC 接口，不覆盖已有代码，也不执行或发布生成结果。": "Generate messages or gRPC interfaces from original Protobuf definitions. Existing code is preserved; generated output is neither executed nor published.",
+  "正在选择并检查 Java…": "Selecting and checking Java…",
+  "Java 已配置，将用于新建的生成任务。": "Java is configured for new generation jobs.",
+  "选择已安装的 Java 17+ 可执行文件，配置会保存在此设备。": "Select an installed Java 17+ executable. This device will remember your choice.",
+  "更换 Java…": "Change Java…",
+  "选择 Java…": "Select Java…",
+  "无法配置 Java，请选择 Java 17+ 可执行文件，并检查应用设置的写入权限。": "Could not configure Java. Select a Java 17+ executable and check that app settings can be saved."
 }

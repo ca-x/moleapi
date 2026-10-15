@@ -94,3 +94,61 @@ async fn model_generation_is_owned_typed_private_by_default_and_keeps_saved_sour
         20
     );
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn local_java_selection_updates_the_existing_router_without_a_configuration_http_route() {
+    use moleapi_generation::project::ProjectRuntime;
+    use std::os::unix::fs::PermissionsExt;
+    let directory = tempfile::tempdir().unwrap();
+    let runtime = ProjectRuntime::new(
+        std::path::PathBuf::from(env!("CARGO_BIN_EXE_moleapi-server")),
+        None,
+    )
+    .unwrap();
+    let router = moleapi_server::local_with_project_runtime(
+        &directory.path().join("native.db"),
+        runtime.clone(),
+    )
+    .await
+    .unwrap();
+    let (status, catalog) = call(
+        &router,
+        "GET",
+        "/api/generation/projects/catalog",
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(catalog["java_available"], false);
+    let java = directory.path().join("explicit-java");
+    std::fs::write(
+        &java,
+        "#!/bin/sh\nprintf 'openjdk version \"21.0.12\"\\n' >&2\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&java, std::fs::Permissions::from_mode(0o700)).unwrap();
+    runtime
+        .select_native_java(java, &directory.path().join("java-runtime.json"))
+        .await
+        .unwrap();
+    let (_, catalog) = call(
+        &router,
+        "GET",
+        "/api/generation/projects/catalog",
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(catalog["java_available"], true);
+    let (status, _) = call(
+        &router,
+        "POST",
+        "/api/generation/projects/runtime/java",
+        None,
+        Some(json!({"path":"/not-an-http-operation"})),
+    )
+    .await;
+    assert!(!status.is_success());
+}
