@@ -1252,3 +1252,12 @@ Docker images in advance: those require their actual CI and installed-package re
 The host has no local Docker/Podman daemon; container execution remains a CI gate.
 Java signing/notarization, actual installer upgrades and broader native/architecture/
 framework/schema/SDK/runtime combinations and all later milestones remain open.
+
+
+Bundled-container follow-through: main ea34ce1 run38698102016 completed both native
+linux/amd64 and linux/arm64 image jobs and the final manifest. Jobs116299442383 and
+116299442161 each started the original pinned JRE21.0.12.1+1 and passed the real owned
+generation API fixture (17 Go files, source SHA81a56039ffb47ceaa48d388715bed1092249f9571eafbebafb440b56613e89d0).
+HTTP/embedded frontend and script-worker smoke also passed before publication.
+This closes that exact dual-architecture container gate; it does not establish later
+commits or foreign-OS installed packages. Exact raw job logs remain in isolated QA.
