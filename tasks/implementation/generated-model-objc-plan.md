@@ -71,3 +71,17 @@ source/descriptor consumers stay unchanged. Overall QA budget180minutes covers t
 cold native builds plus Rust/setup. Optional objc_runner=all/intel/arm allows a focused
 retry without restarting the still-queued ARM job; both architectures remain mandatory
 for final acceptance and relevant source hashes/results must be recorded separately.
+
+## Repaired ARM acceptance checkpoint
+
+Run38707843936/immutable62f08e8 ARM job116331593353 is terminal success. Both
+3.0.3/3.1.0 Foundation model executions passed all14 named profiles, including
+unknown/nested enums, NULL error outputs and stale-error reset. Downloaded original
+hashes match local saved model bytes and the current model engine. This establishes
+the representative macOS26.6.2/arm64/Xcode26.6 scope and permits publishing its
+catalog validation as a verified slice. It does not fulfill the final two-architecture
+acceptance requirement above. Intel retry38718238486 passed source RPCs but its
+descriptor Release build timed out3600sec before models; all Intel descriptor/model
+and wider release/platform semantics remain open. The new shared native consumer
+and exact-host build are separately checked/queued; no modes or representations
+are removed.

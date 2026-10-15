@@ -170,6 +170,7 @@ pub fn project_catalog() -> Result<Vec<ProjectTarget>> {
                 "cpp" => "representative-cpp-four-mode-configured-plugin-fixture",
                 "php" => "representative-php-four-mode-client-configured-plugin-fixture",
                 "go" => "representative-go-four-mode-configured-plugins-fixture",
+                "objc" => "representative-apple-arm64-four-mode-configured-plugin-fixture",
                 _ => "representative-protoc-message-source-descriptor-fixture",
             }
             .into(),

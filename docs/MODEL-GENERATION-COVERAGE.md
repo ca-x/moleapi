@@ -26,7 +26,7 @@ Apifox's [model code list](https://docs.apifox.com/generate-code.md), checked202
 
 The specification generation dialog has a separate data-model category, language selection, all/exact component selection and expandable upstream serialization/style settings. Enum choices and booleans retain their types. Preview/copy/file/ZIP downloads, regeneration and owner/content/cancellation guards reuse project artifacts. SQL exports DDL only and requires the existing explicit Java runtime; the18 Quicktype targets work without Java or Node in hosted and offline applications.
 
-Actual evidence: all18 language targets generated recursive/enum/nullable component models in the host-free Rust VM; the capped application worker produced all20 target artifacts, including actual MySQL/PostgreSQL DDL. Generated Python, JavaScript, TypeScript, Go, C#, Java, Rust, Ruby, C++, Kotlin, Dart, Swift, Flow, Elm, Pike, Crystal and Haskell models now run recursive/enum/nullable/Unicode serialization roundtrips in OpenAPI3.0.3/3.1.0 fixtures. TypeScript, Go, C#, Java, Rust, C++, Kotlin, Dart, Swift, Flow, Elm, Crystal and Haskell compile with real toolchains; Python, JavaScript, Ruby and Pike run through their native runtimes. PostgreSQL18.6/MySQL8.4.11 execute original generated DDL with native enum/required/null/Unicode cases in both dialects. The remaining Objective-C model runtime is not established by artifact generation. Required/optional/null serialization differences remain those of the upstream target; this is model conversion, not universal schema validation.
+Actual evidence: all18 language targets generated recursive/enum/nullable component models in the host-free Rust VM; the capped application worker produced all20 target artifacts, including actual MySQL/PostgreSQL DDL. Generated Python, JavaScript, TypeScript, Go, C#, Java, Rust, Ruby, C++, Kotlin, Dart, Swift, Flow, Elm, Pike, Crystal, Haskell and Objective-C models now run recursive/enum/nullable/Unicode serialization roundtrips in OpenAPI3.0.3/3.1.0 fixtures. TypeScript, Go, C#, Java, Rust, C++, Kotlin, Dart, Swift, Flow, Elm, Crystal, Haskell and Objective-C compile with real toolchains; Python, JavaScript, Ruby and Pike run through their native runtimes. PostgreSQL18.6/MySQL8.4.11 execute original generated DDL with native enum/required/null/Unicode cases in both dialects. Objective-C native Foundation evidence is now established on macOS arm64 for the representative cases below. Required/optional/null serialization differences remain those of the upstream target; this is model conversion, not universal schema validation.
 
 API evidence covers authenticated ownership, anonymous/cross-owner rejection, default credential-example exclusion, exact component selection, typed-option rejection and unchanged canonical source. Component/UI tests cover typed model settings and existing late-reply fencing; English/Chinese catalogs include model flows.
 
@@ -365,3 +365,41 @@ all schema constraints, nested relational fidelity, SQL identifier/options/keywo
 coverage, migrations, dialect/platform/version ranges or release parity. Objective-C
 model/Apple RPC runtime gates and all remaining generation/product requirements stay
 open. The existing17 Quicktype model runtime cases remain independently scoped.
+
+
+## Objective-C Foundation model acceptance on Apple arm64
+
+Immutable development ref62f08e8 passed actual native Apple checks in workflow
+run38707843936, job116331593353. Downloaded original artifacts were audited:
+OpenAPI3.0.3 and3.1.0 model manifests/source hashes match their runtime evidence,
+the generated models.h/models.m bytes match the retained local original fixtures,
+and the current model engine is byte-identical to that successful ref. Toolchain:
+macOS26.6.2/arm64, Xcode26.6 build17F113, native Apple Foundation/clang with-O2,
+ARC/blocks and quicktype-core26.0.0+moleapi.1. This is native execution, not artifact
+presence, Linux syntax-only checks, a substituted model or a mock Foundation API.
+
+Both dialects passed14 named profiles: decoded/constructed native values,
+recursive/zero/enum/null/Unicode roundtrips, invalid enum/object/nested enum,
+nullable public enum lookup, NULL error-output success/failure and stale NSError
+reset. The pinned mature ObjectiveCRenderer patch repairs the reproduced unknown
+JSON-enum acceptance through a private fromJSONValue converter, retaining public
+nullable withValue lookup. Encode/decode APIs handle omitted NSError outputs with
+local autoreleasing storage, reset caller errors and return nil on invalid values.
+This is not universal JSON Schema validation; omitted/null membership and other
+model shapes keep upstream semantics unless separately proven.
+
+All18 Quicktype language targets now have representative3.0/3.1 native model
+roundtrip evidence in the catalog; each language's exact compiler/runtime/platform
+scope remains in this document. The model patch did not change the other17 target
+outputs in the recorded candidate parity/regression checks. The current local
+batch passes the generation/model/project API gates; canonical source/privacy,
+owner boundaries and the host-free capped worker remain unchanged.
+
+The same ARM job also passed original GPB/gRPC clients in source and descriptor
+forms through all4 RPC modes on gRPC1.84.0/Protobuf5.36.1/protoc36.1. Intel retry
+38718238486 passed source RPCs but descriptor Release xcodebuild exceeded3600sec;
+its model step never ran. Intel descriptor/model evidence, broader Apple versions/
+architectures/options/shapes and native installation/signing/current-head release
+checks remain open. A proposed host-only/shared-Pods QA optimization is validated
+locally and will have a distinct native CI result; it is not retroactively proven
+by the ARM run. Artifacts: `/tmp/moleapi-objc-repair-arm-38707843936`.

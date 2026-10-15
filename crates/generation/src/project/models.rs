@@ -40,6 +40,7 @@ pub(super) fn catalog() -> Result<Vec<ProjectTarget>> {
                 | "model-pike"
                 | "model-crystal"
                 | "model-haskell"
+                | "model-objc"
         ) {
             target.validation = "representative-3.0-3.1-native-model-roundtrip-fixture".into();
         }
