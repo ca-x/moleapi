@@ -1737,5 +1737,6 @@
   "Java 代码需放入方法或 main，并补充所选 HTTP 库的 import 与 Maven／Gradle 依赖；java.net.http 使用 JDK 自带客户端。": "Java 代码需放入方法或 main，并补充所选 HTTP 库的 import 与 Maven／Gradle 依赖；java.net.http 使用 JDK 自带客户端。",
   "OkHttp cannot send GET/HEAD bodies; choose another Java HTTP library": "OkHttp 无法发送带正文的 GET/HEAD 请求；请选择其他 Java HTTP 库。",
   "Kotlin 代码需放入方法体，并安装 OkHttp 依赖。请导入 asRequestBody、toRequestBody、toMediaTypeOrNull 扩展方法；文件示例还需要 java.io.File。": "Kotlin 代码需放入方法体，并安装 OkHttp 依赖。请导入 asRequestBody、toRequestBody、toMediaTypeOrNull 扩展方法；文件示例还需要 java.io.File。",
-  "OkHttp cannot send GET/HEAD bodies; choose a different HTTP library": "OkHttp 无法发送带正文的 GET/HEAD 请求；请选择其他 HTTP 库。"
+  "OkHttp cannot send GET/HEAD bodies; choose a different HTTP library": "OkHttp 无法发送带正文的 GET/HEAD 请求；请选择其他 HTTP 库。",
+  "Dart 示例需放入 async 方法，并安装所选 http／dio 及 http_parser 依赖。文件示例需要 dart:io，编码转换需要 dart:convert。": "Dart 示例需放入 async 方法，并安装所选 http／dio 及 http_parser 依赖。文件示例需要 dart:io，编码转换需要 dart:convert。"
 }

@@ -142,7 +142,8 @@ pub fn generate_request(
     }
     let native_form = (target == "java"
         && matches!(client, "nethttp" | "okhttp" | "asynchttp" | "unirest"))
-        || (target == "kotlin" && client == "okhttp");
+        || (target == "kotlin" && client == "okhttp")
+        || (target == "dart" && matches!(client, "http" | "dio"));
     if request.body_kind == "form" && !(target == "shell" && client == "curl") && !native_form {
         let mut names = std::collections::BTreeSet::new();
         for (name, _) in url::form_urlencoded::parse(request.body.as_bytes()) {
@@ -280,6 +281,59 @@ pub fn generate_request(
 mod tests {
     use super::*;
     #[test]
+    fn dart_native_files_and_repeated_forms_preserve_private_source_boundaries() {
+        let body =
+            json!({"file_name":"upload.bin","mime":"application/octet-stream","base64":"AP+AClg="})
+                .to_string();
+        let mut w = workspace("binary", &body);
+        w.data.collections[0].requests[0].auth.kind = "bearer".into();
+        w.data.collections[0].requests[0].auth.token = "private-dart-token".into();
+        let target = crate::catalog()
+            .unwrap()
+            .into_iter()
+            .find(|entry| entry.target == "dart")
+            .unwrap();
+        for client in ["http", "dio"] {
+            assert!(
+                target
+                    .clients
+                    .iter()
+                    .any(|entry| entry.client == client && entry.binary_file)
+            );
+            let snippet = generate_request(&w, "r", "dart", client, false).unwrap();
+            assert!(
+                snippet.code.contains("upload.bin")
+                    && !snippet.code.contains("AP+AClg=")
+                    && !snippet.code.contains("private-dart-token")
+            );
+            assert!(
+                snippet
+                    .warnings
+                    .iter()
+                    .any(|warning| warning.contains("文件上传代码引用文件名"))
+            );
+            assert!(
+                generate_request(&w, "r", "dart", client, true)
+                    .unwrap()
+                    .code
+                    .contains("private-dart-token")
+            );
+            let form = workspace("form", "label=one&label=two&empty=");
+            generate_request(&form, "r", "dart", client, true).unwrap();
+        }
+        assert_eq!(w.data.collections[0].requests[0].body, body);
+        assert!(
+            generate_request(
+                &workspace("form", "x=one&x=two"),
+                "r",
+                "node",
+                "fetch",
+                true
+            )
+            .is_err()
+        );
+    }
+    #[test]
     fn kotlin_native_files_forms_and_method_rejections_keep_source_and_privacy() {
         let binary =
             json!({"file_name":"upload.bin","mime":"application/octet-stream","base64":"AP+AClg="})
@@ -410,7 +464,7 @@ mod tests {
                 count += 1;
             }
         }
-        assert_eq!(count, 16);
+        assert_eq!(count, 18);
         assert_eq!(w.data.collections[0].requests[0].body, body);
     }
     #[test]

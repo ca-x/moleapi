@@ -119,3 +119,287 @@ diff --git a/node_modules/postman-code-generators/codegens/csharp-httpclient/lib
          break;
        default:
      }
+diff --git a/node_modules/postman-code-generators/codegens/dart-http/lib/index.js b/node_modules/postman-code-generators/codegens/dart-http/lib/index.js
+--- a/node_modules/postman-code-generators/codegens/dart-http/lib/index.js
++++ b/node_modules/postman-code-generators/codegens/dart-http/lib/index.js
+@@ -12,17 +12,10 @@
+  * @param {Boolean} trim indicates whether to trim string or not
+  */
+ function parseUrlEncoded (body, indent, trim) {
+-  var bodySnippet = 'request.bodyFields = {',
+-    enabledBodyList = _.reject(body, 'disabled'),
+-    bodyDataMap;
+-  if (!_.isEmpty(enabledBodyList)) {
+-    bodyDataMap = _.map(enabledBodyList, function (value) {
+-      return `${indent}'${sanitize(value.key, trim)}': '${sanitize(value.value, trim)}'`;
+-    });
+-    bodySnippet += '\n' + bodyDataMap.join(',\n') + '\n';
+-  }
+-  bodySnippet += '};';
+-  return bodySnippet;
++  var parameters = _.reject(body, 'disabled').map(function (entry) {
++    return [entry.key, entry.value || ''];
++  }), encoded = new URLSearchParams(parameters).toString();
++  return `request.bodyBytes = utf8.encode('${sanitize(encoded, trim)}');`;
+ }
+ 
+ /**
+@@ -34,17 +27,7 @@
+  * @param {Integer} indentCount the number of space to use
+  */
+ function parseRawBody (body, trim, contentType, indentCount) {
+-  if (contentType && (contentType === 'application/json' || contentType.match(/\+json$/))) {
+-    try {
+-      let jsonBody = JSON.parse(body);
+-      return `request.body = json.encode(${JSON.stringify(jsonBody, null, indentCount)});`;
+-
+-    }
+-    catch (error) {
+-      // Do nothing
+-    }
+-  }
+-  return `request.body = '''${sanitize(body, trim)}''';`;
++  return `request.bodyBytes = utf8.encode('${sanitize(body, trim)}');`;
+ }
+ 
+ /**
+@@ -80,40 +63,12 @@
+  * @param {Boolean} trim indicates whether to trim string or not
+  */
+ function parseFormData (body, indent, trim) {
+-  let bodySnippet = '',
+-    formDataArray = [],
+-    formDataFileArray = [],
+-    key,
+-    value;
+-
+-  if (_.isEmpty(body)) {
+-    return bodySnippet;
+-  }
+-
+-  _.forEach(body, function (data) {
+-    key = trim ? data.key.trim() : data.key;
+-    value = trim ? data.value.trim() : data.value;
+-    if (!data.disabled) {
+-      if (data.type === 'file') {
+-        formDataFileArray.push(`request.files.add(await http.MultipartFile.fromPath('${key}', '${data.src}'));`);
+-      }
+-      else {
+-        formDataArray.push(`${indent}'${sanitize(key)}': '${sanitize(value, trim)}'`);
+-      }
+-    }
+-  });
+-
+-  if (formDataArray.length > 0) {
+-    bodySnippet += 'request.fields.addAll({\n';
+-    bodySnippet += formDataArray.join(',\n');
+-    bodySnippet += '\n});\n';
+-  }
+-
+-  if (formDataFileArray.length > 0) {
+-    bodySnippet += formDataFileArray.join('\n');
+-  }
+-
+-  return bodySnippet;
++  return _.reject(body, 'disabled').map(function (data) {
++    var key = sanitize(data.key, trim), mime = sanitize(data.contentType || (data.type === 'file' ? 'application/octet-stream' : 'text/plain; charset=utf-8'), false);
++    return data.type === 'file'
++      ? `request.files.add(await http.MultipartFile.fromPath('${key}', '${sanitize(data.src, false)}', contentType: MediaType.parse('${mime}')));`
++      : `request.files.add(http.MultipartFile.fromString('${key}', '${sanitize(data.value || '', trim)}', contentType: MediaType.parse('${mime}')));`;
++  }).join('\n');
+ }
+ 
+ /**
+@@ -136,7 +91,7 @@
+       case 'graphql':
+         return parseGraphQLBody(body.graphql, trim);
+       case 'file':
+-        return 'request.body = r\'<file contents here>\';\n';
++        return `request.bodyBytes = await File('${sanitize(body.file.src, false)}').readAsBytes();`;
+       default:
+         return '';
+     }
+@@ -209,11 +164,14 @@
+       }
+     }
+ 
++    if (request.body && request.body.mode === 'formdata') request.removeHeader('Content-Type');
+     contentType = request.headers.get('Content-Type');
+     if (options.includeBoilerplate) {
+-      if (contentType && (contentType === 'application/json' || contentType.match(/\+json$/))) {
++      if (request.body && ['raw','urlencoded','graphql'].includes(request.body.mode)) {
+         headerSnippet = 'import \'dart:convert\';\n';
+       }
++      if (request.body && request.body.mode === 'file') headerSnippet += 'import \'dart:io\';\n';
++      if (request.body && request.body.mode === 'formdata') headerSnippet += 'import \'package:http_parser/http_parser.dart\';\n';
+       headerSnippet += 'import \'package:http/http.dart\' as http;\n\n';
+       headerSnippet += 'void main() async {\n';
+       footerSnippet = '}\n';
+@@ -269,11 +227,11 @@
+ 
+     if (requestBody && requestBody.mode === 'formdata') {
+       codeSnippet += `var request = http.MultipartRequest('${request.method.toUpperCase()}',` +
+-        ` Uri.parse('${request.url.toString()}'));\n`;
++        ` Uri.parse('${sanitize(request.url.toString(), false)}'));\n`;
+     }
+     else {
+       codeSnippet += `var request = http.Request('${request.method.toUpperCase()}',` +
+-      ` Uri.parse('${request.url.toString()}'));\n`;
++      ` Uri.parse('${sanitize(request.url.toString(), false)}'));\n`;
+     }
+ 
+     if (body !== '') {
+diff --git a/node_modules/postman-code-generators/codegens/dart-http/lib/util.js b/node_modules/postman-code-generators/codegens/dart-http/lib/util.js
+--- a/node_modules/postman-code-generators/codegens/dart-http/lib/util.js
++++ b/node_modules/postman-code-generators/codegens/dart-http/lib/util.js
+@@ -17,6 +17,7 @@
+       .replace(/\t/g, '\\t')
+       .replace(/'/g, '\\\'')
+       .replace(/\$/g, '\\$');
++    inputString = inputString.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, function (value) { return '\\u' + value.charCodeAt(0).toString(16).padStart(4, '0'); });
+     return trim ? inputString.trim() : inputString;
+ 
+   },
+diff --git a/node_modules/postman-code-generators/codegens/dart-dio/lib/index.js b/node_modules/postman-code-generators/codegens/dart-dio/lib/index.js
+--- a/node_modules/postman-code-generators/codegens/dart-dio/lib/index.js
++++ b/node_modules/postman-code-generators/codegens/dart-dio/lib/index.js
+@@ -13,17 +13,10 @@
+  * @param {Boolean} trim indicates whether to trim string or not
+  */
+ function parseUrlEncoded (body, indent, trim) {
+-  var bodySnippet = 'var data = {',
+-    enabledBodyList = _.reject(body, 'disabled'),
+-    bodyDataMap;
+-  if (!_.isEmpty(enabledBodyList)) {
+-    bodyDataMap = _.map(enabledBodyList, function (value) {
+-      return `${indent}'${sanitize(value.key, trim)}': '${sanitize(value.value, trim)}'`;
+-    });
+-    bodySnippet += '\n' + bodyDataMap.join(',\n') + '\n';
+-  }
+-  bodySnippet += '};';
+-  return bodySnippet;
++  var parameters = _.reject(body, 'disabled').map(function (entry) {
++    return [entry.key, entry.value || ''];
++  }), encoded = new URLSearchParams(parameters).toString();
++  return `var data = '${sanitize(encoded, trim)}';`;
+ }
+ 
+ /**
+@@ -35,17 +28,7 @@
+  * @param {Integer} indentCount the number of space to use
+  */
+ function parseRawBody (body, trim, contentType, indentCount) {
+-  if (contentType && (contentType === 'application/json' || contentType.match(/\+json$/))) {
+-    try {
+-      let jsonBody = JSON.parse(body);
+-      return `var data = json.encode(${JSON.stringify(jsonBody, null, indentCount)});`;
+-
+-    }
+-    catch (error) {
+-      // Do nothing
+-    }
+-  }
+-  return `var data = '''${sanitize(body, trim)}''';`;
++  return `var data = '${sanitize(body, trim)}';`;
+ }
+ 
+ /**
+@@ -81,43 +64,21 @@
+  * @param {Boolean} trim indicates whether to trim string or not
+  */
+ function parseFormData (body, indent, trim) {
+-  let bodySnippet = '',
+-    formDataArray = [],
+-    formDataFileArray = [],
+-    key,
+-    value;
+-
+-  if (_.isEmpty(body)) {
+-    return bodySnippet;
+-  }
+-
+-  _.forEach(body, function (data) {
+-    key = trim ? data.key.trim() : data.key;
+-    value = trim ? data.value.trim() : data.value;
+-    if (!data.disabled) {
+-      if (data.type === 'file') {
+-        var pathArray = data.src.split(path.sep),
+-          fileName = pathArray[pathArray.length - 1];
+-        formDataFileArray.push(`await MultipartFile.fromFile('${data.src}', filename: '${sanitize(fileName, trim)}')`);
+-      }
+-      else {
+-        formDataArray.push(`${indent}'${sanitize(key)}': '${sanitize(value, trim)}'`);
+-      }
++  var lines = ['var data = FormData();'];
++  _.reject(body, 'disabled').forEach(function (data) {
++    var key = sanitize(data.key, trim), mime = sanitize(data.contentType || (data.type === 'file' ? 'application/octet-stream' : ''), false);
++    if (data.type === 'file') {
++      var filename = sanitize(path.basename(data.src), false);
++      lines.push(`data.files.add(MapEntry('${key}', await MultipartFile.fromFile('${sanitize(data.src, false)}', filename: '${filename}', contentType: MediaType.parse('${mime}'))));`);
++    }
++    else if (data.contentType) {
++      lines.push(`data.files.add(MapEntry('${key}', MultipartFile.fromString('${sanitize(data.value || '', trim)}', contentType: MediaType.parse('${mime}'))));`);
++    }
++    else {
++      lines.push(`data.fields.add(MapEntry('${key}', '${sanitize(data.value || '', trim)}'));`);
+     }
+   });
+-
+-  if (formDataArray.length > 0 || formDataFileArray.length > 0) {
+-    bodySnippet += 'var data = FormData.fromMap({\n';
+-    if (formDataFileArray.length > 0) {
+-      bodySnippet += `${indent}'files': [\n${indent}${indent}`;
+-      bodySnippet += formDataFileArray.join(`,\n${indent}${indent}`);
+-      bodySnippet += `\n${indent}],\n`;
+-    }
+-    bodySnippet += formDataArray.join(',\n');
+-    bodySnippet += '\n});\n';
+-  }
+-
+-  return bodySnippet;
++  return lines.join('\n');
+ }
+ 
+ /**
+@@ -140,7 +101,7 @@
+       case 'graphql':
+         return parseGraphQLBody(body.graphql, trim);
+       case 'file':
+-        return 'var data = r\'<file contents here>\';\n';
++        return `var data = await File('${sanitize(body.file.src, false)}').readAsBytes();`;
+       default:
+         return '';
+     }
+@@ -214,9 +175,12 @@
+       }
+     }
+ 
++    if (request.body && request.body.mode === 'formdata') request.removeHeader('Content-Type');
+     contentType = request.headers.get('Content-Type');
+     if (options.includeBoilerplate) {
+       headerSnippet = 'import \'dart:convert\';\n';
++      if (request.body && request.body.mode === 'file') headerSnippet += 'import \'dart:io\';\n';
++      if (request.body && request.body.mode === 'formdata') headerSnippet += 'import \'package:http_parser/http_parser.dart\';\n';
+       headerSnippet += 'import \'package:dio/dio.dart\';\n\n';
+       headerSnippet += 'void main() async {\n';
+       footerSnippet = '}\n';
+@@ -273,7 +237,7 @@
+ 
+     codeSnippet += 'var dio = Dio();\n';
+     codeSnippet += 'var response = await dio.request(\n';
+-    codeSnippet += `${indent}'${request.url.toString()}',\n`;
++    codeSnippet += `${indent}'${sanitize(request.url.toString(), false)}',\n`;
+     codeSnippet += `${indent}options: Options(\n`;
+     codeSnippet += `${indent}${indent}method: '${request.method.toUpperCase()}',\n`;
+     codeSnippet += `${headers !== '' ? `${indent}${indent}headers: headers,\n` : ''}`;
+diff --git a/node_modules/postman-code-generators/codegens/dart-dio/lib/util.js b/node_modules/postman-code-generators/codegens/dart-dio/lib/util.js
+--- a/node_modules/postman-code-generators/codegens/dart-dio/lib/util.js
++++ b/node_modules/postman-code-generators/codegens/dart-dio/lib/util.js
+@@ -17,6 +17,7 @@
+       .replace(/\t/g, '\\t')
+       .replace(/'/g, '\\\'')
+       .replace(/\$/g, '\\$');
++    inputString = inputString.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, function (value) { return '\\u' + value.charCodeAt(0).toString(16).padStart(4, '0'); });
+     return trim ? inputString.trim() : inputString;
+ 
+   },
