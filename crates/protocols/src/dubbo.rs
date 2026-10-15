@@ -1,14 +1,15 @@
 //! One-shot Apache Dubbo GenericService worker with Rust-owned network admission.
 use anyhow::{Context, Result, bail, ensure};
+use futures_util::StreamExt;
 use moleapi_core::{
     DubboConfig, NetworkPolicy, Protocol, RequestSpec, Response, ScriptLog, checked_destination,
-    dubbo_provider_url, dubbo_url,
+    dubbo_provider_url, dubbo_registry_url, dubbo_url,
 };
 use percent_encoding::percent_decode_str;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
-    net::SocketAddr,
+    net::{IpAddr, SocketAddr},
     path::Path,
     process::Stdio,
     sync::Arc,
@@ -89,22 +90,7 @@ pub async fn lookup_zookeeper(
     timeout: Duration,
 ) -> Result<Vec<String>> {
     let deadline = Instant::now() + timeout;
-    ensure!(
-        registry.len() <= 2048,
-        "ZooKeeper registry URL exceeds limit"
-    );
-    let url = url::Url::parse(registry).context("Invalid ZooKeeper registry URL")?;
-    ensure!(
-        url.scheme() == "zookeeper"
-            && url.host_str().is_some()
-            && url.port().is_some_and(|port| port > 0)
-            && url.username().is_empty()
-            && url.password().is_none()
-            && matches!(url.path(), "" | "/")
-            && url.query().is_none()
-            && url.fragment().is_none(),
-        "Unsupported ZooKeeper registry endpoint"
-    );
+    let url = dubbo_registry_url(registry, "zookeeper")?;
     let addresses = tokio::time::timeout(
         deadline.saturating_duration_since(Instant::now()),
         checked_destination(&url, policy),
@@ -205,6 +191,162 @@ fn registry_candidate_matches(source: &str, config: &DubboConfig) -> Result<bool
         && group.as_deref().unwrap_or("") == config.group)
 }
 
+/// Nacos v2's published instance-list API, pinned to one Rust-admitted address.
+/// The returned instance metadata is reconstructed as Apache Dubbo's provider URL.
+pub async fn lookup_nacos(
+    registry: &str,
+    config: &DubboConfig,
+    policy: NetworkPolicy,
+    timeout: Duration,
+) -> Result<Vec<String>> {
+    let deadline = Instant::now() + timeout;
+    let registry_url = dubbo_registry_url(registry, "nacos")?;
+    ensure!(
+        config.registry_auth.is_none(),
+        "Nacos registry credentials are not supported yet"
+    );
+    let addresses = tokio::time::timeout(
+        deadline.saturating_duration_since(Instant::now()),
+        checked_destination(&registry_url, policy),
+    )
+    .await
+    .context("Nacos address lookup timed out")??;
+    let address = reachable_address(&addresses, deadline)
+        .await
+        .context("Nacos registry connection failed")?;
+    let host = registry_url
+        .host_str()
+        .context("Nacos host missing")?
+        .trim_matches(['[', ']']);
+    let mut endpoint = url::Url::parse("http://127.0.0.1")?;
+    endpoint
+        .set_host(Some(host))
+        .map_err(|_| anyhow::anyhow!("Invalid Nacos host"))?;
+    endpoint
+        .set_port(registry_url.port())
+        .map_err(|_| anyhow::anyhow!("Invalid Nacos port"))?;
+    endpoint.set_path("/nacos/v1/ns/instance/list");
+    endpoint
+        .query_pairs_mut()
+        .append_pair(
+            "serviceName",
+            &format!(
+                "providers:{}:{}:{}",
+                config.service, config.version, config.group
+            ),
+        )
+        .append_pair("groupName", "DEFAULT_GROUP")
+        .append_pair("healthyOnly", "false");
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .no_gzip()
+        .no_brotli()
+        .no_deflate()
+        .no_zstd()
+        .resolve(host, address)
+        .timeout(deadline.saturating_duration_since(Instant::now()))
+        .build()?;
+    let response = client
+        .get(endpoint)
+        .send()
+        .await
+        .context("Nacos provider lookup failed")?;
+    ensure!(
+        response.status().is_success(),
+        "Nacos provider lookup returned {}",
+        response.status()
+    );
+    ensure!(
+        response
+            .content_length()
+            .is_none_or(|length| length <= MAX_INPUT as u64),
+        "Nacos provider response exceeds 1 MiB"
+    );
+    let mut body = Vec::new();
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = tokio::time::timeout(
+        deadline.saturating_duration_since(Instant::now()),
+        stream.next(),
+    )
+    .await
+    .context("Nacos provider response timed out")?
+    {
+        let chunk = chunk.context("Nacos provider response failed")?;
+        ensure!(
+            body.len().saturating_add(chunk.len()) <= MAX_INPUT,
+            "Nacos provider response exceeds 1 MiB"
+        );
+        body.extend_from_slice(&chunk);
+    }
+    let data: Value = serde_json::from_slice(&body).context("Invalid Nacos provider response")?;
+    let instances = data
+        .get("hosts")
+        .and_then(Value::as_array)
+        .context("Nacos provider response omitted hosts")?;
+    ensure!(instances.len() <= 256, "Nacos provider count exceeds limit");
+    let mut sources = Vec::new();
+    let mut total = 0usize;
+    for instance in instances {
+        ensure!(
+            instance.get("healthy").and_then(Value::as_bool).is_some()
+                && instance.get("enabled").and_then(Value::as_bool).is_some(),
+            "Invalid Nacos provider state"
+        );
+        if instance["healthy"] != true || instance["enabled"] != true {
+            continue;
+        }
+        let ip: IpAddr = instance
+            .get("ip")
+            .and_then(Value::as_str)
+            .context("Nacos provider IP missing")?
+            .parse()
+            .context("Invalid Nacos provider IP")?;
+        let port: u16 = instance
+            .get("port")
+            .and_then(Value::as_u64)
+            .context("Nacos provider port missing")?
+            .try_into()
+            .context("Invalid Nacos provider port")?;
+        ensure!(port > 0, "Invalid Nacos provider port");
+        let metadata = instance
+            .get("metadata")
+            .and_then(Value::as_object)
+            .context("Nacos provider metadata missing")?;
+        ensure!(
+            metadata.len() <= 128,
+            "Nacos provider metadata exceeds limit"
+        );
+        let path = metadata
+            .get("path")
+            .and_then(Value::as_str)
+            .context("Nacos provider path missing")?;
+        ensure!(
+            path == config.service
+                && metadata.get("protocol").and_then(Value::as_str) == Some("dubbo"),
+            "Nacos instance is not a matching classic Dubbo provider"
+        );
+        let mut provider = url::Url::parse(&format!("dubbo://{}", SocketAddr::new(ip, port)))?;
+        provider.set_path(&format!("/{path}"));
+        let mut fields = metadata.iter().collect::<Vec<_>>();
+        fields.sort_by(|left, right| left.0.cmp(right.0));
+        for (key, value) in fields {
+            provider.query_pairs_mut().append_pair(
+                key,
+                value
+                    .as_str()
+                    .context("Invalid Nacos provider metadata value")?,
+            );
+        }
+        let source = provider.to_string();
+        ensure!(source.len() <= 4096, "Nacos provider URL exceeds limit");
+        total += source.len();
+        ensure!(total <= MAX_INPUT, "Nacos provider snapshot exceeds 1 MiB");
+        sources.push(source);
+    }
+    Ok(sources)
+}
+
 #[derive(Clone)]
 pub struct DubboRuntime {
     jar: Arc<[u8]>,
@@ -245,14 +387,28 @@ impl DubboRuntime {
         };
         let start = Instant::now();
         let deadline = start + Duration::from_millis(request.timeout_ms);
-        let target = if config.source == "zookeeper" {
-            let providers = lookup_zookeeper(
-                &request.url,
-                config,
-                policy,
-                deadline.saturating_duration_since(Instant::now()),
-            )
-            .await?;
+        let target = if config.source != "direct" {
+            let providers = match config.source.as_str() {
+                "zookeeper" => {
+                    lookup_zookeeper(
+                        &request.url,
+                        config,
+                        policy,
+                        deadline.saturating_duration_since(Instant::now()),
+                    )
+                    .await?
+                }
+                "nacos" => {
+                    lookup_nacos(
+                        &request.url,
+                        config,
+                        policy,
+                        deadline.saturating_duration_since(Instant::now()),
+                    )
+                    .await?
+                }
+                _ => bail!("Unsupported Dubbo registry source"),
+            };
             select_registry_provider(
                 config,
                 &providers,
@@ -357,10 +513,17 @@ impl DubboRuntime {
             private_auth_values: vec![],
             soap_fault: None,
             request_updates: vec![],
-            logs: if config.source == "zookeeper" {
+            logs: if config.source != "direct" {
                 vec![ScriptLog {
                     level: "info".into(),
-                    message: format!("ZooKeeper → {target}"),
+                    message: format!(
+                        "{} → {target}",
+                        if config.source == "zookeeper" {
+                            "ZooKeeper"
+                        } else {
+                            "Nacos"
+                        }
+                    ),
                 }]
             } else {
                 vec![]
@@ -449,6 +612,49 @@ mod tests {
         );
         assert!(registry_candidate_matches(&format!("{base}&group=other"), &config).is_err());
         assert!(registry_candidate_matches("not a URL", &config).is_err());
+    }
+
+    #[tokio::test]
+    async fn nacos_rejects_non_dubbo_instances_and_oversized_responses() {
+        let config = DubboConfig {
+            source_version: 2,
+            source: "nacos".into(),
+            service: "fixture.Service".into(),
+            version: "1.0.0".into(),
+            group: "qa".into(),
+            ..Default::default()
+        };
+        let policy = NetworkPolicy {
+            allow_private_network: true,
+        };
+        let invalid = json!({"hosts":[{"healthy":true,"enabled":true,
+            "ip":"127.0.0.1","port":20880,"metadata":{"path":"fixture.Service",
+            "protocol":"tri","version":"1.0.0","group":"qa","side":"provider"}}]})
+        .to_string();
+        for (body, expected) in [
+            (invalid, "not a matching classic Dubbo provider"),
+            ("x".repeat(MAX_INPUT + 1), "response exceeds 1 MiB"),
+        ] {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let app = axum::Router::new().route(
+                "/nacos/v1/ns/instance/list",
+                axum::routing::get(move || {
+                    let value = body.clone();
+                    async move { value }
+                }),
+            );
+            let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+            let result = lookup_nacos(
+                &format!("nacos://127.0.0.1:{port}"),
+                &config,
+                policy,
+                Duration::from_secs(3),
+            )
+            .await;
+            assert!(result.unwrap_err().to_string().contains(expected));
+            server.abort();
+        }
     }
 
     #[test]

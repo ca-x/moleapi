@@ -111,6 +111,23 @@ pub fn dubbo_url(raw: &str) -> Result<url::Url> {
     Ok(parsed)
 }
 
+pub fn dubbo_registry_url(raw: &str, scheme: &str) -> Result<url::Url> {
+    ensure!(raw.len() <= 2048, "Dubbo registry URL exceeds limit");
+    let url = url::Url::parse(raw).context("Invalid Dubbo registry URL")?;
+    ensure!(
+        url.scheme() == scheme
+            && url.host_str().is_some()
+            && url.port().is_some_and(|port| port > 0)
+            && url.username().is_empty()
+            && url.password().is_none()
+            && matches!(url.path(), "" | "/")
+            && url.query().is_none()
+            && url.fragment().is_none(),
+        "Unsupported Dubbo registry endpoint"
+    );
+    Ok(url)
+}
+
 /// Validate one untrusted registry result before the host resolves or connects it.
 pub fn dubbo_provider_url(raw: &str, config: &DubboConfig) -> Result<url::Url> {
     ensure!(
@@ -192,7 +209,8 @@ pub fn validate_dubbo(request: &RequestSpec, templates: bool) -> Result<()> {
     };
     ensure!(
         (config.source_version == 1 && config.source == "direct")
-            || (config.source_version == 2 && config.source == "zookeeper"),
+            || (config.source_version == 2
+                && matches!(config.source.as_str(), "zookeeper" | "nacos")),
         "Unsupported Dubbo source version"
     );
     if let Some(auth) = &config.registry_auth {
@@ -222,6 +240,12 @@ pub fn validate_dubbo(request: &RequestSpec, templates: bool) -> Result<()> {
             && config.group.len() <= 128,
         "Dubbo service or method exceeds size limit"
     );
+    if config.source == "nacos" {
+        ensure!(
+            !config.version.is_empty() && !config.group.is_empty(),
+            "Nacos discovery requires explicit Dubbo version and group"
+        );
+    }
     if !templates {
         ensure!(
             java_name(&config.service, true) && config.service.contains('.'),
@@ -336,18 +360,7 @@ pub fn validate_dubbo(request: &RequestSpec, templates: bool) -> Result<()> {
         if config.source == "direct" {
             dubbo_url(&request.url)?;
         } else {
-            let url = url::Url::parse(&request.url).context("Invalid ZooKeeper registry URL")?;
-            ensure!(
-                url.scheme() == "zookeeper"
-                    && url.host_str().is_some()
-                    && url.port().is_some_and(|port| port > 0)
-                    && url.username().is_empty()
-                    && url.password().is_none()
-                    && matches!(url.path(), "" | "/")
-                    && url.query().is_none()
-                    && url.fragment().is_none(),
-                "Invalid ZooKeeper registry endpoint"
-            );
+            dubbo_registry_url(&request.url, &config.source)?;
         }
     }
     Ok(())

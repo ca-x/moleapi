@@ -17,3 +17,4 @@ vendor/java-runtime/.java-*
 vendor/dubbo-worker/.dubbo-*
 tools/dubbo-worker/target
 tools/dubbo-discovery-qa/java/target
+tools/dubbo-nacos-qa/java/target

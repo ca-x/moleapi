@@ -440,6 +440,7 @@
   "ZooKeeper 密码": "ZooKeeper password",
   "凭据留空表示无需认证；填写时使用 ZooKeeper digest 认证。": "Leave credentials empty for anonymous access, or enter a username and password for ZooKeeper digest authentication.",
   "在上方 URL 栏填写 ZooKeeper 地址。每次调用都会重新查找提供方。": "Enter the ZooKeeper address in the URL field above. Each call looks up providers again.",
+  "在上方 URL 栏填写 Nacos 地址。当前支持公开命名空间的无认证 HTTP 服务发现。": "Enter the Nacos address in the URL field above. Discovery currently supports unauthenticated HTTP in the public namespace.",
   "直连提供方": "Direct provider",
   "Dubbo 服务": "Dubbo service",
   "Dubbo 方法": "Dubbo method",

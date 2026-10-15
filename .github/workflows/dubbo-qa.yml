@@ -143,3 +143,43 @@ jobs:
             ${{ runner.temp }}/zookeeper-evidence.auth.log
             ${{ runner.temp }}/zookeeper-evidence.complete.log
           if-no-files-found: warn
+  nacos-wire:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: |
+            tools/dubbo-worker/pom.xml
+            tools/dubbo-nacos-qa/java/pom.xml
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Prepare official Nacos 2.5.1 server and Apache fixture
+        run: |
+          python3 scripts/prepare_dubbo_worker.py --maven "$(command -v mvn)"
+          mkdir -p "$RUNNER_TEMP/nacos-qa"
+          curl -fL --retry 3 --retry-delay 3 -o "$RUNNER_TEMP/nacos-qa/nacos-server-2.5.1.tar.gz" \
+            https://github.com/alibaba/nacos/releases/download/2.5.1/nacos-server-2.5.1.tar.gz
+          mvn -B --strict-checksums -f tools/dubbo-nacos-qa/java/pom.xml package dependency:copy-dependencies -DincludeScope=runtime
+      - name: Verify checked Nacos discovery and product Dubbo call
+        run: |
+          python3 tools/dubbo-nacos-qa/verify.py --java "$(readlink -f "$(command -v java)")" \
+            --jar "$PWD/vendor/dubbo-worker/current/engine.jar" \
+            --archive "$RUNNER_TEMP/nacos-qa/nacos-server-2.5.1.tar.gz" \
+            --output "$RUNNER_TEMP/nacos-evidence.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dubbo-nacos-wire
+          path: |
+            ${{ runner.temp }}/nacos-evidence.json
+            ${{ runner.temp }}/nacos-evidence.server.log
+            ${{ runner.temp }}/nacos-evidence.held.log
+            ${{ runner.temp }}/nacos-evidence.complete.log
+          if-no-files-found: warn

@@ -72,6 +72,30 @@ fn zookeeper_digest_credentials_are_explicit_and_bounded() {
 }
 
 #[test]
+fn nacos_source_requires_a_plain_registry_endpoint() {
+    let mut r = request();
+    r.url = "nacos://registry.example:8848".into();
+    let Protocol::Dubbo { config } = &mut r.protocol else {
+        unreachable!()
+    };
+    config.source_version = 2;
+    config.source = "nacos".into();
+    config.group = "qa".into();
+    validate_request(&r, false).unwrap();
+    let Protocol::Dubbo { config } = &mut r.protocol else {
+        unreachable!()
+    };
+    config.group.clear();
+    assert!(validate_request(&r, false).is_err());
+    let Protocol::Dubbo { config } = &mut r.protocol else {
+        unreachable!()
+    };
+    config.group = "qa".into();
+    r.url = "nacos://registry.example:8848/other".into();
+    assert!(validate_request(&r, false).is_err());
+}
+
+#[test]
 fn classic_draft_roundtrips_order_and_original_json_without_becoming_http() {
     let r = request();
     validate_request(&r, true).unwrap();

@@ -336,7 +336,7 @@ export default function RequestEditor({
           aria-label={t("请求 URL")}
           disabled={mcpStdio || dataLocal || (data && protocolConnected)}
           value={mcpStdio ? "STDIO" : dataLocal && request.protocol?.kind==="data" ? request.protocol.file_name : request.url}
-          placeholder={dubbo ? request.protocol?.kind === "dubbo" && request.protocol.source === "zookeeper" ? "zookeeper://host:2181" : "dubbo://host:20880" : "https://api.example.com/v1/users"}
+          placeholder={dubbo ? request.protocol?.kind === "dubbo" && request.protocol.source === "zookeeper" ? "zookeeper://host:2181" : request.protocol?.kind === "dubbo" && request.protocol.source === "nacos" ? "nacos://host:8848" : "dubbo://host:20880" : "https://api.example.com/v1/users"}
           onChange={(e) => update({ url: e.target.value })}
         />
         <Button
