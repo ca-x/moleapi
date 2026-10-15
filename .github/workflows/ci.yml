@@ -92,3 +92,27 @@ jobs:
           MOLEAPI_TEST_POSTGRES_URL: postgresql://moleapi:moleapi_test_only@127.0.0.1:5432/moleapi
           MOLEAPI_TEST_MYSQL_URL: mysql://moleapi:moleapi_test_only@127.0.0.1:3306/moleapi
         run: cargo test --locked -p moleapi-server --test database -- --nocapture --test-threads=1
+      - name: Prepare pinned SQL generator and native database consumers
+        run: |
+          python scripts/prepare_openapi_generator.py
+          python -m venv "$RUNNER_TEMP/sql-model-tools"
+          "$RUNNER_TEMP/sql-model-tools/bin/python" -m pip install -r tools/models/sql-requirements.txt
+          cargo build --locked -p moleapi-server
+      - name: Execute original model DDL on PostgreSQL and MySQL
+        env:
+          MOLEAPI_MODEL_QA_POSTGRES_URL: postgresql://moleapi:moleapi_test_only@127.0.0.1:5432/postgres
+          MOLEAPI_MODEL_QA_MYSQL_URL: mysql://root:moleapi_test_only@127.0.0.1:3306/
+        run: |
+          for dialect in 3.0.3 3.1.0; do
+            cargo run --locked -p moleapi-generation --example fixture_models -- "$RUNNER_TEMP/sql-models-$dialect" "$PWD/target/debug/moleapi-server" "$(command -v java)" "$dialect" mysql-schema,postgresql-schema
+            "$RUNNER_TEMP/sql-model-tools/bin/python" tools/models/verify-sql.py --fixtures "$RUNNER_TEMP/sql-models-$dialect" --dialect "$dialect" --target postgresql-schema --url-env MOLEAPI_MODEL_QA_POSTGRES_URL
+            "$RUNNER_TEMP/sql-model-tools/bin/python" tools/models/verify-sql.py --fixtures "$RUNNER_TEMP/sql-models-$dialect" --dialect "$dialect" --target mysql-schema --url-env MOLEAPI_MODEL_QA_MYSQL_URL
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sql-model-native-evidence
+          path: |
+            ${{ runner.temp }}/sql-models-*/**/runtime-evidence.json
+            ${{ runner.temp }}/sql-models-*/**/moleapi-generation.json
+          if-no-files-found: warn

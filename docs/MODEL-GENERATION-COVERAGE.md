@@ -26,7 +26,7 @@ Apifox's [model code list](https://docs.apifox.com/generate-code.md), checked202
 
 The specification generation dialog has a separate data-model category, language selection, all/exact component selection and expandable upstream serialization/style settings. Enum choices and booleans retain their types. Preview/copy/file/ZIP downloads, regeneration and owner/content/cancellation guards reuse project artifacts. SQL exports DDL only and requires the existing explicit Java runtime; the18 Quicktype targets work without Java or Node in hosted and offline applications.
 
-Actual evidence: all18 language targets generated recursive/enum/nullable component models in the host-free Rust VM; the capped application worker produced all20 target artifacts, including actual MySQL/PostgreSQL DDL. Generated Python, JavaScript, TypeScript, Go, C#, Java, Rust, Ruby, C++, Kotlin, Dart, Swift, Flow, Elm, Pike, Crystal and Haskell models now run recursive/enum/nullable/Unicode serialization roundtrips in OpenAPI3.0.3/3.1.0 fixtures. TypeScript, Go, C#, Java, Rust, C++, Kotlin, Dart, Swift, Flow, Elm, Crystal and Haskell compile with real toolchains; Python, JavaScript, Ruby and Pike run through their native runtimes. The remaining Objective-C model runtime and execution of generated SQL DDL are not established by artifact generation. Required/optional/null serialization differences remain those of the upstream target; this is model conversion, not universal schema validation.
+Actual evidence: all18 language targets generated recursive/enum/nullable component models in the host-free Rust VM; the capped application worker produced all20 target artifacts, including actual MySQL/PostgreSQL DDL. Generated Python, JavaScript, TypeScript, Go, C#, Java, Rust, Ruby, C++, Kotlin, Dart, Swift, Flow, Elm, Pike, Crystal and Haskell models now run recursive/enum/nullable/Unicode serialization roundtrips in OpenAPI3.0.3/3.1.0 fixtures. TypeScript, Go, C#, Java, Rust, C++, Kotlin, Dart, Swift, Flow, Elm, Crystal and Haskell compile with real toolchains; Python, JavaScript, Ruby and Pike run through their native runtimes. PostgreSQL18.6/MySQL8.4.11 execute original generated DDL with native enum/required/null/Unicode cases in both dialects. The remaining Objective-C model runtime is not established by artifact generation. Required/optional/null serialization differences remain those of the upstream target; this is model conversion, not universal schema validation.
 
 API evidence covers authenticated ownership, anonymous/cross-owner rejection, default credential-example exclusion, exact component selection, typed-option rejection and unchanged canonical source. Component/UI tests cover typed model settings and existing late-reply fencing; English/Chinese catalogs include model flows.
 
@@ -318,3 +318,49 @@ python3 tools/models/verify-haskell.py --fixtures /absolute/haskell-models --dia
 Use fresh roots per dialect and append multi to the fixture command for the
 multiple-root/empty-object/array/map profile. Explicit GHC launchers may select an
 isolated package DB and library prefix without modifying host packages.
+
+
+## PostgreSQL and MySQL DDL execution
+
+Four actual OpenAPI3.0.3/3.1.0 cases execute the original aggregate DDL on native
+PostgreSQL18.6 and Oracle MySQL Community8.4.11/Linux. No DDL rewrite or SQL parser
+is used. Native enum columns retain ready/done, integer ID preserves zero, nullable
+TEXT preserves SQL NULL, and Unicode/quotes/ampersand/plus retain exact values.
+The recursive friend property is upstream TEXT: its JSON text roundtrips, without
+claiming relational references or a recursive database object model. Native metadata
+confirms the generated types/nullability. Unknown enum and missing required ID fail
+with the exact engine errors (PostgreSQL22P02/23502; strict MySQL1265/1364); rejected
+inserts leave row count unchanged.
+
+The QA-only driver creates a fresh UUID-named database using an explicit admin URL
+environment variable, executes original files, and drops only its own created database
+in finally. Credentials never become command arguments or evidence. It checks exact
+canonical source/dialect/manifest/file hashes before and after execution and records
+actual server versions and columns. QA connections require CREATE/DROP DATABASE
+privileges. Product generation never connects to or runs SQL against a database.
+The existing database CI adds these same cases against its PostgreSQL16/MySQL8.4
+services; local18.6/8.4.11 evidence does not assert those CI results in advance.
+
+Local services run from isolated native prefixes with private data and Unix sockets,
+without TCP listeners or host package changes. Official Arch PostgreSQL package
+SHA256/signature checks and the Oracle signed MySQL repository/index/package SHA256
+checks pass. The MySQL signer is BCA43417C3B485DD128EC6D4B7B3B788A8D3785C.
+Exact package/tool/source/runtime records stay in isolated QA. Consumers use pinned
+psycopg3.3.3/PyMySQL1.1.2 and the dependency versions in sql-requirements.txt.
+Catalog marks the two dialects representative-3.0-3.1-native-ddl-fixture, preserving
+OpenAPI Generator7.26.0 output and the existing explicit Java requirement.
+
+```sh
+python3 -m venv /absolute/sql-model-tools
+/absolute/sql-model-tools/bin/python -m pip install -r tools/models/sql-requirements.txt
+cargo run -p moleapi-generation --example fixture_models -- /absolute/sql-models /absolute/moleapi-server /absolute/java 3.1.0 mysql-schema,postgresql-schema
+# Set dedicated QA admin URLs in the named environment variables first.
+/absolute/sql-model-tools/bin/python tools/models/verify-sql.py --fixtures /absolute/sql-models --dialect 3.1.0 --target postgresql-schema --url-env MOLEAPI_MODEL_QA_POSTGRES_URL
+/absolute/sql-model-tools/bin/python tools/models/verify-sql.py --fixtures /absolute/sql-models --dialect 3.1.0 --target mysql-schema --url-env MOLEAPI_MODEL_QA_MYSQL_URL
+```
+
+Use a separate fresh fixture root for3.0.3. These representative cases do not prove
+all schema constraints, nested relational fidelity, SQL identifier/options/keyword
+coverage, migrations, dialect/platform/version ranges or release parity. Objective-C
+model/Apple RPC runtime gates and all remaining generation/product requirements stay
+open. The existing17 Quicktype model runtime cases remain independently scoped.
