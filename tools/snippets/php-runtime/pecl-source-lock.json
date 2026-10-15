@@ -1,0 +1,22 @@
+{
+  "purpose": "Explicit native QA/consumer tools only; no MoleAPI runtime dependency",
+  "sources": [
+    {
+      "url": "https://pecl.php.net/get/raphf-2.0.2.tgz",
+      "sha256": "7e782fbe7b7de2b5f1c43f49d9eb8c427649b547573564c78baaf2b8f8160ef4",
+      "bytes": 16262,
+      "official_package_files_checked": 21,
+      "metadata_url": "https://pecl.php.net/rest/r/raphf/package.2.0.2.xml",
+      "package_metadata_sha256": "7d91cb3139c6a358152b930a64e8bf0fcef2a98b70930fdc3a44bd473b5c7b90"
+    },
+    {
+      "url": "https://pecl.php.net/get/pecl_http-4.3.1.tgz",
+      "sha256": "1512dc02fea2356c4df50113e00943b0b7fc99bb22d34d9f624b4662f1dad263",
+      "bytes": 224532,
+      "official_package_files_checked": 320,
+      "metadata_url": "https://pecl.php.net/rest/r/pecl_http/package.4.3.1.xml",
+      "package_metadata_sha256": "14c1aa851c8f245957f2bf545e342964938ecd4899b39e3b659965b1bebe2c75"
+    }
+  ],
+  "native_source_patches": []
+}

@@ -18,7 +18,7 @@ This is usable request-example generation, separate from typed OpenAPI SDK/serve
 | Node.js | fetch, axios, ofetch, undici, native, request, unirest | Fetch and Native/Request/Unirest POST fixtures |
 | Objective-C | nsurlsession | Engine smoke only |
 | OCaml | cohttp | Engine smoke only |
-| PHP | curl, guzzle, laravel, httprequest2, pecl_http |54 original-code syntax/native HTTP cases for cURL/Guzzle8.2.0/Laravel HTTP13.36.0 on PHP8.5.11; HTTP_Request2/PECL HTTP remain smoke only |
+| PHP | curl, guzzle, laravel, httprequest2, pecl_http |90 original-code syntax/native HTTP cases across all5 clients on PHP8.5.11, including HTTP_Request2 2.8.0 default Socket and PECL HTTP4.3.1/raphf2.0.2 curl driver |
 | PowerShell | webrequest, restmethod | Engine smoke only |
 | Python | python3, requests, aiohttp, httpx_sync, httpx_async | 80 original-code syntax/native HTTP cases across all5 clients on Python3.14.8; aiohttp3.14.5, Requests2.34.2, HTTPX0.28.1, urllib3 2.8.0 multipart encoder |
 | R | httr2, httr, rcurl | Engine smoke only |
@@ -397,7 +397,7 @@ Laravel null omission, empty-object-to-array changes in all3 clients, cURL raw t
 rewriting and cURL/Guzzle literal syntax failures.
 
 QA: PHP8.5.11 NTS/Linux, ext-curl/libcurl8.22.0, Guzzle8.2.0, Illuminate HTTP/
-Container13.36.0, PSR7 3.1.0; the complete48-package lock and manifest live under
+Container13.36.0, PSR7 3.1.0; the complete51-package lock and manifest live under
 `tools/snippets/php-runtime`. These are explicit consumer/QA dependencies, not
 MoleAPI dependencies.96 generation cases,3 local/owned snippet API cases (including
 all3 PHP raw-file libraries with MIME/owner/privacy checks),44 focused UI/i18n cases,
@@ -417,12 +417,63 @@ absolute directory, install that lock with the selected PHP/Composer and scripts
 plugins disabled, then run:
 
 ```sh
-python3 tools/snippets/verify-php.py --php /absolute/php --node /absolute/node --dependencies /absolute/composer-project --output /absolute/fresh-output
+python3 tools/snippets/verify-php.py --php /absolute/php --node /absolute/node --dependencies /absolute/composer-project --extensions /absolute/pecl-modules --output /absolute/fresh-output
 ```
 
-HTTP_Request2 and PECL HTTP, other PHP/framework/dependency/OS ranges, advanced
+Other PHP/framework/dependency/OS ranges, advanced
 empty/escaped/nested part shapes, arbitrary headers/methods, response/error/auth/
 transport options and streaming remain open. Raw reads and cURL multipart string
 conversion may materialize bodies in the consumer; native stream cleanup belongs
 to the consumer/client lifecycle. This is evidence for the named cases, not full
 PHP or request-generation parity.
+
+
+## PHP HTTP_Request2 and PECL HTTP completion slice
+
+The pinned Postman converters now use literal-preserving PHP sanitization, native
+filename reads and actual saved MIME for raw bodies. HTTP_Request2 accepts Composer
+autoload with its existing PEAR include-path fallback. Its previous conversion of
+LF into backslash-n inside single-quoted PHP changed body bytes; that transformation
+is removed. PECL's raw-body branch now uses its mature sanitizer rather than direct
+source interpolation. Repeated URL-encoded values use mature URLSearchParams
+serialization. Multipart fields/files feed PSR7 MultipartStream in source order,
+with explicit MIME/filename, generated boundary and stream cleanup; the resulting
+bytes go through each selected native HTTP client. No application MIME encoder or
+replacement HTTP transport was added. Raw-file capability now covers28 adapters.
+
+The native PHP matrix now passes90 original-source syntax/HTTP cases: all5 exposed
+PHP clients ×18 existing profiles, including both new libraries' raw binary/MIME,
+GET file/DELETE JSON, multipart/text-only repeats, field MIME, Unicode/apostrophe
+filename, raw controls, scalar/null/empty-object JSON and quoted headers. The real
+HTTP_Request2 2.8.0 default Socket adapter and PECL HTTP4.3.1/raphf2.0.2 curl driver
+were used on PHP8.5.11/Linux, with the previous Guzzle/PSR7/Illuminate versions held
+by the extended51-package Composer lock. Native PECL extensions were built from
+pristine official releases in a private SDK, using matching PHP headers and no
+host installation. Release sizes and all341 official package-file MD5 entries
+matched; archive SHA256, metadata references and no-source-patch status are pinned
+in pecl-source-lock.json. Actual loaded extension versions/module hashes are in the
+driver evidence. The source-build procedure is documented in php-runtime/PECL-QA.md;
+these are explicit consumer/QA tools, not MoleAPI runtime dependencies.
+
+Old converter output reproduced9 issues: Composer-only HTTP_Request2 loading,
+its newline changes, PECL raw quoting, both clients' repeated forms/multipart and
+raw-MIME loss. Other53 representative adapter outputs remain byte-identical.
+96 generation cases,3 owned/local snippet API cases (including all5 PHP file
+libraries),46 UI/i18n cases, scoped strict Clippy, formatting, frontend/server
+builds, deterministic engine and complete clean Postman patch application passed.
+An initial API compilation was correctly discarded by the build cache when the
+parallel frontend build changed embedded assets; after the frontend finished, the
+API batch and server build passed with stable inputs. Build web/dist before Rust
+compiles the embedded server; do not mutate embedded engines or assets mid-build.
+
+Real owned-API UI checks cover English/light1280×900 HTTP_Request2 raw files and
+Chinese/dark375×812 PECL raw files. Both are available under the binary filter;
+selected dependency hints are localized, saved token/Base64 are absent and the
+document has no horizontal overflow. Scoped axe0 verified violations/1 manual
+line-number contrast check per view; screenshots were inspected. Evidence:
+`/tmp/moleapi-php-extensions-final` and `/tmp/moleapi-php-extensions-*.log`.
+
+This closes representative body/file runtime gaps for these two libraries, not
+all PHP behavior. Other dependency/PHP/OS ranges, advanced/empty/nested/escaped
+multipart shapes, arbitrary methods, response/error handling, streaming and full
+auth/timeout/TLS/redirect/cookie option mapping remain open with the overall plan.

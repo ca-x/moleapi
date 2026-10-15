@@ -40,6 +40,8 @@ async fn binary_snippets_preserve_mime_and_ownership_without_exporting_saved_byt
         ("php", "curl"),
         ("php", "guzzle"),
         ("php", "laravel"),
+        ("php", "httprequest2"),
+        ("php", "pecl_http"),
         ("python", "python3"),
         ("python", "aiohttp"),
         ("python", "requests"),

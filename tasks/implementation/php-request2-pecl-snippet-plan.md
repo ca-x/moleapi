@@ -1,0 +1,16 @@
+# PHP HTTP_Request2 and PECL HTTP request bodies
+
+Continue the full generation milestone using the existing pinned Postman2.1.1 converters and SDK5.3.1. Preserve the cURL/Guzzle/Laravel batch and all other library routing.
+
+- HTTP_Request2 uses its native client/default Socket adapter and setBody, supporting Composer autoload with the existing PEAR include-path fallback. PECL HTTP keeps http Client/Request/Message Body. Do not substitute Guzzle for either HTTP transport.
+- Repair raw PHP literal escaping and filename-only native reads; keep raw JSON/text shape and effective MIME. Preserve repeated forms through mature URLSearchParams serialization. For multipart, both native clients consume Guzzle PSR7 MultipartStream output/boundary, retaining ordered fields/files, duplicate names and part metadata. Do not write a MIME encoder or parser.
+- Extend the existing trusted PHP fixture/verifier to all5 exposed PHP clients and18 profiles. Preserve source hash assertions, native Node HTTP/stdlib MIME observations, status checks, privacy/owner boundaries, default binary capability filtering and no app-host IO. Code and validation scripts precede the batch tests.
+- Pin pear/http_request2 2.8.0 and dependencies. Prepare explicit isolated PECL HTTP/raphf modules with the existing verified PHP8.5 headers/tools; record source/module/runtime integrity. No host package installation or implicit app runtime dependency.
+- UI uses ui-ux-pro-max and emil-design-eng to disclose the selected PEAR/Composer/extension and multipart requirements only after generation. Preserve current theme/focus/wrapping.
+- Batch actual native/syntax checks, old-output reproduction, generation/API/UI regressions, scoped lint/build/format, deterministic engine and clean patch application, actual bilingual owned-API UI. Commit explicit files, cherry-pick the verified slice to main and push both branches without re-requesting approval. Keep Apple native gates and the full395-feature goal open.
+
+## Evidence checkpoint
+
+90 original syntax/native HTTP cases pass across all5 PHP adapters and18 profiles, including actual HTTP_Request2 Socket and PECL HTTP curl clients. Pristine official raphf2.0.2 and HTTP4.3.1 compile/load on matching PHP8.5.11 SDK with relocated tools, no host installation or C source patches. All341 published package-file digests and official archive sizes match; archive/module hashes are recorded. Nine prior converter issues reproduced;53 other representative outputs are byte-identical.96 generation/3 API/46 UI-i18n cases, scoped strict Clippy/fmt, frontend/server builds and deterministic/clean upstream patch gates pass. The first API compile was discarded due to a concurrent web/dist mutation; rerunning after the frontend stabilized passed. Never overlap web asset/engine mutations with Rust embedding compilation.
+
+Actual owned-API binary-filter UI covers en/light1280 HTTP_Request2 and zh/dark375 PECL. Correct native reads/localized hints/privacy/no document overflow, inspected screenshots, scoped axe0 verified violations/1 manual line-number contrast check. Evidence: `/tmp/moleapi-php-extensions-final` and `/tmp/moleapi-php-extensions-*.log`. Advanced scopes and the full395-feature goal remain open; Apple CI continues on its existing immutable refs.

@@ -403,3 +403,280 @@ diff --git a/node_modules/postman-code-generators/codegens/dart-dio/lib/util.js 
      return trim ? inputString.trim() : inputString;
  
    },
+diff --git a/node_modules/postman-code-generators/codegens/php-httprequest2/lib/index.js b/node_modules/postman-code-generators/codegens/php-httprequest2/lib/index.js
+--- a/node_modules/postman-code-generators/codegens/php-httprequest2/lib/index.js
++++ b/node_modules/postman-code-generators/codegens/php-httprequest2/lib/index.js
+@@ -87,7 +87,7 @@
+     indentString = indentString.repeat(options.indentCount);
+ 
+     snippet = '<?php\n';
+-    snippet += 'require_once \'HTTP/Request2.php\';\n';
++    snippet += 'if (!class_exists(\'HTTP_Request2\')) require_once \'HTTP/Request2.php\';\n';
+     snippet += '$request = new HTTP_Request2();\n';
+     snippet += `$request->setUrl('${sanitize(request.url.toString())}');\n`;
+     snippet += '$request->setMethod(';
+@@ -178,6 +178,7 @@
+     if (!_.isEmpty(request.body)) {
+       snippet += `${parseBody(request.toJSON(), indentString, options.trimRequestBody)}`;
+     }
++    if (request.body && request.body.mode === 'formdata') snippet += '$multipart->close();\n';
+     snippet += 'try {\n';
+     snippet += `${indentString}$response = $request->send();\n`;
+     snippet += `${indentString}if ($response->getStatus() == 200) {\n`;
+diff --git a/node_modules/postman-code-generators/codegens/php-httprequest2/lib/util/parseBody.js b/node_modules/postman-code-generators/codegens/php-httprequest2/lib/util/parseBody.js
+--- a/node_modules/postman-code-generators/codegens/php-httprequest2/lib/util/parseBody.js
++++ b/node_modules/postman-code-generators/codegens/php-httprequest2/lib/util/parseBody.js
+@@ -1,67 +1,42 @@
+ var _ = require('../lodash'),
+-  sanitize = require('./sanitize').sanitize,
+-  path = require('path');
++  sanitize = require('./sanitize').sanitize;
+ 
+-module.exports = function (request, indentString, trim) {
+-  var bodySnippet = '',
+-    bodyFileMap = [],
+-    bodyDataMap = [],
+-    enabledBodyList;
+-
+-  switch (request.body.mode) {
+-    case 'raw':
+-      bodySnippet += `$request->setBody('${sanitize(request.body[request.body.mode], trim)}');\n`;
+-      break;
+-    case 'graphql':
+-      // eslint-disable-next-line no-case-declarations
+-      let query = request.body[request.body.mode].query,
+-        graphqlVariables;
+-      try {
+-        graphqlVariables = JSON.parse(request.body[request.body.mode].variables);
++module.exports = function (request, indentation, trim) {
++  if (!request.body) return '';
++  const body = request.body;
++  const quote = (value) => `'${sanitize(value, trim)}'`;
++  if (body.mode === 'raw') {
++    return `$request->setBody(${quote(body.raw ?? '')});\n`;
++  }
++  if (body.mode === 'graphql') {
++    let variables;
++    try { variables = JSON.parse(body.graphql.variables || '{}'); } catch { variables = {}; }
++    return `$request->setBody(${quote(JSON.stringify({query: body.graphql.query, variables}))});\n`;
++  }
++  if (body.mode === 'urlencoded') {
++    const values = (body.urlencoded ?? []).filter((part) => !part.disabled);
++    const encoded = new URLSearchParams(values.map((part) => [part.key, part.value ?? ''])).toString();
++    return `$request->setBody(${quote(encoded)});\n`;
++  }
++  if (body.mode === 'file') {
++    return `$request->setBody(file_get_contents(${quote(body.file.src)}));\n`;
++  }
++  if (body.mode === 'formdata') {
++    const fields = (body.formdata ?? []).filter((part) => !part.disabled).map((part) => {
++      const entries = [`'name' => ${quote(part.key)}`];
++      if (part.type === 'file') {
++        entries.push(`'contents' => fopen(${quote(part.src)}, 'rb')`, `'filename' => ${quote(part.src)}`);
++      } else {
++        entries.push(`'contents' => ${quote(part.value ?? '')}`);
+       }
+-      catch (e) {
+-        graphqlVariables = {};
+-      }
+-      bodySnippet += `$request->setBody('${sanitize(JSON.stringify({
+-        query: query,
+-        variables: graphqlVariables
+-      }), trim)}');\n`;
+-      break;
+-    case 'urlencoded':
+-      enabledBodyList = _.reject(request.body[request.body.mode], 'disabled');
+-      if (!_.isEmpty(enabledBodyList)) {
+-        bodyDataMap = _.map(enabledBodyList, (data) => {
+-          return `${indentString}'${sanitize(data.key, trim)}' => '${sanitize(data.value, trim)}'`;
+-        });
+-        bodySnippet += `$request->addPostParameter(array(\n${bodyDataMap.join(',\n')}\n));\n`;
+-      }
+-      break;
+-    case 'formdata':
+-      enabledBodyList = _.reject(request.body[request.body.mode], 'disabled');
+-      if (!_.isEmpty(enabledBodyList)) {
+-        bodyDataMap = _.map(_.filter(enabledBodyList, {'type': 'text'}), function (data) {
+-          return `${indentString}'${sanitize(data.key, trim)}' => '${sanitize(data.value, trim)}'`;
+-        });
+-        bodyFileMap = _.map(_.filter(enabledBodyList, {'type': 'file'}), function (data) {
+-          let pathArray = data.src.split(path.sep),
+-            fileName = pathArray[pathArray.length - 1];
+-          return `'${sanitize(data.key, trim)}', '${data.src}', '${fileName}', '<Content-Type Header>'`;
+-        });
+-        if (bodyDataMap.length) {
+-          bodySnippet += `$request->addPostParameter(array(\n${bodyDataMap.join(',\n')}\n));\n`;
+-        }
+-        if (bodyFileMap.length) {
+-          _.forEach(bodyFileMap, (file) => {
+-            bodySnippet += `$request->addUpload(${file});\n`;
+-          });
+-        }
+-      }
+-      break;
+-    case 'file':
+-      bodySnippet += '$request->setBody(\'<file contents here>\');\n';
+-      break;
+-    default:
+-      break;
++      const mime = part.contentType || (part.type === 'file' ? 'application/octet-stream' : '');
++      if (mime) entries.push(`'headers' => array('Content-Type' => ${quote(mime)})`);
++      return `${indentation}array(${entries.join(', ')})`;
++    });
++    let result = `$multipart = new GuzzleHttp\\Psr7\\MultipartStream(array(\n${fields.join(',\n')}\n));\n`;
++    result += `$request->setBody((string) $multipart);\n`;
++    result += "$request->setHeader('Content-Type', 'multipart/form-data; boundary=' . $multipart->getBoundary());\n";
++    return result;
+   }
+-  return bodySnippet;
++  return '';
+ };
+diff --git a/node_modules/postman-code-generators/codegens/php-httprequest2/lib/util/sanitize.js b/node_modules/postman-code-generators/codegens/php-httprequest2/lib/util/sanitize.js
+--- a/node_modules/postman-code-generators/codegens/php-httprequest2/lib/util/sanitize.js
++++ b/node_modules/postman-code-generators/codegens/php-httprequest2/lib/util/sanitize.js
+@@ -12,7 +12,7 @@
+     }
+ 
+     inputString = inputTrim && typeof inputTrim === 'boolean' ? inputString.trim() : inputString;
+-    return inputString.replace(/\\/g, '\\\\').replace(/'/g, '\\\'').replace(/\n/g, '\\n');
++    return inputString.replace(/\\/g, '\\\\').replace(/'/g, '\\\'');
+   },
+ 
+   /**
+diff --git a/node_modules/postman-code-generators/codegens/php-pecl-http/lib/phpPecl.js b/node_modules/postman-code-generators/codegens/php-pecl-http/lib/phpPecl.js
+--- a/node_modules/postman-code-generators/codegens/php-pecl-http/lib/phpPecl.js
++++ b/node_modules/postman-code-generators/codegens/php-pecl-http/lib/phpPecl.js
+@@ -173,6 +173,10 @@
+       }
+     }
+     snippet += `${getHeaders(request, indentation)}\n`;
++    if (request.body && request.body.mode === 'formdata') {
++      snippet += "$request->addHeader('Content-Type', 'multipart/form-data; boundary=' . $multipart->getBoundary());\n";
++      snippet += '$multipart->close();\n';
++    }
+     snippet += '$client->enqueue($request)->send();\n';
+     snippet += '$response = $client->getResponse();\n';
+     snippet += 'echo $response->getBody();\n';
+diff --git a/node_modules/postman-code-generators/codegens/php-pecl-http/lib/util/parseBody.js b/node_modules/postman-code-generators/codegens/php-pecl-http/lib/util/parseBody.js
+--- a/node_modules/postman-code-generators/codegens/php-pecl-http/lib/util/parseBody.js
++++ b/node_modules/postman-code-generators/codegens/php-pecl-http/lib/util/parseBody.js
+@@ -1,84 +1,42 @@
+ var _ = require('../lodash'),
+   sanitize = require('./sanitize').sanitize;
+ 
+-/**
+- * Used to parse the body of the postman SDK-request and return in the desired format
+- *
+- * @param  {Object} request - postman SDK-request object
+- * @param  {String} indentation - used for indenting snippet's structure
+- * @param  {Boolean} bodyTrim - whether to trim body fields or not
+- * @returns {String} - request body
+- */
+-module.exports = function (request, indentation, bodyTrim) {
+-  // used to check whether body is present in the request or not
+-  if (request.body) {
+-    var bodyDataMap = [],
+-      bodyFileMap = [],
+-      requestBody = '',
+-      enabledBodyList;
++module.exports = function (request, indentation, trim) {
++  if (!request.body) return '';
++  const body = request.body;
++  const quote = (value) => `'${sanitize(value, trim)}'`;
++  if (body.mode === 'raw') {
++    return `$body->append(${quote(body.raw ?? '')});\n`;
++  }
++  if (body.mode === 'graphql') {
++    let variables;
++    try { variables = JSON.parse(body.graphql.variables || '{}'); } catch { variables = {}; }
++    return `$body->append(${quote(JSON.stringify({query: body.graphql.query, variables}))});\n`;
++  }
++  if (body.mode === 'urlencoded') {
++    const values = (body.urlencoded ?? []).filter((part) => !part.disabled);
++    const encoded = new URLSearchParams(values.map((part) => [part.key, part.value ?? ''])).toString();
++    return `$body->append(${quote(encoded)});\n`;
++  }
++  if (body.mode === 'file') {
++    return `$body->append(file_get_contents(${quote(body.file.src)}));\n`;
++  }
++  if (body.mode === 'formdata') {
++    const fields = (body.formdata ?? []).filter((part) => !part.disabled).map((part) => {
++      const entries = [`'name' => ${quote(part.key)}`];
++      if (part.type === 'file') {
++        entries.push(`'contents' => fopen(${quote(part.src)}, 'rb')`, `'filename' => ${quote(part.src)}`);
++      } else {
++        entries.push(`'contents' => ${quote(part.value ?? '')}`);
++      }
++      const mime = part.contentType || (part.type === 'file' ? 'application/octet-stream' : '');
++      if (mime) entries.push(`'headers' => array('Content-Type' => ${quote(mime)})`);
++      return `${indentation}array(${entries.join(', ')})`;
++    });
++    let result = `$multipart = new GuzzleHttp\\Psr7\\MultipartStream(array(\n${fields.join(',\n')}\n));\n`;
++    result += `$body->append((string) $multipart);\n`;
+ 
+-    switch (request.body.mode) {
+-      case 'raw':
+-        if (!_.isEmpty(request.body[request.body.mode])) {
+-          requestBody += `$body->append('${request.body[request.body.mode]}');\n`;
+-        }
+-        return requestBody;
+-      case 'graphql':
+-        // eslint-disable-next-line no-case-declarations
+-        let query = request.body[request.body.mode].query,
+-          graphqlVariables;
+-        try {
+-          graphqlVariables = JSON.parse(request.body[request.body.mode].variables);
+-        }
+-        catch (e) {
+-          graphqlVariables = {};
+-        }
+-        requestBody += `$body->append('${sanitize(JSON.stringify({
+-          query: query,
+-          variables: graphqlVariables
+-        }), bodyTrim)}');\n`;
+-        return requestBody;
+-      case 'urlencoded':
+-        enabledBodyList = _.reject(request.body[request.body.mode], 'disabled');
+-        if (!_.isEmpty(enabledBodyList)) {
+-          bodyDataMap = _.map(enabledBodyList, function (value) {
+-            return `${indentation}'${sanitize(value.key, bodyTrim)}' => ` +
+-                            `'${sanitize(value.value, bodyTrim)}'`;
+-          });
+-          requestBody = `$body->append(new http\\QueryString(array(\n${bodyDataMap.join(',\n')})));`;
+-        }
+-        return requestBody;
+-
+-      case 'formdata':
+-        enabledBodyList = _.reject(request.body[request.body.mode], 'disabled');
+-        if (!_.isEmpty(enabledBodyList)) {
+-          bodyDataMap = _.map(_.filter(enabledBodyList, {'type': 'text'}), function (value) {
+-            return (`${indentation}'${sanitize(value.key, bodyTrim)}' => ` +
+-                            `'${sanitize(value.value, bodyTrim)}'`);
+-          });
+-          bodyFileMap = _.map(_.filter(enabledBodyList, {'type': 'file'}), function (value) {
+-            return (`${indentation.repeat(2)}array('name' => '${sanitize(value.key, bodyTrim)}', ` +
+-                            '\'type\' => \'<Content-type header>\', ' +
+-                            `'file' => '${sanitize(value.src, bodyTrim)}', ` +
+-                            '\'data\' => null)');
+-          });
+-          requestBody = `$body->addForm(array(\n${bodyDataMap.join(',\n')}\n), ` +
+-                        `array(\n${bodyFileMap.join(',\n')}\n));\n`;
+-        }
+-        return requestBody;
+-
+-      case 'file':
+-        // requestBody = `${indentation.repeat(2)}array('name' => '` +
+-        //             `${sanitize(request.body[request.body.mode].key, bodyTrim)}', ` +
+-        //             `'type' => '${sanitize(request.body[request.body.mode].type, bodyTrim)}', ` +
+-        //             `'file' => '${sanitize(request.body[request.body.mode].src, bodyTrim)}', ` +
+-        //             '\'data\' => null)';
+-        // return `$body->addForm(array(), array(${requestBody}));\n`;
+-        requestBody = '$body->append(\'<file contents here>\');\n';
+-        return requestBody;
+-      default:
+-        return requestBody;
+-    }
++    return result;
+   }
+   return '';
+ };
