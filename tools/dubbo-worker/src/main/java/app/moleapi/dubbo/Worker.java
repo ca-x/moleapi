@@ -47,7 +47,9 @@ public final class Worker {
         String method = required(input.getString("method"), 128);
         if (!service.matches("[A-Za-z_$][A-Za-z0-9_$]*(\\.[A-Za-z_$][A-Za-z0-9_$]*)+") || !method.matches("[A-Za-z_$][A-Za-z0-9_$]*")) throw new IllegalArgumentException("Invalid service or method");
         URI endpoint = URI.create(required(input.getString("endpoint"), 512));
-        if (!"dubbo".equals(endpoint.getScheme()) || endpoint.getHost() == null || !InetAddresses.isInetAddress(endpoint.getHost()) || endpoint.getPort() < 1 || endpoint.getPort() > 65535 || endpoint.getRawUserInfo() != null || endpoint.getRawQuery() != null || endpoint.getRawFragment() != null || !('/' + service).equals(endpoint.getRawPath())) throw new IllegalArgumentException("Dubbo endpoint requires a checked literal IP and selected service path");
+        String host = endpoint.getHost();
+        String literal = host != null && host.startsWith("[") && host.endsWith("]") ? host.substring(1, host.length() - 1) : host;
+        if (!"dubbo".equals(endpoint.getScheme()) || literal == null || !InetAddresses.isInetAddress(literal) || endpoint.getPort() < 1 || endpoint.getPort() > 65535 || endpoint.getRawUserInfo() != null || endpoint.getRawQuery() != null || endpoint.getRawFragment() != null || !('/' + service).equals(endpoint.getRawPath())) throw new IllegalArgumentException("Dubbo endpoint requires a checked literal IP and selected service path");
         int timeout = input.getIntValue("timeout_ms");
         if (timeout < 1 || timeout > 120_000) throw new IllegalArgumentException("Invalid Dubbo timeout");
         JSONArray names = input.getJSONArray("parameter_types");

@@ -62,11 +62,15 @@ impl DubboRuntime {
             bail!("Expected classic Dubbo request");
         };
         let start = Instant::now();
+        let deadline = start + Duration::from_millis(request.timeout_ms);
         let original = dubbo_url(&request.url)?;
-        let addresses = checked_destination(&original, policy).await?;
-        let target = *addresses
-            .first()
-            .context("Dubbo destination has no checked address")?;
+        let addresses = tokio::time::timeout(
+            deadline.saturating_duration_since(Instant::now()),
+            checked_destination(&original, policy),
+        )
+        .await
+        .context("Dubbo address lookup timed out")??;
+        let target = reachable_address(&addresses, deadline).await?;
         let endpoint = pinned_url(target, &config.service);
         let attachments = config
             .attachments
@@ -92,7 +96,12 @@ impl DubboRuntime {
         ensure!(bytes.len() <= MAX_INPUT, "Dubbo worker input exceeds 1 MiB");
         let temporary = tempfile::tempdir()?;
         let jar = temporary.path().join("dubbo-worker.jar");
-        tokio::fs::write(&jar, self.jar.as_ref()).await?;
+        tokio::time::timeout(
+            deadline.saturating_duration_since(Instant::now()),
+            tokio::fs::write(&jar, self.jar.as_ref()),
+        )
+        .await
+        .context("Dubbo worker setup timed out")??;
         let mut child = Command::new(&java)
             .env_clear()
             .arg("-Xmx128m")
@@ -110,8 +119,7 @@ impl DubboRuntime {
             .kill_on_drop(true)
             .spawn()
             .context("Cannot start Dubbo worker")?;
-        let limit =
-            Duration::from_millis(request.timeout_ms).saturating_add(Duration::from_secs(2));
+        let limit = deadline.saturating_duration_since(Instant::now());
         let result = tokio::time::timeout(limit, exchange(&mut child, &bytes)).await;
         let output = match result {
             Ok(Ok(value)) => value,
@@ -167,6 +175,23 @@ impl DubboRuntime {
 
 fn pinned_url(target: SocketAddr, service: &str) -> String {
     format!("dubbo://{target}/{service}")
+}
+
+async fn reachable_address(addresses: &[SocketAddr], deadline: Instant) -> Result<SocketAddr> {
+    for address in addresses {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            bail!("Dubbo connection timed out");
+        }
+        let limit = remaining.min(Duration::from_secs(3));
+        if let Ok(Ok(stream)) =
+            tokio::time::timeout(limit, tokio::net::TcpStream::connect(address)).await
+        {
+            drop(stream);
+            return Ok(*address);
+        }
+    }
+    bail!("Dubbo destination could not be connected")
 }
 
 async fn bounded_read(stream: impl AsyncRead + Unpin, limit: usize) -> Result<Vec<u8>> {
@@ -228,5 +253,21 @@ mod tests {
         });
         assert!(bounded_read(receiver, 8).await.is_err());
         writer.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn selects_reachable_checked_address_after_ipv6_refusal() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let addresses = [
+            format!("[::1]:{port}").parse().unwrap(),
+            listener.local_addr().unwrap(),
+        ];
+        assert_eq!(
+            reachable_address(&addresses, Instant::now() + Duration::from_secs(3))
+                .await
+                .unwrap(),
+            addresses[1]
+        );
     }
 }

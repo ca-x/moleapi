@@ -53,6 +53,11 @@ def main():
                      'argument_sources':['"moleapi"']})
     assert rejected['ok'] is False and rejected['kind'] == 'worker_error' and 'literal IP' in rejected['message'], rejected
     results.append({'case':'reject_unchecked_hostname', 'passed':True})
+    ipv6 = call({**base, 'endpoint':'dubbo://[::1]:1/fixture.EchoService',
+                 'timeout_ms':500, 'method':'echo', 'parameter_types':['java.lang.String'],
+                 'argument_sources':['"moleapi"']})
+    assert ipv6['ok'] is False and 'literal IP' not in ipv6['message'], ipv6
+    results.append({'case':'accept_ipv6_literal', 'passed':True})
     evidence = {'format':'moleapi-dubbo-worker-qa-v1',
                 'jar_sha256':hashlib.sha256(args.jar.read_bytes()).hexdigest(),
                 'cases':results}
