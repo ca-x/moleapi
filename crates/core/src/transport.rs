@@ -69,6 +69,7 @@ async fn execute_inner(
     raw_body: Option<Vec<u8>>,
     cookies: Option<&CookieJar>,
 ) -> Result<Response> {
+    let cookies = cookies.filter(|_| r.use_cookie_jar);
     let cookie_generation = cookies.map(CookieJar::generation);
     let start = Instant::now();
     let mut url = valid_url(&r.url)?;

@@ -1128,6 +1128,7 @@
   "管理 Cookie": "管理 Cookie",
   "Cookie 按账号、工作区和当前环境隔离，仅保存在进程内存中；退出账号或重启后清除，不参与同步和导出。": "Cookie 按账号、工作区和当前环境隔离，仅保存在进程内存中；退出账号或重启后清除，不参与同步和导出。",
   "自动接收和发送 Cookie": "自动接收和发送 Cookie",
+  "此请求使用 Cookie 库": "此请求使用 Cookie 库",
   "用于 HTTP、SOAP 和 GraphQL 查询；手动 Cookie Header 优先。其他协议不使用此 Cookie 库。": "用于 HTTP、SOAP 和 GraphQL 查询；手动 Cookie Header 优先。其他协议不使用此 Cookie 库。",
   "隐藏 Cookie 值": "隐藏 Cookie 值",
   "显示 Cookie 值": "显示 Cookie 值",

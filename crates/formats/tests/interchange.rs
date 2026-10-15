@@ -10,6 +10,22 @@ fn workspace(data: moleapi_core::WorkspaceData) -> Workspace {
         data,
     }
 }
+#[test]
+fn cookie_jar_override_survives_native_export_and_rejects_unmapped_formats() {
+    let mut imported = import("postman", &postman().to_string()).unwrap();
+    let request = &mut imported.data.collections[0].requests[0];
+    request.use_cookie_jar = false;
+    let w = workspace(imported.data);
+    let native = export(&w, "moleapi", true).unwrap();
+    let restored = import("moleapi", &native.content).unwrap();
+    assert!(!restored.data.collections[0].requests[0].use_cookie_jar);
+    let error = export(&w, "postman", true).err().unwrap();
+    assert!(error.to_string().contains("cookie jar"), "{error}");
+    let mut api = import("openapi", &json!({"openapi":"3.0.3","info":{"title":"Cookie","version":"1"},"paths":{"/echo":{"get":{"responses":{"200":{"description":"ok"}}}}}}).to_string()).unwrap();
+    api.data.collections[0].requests[0].use_cookie_jar = false;
+    let error = export(&workspace(api.data), "openapi", true).err().unwrap();
+    assert!(error.to_string().contains("cookie jar"), "{error}");
+}
 
 #[test]
 fn openapi31_keeps_references_extensions_and_raw_source() {

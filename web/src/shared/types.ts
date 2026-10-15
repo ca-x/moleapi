@@ -99,6 +99,7 @@ export interface RequestNetwork {
   connect_timeout_ms:number;
 }
 export interface RequestSpec {
+  use_cookie_jar?: boolean;
   extractions?:Extraction[];
   protocol?: ProtocolConfig;
   id: string;

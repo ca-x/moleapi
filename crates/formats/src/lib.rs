@@ -125,6 +125,16 @@ pub fn export(workspace: &Workspace, format: &str, include_secrets: bool) -> Res
             "Network settings cannot be preserved by this export format; use MoleAPI source export"
         );
     }
+    if matches!(format, "postman" | "openapi")
+        && workspace
+            .data
+            .collections
+            .iter()
+            .flat_map(|c| &c.requests)
+            .any(|r| !r.use_cookie_jar)
+    {
+        bail!("Per-request cookie jar settings require MoleAPI source export");
+    }
     let unsupported = workspace
         .data
         .collections

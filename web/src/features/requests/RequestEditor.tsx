@@ -485,7 +485,13 @@ export default function RequestEditor({
             <Tabs.Content value="settings">
               <div className="form-panel">
                 {(!data||(request.protocol?.kind==="data"&&request.protocol.source==="remote_file"))&&<NetworkSettings key={`${bodyScope}/${request.id}`} value={request.network} change={network=>update({network})} disabled={busy||sending} ntlm={request.auth.kind==="ntlm"} websocket={request.protocol?.kind==="websocket"||socketio} grpc={grpc} rawTcp={tcp} mqtt={mqtt}/>}
-                {cookieWorkspace && <CookieManager key={bodyScope} workspace={cookieWorkspace} environment={workspaceData?.active_environment_id} url={request.url}/>}
+                {cookieWorkspace && ["http", "soap", "graphql"].includes(kind) && <>
+                  <CookieManager key={bodyScope} workspace={cookieWorkspace} environment={workspaceData?.active_environment_id} url={request.url}/>
+                  <label className="checkbox-label">
+                    <Checkbox checked={request.use_cookie_jar !== false} disabled={busy || sending} onCheckedChange={value=>update({use_cookie_jar:value===true})}/>
+                    {t("此请求使用 Cookie 库")}
+                  </label>
+                </>}
                 <Field label={t("请求超时 (ms)")} hint={t("最大 120000ms。")}>
                   <TextField.Root
                     type="number"

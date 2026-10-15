@@ -75,6 +75,28 @@ async fn cookie_management_environment_isolation_execution_history_and_export_pr
             }
         );
     }
+    let mut private_request = data["collections"][0]["requests"][0].clone();
+    private_request["use_cookie_jar"] = json!(false);
+    let (status, response) = call(
+        &router,
+        "POST",
+        "/api/execute",
+        None,
+        Some(json!({"workspace_id":"cookie","environment_id":"dev","request":private_request})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(response["body"], "missing");
+    let (status, response) = call(
+        &router,
+        "POST",
+        "/api/execute",
+        None,
+        Some(json!({"workspace_id":"cookie","environment_id":"dev","request":data["collections"][0]["requests"][0]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(response["body"], "sid=private-cookie-value");
     let (status, history) =
         call(&router, "GET", "/api/workspaces/cookie/history", None, None).await;
     assert_eq!(status, StatusCode::OK, "{history}");

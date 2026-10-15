@@ -6,6 +6,7 @@ The finite HTTP/SOAP/GraphQL request pipeline accepts an optional private cookie
 
 - Account + workspace + selected environment (including a separate no-environment scope); collection runner uses its selected environment.
 - Disabled by default. Enable through request Settings → Manage cookies. Receiving and sending are controlled together.
+- Each finite HTTP/SOAP/GraphQL query request may opt out of the enabled jar. Omitted `use_cookie_jar` defaults to true for old saved requests; false prevents both outgoing jar cookies and response insertion. Explicit manual Cookie headers remain ordinary request headers and still send. The opt-out is saved with the request, while the jar itself remains private and in memory.
 - Private in-memory sessions. Logout, successful workspace deletion or process restart clears them. Disabling retains values for explicit reuse; Clear deletes them.
 - No workspace schema, synchronization, version snapshots or backup exports contain jar values. This slice does **not** implement durable private cookies or browser Interceptor synchronization.
 - Management admission rechecks the authenticated session under its owner gate. Workspace deletion shares the existing workspace gate. Execution only looks up existing jars, never recreates one after logout/deletion.
@@ -34,8 +35,8 @@ All operations require workspace ownership; unknown environment IDs reject. The 
 
 ## Evidence and remaining coverage
 
-Three core tests verify SDK rules, real redirect/HTTP requests and a real in-flight Clear race. Two server tests verify management/actual execution, environment and account isolation, logout cleanup, history privacy and no-store. Two React tests cover masking/explicit reveal/clear and stale close/reopen responses. Translation catalog validation, TypeScript production build, strict core/server Clippy and package fmt passed.
+Core tests verify SDK rules, real redirect/HTTP requests, a real in-flight Clear race and per-request send/receive opt-out. Server tests verify management/actual execution, per-request selection, environment and account isolation, logout cleanup, history privacy and no-store. React tests cover masking/explicit reveal/clear, stale close/reopen responses and the request-level settings control. Translation catalog validation, TypeScript production build, strict core/server Clippy and package fmt are gates for each changed slice.
 
 Agent-browser exercised the actual embedded server UI: enable, add, masked list, reveal and delete, including a 390px viewport. Native graphical installers are still part of the final GitHub Actions release gate, not claimed tested by HTTP browser evidence.
 
-Separate incomplete capabilities: durable private cookie storage, script pm.cookies/cookie-jar compatibility, dedicated response-cookie extraction, browser capture/sync, per-request disable overrides, and live protocol cookie adapters. This checkpoint does not mark the whole network matrix or full product parity complete.
+Separate incomplete capabilities: durable private cookie storage, script pm.cookies/cookie-jar compatibility, dedicated response-cookie extraction, browser capture/sync and live protocol cookie adapters. The request opt-out has no verified external Postman/OpenAPI mapping, so those exports reject selected overrides and native MoleAPI backup preserves them. This checkpoint does not mark the whole network matrix or full product parity complete.

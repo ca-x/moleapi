@@ -65,6 +65,8 @@ Go request snippet checkpoint2026-10-15: pinned mature Go stdlib emitter now pre
 
 User steering2026-10-15: generation is sufficiently advanced for now; prioritize the remaining non-generation functionality. Finish the already started C/libcurl request-code body slice, then advance milestone3 request/protocol work. Generation's open matrix rows and final platform/release gates remain required, but they no longer lead feature order.
 
+Milestone3 first slice2026-10-16: finite HTTP/SOAP/GraphQL requests now have a source-preserving per-request Cookie Jar opt-out, with actual send/receive and external-export gates. Continue non-generation work; Dubbo classic/Hessian is still missing. The historical Apache dubbo0.4 Rust package implements Triple only, while a community0.1 package claims classic TCP/Hessian but its direct socket and frame reads lack the shared network admission and response budgets. Validate a mature interoperable route before integrating Dubbo; no gRPC alias counts as classic Dubbo support.
+
 ## Slice 1: CLI runner labels
 
 **Files:** `crates/cli/src/args.rs` owns flags; `crates/cli/src/runners.rs` owns request payloads; `crates/cli/tests/runners.rs` owns real process/API fixtures; `docs/SELF-HOSTED-RUNNERS.md`, `docs/SELF-HOSTED-RUNNER-COVERAGE.md` and `docs/IMPLEMENTATION-STATUS.md` own usage/status.

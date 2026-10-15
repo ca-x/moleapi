@@ -8,6 +8,64 @@ use serde_json::json;
 fn request(url: String) -> RequestSpec {
     serde_json::from_value(json!({"id":"r","name":"cookies","url":url,"method":"GET","description":"","query":[],"headers":[],"body_kind":"none","body":"","auth":{"kind":"none","username":"","password":"","token":""},"timeout_ms":3000,"verify_tls":true,"follow_redirects":true,"assertions":[],"examples":[]})).unwrap()
 }
+#[tokio::test]
+async fn request_cookie_override_disables_jar_send_and_receive_without_changing_legacy_defaults() {
+    let app = Router::new().route(
+        "/",
+        get(|headers: HeaderMap| async move {
+            let sent = headers
+                .get("cookie")
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or("missing")
+                .to_owned();
+            ([("set-cookie", "new=server-value; Path=/")], sent)
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let jar = CookieJar::default();
+    jar.configure(true, false);
+    let url = url::Url::parse(&base).unwrap();
+    jar.insert(&url, "sid=existing; Path=/").unwrap();
+    let policy = NetworkPolicy {
+        allow_private_network: true,
+    };
+    let mut r = request(format!("{base}/"));
+    assert!(r.use_cookie_jar);
+    assert!(
+        serde_json::to_value(&r)
+            .unwrap()
+            .get("use_cookie_jar")
+            .is_none()
+    );
+    r.use_cookie_jar = false;
+    assert_eq!(serde_json::to_value(&r).unwrap()["use_cookie_jar"], false);
+    let disabled = execute_with_cookies(&r, None, policy, Some(&jar))
+        .await
+        .unwrap();
+    assert_eq!(disabled.body, "missing");
+    assert_eq!(jar.snapshot(true).cookies.len(), 1);
+    assert!(!disabled.private_auth_values.contains(&"existing".into()));
+    r.headers.push(
+        serde_json::from_value(
+            json!({"id":"manual","key":"Cookie","value":"manual=yes","enabled":true}),
+        )
+        .unwrap(),
+    );
+    let manual = execute_with_cookies(&r, None, policy, Some(&jar))
+        .await
+        .unwrap();
+    assert_eq!(manual.body, "manual=yes");
+    r.headers.clear();
+    r.use_cookie_jar = true;
+    let enabled = execute_with_cookies(&r, None, policy, Some(&jar))
+        .await
+        .unwrap();
+    assert_eq!(enabled.body, "sid=existing");
+    assert_eq!(jar.snapshot(true).cookies.len(), 2);
+    server.abort();
+}
 #[test]
 fn cookie_sdk_rules_prefixes_public_suffixes_limits_and_masking() {
     let jar = CookieJar::default();

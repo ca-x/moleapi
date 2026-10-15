@@ -183,6 +183,8 @@ impl Protocol {
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct RequestSpec {
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub use_cookie_jar: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub extractions: Vec<crate::Extraction>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -212,6 +214,12 @@ pub struct RequestSpec {
     pub verify_tls: bool,
     pub assertions: Vec<Assertion>,
     pub examples: Vec<Example>,
+}
+fn default_true() -> bool {
+    true
+}
+fn is_true(value: &bool) -> bool {
+    *value
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Collection {

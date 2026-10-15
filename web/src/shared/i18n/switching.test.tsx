@@ -78,6 +78,19 @@ it("switches the complete request toolbar and tabs without changing user-owned f
   expect((screen.getByLabelText("接口说明") as HTMLTextAreaElement).value).toBe(request.description);
   expect(JSON.stringify(request)).toBe(before);
 });
+it("lets an existing HTTP request opt out of the cookie jar without changing its source", async () => {
+  await setLanguage("en");
+  const request = newRequest("Cookie check", "https://example.com/");
+  const original = JSON.stringify(request);
+  const update = vi.fn();
+  render(<RequestEditor request={request} cookieWorkspace="workspace" update={update} send={vi.fn()} save={vi.fn()} dirty={false} saving={false} busy={false} sending={false} dark={false} response={null} error="" />, { wrapper: theme });
+  fireEvent.mouseDown(screen.getByRole("tab", { name: "Settings" }), { button: 0 });
+  const toggle = screen.getByRole("checkbox", { name: "Use cookie jar for this request" });
+  expect(toggle.getAttribute("aria-checked")).toBe("true");
+  fireEvent.click(toggle);
+  expect(update).toHaveBeenCalledWith({ use_cookie_jar: false });
+  expect(JSON.stringify(request)).toBe(original);
+});
 it("updates navigation and a pending interpolated guard without changing stored sample names", async () => {
   const data = initialData(), before = JSON.stringify(data);
   const state = { draft: { id: "w", name: "我的工作区", data }, view: "requests", setView: vi.fn(), setHistoryResponse: vi.fn(), openModal: vi.fn(), guard: { title: message("删除环境"), description: message("删除「{{value0}}」，保存后生效。", { value0: "我的环境" }), action: vi.fn() }, saving: false, setGuard: vi.fn(), confirmGuard: vi.fn() };

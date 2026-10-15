@@ -1128,6 +1128,7 @@
   "管理 Cookie": "Manage cookies",
   "Cookie 按账号、工作区和当前环境隔离，仅保存在进程内存中；退出账号或重启后清除，不参与同步和导出。": "Cookies are isolated by account, workspace and current environment. They stay in process memory, are cleared on logout or restart, and are excluded from sync and exports.",
   "自动接收和发送 Cookie": "Receive and send cookies automatically",
+  "此请求使用 Cookie 库": "Use cookie jar for this request",
   "用于 HTTP、SOAP 和 GraphQL 查询；手动 Cookie Header 优先。其他协议不使用此 Cookie 库。": "Used for HTTP, SOAP and GraphQL queries. Manual Cookie headers take precedence. Other protocols do not use this jar.",
   "隐藏 Cookie 值": "Hide cookie values",
   "显示 Cookie 值": "Reveal cookie values",
