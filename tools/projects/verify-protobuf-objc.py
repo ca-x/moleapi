@@ -6,9 +6,9 @@ import hashlib
 import json
 from pathlib import Path
 import platform
-import shutil
 import subprocess
 import sys
+from objc_consumer import build_command, native_arch, prepare_consumer
 
 
 def run(command, cwd, timeout=1800):
@@ -27,28 +27,23 @@ def verify(args):
     assert descriptor == hashlib.sha256((args.server_dir / 'descriptor-set.bin').read_bytes()).hexdigest(), 'Server/client schema differs'
     manifest = json.loads((root / 'moleapi-generation.json').read_text())
     assert manifest['target'] == 'protobuf-objc' and 'grpc-plugin=true' in manifest['engine']
+    (root / 'runtime-evidence.json').unlink(missing_ok=True)
     before = {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
               for p in root.rglob('*') if p.suffix in ('.h', '.m') and 'runtime-consumer' not in p.relative_to(root).parts}
     assert 'Fixture.pbrpc.m' in before and 'models/Types.pbobjc.m' in before
-    consumer = root / 'runtime-consumer'
-    consumer.mkdir(exist_ok=False)
+    if args.consumer_dir is not None:
+        assert args.consumer_dir.is_absolute(), 'Select an absolute private consumer directory'
+    architecture = native_arch(platform.machine())
+    xcode = subprocess.check_output(['xcodebuild', '-version'], text=True).strip()
     scripts = Path(__file__).resolve().parent / 'objc'
-    shutil.copyfile(scripts / 'RuntimeFixture.m', consumer / 'RuntimeFixture.m')
-    (consumer / 'Podfile').write_text("""source 'https://cdn.cocoapods.org/'
-platform :osx, '12.0'
-project 'FixtureQA.xcodeproj'
-target 'FixtureQA' do
-  pod 'gRPC-ProtoRPC', '1.84.0'
-  pod 'Protobuf', '5.36.1'
-end
-""")
-    run(['ruby', str(scripts / 'create-project.rb'), str(root)], consumer)
-    run(['pod', 'install'], consumer)
-    run(['xcodebuild', '-workspace', 'FixtureQA.xcworkspace', '-scheme', 'FixtureQA',
-         '-configuration', 'Release', '-derivedDataPath', str(consumer / 'build'),
-         'CODE_SIGNING_ALLOWED=NO', 'build'], consumer, timeout=3600)
+    consumer, reused, pods = prepare_consumer(root, args.consumer_dir or root / 'runtime-consumer',
+                                              scripts, architecture, xcode, descriptor, run)
+    command = build_command(consumer, architecture)
+    run(command, consumer, timeout=3600)
     binary = consumer / 'build/Build/Products/Release/FixtureQA'
     assert binary.is_file()
+    binary_architectures = subprocess.check_output(['lipo', '-archs', str(binary)], text=True).split()
+    assert binary_architectures == [architecture], binary_architectures
     sys.path.insert(0, str(args.server_dir))
     from models import types_pb2, common_pb2
     import fixture_pb2_grpc
@@ -102,7 +97,10 @@ end
                for path, digest in before.items()), 'Generated Objective-C sources changed'
     evidence = {'target': 'protobuf-objc', 'representation': root.name, 'engine': manifest['engine'],
                 'platform': platform.platform(), 'architecture': platform.machine(),
-                'xcode': subprocess.check_output(['xcodebuild', '-version'], text=True).strip(),
+                'driver_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                'xcode': xcode, 'build_command': command, 'consumer_reused': reused,
+                'binary_architectures': binary_architectures, 'binary_sha256': hashlib.sha256(binary.read_bytes()).hexdigest(),
+                'pod_project_sha256': pods['pod_project_sha256'],
                 'cocoapods': subprocess.check_output(['pod', '--version'], text=True).strip(),
                 'grpc': '1.84.0', 'protobuf': '5.36.1', 'python_server_grpc': grpc.__version__,
                 'modes': observations, 'descriptor_sha256': descriptor,
@@ -117,4 +115,5 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('root', type=Path)
     parser.add_argument('--server-dir', type=Path, required=True)
+    parser.add_argument('--consumer-dir', type=Path, help='Explicit private directory reused sequentially for the same schema/toolchain')
     verify(parser.parse_args())

@@ -217,8 +217,8 @@ jobs:
         env:
           BUNDLE_GEMFILE: ${{ github.workspace }}/tools/projects/objc/Gemfile
         run: |
-          bundle exec "$MOLEAPI_OBJC_QA_PYTHON" tools/projects/verify-protobuf-objc.py "$RUNNER_TEMP/objc-clients/source" --server-dir "$RUNNER_TEMP/objc-server/source"
-          bundle exec "$MOLEAPI_OBJC_QA_PYTHON" tools/projects/verify-protobuf-objc.py "$RUNNER_TEMP/objc-clients/descriptor" --server-dir "$RUNNER_TEMP/objc-server/descriptor"
+          bundle exec "$MOLEAPI_OBJC_QA_PYTHON" tools/projects/verify-protobuf-objc.py "$RUNNER_TEMP/objc-clients/source" --server-dir "$RUNNER_TEMP/objc-server/source" --consumer-dir "$RUNNER_TEMP/objc-shared-consumer"
+          bundle exec "$MOLEAPI_OBJC_QA_PYTHON" tools/projects/verify-protobuf-objc.py "$RUNNER_TEMP/objc-clients/descriptor" --server-dir "$RUNNER_TEMP/objc-server/descriptor" --consumer-dir "$RUNNER_TEMP/objc-shared-consumer"
       - name: Compile and run original Objective-C models with Foundation
         run: |
           for dialect in 3.0.3 3.1.0; do
@@ -229,11 +229,14 @@ jobs:
         if: always()
         with:
           name: objc-qa-${{ matrix.runner }}
+          include-hidden-files: true
           path: |
             ${{ runner.temp }}/objc-clients/**/runtime-evidence.json
             ${{ runner.temp }}/objc-clients/**/Podfile.lock
             ${{ runner.temp }}/objc-clients/**/moleapi-generation.json
             ${{ runner.temp }}/objc-tools/versions.txt
+            ${{ runner.temp }}/objc-shared-consumer/Podfile.lock
+            ${{ runner.temp }}/objc-shared-consumer/.moleapi-objc-consumer.json
             ${{ runner.temp }}/objc-models-*/**/runtime-evidence.json
             ${{ runner.temp }}/objc-models-*/**/moleapi-generation.json
           if-no-files-found: warn

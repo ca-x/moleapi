@@ -2,22 +2,34 @@
 require 'xcodeproj'
 
 root = File.expand_path(ARGV.fetch(0))
-consumer = File.join(root, 'runtime-consumer')
-project = Xcodeproj::Project.new(File.join(consumer, 'FixtureQA.xcodeproj'))
-target = project.new_target(:command_line_tool, 'FixtureQA', :osx, '12.0')
-target.add_system_framework('Foundation')
-sources = Dir.glob(File.join(root, '**', '*.{h,m}')).reject { |p| p.start_with?(consumer + '/') }
-sources << File.join(consumer, 'RuntimeFixture.m')
-# Protobuf's static archive includes Swift additions and compatibility runtime symbols.
-# A Swift compilation unit makes Xcode supply its matching runtime/link search paths.
-swift_runtime = File.join(consumer, 'LinkRuntime.swift')
-File.write(swift_runtime, "// Link the selected Xcode Swift runtime required by Protobuf.\n")
-sources << swift_runtime
+consumer = File.expand_path(ARGV.fetch(1, File.join(root, 'runtime-consumer')))
+project_path = File.join(consumer, 'FixtureQA.xcodeproj')
+existing = File.directory?(project_path)
+project = existing ? Xcodeproj::Project.open(project_path) : Xcodeproj::Project.new(project_path)
+target = existing ? project.targets.find { |item| item.name == 'FixtureQA' } : project.new_target(:command_line_tool, 'FixtureQA', :osx, '12.0')
+raise 'Native fixture target missing' unless target
+unless existing
+  target.add_system_framework('Foundation')
+  runtime = project.main_group.new_group('Runtime')
+  swift_runtime = File.join(consumer, 'LinkRuntime.swift')
+  File.write(swift_runtime, "// Link the selected Xcode Swift runtime required by Protobuf.\n")
+  [File.join(consumer, 'RuntimeFixture.m'), swift_runtime].each do |path|
+    target.source_build_phase.add_file_reference(runtime.new_file(path))
+  end
+end
+
+generated = project.main_group.children.find { |item| item.isa == 'PBXGroup' && item.name == 'Generated' }
+generated ||= project.main_group.new_group('Generated')
+generated.files.each do |reference|
+  reference.build_files.each(&:remove_from_project)
+  reference.remove_from_project
+end
+sources = Dir.glob(File.join(root, '**', '*.{h,m}')).reject { |path| path.start_with?(consumer + '/') }
 sources.each do |path|
-  reference = project.main_group.new_file(path)
-  next unless ['.m', '.swift'].include?(File.extname(path))
+  reference = generated.new_file(path)
+  next unless File.extname(path) == '.m'
   build_file = target.source_build_phase.add_file_reference(reference)
-  # Official GPB generated messages use manual reference counting; the QA client uses ARC.
+  # Official GPB messages use MRC; generated service clients and QA consumer use ARC.
   build_file.settings = { 'COMPILER_FLAGS' => '-fno-objc-arc' } if path.end_with?('.pbobjc.m')
 end
 target.build_configurations.each do |config|
@@ -30,7 +42,9 @@ target.build_configurations.each do |config|
   config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = ['$(inherited)', 'GPB_USE_PROTOBUF_FRAMEWORK_IMPORTS=1']
 end
 project.save
-scheme = Xcodeproj::XCScheme.new
-scheme.add_build_target(target)
-scheme.set_launch_target(target)
-scheme.save_as(project.path, 'FixtureQA', true)
+unless existing
+  scheme = Xcodeproj::XCScheme.new
+  scheme.add_build_target(target)
+  scheme.set_launch_target(target)
+  scheme.save_as(project.path, 'FixtureQA', true)
+end
