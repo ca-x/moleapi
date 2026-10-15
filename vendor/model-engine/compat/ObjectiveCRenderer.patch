@@ -1,0 +1,138 @@
+--- a/dist/esm/language/Objective-C/ObjectiveCRenderer.js
++++ b/dist/esm/language/Objective-C/ObjectiveCRenderer.js
+@@ -164,7 +164,7 @@
+         ], (enumType) => [
+             "[",
+             this.nameForNamedType(enumType),
+-            " withValue:",
++            " fromJSONValue:",
+             dynamic,
+             "]",
+         ], (unionType) => {
+@@ -286,7 +286,7 @@
+             name,
+             " *_Nullable ",
+             name,
+-            "FromData(NSData *data, NSError **error)",
++            "FromData(NSData *data, NSError * _Nullable * _Nullable error)",
+         ];
+     }
+     topLevelFromJSONPrototype(name) {
+@@ -294,7 +294,7 @@
+             name,
+             " *_Nullable ",
+             name,
+-            "FromJSON(NSString *json, NSStringEncoding encoding, NSError **error)",
++            "FromJSON(NSString *json, NSStringEncoding encoding, NSError * _Nullable * _Nullable error)",
+         ];
+     }
+     topLevelToDataPrototype(name, pad = false) {
+@@ -311,7 +311,7 @@
+             name,
+             " *",
+             parameter,
+-            ", NSError **error)",
++            ", NSError * _Nullable * _Nullable error)",
+         ];
+     }
+     topLevelToJSONPrototype(name, pad = false) {
+@@ -328,7 +328,7 @@
+             name,
+             " *",
+             parameter,
+-            ", NSStringEncoding encoding, NSError **error)",
++            ", NSStringEncoding encoding, NSError * _Nullable * _Nullable error)",
+         ];
+     }
+     emitTopLevelFunctionDeclarations(_, name) {
+@@ -337,7 +337,10 @@
+         this.emitLine(this.topLevelToDataPrototype(name, true), ";");
+         this.emitLine(this.topLevelToJSONPrototype(name, true), ";");
+     }
+-    emitTryCatchAsError(inTry, inCatch) {
++    emitTryCatchAsError(inTry, inCatch, localError = "localError") {
++        this.emitLine("NSError * __autoreleasing ", localError, " = nil;");
++        this.emitLine("if (error == NULL) error = &", localError, ";");
++        this.emitLine("*error = nil;");
+         this.emitLine("@try {");
+         this.indent(inTry);
+         this.emitLine("} @catch (NSException *exception) {");
+@@ -366,7 +369,7 @@
+                 this.emitLine("id json = ", this.toDynamicExpression(t, parameter), ";");
+                 this.emitLine("NSData *data = [NSJSONSerialization dataWithJSONObject:json options:kNilOptions error:error];");
+                 this.emitLine("return *error ? nil : data;");
+-            }, () => this.emitLine("return nil;"));
++            }, () => this.emitLine("return nil;"), this.sourcelikeToString(parameter) === "localError" ? "serializationError" : "localError");
+         });
+         this.ensureBlankLine();
+         this.emitMethod(this.topLevelToJSONPrototype(name), () => {
+@@ -396,10 +399,10 @@
+         if (!this._options.justTypes && isTopLevel) {
+             if (t.getProperties().size > 0)
+                 this.ensureBlankLine();
+-            this.emitLine("+ (_Nullable instancetype)fromJSON:(NSString *)json encoding:(NSStringEncoding)encoding error:(NSError *_Nullable *)error;");
+-            this.emitLine("+ (_Nullable instancetype)fromData:(NSData *)data error:(NSError *_Nullable *)error;");
+-            this.emitLine("- (NSString *_Nullable)toJSON:(NSStringEncoding)encoding error:(NSError *_Nullable *)error;");
+-            this.emitLine("- (NSData *_Nullable)toData:(NSError *_Nullable *)error;");
++            this.emitLine("+ (_Nullable instancetype)fromJSON:(NSString *)json encoding:(NSStringEncoding)encoding error:(NSError *_Nullable *_Nullable)error;");
++            this.emitLine("+ (_Nullable instancetype)fromData:(NSData *)data error:(NSError *_Nullable *_Nullable)error;");
++            this.emitLine("- (NSString *_Nullable)toJSON:(NSStringEncoding)encoding error:(NSError *_Nullable *_Nullable)error;");
++            this.emitLine("- (NSData *_Nullable)toData:(NSError *_Nullable *_Nullable)error;");
+         }
+         this.emitLine("@end");
+     }
+@@ -436,11 +439,11 @@
+             });
+             this.ensureBlankLine();
+             if (isTopLevel) {
+-                this.emitMethod("+ (_Nullable instancetype)fromData:(NSData *)data error:(NSError *_Nullable *)error", () => {
++                this.emitMethod("+ (_Nullable instancetype)fromData:(NSData *)data error:(NSError *_Nullable *_Nullable)error", () => {
+                     this.emitLine("return ", className, "FromData(data, error);");
+                 });
+                 this.ensureBlankLine();
+-                this.emitMethod("+ (_Nullable instancetype)fromJSON:(NSString *)json encoding:(NSStringEncoding)encoding error:(NSError *_Nullable *)error", () => {
++                this.emitMethod("+ (_Nullable instancetype)fromJSON:(NSString *)json encoding:(NSStringEncoding)encoding error:(NSError *_Nullable *_Nullable)error", () => {
+                     this.emitLine("return ", className, "FromJSON(json, encoding, error);");
+                 });
+                 this.ensureBlankLine();
+@@ -513,11 +516,11 @@
+             });
+             if (isTopLevel) {
+                 this.ensureBlankLine();
+-                this.emitMethod("- (NSData *_Nullable)toData:(NSError *_Nullable *)error", () => {
++                this.emitMethod("- (NSData *_Nullable)toData:(NSError *_Nullable *_Nullable)error", () => {
+                     this.emitLine("return ", className, "ToData(self, error);");
+                 });
+                 this.ensureBlankLine();
+-                this.emitMethod("- (NSString *_Nullable)toJSON:(NSStringEncoding)encoding error:(NSError *_Nullable *)error", () => {
++                this.emitMethod("- (NSString *_Nullable)toJSON:(NSStringEncoding)encoding error:(NSError *_Nullable *_Nullable)error", () => {
+                     this.emitLine("return ", className, "ToJSON(self, encoding, error);");
+                 });
+             }
+@@ -574,6 +577,13 @@
+         this.ensureBlankLine();
+         this.emitMethod("+ (instancetype _Nullable)withValue:(NSString *)value", () => this.emitLine("return ", instances, "[value];"));
+         this.ensureBlankLine();
++        this.emitMethod("+ (instancetype _Nullable)fromJSONValue:(id _Nullable)value", () => {
++            this.emitLine("if (value == nil || value == NSNull.null) return nil;");
++            this.emitLine("id result = [self withValue:value];");
++            this.emitLine('if (result == nil) [NSException raise:@"JSONSerialization" format:@"Invalid enum value"];');
++            this.emitLine("return result;");
++        });
++        this.ensureBlankLine();
+         this.emitMethod("- (instancetype)initWithValue:(NSString *)value", () => {
+             this.emitLine("if (self = [super init]) _value = value;");
+             this.emitLine("return self;");
+@@ -665,7 +675,11 @@
+                 if (this._options.extraComments) {
+                     this.emitMark("Private model interfaces");
+                 }
+-                this.forEachNamedType("leading-and-interposing", (c, className) => this.emitPrivateClassInterface(c, className), () => null, () => null);
++                this.forEachNamedType("leading-and-interposing", (c, className) => this.emitPrivateClassInterface(c, className), (_, enumName) => {
++                    this.emitLine("@interface ", enumName, " (JSONConversion)");
++                    this.emitLine("+ (instancetype _Nullable)fromJSONValue:(id _Nullable)value;");
++                    this.emitLine("@end");
++                }, () => null);
+                 if (this.haveEnums) {
+                     if (this._options.extraComments) {
+                         this.ensureBlankLine();

@@ -44,11 +44,21 @@ int main(void) {
         error = nil;
         QTPet *invalid = [QTPet fromJSON:@"{\"id\":0,\"status\":\"invalid\"}" encoding:NSUTF8StringEncoding error:&error];
         check(invalid == nil && error != nil, @"Unknown enum silently accepted");
+        check([QTStatus withValue:@"invalid"] == nil, @"Public nullable enum lookup changed");
+        error = nil;
+        invalid = [QTPet fromJSON:@"{\"id\":0,\"status\":\"ready\",\"friend\":{\"id\":2,\"status\":\"invalid\"}}" encoding:NSUTF8StringEncoding error:&error];
+        check(invalid == nil && error != nil, @"Nested unknown enum accepted");
         error = nil;
         invalid = [QTPet fromJSON:@"\"not-an-object\"" encoding:NSUTF8StringEncoding error:&error];
         check(invalid == nil && error != nil, @"Non-object silently accepted");
         check([QTPet fromData:source error:NULL] != nil, @"NULL error output failed");
         check([built toData:NULL] != nil, @"NULL encoding error output failed");
+        check([QTPet fromJSON:@"\"not-an-object\"" encoding:NSUTF8StringEncoding error:NULL] == nil, @"NULL error output did not reject invalid data");
+        check([[QTPet new] toData:NULL] == nil, @"Invalid native object encoding did not return nil");
+        error = [NSError errorWithDomain:@"PreviousOperation" code:1 userInfo:nil];
+        check([QTPet fromData:source error:&error] != nil && error == nil, @"Stale decode error was reused");
+        error = [NSError errorWithDomain:@"PreviousOperation" code:1 userInfo:nil];
+        check([built toData:&error] != nil && error == nil, @"Stale encode error was reused");
     }
     return 0;
 }
@@ -85,7 +95,8 @@ def verify(args):
                 'compiler': native.run([str(args.xcrun), 'clang', '--version'], consumer).strip(),
                 'source_sha256': manifest['source_sha256'], 'generated_source_sha256': before,
                 'profiles': ['decoded', 'constructed', 'recursive', 'zero', 'enum', 'null', 'unicode',
-                             'invalid-enum', 'invalid-object', 'null-error-output'], 'result': 'passed'}
+                             'invalid-enum', 'invalid-object', 'null-error-output', 'invalid-nested-enum',
+                             'public-nullable-enum-lookup', 'null-error-failures', 'stale-error-reset'], 'result': 'passed'}
     (consumer / 'runtime-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
     print(f'PASS Objective-C/{args.dialect}: original native Apple models and errors')
 

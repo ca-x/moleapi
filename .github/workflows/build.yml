@@ -155,7 +155,7 @@ jobs:
           if-no-files-found: error
   objc-qa:
     if: github.event_name == 'workflow_dispatch' && inputs.objc_qa == true
-    timeout-minutes: 60
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:

@@ -43,6 +43,12 @@
       "patch": "HaskellRenderer.patch",
       "original_sha256": "cc83f8a90da4c96d2ce93b0f68120481734f8fabb7e347f0db31ed79eee841ef",
       "patched_sha256": "d78c1ddd28a14a379fa403c297ae163efefba644ec8dc58dfe3bf5363b078a50"
+    },
+    {
+      "file": "dist/esm/language/Objective-C/ObjectiveCRenderer.js",
+      "patch": "ObjectiveCRenderer.patch",
+      "original_sha256": "a69cea48435b60515c0f576d292ed2f4a87b9519c5ad85b24abbbbafe69d9333",
+      "patched_sha256": "e4cc8f72e49bf08cb5a63a0255fa4a5a6153bd2d2644021eea926a4f8995db6c"
     }
   ]
 }
