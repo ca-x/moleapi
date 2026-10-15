@@ -140,9 +140,10 @@ pub fn generate_request(
         );
         headers.push(json!({"name":row.key,"value":row.value}));
     }
-    let java_native =
-        target == "java" && matches!(client, "nethttp" | "okhttp" | "asynchttp" | "unirest");
-    if request.body_kind == "form" && !(target == "shell" && client == "curl") && !java_native {
+    let native_form = (target == "java"
+        && matches!(client, "nethttp" | "okhttp" | "asynchttp" | "unirest"))
+        || (target == "kotlin" && client == "okhttp");
+    if request.body_kind == "form" && !(target == "shell" && client == "curl") && !native_form {
         let mut names = std::collections::BTreeSet::new();
         for (name, _) in url::form_urlencoded::parse(request.body.as_bytes()) {
             ensure!(
@@ -159,11 +160,11 @@ pub fn generate_request(
         "Fetch adapters cannot send GET/HEAD bodies; choose a different HTTP library"
     );
     ensure!(
-        !(target == "java"
+        !(matches!(target, "java" | "kotlin")
             && client == "okhttp"
             && matches!(request.method.as_str(), "GET" | "HEAD")
             && request.body_kind != "none"),
-        "OkHttp cannot send GET/HEAD bodies; choose another Java HTTP library"
+        "OkHttp cannot send GET/HEAD bodies; choose a different HTTP library"
     );
     match request.auth.kind.as_str() {
         "none" => {},
@@ -278,6 +279,46 @@ pub fn generate_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn kotlin_native_files_forms_and_method_rejections_keep_source_and_privacy() {
+        let binary =
+            json!({"file_name":"upload.bin","mime":"application/octet-stream","base64":"AP+AClg="})
+                .to_string();
+        let mut w = workspace("binary", &binary);
+        w.data.collections[0].requests[0].auth.kind = "bearer".into();
+        w.data.collections[0].requests[0].auth.token = "private-kotlin-token".into();
+        let private = generate_request(&w, "r", "kotlin", "okhttp", false).unwrap();
+        assert!(
+            private.code.contains("upload.bin")
+                && !private.code.contains("AP+AClg=")
+                && !private.code.contains("private-kotlin-token")
+        );
+        assert!(
+            private
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("文件上传代码引用文件名"))
+        );
+        assert!(
+            generate_request(&w, "r", "kotlin", "okhttp", true)
+                .unwrap()
+                .code
+                .contains("private-kotlin-token")
+        );
+        for method in ["GET", "HEAD"] {
+            w.data.collections[0].requests[0].method = method.into();
+            assert!(
+                generate_request(&w, "r", "kotlin", "okhttp", true)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("cannot send GET/HEAD bodies")
+            );
+        }
+        assert_eq!(w.data.collections[0].requests[0].body, binary);
+        let forms = workspace("form", "label=one&label=two&empty=");
+        generate_request(&forms, "r", "kotlin", "okhttp", true).unwrap();
+        assert!(generate_request(&forms, "r", "node", "fetch", true).is_err());
+    }
     #[test]
     fn java_okhttp_rejects_unsupported_method_bodies_instead_of_silently_dropping_them() {
         let mut w = workspace("binary", &json!({"file_name":"upload.bin","mime":"application/octet-stream","base64":"AP+AClg="}).to_string());

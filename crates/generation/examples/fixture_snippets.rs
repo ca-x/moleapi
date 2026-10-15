@@ -16,12 +16,13 @@ fn main() -> Result<()> {
     ensure!(args.next().is_none(), "Unexpected fixture arguments");
     ensure!(
         profile == "core"
-            || mode.as_deref() == Some("java")
+            || matches!(mode.as_deref(), Some("java" | "kotlin"))
                 && ["form", "text", "binary", "binary-mime", "multipart"]
-                    .contains(&profile.as_str()),
+                    .contains(&profile.as_str())
+            || mode.as_deref() == Some("kotlin") && profile == "dollar",
         "Unknown snippet fixture profile"
     );
-    let body_profile = if mode.as_deref() == Some("java") {
+    let body_profile = if matches!(mode.as_deref(), Some("java" | "kotlin")) {
         profile.as_str()
     } else {
         mode.as_deref().unwrap_or("core")
@@ -35,6 +36,11 @@ fn main() -> Result<()> {
         let request = &mut workspace.data.collections[0].requests[0];
         request.body_kind = "text".into();
         request.body = "鼹鼠 \"quotes\" & +\r\nline\0\u{b}end".into();
+    }
+    if body_profile == "dollar" {
+        let request = &mut workspace.data.collections[0].requests[0];
+        request.body_kind = "text".into();
+        request.body = "literal $ and ${1 + 2} 鼹鼠".into();
     }
     if matches!(body_profile, "binary" | "binary-mime") {
         let request = &mut workspace.data.collections[0].requests[0];
@@ -58,7 +64,9 @@ fn main() -> Result<()> {
         request.body_kind = "multipart".into();
         request.body=json!({"parts":[{"id":"one","name":"label","value":{"kind":"text","text":"鼹鼠 'quotes' & +","mime":""}},{"id":"two","name":"label","value":{"kind":"text","text":"second","mime":""}},{"id":"upload","name":"upload","value":{"kind":"file","file":{"file_name":"upload.bin","mime":"application/octet-stream","base64":"AP+AClg="}}},{"id":"off","name":"disabled","enabled":false,"value":{"kind":"text","text":"must-not-send","mime":""}}]}).to_string();
     }
-    let targets = if mode.as_deref() == Some("java") {
+    let targets = if mode.as_deref() == Some("kotlin") {
+        vec![("kotlin", "okhttp", "snippet.kt")]
+    } else if mode.as_deref() == Some("java") {
         vec![
             ("java", "nethttp", "nethttp.java"),
             ("java", "okhttp", "okhttp.java"),
@@ -126,7 +134,7 @@ fn main() -> Result<()> {
         );
         std::fs::write(std::path::Path::new(&output).join(filename), code)?;
     }
-    if mode.as_deref() == Some("java") {
+    if matches!(mode.as_deref(), Some("java" | "kotlin")) {
         let source = serde_json::to_vec(&workspace)?;
         std::fs::write(
             std::path::Path::new(&output).join("fixture-request.json"),
@@ -135,7 +143,7 @@ fn main() -> Result<()> {
         std::fs::write(
             std::path::Path::new(&output).join("fixture-manifest.json"),
             serde_json::to_vec_pretty(
-                &json!({"engine":moleapi_generation::ENGINE,"target":"java","profile":profile,"source_sha256":format!("{:x}",Sha256::digest(source)),"files":hashes}),
+                &json!({"engine":moleapi_generation::ENGINE,"target":mode,"profile":profile,"source_sha256":format!("{:x}",Sha256::digest(source)),"files":hashes}),
             )?,
         )?;
     }

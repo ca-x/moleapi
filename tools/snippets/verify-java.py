@@ -39,7 +39,7 @@ def run(command, cwd, env, timeout=300):
     return result.stdout
 
 
-def check(profile, record):
+def check(profile, record, expected_text=None):
     assert record['method'] == 'POST', record
     headers = record['headers']
     assert headers['authorization'] == 'Bearer fixture-token'
@@ -54,7 +54,7 @@ def check(profile, record):
         assert mime.startswith('application/x-www-form-urlencoded')
         assert urllib.parse.parse_qs(body.decode(), keep_blank_values=True) == {'label': [NOTE, 'second'], 'empty': ['']}
     elif profile == 'text':
-        assert mime.startswith('text/plain') and body == (NOTE + '\r\nline\0\vend').encode()
+        assert mime.startswith('text/plain') and body == (expected_text if expected_text is not None else NOTE + '\r\nline\0\vend').encode()
     elif profile in ('binary', 'binary-mime'):
         expected = 'application/vnd.moleapi.fixture' if profile == 'binary-mime' else 'application/octet-stream'
         assert mime.startswith(expected) and body == BYTES
