@@ -144,7 +144,8 @@ pub fn generate_request(
         && matches!(client, "nethttp" | "okhttp" | "asynchttp" | "unirest"))
         || (target == "kotlin" && client == "okhttp")
         || (target == "dart" && matches!(client, "http" | "dio"))
-        || (target == "ruby" && client == "native");
+        || (target == "ruby" && client == "native")
+        || (target == "python" && matches!(client, "requests" | "httpx_sync" | "httpx_async"));
     if request.body_kind == "form" && !(target == "shell" && client == "curl") && !native_form {
         let mut names = std::collections::BTreeSet::new();
         for (name, _) in url::form_urlencoded::parse(request.body.as_bytes()) {
@@ -281,6 +282,54 @@ pub fn generate_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn python_native_bodies_preserve_literals_files_and_private_source() {
+        let body =
+            json!({"file_name":"upload.bin","mime":"application/octet-stream","base64":"AP+AClg="})
+                .to_string();
+        let mut w = workspace("binary", &body);
+        w.data.collections[0].requests[0].auth.kind = "bearer".into();
+        w.data.collections[0].requests[0].auth.token = "private-python-token".into();
+        for client in ["requests", "httpx_sync", "httpx_async"] {
+            let private = generate_request(&w, "r", "python", client, false).unwrap();
+            assert!(private.code.contains("read_bytes()") && private.code.contains("upload.bin"));
+            assert!(
+                !private.code.contains("AP+AClg=")
+                    && !private.code.contains("private-python-token")
+            );
+            assert!(
+                generate_request(&w, "r", "python", client, true)
+                    .unwrap()
+                    .code
+                    .contains("private-python-token")
+            );
+            assert!(
+                private
+                    .warnings
+                    .iter()
+                    .any(|warning| warning.contains("文件上传代码引用文件名"))
+            );
+            generate_request(
+                &workspace("form", "x=one&x=two&empty="),
+                "r",
+                "python",
+                client,
+                true,
+            )
+            .unwrap();
+            let literal = generate_request(
+                &workspace("json", r#"{"literal":"x: true, text","flag":true}"#),
+                "r",
+                "python",
+                client,
+                true,
+            )
+            .unwrap()
+            .code;
+            assert!(literal.contains("x: true, text") && literal.contains("True"));
+        }
+        assert_eq!(w.data.collections[0].requests[0].body, body);
+    }
     #[test]
     fn ruby_native_file_and_repeated_form_generation_retains_private_source() {
         let body =
@@ -512,7 +561,7 @@ mod tests {
                 count += 1;
             }
         }
-        assert_eq!(count, 19);
+        assert_eq!(count, 21);
         assert_eq!(w.data.collections[0].requests[0].body, body);
     }
     #[test]

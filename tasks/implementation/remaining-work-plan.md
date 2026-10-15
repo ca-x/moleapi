@@ -47,6 +47,8 @@ Dart snippet checkpoint2026-10-15: original text body omission was reproduced; b
 
 Ruby snippet checkpoint2026-10-15: reproduced original JSON heredoc escape loss on real wire, then repaired pinned mature literals/interpolation and native binread/set_form binary paths. Eight original Ruby3.4.7 syntax/HTTP profiles pass; raw-file adapters now19,54 other representative outputs unchanged.94 generation/4 API/36 UI-i18n cases, prior7 native wires, patch idempotence and scoped checks pass. Actual bilingual owned-API UI preserves privacy/prerequisites. Both Apple native handles remain observed separately; all wider generation and later milestones remain open.
 
+Python Requests/HTTPX checkpoint2026-10-15: shared pinned emitter preserves JSON literal tokens/root false/null, raw UTF-8 text/MIME and native binary files. Requests2.34.2/HTTPX0.28.1 sync+async pass39 syntax/native HTTP cases on Python3.14.8, including GET file/DELETE JSON; native forms preserve repeats. Raw-file adapters now21;50 other non-Python representative outputs unchanged.95 generation/3 API/39 UI-i18n cases, deterministic engine, scoped checks and real bilingual owned-API browser checks pass. Stdlib/aiohttp extended profiles, Apple native gates and the larger plan remain open.
+
 ## Slice 1: CLI runner labels
 
 **Files:** `crates/cli/src/args.rs` owns flags; `crates/cli/src/runners.rs` owns request payloads; `crates/cli/tests/runners.rs` owns real process/API fixtures; `docs/SELF-HOSTED-RUNNERS.md`, `docs/SELF-HOSTED-RUNNER-COVERAGE.md` and `docs/IMPLEMENTATION-STATUS.md` own usage/status.

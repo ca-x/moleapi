@@ -39,8 +39,8 @@ def run(command, cwd, env, timeout=300):
     return result.stdout
 
 
-def check(profile, record, expected_text=None, expected_json=None):
-    assert record['method'] == 'POST', record
+def check(profile, record, expected_text=None, expected_json=None, expected_method="POST"):
+    assert record['method'] == expected_method, record
     headers = record['headers']
     assert headers['authorization'] == 'Bearer fixture-token'
     assert headers['x-test'] == 'moleapi-fixture'
