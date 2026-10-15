@@ -69,7 +69,7 @@ pub async fn create(
         return Err(ApiError::bad("HTTP requests use the execute API"));
     }
     if c.request.protocol.is_dubbo() {
-        return Err(ApiError::bad("Classic Dubbo calls are not available yet"));
+        return Err(ApiError::bad("Classic Dubbo calls use the execute API"));
     }
     if let Some(id) = &c.request.specification_id
         && !w.data.specifications.iter().any(|s| &s.id == id)

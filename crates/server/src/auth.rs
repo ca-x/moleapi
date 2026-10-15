@@ -337,6 +337,8 @@ mod tests {
                 )
                 .unwrap(),
             ),
+            dubbo_runtime: None,
+            dubbo_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
             cookies: std::sync::Arc::default(),
             oauth1_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(8)),
             oauth1_flows: std::sync::Arc::default(),

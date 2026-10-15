@@ -1,5 +1,6 @@
 //! Volatile owner-scoped protocol sessions. Event cursors order delivery independently of clocks.
 pub mod a2a;
+pub mod dubbo;
 mod grpc;
 mod mcp;
 mod mqtt;

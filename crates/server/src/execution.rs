@@ -256,6 +256,11 @@ pub(crate) async fn perform_deferred(
     if request.protocol.is_soap() != r.protocol.is_soap() {
         return Err(ApiError::bad("Pre scripts cannot change the SOAP protocol"));
     }
+    if request.protocol.is_dubbo() != r.protocol.is_dubbo() {
+        return Err(ApiError::bad(
+            "Pre scripts cannot change the Dubbo protocol",
+        ));
+    }
     let effective = scopes.effective();
     let request = moleapi_core::inherit_request_authentication(
         &w.data,
@@ -278,16 +283,32 @@ pub(crate) async fn perform_deferred(
     crate::privacy::request_values(&resolved, scopes)?;
     let mut network_request = resolved.clone();
     network_request.assertions.clear();
-    let mut response = moleapi_core::execute_with_cookies(
-        &network_request,
-        None,
-        moleapi_core::NetworkPolicy {
-            allow_private_network: s.local || s.config.allow_private_network,
-        },
-        cookie_jar.as_deref(),
-    )
-    .await
-    .map_err(|e| ApiError::bad(e.to_string()))?;
+    let policy = moleapi_core::NetworkPolicy {
+        allow_private_network: s.local || s.config.allow_private_network,
+    };
+    let mut response = if network_request.protocol.is_dubbo() {
+        let runtime = s
+            .dubbo_runtime
+            .as_ref()
+            .ok_or_else(|| ApiError::bad("Classic Dubbo worker is not configured"))?;
+        let java = s
+            .project_runtime
+            .java_path()
+            .ok_or_else(|| ApiError::bad("Configure a Java17+ executable for classic Dubbo"))?;
+        let _slot = s
+            .dubbo_slots
+            .acquire()
+            .await
+            .map_err(|_| ApiError::internal())?;
+        runtime
+            .invoke(&java, &network_request, policy)
+            .await
+            .map_err(|e| ApiError::bad(e.to_string()))?
+    } else {
+        moleapi_core::execute_with_cookies(&network_request, None, policy, cookie_jar.as_deref())
+            .await
+            .map_err(|e| ApiError::bad(e.to_string()))?
+    };
     if !resolved.assertions.is_empty() {
         response.tests =
             moleapi_core::assertion_worker(&s.script_worker, &resolved.assertions, &response).await;

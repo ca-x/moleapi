@@ -75,6 +75,8 @@ struct AppState {
     project_slots: Arc<tokio::sync::Semaphore>,
     project_jobs: Arc<generation_projects::Jobs>,
     project_runtime: Arc<moleapi_generation::project::ProjectRuntime>,
+    dubbo_runtime: Option<Arc<moleapi_protocols::dubbo::DubboRuntime>>,
+    dubbo_slots: Arc<tokio::sync::Semaphore>,
     cookies: Arc<cookies::Jars>,
     oauth1_slots: Arc<tokio::sync::Semaphore>,
     oauth1_flows: Arc<oauth1::flows::Hub>,
@@ -223,6 +225,9 @@ async fn build(
     );
     let db = storage::connect(&config.database_url).await?;
     let credential_revisions = credential_revocations::revisions(&db).await?;
+    let dubbo_runtime = std::env::var_os("MOLEAPI_DUBBO_WORKER_JAR")
+        .map(|path| moleapi_protocols::dubbo::DubboRuntime::new(&PathBuf::from(path)).map(Arc::new))
+        .transpose()?;
     let state = AppState {
         credential_revisions: Arc::new(tokio::sync::Mutex::new(credential_revisions)),
         db,
@@ -233,6 +238,8 @@ async fn build(
         generation_slots: Arc::new(tokio::sync::Semaphore::new(4)),
         project_slots: Arc::new(tokio::sync::Semaphore::new(2)),
         project_jobs: Arc::default(),
+        dubbo_runtime,
+        dubbo_slots: Arc::new(tokio::sync::Semaphore::new(4)),
         project_runtime: Arc::new(match project_runtime {
             Some(runtime) => runtime,
             None => moleapi_generation::project::ProjectRuntime::from_environment(
