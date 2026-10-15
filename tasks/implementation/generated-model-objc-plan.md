@@ -58,3 +58,16 @@ remain separate required parent work. No blanket schema or full module completio
   byte comparisons and5 prior native model runtime regressions pass. Actual Clang
   ARC syntax-only preflight confirms the new autoreleasing error-pointer setup;
   no Linux stub is counted as Foundation execution. Repaired Apple gate is pending.
+
+
+## Intel child compiler timeout follow-through
+
+Run38707843936 Intel job116331593492 failed before the model step. Exact traceback:
+xcodebuild Release of the original source consumer timed out after1800seconds while
+clang was still compiling gRPC-Core. Started08:52:21UTC; RPC step09:20:49; failure09:54:21.
+The earlier90-minute job budget did not raise this separate child-process limit.
+Only xcodebuild now receives3600seconds; protocol/runtime-call deadlines and all
+source/descriptor consumers stay unchanged. Overall QA budget180minutes covers two
+cold native builds plus Rust/setup. Optional objc_runner=all/intel/arm allows a focused
+retry without restarting the still-queued ARM job; both architectures remain mandatory
+for final acceptance and relevant source hashes/results must be recorded separately.
