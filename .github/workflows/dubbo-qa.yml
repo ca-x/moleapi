@@ -46,6 +46,8 @@ jobs:
           exit 1
       - name: Prove fixture with official Java client
         run: java -cp 'tools/dubbo-qa/java/target/classes:tools/dubbo-qa/java/target/dependency/*' fixture.Consumer 20880 | tee tools/dubbo-qa/java/official-client.log
+      - name: Prove official generic invocation route
+        run: java -cp 'tools/dubbo-qa/java/target/classes:tools/dubbo-qa/java/target/dependency/*' fixture.GenericConsumer 20880 | tee tools/dubbo-qa/java/generic-client.log
       - name: Probe candidate Rust codec against official provider
         shell: bash
         run: |
@@ -68,6 +70,7 @@ jobs:
           path: |
             tools/dubbo-qa/java/provider.log
             tools/dubbo-qa/java/official-client.log
+            tools/dubbo-qa/java/generic-client.log
             tools/dubbo-qa/java/candidate.log
             tools/dubbo-qa/java/candidate-exit.txt
             tools/dubbo-qa/java/verdict.json
