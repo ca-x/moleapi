@@ -40,6 +40,15 @@ async fn main() -> Result<()> {
                 .is_empty(),
             "Namespaced provider leaked into the public Nacos namespace"
         );
+    } else {
+        let mut custom = config.clone();
+        custom.registry_namespace = "moleapi-qa".into();
+        ensure!(
+            lookup_nacos(&registry, &custom, policy, Duration::from_secs(5))
+                .await?
+                .is_empty(),
+            "Public provider leaked into the custom Nacos namespace"
+        );
     }
     let sources = lookup_nacos(&registry, &config, policy, Duration::from_secs(8)).await?;
     ensure!(
