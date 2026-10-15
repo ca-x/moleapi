@@ -91,3 +91,23 @@ JSON null/absence serialization stays the mature optional-nil policy, not a univ
 schema claim. Constructor option/name/framework/platform and scalar/range cases remain
 separate parent-module scope. Source/version/license/hash guards cover both pinned
 Crystal renderer and string utility files.
+
+
+## Haskell total parsers and multiple selected roots
+
+Actual GHC9.6.7/Aeson2.2.4.0 execution exposed non-exhaustive enum and object
+patterns; multiple selected component roots also repeated decodeTopLevel and
+exported aliases with constructor syntax. The pinned mature renderer now uses
+Aeson withObject for normal and empty classes, a typed failing enum fallback,
+and DependencyName allocation for each exported root decoder. Single-root API
+retains decodeTopLevel; multiple-root callers use decodePet/decodeEmpty/etc.
+Type aliases export bare names, retaining native array/map representations.
+
+Four compiled optimized3.0.3/3.1.0 core/multiple-root cases preserve original
+Pet/Status recursion/construction/zero/null/Unicode and return typed errors for
+invalid enum/object/required/nested inputs. Empty-object non-object rejection and
+native aliases pass. Other17 model outputs remain byte-identical. Model source
+is never rewritten by QA. Version/license/original/patched SHA guards and an
+idempotent build cover this target's26.0.0+moleapi.1 compatibility variant.
+Machine Int ranges, full schema validation, null/absence fidelity, advanced unions
+and additional runtime/options/platform combinations require separate acceptance.

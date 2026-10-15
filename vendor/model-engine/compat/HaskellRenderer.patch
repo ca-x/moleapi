@@ -1,0 +1,76 @@
+--- a/dist/esm/language/Haskell/HaskellRenderer.js
++++ b/dist/esm/language/Haskell/HaskellRenderer.js
+@@ -1,4 +1,6 @@
+ import { mapContains } from "collection-utils";
++import { DependencyName } from "../../Naming.js";
++import { defined } from "../../support/Support.js";
+ import { ConvenienceRenderer, } from "../../ConvenienceRenderer.js";
+ import { multiWord, parenIfNeeded, singleWord, } from "../../Source.js";
+ import { stringEscape } from "../../support/Strings.js";
+@@ -9,6 +11,13 @@
+     constructor(targetLanguage, renderContext, _options) {
+         super(targetLanguage, renderContext);
+         this._options = _options;
++        this._topLevelDecoders = new Map();
++    }
++    makeTopLevelDependencyNames(_type, name) {
++        const decoder = new DependencyName(lowerNamingFunction, name.order,
++            lookup => this.topLevels.size === 1 ? "decode_top_level" : `decode_${lookup(name)}`);
++        this._topLevelDecoders.set(name, decoder);
++        return [decoder];
+     }
+     forbiddenNamesForGlobalNamespace() {
+         return forbiddenNames;
+@@ -145,8 +154,9 @@
+         });
+     }
+     emitTopLevelFunctions(topLevelName) {
+-        this.emitLine("decodeTopLevel :: ByteString -> Maybe ", topLevelName);
+-        this.emitLine("decodeTopLevel = decode");
++        const decoder = defined(this._topLevelDecoders.get(topLevelName));
++        this.emitLine(decoder, " :: ByteString -> Maybe ", topLevelName);
++        this.emitLine(decoder, " = decode");
+     }
+     classPropertyLength(c) {
+         let counter = 0;
+@@ -188,10 +198,10 @@
+         this.emitLine("instance FromJSON ", className, " where");
+         this.indent(() => {
+             if (this.classPropertyLength(c) === 0) {
+-                this.emitLine("parseJSON emptyObject = return ", className);
++                this.emitLine('parseJSON = withObject "', className, '" (\\_ -> return ', className, ')');
+             }
+             else {
+-                this.emitLine("parseJSON (Object v) = ", className);
++                this.emitLine('parseJSON = withObject "', className, '" $ \\v -> ', className);
+                 this.indent(() => {
+                     let onFirst = true;
+                     this.forEachClassProperty(c, "none", (_, jsonName, p) => {
+@@ -226,6 +236,7 @@
+                     this.forEachEnumCase(e, "none", (name, jsonName) => {
+                         this.emitLine('parseText "', stringEscape(jsonName), '" = return ', name, enumName);
+                     });
++                    this.emitLine('parseText _ = fail "Invalid enum value"');
+                 });
+             });
+         });
+@@ -271,8 +282,8 @@
+     }
+     emitSourceStructure() {
+         const exports = [];
+-        this.forEachTopLevel("none", (_, name) => {
+-            exports.push([name, " (..)"]);
++        this.forEachTopLevel("none", (type, name) => {
++            exports.push(this.namedTypeToNameForTopLevel(type) === undefined ? name : [name, " (..)"]);
+         });
+         this.forEachObject("none", (t, name) => {
+             if (!mapContains(this.topLevels, t))
+@@ -295,7 +306,7 @@
+                 for (let i = 0; i < exports.length; i++) {
+                     this.emitLine(i === 0 ? "(" : ",", " ", exports[i]);
+                 }
+-                this.emitLine(", decodeTopLevel");
++                this.forEachTopLevel("none", (_, name) => this.emitLine(", ", defined(this._topLevelDecoders.get(name))));
+                 this.emitLine(") where");
+             });
+             this.ensureBlankLine();
