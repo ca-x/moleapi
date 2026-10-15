@@ -1,7 +1,8 @@
 //! One-shot Apache Dubbo GenericService worker with Rust-owned network admission.
 use anyhow::{Context, Result, bail, ensure};
 use moleapi_core::{
-    NetworkPolicy, Protocol, RequestSpec, Response, checked_destination, dubbo_url,
+    DubboConfig, NetworkPolicy, Protocol, RequestSpec, Response, checked_destination,
+    dubbo_provider_url, dubbo_url,
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -22,6 +23,62 @@ pub const WORKER_JAR_SHA256: &str =
 const MAX_INPUT: usize = 1024 * 1024;
 const MAX_OUTPUT: usize = 1024 * 1024;
 const MAX_STDERR: usize = 16 * 1024;
+
+#[derive(Clone, Debug)]
+pub struct CheckedProvider {
+    /// Original registry value; callers must screen it before history or UI output.
+    source: String,
+    address: SocketAddr,
+}
+
+impl CheckedProvider {
+    pub fn original_url(&self) -> &str {
+        &self.source
+    }
+
+    pub fn destination(&self) -> SocketAddr {
+        self.address
+    }
+}
+
+/// Admit the complete untrusted registry snapshot before preflighting one provider.
+pub async fn select_registry_provider(
+    config: &DubboConfig,
+    sources: &[String],
+    policy: NetworkPolicy,
+    timeout: Duration,
+) -> Result<CheckedProvider> {
+    ensure!(
+        !sources.is_empty() && sources.len() <= 256,
+        "Dubbo registry provider count must be 1–256"
+    );
+    ensure!(
+        sources.iter().map(String::len).sum::<usize>() <= MAX_INPUT,
+        "Dubbo registry provider snapshot exceeds 1 MiB"
+    );
+    let deadline = Instant::now() + timeout;
+    let mut providers = sources
+        .iter()
+        .map(|raw| Ok((raw.clone(), dubbo_provider_url(raw, config)?)))
+        .collect::<Result<Vec<_>>>()?;
+    providers.sort_by(|left, right| left.0.cmp(&right.0));
+    let mut checked = Vec::with_capacity(providers.len());
+    for (source, url) in providers {
+        let addresses = tokio::time::timeout(
+            deadline.saturating_duration_since(Instant::now()),
+            checked_destination(&url, policy),
+        )
+        .await
+        .context("Dubbo registry provider admission timed out")??;
+        checked.push((source, addresses));
+    }
+    for (source, addresses) in checked {
+        if let Ok(address) = reachable_address(&addresses, deadline).await {
+            return Ok(CheckedProvider { source, address });
+        }
+    }
+    bail!("No reachable checked Dubbo provider")
+}
 
 #[derive(Clone)]
 pub struct DubboRuntime {
@@ -268,6 +325,64 @@ mod tests {
                 .await
                 .unwrap(),
             addresses[1]
+        );
+    }
+
+    #[tokio::test]
+    async fn registry_snapshot_checks_every_provider_before_selecting_one() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let config = DubboConfig {
+            service: "fixture.EchoService".into(),
+            version: "1.0.0".into(),
+            ..Default::default()
+        };
+        let reachable =
+            format!("dubbo://{address}/fixture.EchoService?side=provider&version=1.0.0");
+        let selected = select_registry_provider(
+            &config,
+            std::slice::from_ref(&reachable),
+            NetworkPolicy {
+                allow_private_network: true,
+            },
+            Duration::from_secs(2),
+        )
+        .await
+        .unwrap();
+        assert_eq!(selected.destination(), address);
+        assert_eq!(selected.original_url(), reachable);
+        let mismatched = [
+            reachable.clone(),
+            "dubbo://127.0.0.2:20880/fixture.EchoService?side=provider&version=2.0.0".into(),
+        ];
+        assert!(
+            select_registry_provider(
+                &config,
+                &mismatched,
+                NetworkPolicy {
+                    allow_private_network: true,
+                },
+                Duration::from_secs(2),
+            )
+            .await
+            .is_err(),
+            "a reachable first provider cannot hide a malformed later entry"
+        );
+        let unsafe_snapshot = [
+            reachable,
+            "dubbo://127.0.0.2:20880/fixture.EchoService?side=provider&version=1.0.0".into(),
+        ];
+        assert!(
+            select_registry_provider(
+                &config,
+                &unsafe_snapshot,
+                NetworkPolicy {
+                    allow_private_network: false,
+                },
+                Duration::from_secs(2),
+            )
+            .await
+            .is_err()
         );
     }
 }

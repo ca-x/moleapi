@@ -94,6 +94,81 @@ pub fn dubbo_url(raw: &str) -> Result<url::Url> {
     Ok(parsed)
 }
 
+/// Validate one untrusted registry result before the host resolves or connects it.
+pub fn dubbo_provider_url(raw: &str, config: &DubboConfig) -> Result<url::Url> {
+    ensure!(
+        config.source_version == 1
+            && config.transport == "classic"
+            && config.serialization == "hessian2",
+        "Unsupported Dubbo provider selection mode"
+    );
+    ensure!(raw.len() <= 4096, "Dubbo provider URL exceeds 4 KiB");
+    let url = url::Url::parse(raw).context("Invalid Dubbo provider URL")?;
+    ensure!(
+        url.scheme() == "dubbo"
+            && url.host_str().is_some()
+            && url.port().is_some_and(|port| port > 0)
+            && url.username().is_empty()
+            && url.password().is_none()
+            && url.path() == format!("/{}", config.service)
+            && url.fragment().is_none(),
+        "Registry result is not a matching direct Dubbo provider"
+    );
+    let mut fields = std::collections::HashMap::new();
+    for (index, (name, value)) in url.query_pairs().enumerate() {
+        ensure!(index < 128, "Dubbo provider metadata exceeds 128 fields");
+        if matches!(
+            name.as_ref(),
+            "side"
+                | "version"
+                | "group"
+                | "serialization"
+                | "prefer.serialization"
+                | "enabled"
+                | "category"
+        ) {
+            ensure!(
+                fields
+                    .insert(name.into_owned(), value.into_owned())
+                    .is_none(),
+                "Duplicate Dubbo provider control field"
+            );
+        }
+    }
+    let get = |key| fields.get(key).map(String::as_str);
+    ensure!(
+        get("side") == Some("provider"),
+        "Registry result is not a provider"
+    );
+    ensure!(
+        get("version").unwrap_or("") == config.version,
+        "Dubbo provider version differs from request"
+    );
+    ensure!(
+        get("group").unwrap_or("") == config.group,
+        "Dubbo provider group differs from request"
+    );
+    ensure!(
+        get("serialization").unwrap_or("hessian2") == "hessian2",
+        "Dubbo provider does not support Hessian2"
+    );
+    if let Some(preferred) = get("prefer.serialization") {
+        ensure!(
+            preferred.split(',').any(|part| part.trim() == "hessian2"),
+            "Dubbo provider does not advertise Hessian2"
+        );
+    }
+    ensure!(
+        get("enabled").is_none_or(|value| value == "true"),
+        "Dubbo provider is disabled"
+    );
+    ensure!(
+        get("category").is_none_or(|value| value == "providers"),
+        "Dubbo registry category is not providers"
+    );
+    Ok(url)
+}
+
 pub fn validate_dubbo(request: &RequestSpec, templates: bool) -> Result<()> {
     let Protocol::Dubbo { config } = &request.protocol else {
         return Ok(());

@@ -1,4 +1,6 @@
-use moleapi_core::{DubboConfig, Environment, Protocol, RequestSpec, validate_request};
+use moleapi_core::{
+    DubboConfig, Environment, Protocol, RequestSpec, dubbo_provider_url, validate_request,
+};
 use serde_json::{Value, json};
 
 fn request() -> RequestSpec {
@@ -84,4 +86,45 @@ fn argument_interpolation_quotes_private_text_and_preserves_saved_source() {
     assert_eq!(value, "鼹鼠 \"\\\n");
     assert_eq!(config.attachments[0].value, "trace-1");
     assert_eq!(serde_json::to_value(r).unwrap(), before);
+}
+
+#[test]
+fn registry_result_must_match_classic_service_version_group_and_serialization() {
+    let mut config = DubboConfig {
+        service: "fixture.EchoService".into(),
+        version: "1.0.0".into(),
+        group: "qa".into(),
+        ..Default::default()
+    };
+    let valid = "dubbo://127.0.0.1:20880/fixture.EchoService?side=provider&version=1.0.0&group=qa&prefer.serialization=hessian2%2Cfastjson2";
+    dubbo_provider_url(valid, &config).unwrap();
+    for source in [
+        "http://127.0.0.1:20880/fixture.EchoService?side=provider&version=1.0.0&group=qa",
+        "dubbo://127.0.0.1:20880/fixture.Other?side=provider&version=1.0.0&group=qa",
+        "dubbo://127.0.0.1:20880/fixture.EchoService?side=consumer&version=1.0.0&group=qa",
+        "dubbo://127.0.0.1:20880/fixture.EchoService?side=provider&version=2.0&group=qa",
+        "dubbo://127.0.0.1:20880/fixture.EchoService?side=provider&version=1.0.0&group=other",
+        "dubbo://127.0.0.1:20880/fixture.EchoService?side=provider&version=1.0.0&group=qa&serialization=fastjson2",
+        "dubbo://127.0.0.1:20880/fixture.EchoService?side=provider&side=consumer&version=1.0.0&group=qa",
+        "dubbo://127.0.0.1:20880/fixture.EchoService?side=provider&version=1.0.0&group=qa&enabled=false",
+        "dubbo://user:secret@127.0.0.1:20880/fixture.EchoService?side=provider&version=1.0.0&group=qa",
+    ] {
+        assert!(
+            dubbo_provider_url(source, &config).is_err(),
+            "accepted {source}"
+        );
+    }
+    config.version.clear();
+    assert!(dubbo_provider_url(valid, &config).is_err());
+    config.version = "1.0.0".into();
+    config.transport = "triple".into();
+    assert!(dubbo_provider_url(valid, &config).is_err());
+    config.transport = "classic".into();
+    let mut excessive = String::from(
+        "dubbo://127.0.0.1:20880/fixture.EchoService?side=provider&version=1.0.0&group=qa",
+    );
+    for index in 0..126 {
+        excessive.push_str(&format!("&option{index}=x"));
+    }
+    assert!(dubbo_provider_url(&excessive, &config).is_err());
 }
