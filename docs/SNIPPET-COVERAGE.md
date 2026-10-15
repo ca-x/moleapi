@@ -22,7 +22,7 @@ This is usable request-example generation, separate from typed OpenAPI SDK/serve
 | PowerShell | webrequest, restmethod | Engine smoke only |
 | Python | python3, requests, aiohttp, httpx_sync, httpx_async | python3/http.client POST fixture |
 | R | httr2, httr, rcurl | Engine smoke only |
-| Ruby | native | Engine smoke only |
+| Ruby | native |8 original-code syntax/native HTTP cases on Ruby3.4.7: JSON/form/text/files/MIME/multipart/dollar and Ruby interpolation literals |
 | Rust | reqwest | reqwest POST fixture, generated snippet wrapped in async main |
 | Shell | curl, curl_windows, wget, httpie | cURL POST fixture |
 | Swift | nsurlsession | Engine smoke only |
@@ -206,3 +206,45 @@ readAsBytes code with default credential/saved-byte exclusion in1280px English/l
 and375px Chinese/dark. The localized async/package/import hint reuses the current
 layout. Neither theme has document overflow or verified scoped axe violations; one
 manual axe check remains per theme. These UI cases do not prove other OS runtimes.
+
+
+## Ruby Net::HTTP literal bodies and native file IO
+
+The original JSON heredoc consumed authored backslash/quote escapes, producing invalid
+JSON in the actual HTTP observation. The pinned Scalar Ruby emitter now quotes the
+original raw JSON/text through its Ruby literal helper, retaining control escapes and
+protecting #{...}, #@... and #$... interpolation sequences. It does not parse/re-encode
+user JSON or execute strings. Raw files use native File.binread; existing native
+set_form multipart uses binary file handles and authored filename/MIME. Missing
+nonmultipart Content-Type uses the supplied HAR MIME. Native repeated forms retain
+all rows; other unverified adapters keep their scoped rejection.
+
+Eight original snippets syntax-check and execute real POST requests on isolated
+source-built Ruby3.4.7/Linux: Unicode/quotes JSON, repeated form/empty value, text CRLF/
+NUL/vertical-tab, non-UTF8 binary, explicit binary MIME, repeated multipart text and
+file bytes/MIME/filename with disabled exclusion, literal dollar text and Ruby
+interpolation syntax as data. Only assertions/IO cleanup follow original source; no
+request/encoder substitute or snippet rewrite is used. Wire/source/engine/tool hashes
+and exact runtime records remain under the trusted developer QA output root.
+
+Ruby file capability brings raw-file adapters to19. Generation only references names
+and never reads files or sends the emitted request. Default privacy and filename
+preparation remain covered; the localized Ruby hint describes standard-library usage
+and binary handle lifecycle. Other54 representative adapter outputs remain byte-
+identical, pinned patch rebuild is idempotent, and94 generation/4 related API/36 focused
+UI-i18n cases, frontend build/scoped strict checks and prior native wire regressions
+pass. Other Ruby/OS ranges, custom methods/headers/auth/transport/response behavior and
+all remaining language/schema/SDK/product/release requirements stay open.
+
+```sh
+python3 tools/snippets/verify-ruby.py --ruby /absolute/ruby --node /absolute/node --output /absolute/fresh-output
+```
+
+The driver accepts only repository-authored loopback profiles and explicitly selected
+QA tools. No target runtime or dependency download is added to product generation.
+
+Real owned-API agent-browser UI interaction confirms Ruby raw-file selection/binread,
+localized prerequisites and default credential/saved-byte exclusion in1280px English/
+light and375px Chinese/dark. Both rendered scopes show0 verified axe violations
+(1 manual check each), with no document horizontal overflow. This is not proof of
+other Ruby/OS/runtime combinations.
