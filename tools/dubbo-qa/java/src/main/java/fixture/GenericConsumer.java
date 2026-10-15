@@ -10,6 +10,8 @@ public class GenericConsumer {
     public static void main(String[] args) {
         int port = Integer.parseInt(args[0]);
         ApplicationConfig application = new ApplicationConfig("moleapi-dubbo-qa-generic");
+        application.setQosEnable(false);
+        application.setEnableFileCache(false);
         ReferenceConfig<GenericService> reference = new ReferenceConfig<>();
         reference.setApplication(application);
         reference.setInterface("fixture.EchoService");

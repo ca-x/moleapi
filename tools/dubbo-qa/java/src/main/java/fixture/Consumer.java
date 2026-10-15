@@ -7,6 +7,8 @@ public class Consumer {
     public static void main(String[] args) {
         int port = Integer.parseInt(args[0]);
         ApplicationConfig application = new ApplicationConfig("moleapi-dubbo-qa-consumer");
+        application.setQosEnable(false);
+        application.setEnableFileCache(false);
         ReferenceConfig<EchoService> reference = new ReferenceConfig<>();
         reference.setApplication(application);
         reference.setInterface(EchoService.class);

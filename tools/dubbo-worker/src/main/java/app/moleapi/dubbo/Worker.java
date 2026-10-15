@@ -66,7 +66,10 @@ public final class Worker {
         JSONObject attachments = input.getJSONObject("attachments");
         if (attachments != null && attachments.size() > 64) throw new IllegalArgumentException("Too many Dubbo attachments");
         ReferenceConfig<GenericService> reference = new ReferenceConfig<>();
-        reference.setApplication(new ApplicationConfig("moleapi-dubbo-worker"));
+        ApplicationConfig application = new ApplicationConfig("moleapi-dubbo-worker");
+        application.setQosEnable(false);
+        application.setEnableFileCache(false);
+        reference.setApplication(application);
         reference.setRegistry(new RegistryConfig("N/A"));
         reference.setInterface(service);
         reference.setGeneric("true");

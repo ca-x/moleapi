@@ -9,6 +9,8 @@ public class Provider {
     public static void main(String[] args) throws Exception {
         int port = Integer.parseInt(args[0]);
         ApplicationConfig application = new ApplicationConfig("moleapi-dubbo-qa");
+        application.setQosEnable(false);
+        application.setEnableFileCache(false);
         ServiceConfig<EchoService> service = new ServiceConfig<>();
         service.setApplication(application);
         service.setRegistry(new RegistryConfig("N/A"));
