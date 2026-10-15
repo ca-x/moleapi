@@ -18,13 +18,15 @@ fn main() -> Result<()> {
         profile == "core"
             || matches!(
                 mode.as_deref(),
-                Some("java" | "kotlin" | "dart" | "ruby" | "python")
+                Some("java" | "kotlin" | "dart" | "ruby" | "python" | "php")
             ) && ["form", "text", "binary", "binary-mime", "multipart"]
                 .contains(&profile.as_str())
-            || matches!(mode.as_deref(), Some("kotlin" | "dart" | "ruby" | "python"))
-                && profile == "dollar"
+            || matches!(
+                mode.as_deref(),
+                Some("kotlin" | "dart" | "ruby" | "python" | "php")
+            ) && profile == "dollar"
             || mode.as_deref() == Some("ruby") && profile == "interpolation"
-            || mode.as_deref() == Some("python")
+            || matches!(mode.as_deref(), Some("python" | "php"))
                 && [
                     "json-values",
                     "json-scalar",
@@ -34,14 +36,16 @@ fn main() -> Result<()> {
                     "delete-json",
                     "text-json",
                     "multipart-meta",
-                    "multipart-text"
+                    "multipart-text",
+                    "json-object",
+                    "headers-quoted"
                 ]
                 .contains(&profile.as_str()),
         "Unknown snippet fixture profile"
     );
     let body_profile = if matches!(
         mode.as_deref(),
-        Some("java" | "kotlin" | "dart" | "ruby" | "python")
+        Some("java" | "kotlin" | "dart" | "ruby" | "python" | "php")
     ) {
         if profile == "get-binary" {
             "binary"
@@ -82,6 +86,21 @@ fn main() -> Result<()> {
         let request = &mut workspace.data.collections[0].requests[0];
         request.body_kind = "json".into();
         request.body = json!({"message":"literal #{1 + 2} #@value #$value"}).to_string();
+    }
+    if body_profile == "json-object" {
+        workspace.data.collections[0].requests[0].body = "{}".into();
+    }
+    if body_profile == "headers-quoted" {
+        workspace.data.collections[0].requests[0]
+            .headers
+            .push(moleapi_core::Pair {
+                id: "quoted".into(),
+                key: "X-Fixture'Key".into(),
+                value: "literal ' \\ $fixture".into(),
+                enabled: true,
+                secret: None,
+                local_value: None,
+            });
     }
     if body_profile == "json-values" {
         workspace.data.collections[0].requests[0].body = json!({"yes":true,"no":false,"nil":null,"list":[true,false,null],"strings":["x: true, text","x: false, text","x: null, text","\"true\"", "\\false"]}).to_string();
@@ -126,7 +145,19 @@ fn main() -> Result<()> {
         workspace.data.collections[0].requests[0].body_kind = "multipart".into();
         workspace.data.collections[0].requests[0].body = json!({"parts": [{"id": "one", "name": "label", "value": {"kind": "text", "text": "鼹鼠 \"quotes\"\r\nvalue", "mime": ""}}, {"id": "two", "name": "label", "value": {"kind": "text", "text": "second", "mime": ""}}, {"id": "empty", "name": "empty", "value": {"kind": "text", "text": "", "mime": ""}}, {"id": "disabled", "name": "off", "enabled": false, "value": {"kind": "text", "text": "must-not-send", "mime": ""}}]}).to_string();
     }
-    let targets = if mode.as_deref() == Some("python") {
+    if mode.as_deref() == Some("php") && body_profile == "multipart-meta" {
+        let request = &mut workspace.data.collections[0].requests[0];
+        request.body = request
+            .body
+            .replace("upload-鼹鼠.bin", "upload-鼹鼠'quote.bin");
+    }
+    let targets = if mode.as_deref() == Some("php") {
+        vec![
+            ("php", "curl", "curl.php"),
+            ("php", "guzzle", "guzzle.php"),
+            ("php", "laravel", "laravel.php"),
+        ]
+    } else if mode.as_deref() == Some("python") {
         vec![
             ("python", "python3", "python3.py"),
             ("python", "aiohttp", "aiohttp.py"),
@@ -210,7 +241,7 @@ fn main() -> Result<()> {
     }
     if matches!(
         mode.as_deref(),
-        Some("java" | "kotlin" | "dart" | "ruby" | "python")
+        Some("java" | "kotlin" | "dart" | "ruby" | "python" | "php")
     ) {
         let source = serde_json::to_vec(&workspace)?;
         std::fs::write(
