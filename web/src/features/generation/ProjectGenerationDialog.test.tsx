@@ -7,10 +7,31 @@ import ProjectGenerationDialog from "./ProjectGenerationDialog";
 const state=vi.hoisted(()=>({authenticated:true,accountId:"owner",draft:{id:"w",data:{specifications:[{id:"s",name:"Fixture",kind:"openapi",source:"spec",dialect:"3.0.3"}]}},dark:false,dirty:false,save:vi.fn()}));
 const call=vi.hoisted(()=>vi.fn());
 const pick=vi.hoisted(()=>vi.fn());
-vi.mock("../workbench/context",()=>({useWorkbench:()=>state}));vi.mock("../../shared/api",()=>({api:call,pickFile:pick,native:false}));
+const nativeMode=vi.hoisted(()=>({value:false}));
+const selectJava=vi.hoisted(()=>vi.fn());
+vi.mock("./selectNativeJavaRuntime",()=>({selectNativeJavaRuntime:selectJava}));
+vi.mock("../workbench/context",()=>({useWorkbench:()=>state}));vi.mock("../../shared/api",()=>({api:call,pickFile:pick,get native(){return nativeMode.value;}}));
 vi.mock("../../shared/ui",async()=>{const real=await vi.importActual<object>("../../shared/ui");return {...real,Editor:({value}:{value:string})=><textarea aria-label="project-code" value={value} readOnly/>};});
-beforeEach(async()=>{await setLanguage("en");vi.stubGlobal("ResizeObserver",class{observe(){}unobserve(){}disconnect(){}});state.accountId="owner";state.dirty=false;state.draft.data.specifications=[{id:"s",name:"Fixture",kind:"openapi",source:"spec",dialect:"3.0.3"}];call.mockReset();call.mockImplementation((path:string)=>path.endsWith("catalog")?Promise.resolve({java_available:false,targets:[{id:"rust-progenitor",kind:"client",upstream_stability:"stable",validation:"fixture",options:{packageName:"sdk"}},{id:"go-server",kind:"server",upstream_stability:"stable",options:{}}]}):Promise.resolve({engine:"progenitor",files:[{path:"src/lib.rs",encoding:"utf8",content:"generated-client",sha256:"hash",bytes:16,executable:false}],archive_base64:"AA==",source_sha256:"hash"}));});
+beforeEach(async()=>{nativeMode.value=false;selectJava.mockReset();await setLanguage("en");vi.stubGlobal("ResizeObserver",class{observe(){}unobserve(){}disconnect(){}});state.accountId="owner";state.dirty=false;state.draft.data.specifications=[{id:"s",name:"Fixture",kind:"openapi",source:"spec",dialect:"3.0.3"}];call.mockReset();call.mockImplementation((path:string)=>path.endsWith("catalog")?Promise.resolve({java_available:false,targets:[{id:"rust-progenitor",kind:"client",upstream_stability:"stable",validation:"fixture",options:{packageName:"sdk"}},{id:"go-server",kind:"server",upstream_stability:"stable",options:{}}]}):Promise.resolve({engine:"progenitor",files:[{path:"src/lib.rs",encoding:"utf8",content:"generated-client",sha256:"hash",bytes:16,executable:false}],archive_base64:"AA==",source_sha256:"hash"}));});
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
+it("keeps native executable selection unavailable in hosted mode",async()=>{
+ call.mockResolvedValue({java_available:false,targets:[{id:"go",kind:"client",upstream_stability:"stable",options:{}}]});
+ render(<Theme><ProjectGenerationDialog open specificationId="s" onOpenChange={()=>{}}/></Theme>);
+ await screen.findByText("This generator requires Java 17+ configured by the deployment owner. Native Rust SDK generation does not require Java.");
+ expect(screen.queryByRole("button",{name:"Select Java…"})).toBeNull();
+ expect(screen.getByRole("button",{name:"Generate project"}).hasAttribute("disabled")).toBe(true);
+});
+it("enables native generation immediately after the chosen runtime refreshes catalog",async()=>{
+ nativeMode.value=true;let ready=false;
+ selectJava.mockImplementation(async()=>{ready=true;return 21;});
+ call.mockImplementation((path:string)=>path.endsWith("catalog")?Promise.resolve({java_available:ready,targets:[{id:"go",kind:"client",upstream_stability:"stable",options:{}}]}):Promise.resolve({engine:"fixture",files:[],archive_base64:"AA==",source_sha256:"hash"}));
+ render(<Theme><ProjectGenerationDialog open specificationId="s" onOpenChange={()=>{}}/></Theme>);
+ fireEvent.click(await screen.findByRole("button",{name:"Select Java…"}));
+ await waitFor(()=>expect(screen.getByRole("button",{name:"Generate project"}).hasAttribute("disabled")).toBe(false));
+ expect(screen.getByRole("button",{name:"Change Java…"})).toBeTruthy();
+ fireEvent.click(screen.getByRole("button",{name:"Generate project"}));
+ await waitFor(()=>expect(call).toHaveBeenCalledWith("/api/generation/projects","POST",expect.objectContaining({target:"go"})));
+});
 it("includes explicitly loaded templates in generation and hides them when the account changes",async()=>{
  const templates={format:"moleapi-codegen-templates-v1",files:[{path:"models.mustache",content:"{{classname}}"}]};pick.mockResolvedValue(JSON.stringify(templates));
  call.mockImplementation((path:string)=>path.endsWith("catalog")?Promise.resolve({java_available:true,targets:[{id:"typescript-fetch",kind:"client",upstream_stability:"stable",options:{}}]}):Promise.resolve({engine:"openapi-generator",source_sha256:"hash",archive_base64:"AA==",files:[{path:"models/Pet.ts",encoding:"utf8",content:"generated-model",sha256:"h",bytes:15}]}));

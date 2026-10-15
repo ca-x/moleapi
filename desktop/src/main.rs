@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod generation;
 mod tray;
 
 use axum::{
@@ -88,9 +89,25 @@ fn main() {
         .setup(|app| {
             let directory = app.path().app_data_dir()?;
             std::fs::create_dir_all(&directory)?;
-            let router = tauri::async_runtime::block_on(moleapi_server::local(
-                &directory.join("moleapi.db"),
-            ))?;
+            let runtime = moleapi_generation::project::ProjectRuntime::from_environment(
+                std::env::current_exe()?,
+            )?;
+            let preference = directory.join("java-runtime.json");
+            if preference.is_file() && runtime.restore_native_java(&preference).is_err() {
+                eprintln!(
+                    "Saved Java selection is unavailable; select Java again in project generation"
+                );
+            }
+            let router =
+                tauri::async_runtime::block_on(moleapi_server::local_with_project_runtime(
+                    &directory.join("moleapi.db"),
+                    runtime.clone(),
+                ))?;
+            app.manage(generation::NativeGeneration {
+                runtime,
+                preference,
+                selection: Default::default(),
+            });
             app.manage(AppState(router));
             if let Err(error) = tray::install(app) {
                 // Desktop environments without tray support still get a visible
@@ -99,7 +116,11 @@ fn main() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![api, set_language])
+        .invoke_handler(tauri::generate_handler![
+            api,
+            set_language,
+            generation::select_java_runtime
+        ])
         .build(tauri::generate_context!())
         .expect("MoleAPI desktop runtime failed");
     application.run(|_app, _event| {

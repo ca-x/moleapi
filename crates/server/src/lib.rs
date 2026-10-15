@@ -148,6 +148,20 @@ pub async fn local(database_path: &Path) -> anyhow::Result<Router> {
 
 /// Embedder entrypoint with an explicitly trusted worker executable.
 pub async fn local_with_worker(database_path: &Path, worker: &Path) -> anyhow::Result<Router> {
+    local_with_project_runtime(
+        database_path,
+        moleapi_generation::project::ProjectRuntime::from_environment(worker.to_owned())?,
+    )
+    .await
+}
+
+/// Native embedder entrypoint with a shared, explicitly selected Java runtime.
+/// This does not add an HTTP runtime-configuration route.
+pub async fn local_with_project_runtime(
+    database_path: &Path,
+    runtime: moleapi_generation::project::ProjectRuntime,
+) -> anyhow::Result<Router> {
+    let worker = runtime.worker.clone();
     build(
         Config {
             database_url: storage::sqlite_url(database_path)?,
@@ -156,8 +170,9 @@ pub async fn local_with_worker(database_path: &Path, worker: &Path) -> anyhow::R
             allow_private_network: true,
         },
         true,
-        worker.to_owned(),
+        worker,
         true,
+        Some(runtime),
     )
     .await
 }
@@ -170,7 +185,7 @@ pub async fn hosted(config: Config) -> anyhow::Result<Router> {
 
 /// Embedder entrypoint with an explicitly trusted worker executable.
 pub async fn hosted_with_worker(config: Config, worker: &Path) -> anyhow::Result<Router> {
-    build(config, false, worker.to_owned(), true).await
+    build(config, false, worker.to_owned(), true, None).await
 }
 pub async fn setup_required(database_url: &str) -> anyhow::Result<bool> {
     use sea_orm::EntityTrait;
@@ -191,6 +206,7 @@ pub async fn offline_with_worker(database_path: &Path, worker: &Path) -> anyhow:
         true,
         worker.to_owned(),
         false,
+        None,
     )
     .await
 }
@@ -199,6 +215,7 @@ async fn build(
     local: bool,
     script_worker: PathBuf,
     background: bool,
+    project_runtime: Option<moleapi_generation::project::ProjectRuntime>,
 ) -> anyhow::Result<Router> {
     anyhow::ensure!(
         script_worker.is_absolute(),
@@ -216,9 +233,12 @@ async fn build(
         generation_slots: Arc::new(tokio::sync::Semaphore::new(4)),
         project_slots: Arc::new(tokio::sync::Semaphore::new(2)),
         project_jobs: Arc::default(),
-        project_runtime: Arc::new(
-            moleapi_generation::project::ProjectRuntime::from_environment(script_worker.clone())?,
-        ),
+        project_runtime: Arc::new(match project_runtime {
+            Some(runtime) => runtime,
+            None => moleapi_generation::project::ProjectRuntime::from_environment(
+                script_worker.clone(),
+            )?,
+        }),
         cookies: Arc::default(),
         oauth1_slots: Arc::new(tokio::sync::Semaphore::new(8)),
         oauth1_flows: Arc::default(),

@@ -25,7 +25,7 @@ Explicit Mustache overrides now reuse the embedded OpenAPI Generator and mature 
 
 The upstream catalog contains165 non-deprecated targets across client/server/schema/docs/config categories. The UI currently selects client/server projects; native Rust is a separate entry. Swift's current non-deprecated target is swift6, not the older swift5 ID. Naming/library inputs are checked against actual target option catalogs, not silently ignored. Native Rust package/interface fields and multi-language package/namespace/library/version fields are supported where upstream exposes them.
 
-Release builds run `python scripts/prepare_openapi_generator.py` to fetch and verify the pinned build asset, then embed it. Runtime never downloads an engine. Deployment/native generation uses an explicitly configured Java17+ path via `MOLEAPI_CODEGEN_JAVA`; there is no PATH discovery. Java/JRE installation/bundling/platform distribution remains required deployment work, while native Rust requires no Java. Capture the upstream defaults with `node scripts/capture_codegen_catalog.cjs /absolute/path/to/java` after frontend dependencies are installed.
+Release builds run `python scripts/prepare_openapi_generator.py` to fetch and verify the pinned build asset, then embed it. Runtime never downloads an engine. Hosted generation uses an explicitly configured Java17+ path via `MOLEAPI_CODEGEN_JAVA`; desktop users can also select an installed executable in the generation dialog. There is no PATH discovery. Java/JRE installation/bundling/platform distribution remains required deployment work, while native Rust requires no Java. Capture the upstream defaults with `node scripts/capture_codegen_catalog.cjs /absolute/path/to/java` after frontend dependencies are installed.
 
 Artifacts contain exact generated file content, byte counts, executable flags and SHA256. `moleapi-generation.json` records engine, source digest, effective options, private-inclusion mode and generated-file hashes; ZIP preserves safe executable permissions. No authored files are automatically overwritten. Worker/process/file/reply budgets, local-reference checks, symlink/path escape rejection, explicit cancellation/kill/reap and logout/workspace deletion fences apply. Default generation screens credential examples, scoped copies and naming-option copies; explicit private inclusion preserves original selected source. Source definitions remain unchanged.
 
@@ -1154,3 +1154,53 @@ Recorded PHP8.5.11 NTS, OpenAPI Generator7.26.0 and Guzzle7.15.5 on Linux. Produ
 preview/export never installs dependencies or executes consumers. Empty maps, null map
 entries, nested/ambiguous unions, async map/static-analyzer contracts, broader constraints
 and platform/library/toolchain ranges remain open.
+
+
+## Native Java selection and restart persistence
+
+Desktop generation now offers Select Java / Change Java for JVM-backed targets.
+The Rust Tauri command owns the OS file dialog; webview callers supply no executable
+path. A cleared-environment -version probe requires a successful recognized Java17+
+version, caps each output stream at16KiB and times out at5seconds. The native selection
+is serialized. Cancellation and failed probes preserve prior preferences; atomic
+private preference writes complete before the active runtime path changes.
+
+The versioned java-runtime.json preference stays in the application's native data
+directory and restores on startup. Missing/invalid/oversized preferences leave the
+existing explicit environment configuration usable and show a diagnostic without
+opening a shell or searching PATH. New tasks use the selected executable immediately;
+running JVM tasks retain their cloned path. The local embedder passes the same runtime
+to its router, preserving job/cancellation/ownership state. Hosted API clients cannot
+configure an executable: no runtime-configuration HTTP route was added.
+
+Actual Linux JDK21.0.12.1 generation passes with inherited invalid JAVA_TOOL_OPTIONS:
+selection probes and generated Go artifacts run under cleared environments. A trusted
+wrapper pauses one original JVM task; selecting another path keeps that task working,
+and a restarted runtime generates identical original model code from the persisted
+choice. Tests cover Java8/16, malformed/failed/oversized/timed-out probes, relative paths,
+invalid/oversized preferences, shared selection, private0600 files and persistence
+failure preserving prior state. The existing local router updates catalog immediately.
+
+Frontend tests cover native dialog invocation without path arguments, cancel/error/
+loading/duplicate-action handling, late selection/catalog replies, immediate generation
+readiness and hosted action absence. English/Chinese copy uses the existing catalogs.
+Actual agent-browser component-harness interaction covers1280px English/light and375px
+Chinese/dark, landscape, reduced motion,44px selection targets, keyboard focus and no
+horizontal overflow; scoped axe reports0 violations. Browser harness selection replies
+are explicit test doubles; they do not establish an OS picker or target program run.
+Real JVM generation and native dialog evidence are recorded separately.
+
+285 frontend tests,83 generation regressions, the actual JVM concurrency/restart case,
+14 local/model/project API regressions, frontend build and scoped strict Clippy pass. Linux native
+cargo check uses an isolated official SHA/signature-verified WebKitGTK2.54.1 prefix;
+host packages remain unchanged. Actual Linux Xvfb execution with embedded production frontend assets now imports the
+canonical fixture, opens the real GTK file picker, selects JDK21, writes the exact
+private preference, refreshes readiness and generates45 original C# artifact files.
+Real picker cancellation and an explicitly selected non-Java program preserve the
+prior preference; the latter displays an inline localized error. Restarting the actual
+native application restores readiness and generates45 files again. The host has no
+WebKitGTK installation: a read-only bubblewrap mount supplies isolated SDK libraries
+and helper executables at their expected FHS paths, with private QA app/cache/runtime
+folders and software rendering. This changes no host libraries or user app data.
+The source JAR and generated code are unchanged. Other OS/desktop/runtime combinations,
+Java bundling/installation/signing and full module/release work remain separate gates.
