@@ -25,6 +25,7 @@ public class GenericConsumer {
         greeting.put("name", "鼹鼠");
         greeting.put("count", 0);
         if (!"鼹鼠:0".equals(client.$invoke("describe", new String[]{"fixture.Greeting"}, new Object[]{greeting}))) throw new AssertionError("generic DTO");
+        if (!"first|鼹鼠".equals(client.$invoke("names", new String[]{"java.util.List"}, new Object[]{java.util.List.of("first", "鼹鼠")}))) throw new AssertionError("generic list");
         if (client.$invoke("maybeNull", new String[]{"java.lang.String"}, new Object[]{"null"}) != null) throw new AssertionError("generic null");
         try {
             client.$invoke("fail", new String[]{"java.lang.String"}, new Object[]{"expected"});
@@ -32,7 +33,7 @@ public class GenericConsumer {
         } catch (RuntimeException expected) {
             if (!expected.toString().contains("fixture:expected")) throw expected;
         }
-        System.out.println("GENERIC_CLIENT_PASS echo join long DTO null exception");
+        System.out.println("GENERIC_CLIENT_PASS echo join long DTO list null exception");
         reference.destroy();
     }
 }

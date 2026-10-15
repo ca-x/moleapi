@@ -19,6 +19,7 @@ public class Consumer {
         greeting.setName("鼹鼠");
         greeting.setCount(0);
         if (!"鼹鼠:0".equals(client.describe(greeting))) throw new AssertionError("DTO");
+        if (!"first|鼹鼠".equals(client.names(java.util.List.of("first", "鼹鼠")))) throw new AssertionError("list");
         if (client.maybeNull("null") != null) throw new AssertionError("null");
         try {
             client.fail("expected");
@@ -26,7 +27,7 @@ public class Consumer {
         } catch (IllegalArgumentException expected) {
             if (!expected.getMessage().contains("fixture:expected")) throw expected;
         }
-        System.out.println("OFFICIAL_CLIENT_PASS echo join long DTO null exception");
+        System.out.println("OFFICIAL_CLIENT_PASS echo join long DTO list null exception");
         reference.destroy();
     }
 }

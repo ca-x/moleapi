@@ -48,6 +48,11 @@ jobs:
         run: java -cp 'tools/dubbo-qa/java/target/classes:tools/dubbo-qa/java/target/dependency/*' fixture.Consumer 20880 | tee tools/dubbo-qa/java/official-client.log
       - name: Prove official generic invocation route
         run: java -cp 'tools/dubbo-qa/java/target/classes:tools/dubbo-qa/java/target/dependency/*' fixture.GenericConsumer 20880 | tee tools/dubbo-qa/java/generic-client.log
+      - name: Build isolated official Dubbo worker
+        run: mvn -B --strict-checksums -f tools/dubbo-worker/pom.xml package
+      - name: Call bounded worker against the official provider
+        run: |
+          python3 tools/dubbo-worker/verify.py --java "$(readlink -f "$(command -v java)")" --jar "$PWD/tools/dubbo-worker/target/moleapi-dubbo-worker-0.1.0.jar" --port 20880 --output tools/dubbo-qa/java/worker-evidence.json
       - name: Probe candidate Rust codec against official provider
         shell: bash
         run: |
@@ -76,4 +81,5 @@ jobs:
             tools/dubbo-qa/java/verdict.json
             tools/dubbo-qa/java/versions.txt
             tools/dubbo-qa/java/target/dependency-tree.txt
+            tools/dubbo-qa/java/worker-evidence.json
           if-no-files-found: warn
