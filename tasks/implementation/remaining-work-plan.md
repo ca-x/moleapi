@@ -67,6 +67,8 @@ User steering2026-10-15: generation is sufficiently advanced for now; prioritize
 
 Milestone3 first slice2026-10-16: finite HTTP/SOAP/GraphQL requests now have a source-preserving per-request Cookie Jar opt-out, with actual send/receive and external-export gates. Continue non-generation work; Dubbo classic/Hessian is still missing. The historical Apache dubbo0.4 Rust package implements Triple only, while a community0.1 package claims classic TCP/Hessian but its direct socket and frame reads lack the shared network admission and response budgets. Validate a mature interoperable route before integrating Dubbo; no gRPC alias counts as classic Dubbo support.
 
+Milestone3 Dubbo continuation: official Apache Dubbo3.3.6 GenericService now underlies direct classic/Hessian calls, with a dedicated editor, ordered typed arguments, group/attachments, checked/pinned Rust destinations, bounded one-call worker and local real UI/hosted history evidence. The community classic Rust package was rejected by an independent provider's status40 decode error. The worker's exact JAR is staged into server/Desktop/Docker build sources; platform/installed CI remains pending. The next independently testable protocol slice is registry and metadata discovery: see `docs/specs/dubbo-discovery.md` and `tasks/implementation/dubbo-discovery-plan.md`. ZooKeeper/Nacos/EDAS are not satisfied by direct invocation.
+
 ## Slice 1: CLI runner labels
 
 **Files:** `crates/cli/src/args.rs` owns flags; `crates/cli/src/runners.rs` owns request payloads; `crates/cli/tests/runners.rs` owns real process/API fixtures; `docs/SELF-HOSTED-RUNNERS.md`, `docs/SELF-HOSTED-RUNNER-COVERAGE.md` and `docs/IMPLEMENTATION-STATUS.md` own usage/status.

@@ -1,0 +1,12 @@
+# Classic Dubbo discovery implementation plan
+
+Parent: remaining-work-plan milestone3 and docs/specs/dubbo-discovery.md. The direct client and its platform/JAR gates remain active in parallel.
+
+1. Build isolated official Java registry fixtures. Start with ZooKeeper and Nacos independently: provider registration, actual `RegistryService.lookup` or mature SDK equivalent, version/group filters and ephemeral-provider disappearance. Pin exact Java/Maven/ZooKeeper/Nacos dependencies. Record original provider URL bytes and all connection destinations. Reject any SDK route that invokes or resolves a returned provider before Rust admission.
+2. Add a one-shot bounded discovery worker with original logical registry target and checked literal transport address. Check credentials, timeout, cancellation, provider count and URL bytes. Keep discovery worker separate from the direct-call JAR if registry libraries would enlarge/revise the stable direct engine.
+3. Extend `DubboConfig` source version compatibly with explicit direct/registry selection, private credentials and metadata-center reference. Add strict owner/source/privacy/interchange tests; old direct documents retain semantics. Rust performs the second policy/DNS admission on each returned provider and pins one address for the existing direct worker.
+4. Integrate registry lookup into the shared finite execution lifecycle with one deadline and no ambiguous-effect retry. Verify real provider selection/change/cancellation, scripts/assertions/history and isolated owner scopes on hosted and offline routes.
+5. Implement explicit metadata-center preview/import with conflict decisions and original metadata retention. ZooKeeper, Nacos and EDAS each need their own real API/credential evidence; EDAS remains unadvertised until that test exists.
+6. Add bilingual registry/metadata editor and status/selected-provider UI. Browser/native390px, platform/database/container gates and independent review determine completion of the matrix row; direct-call success alone does not.
+
+Decision constraint: Apache Dubbo registry lookup is a one-shot eventually consistent snapshot. The Java SDK must only contact the prechecked registry endpoint; provider URLs return as data, then Rust rechecks every provider destination before any RPC. If a library hides provider connections or remote DNS behind lookup, use an injectable connector or choose a different mature SDK route instead of weakening hosted network policy.
