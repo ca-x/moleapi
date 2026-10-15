@@ -23,7 +23,7 @@ This is usable request-example generation, separate from typed OpenAPI SDK/serve
 | Python | python3, requests, aiohttp, httpx_sync, httpx_async | 80 original-code syntax/native HTTP cases across all5 clients on Python3.14.8; aiohttp3.14.5, Requests2.34.2, HTTPX0.28.1, urllib3 2.8.0 multipart encoder |
 | R | httr2, httr, rcurl | Engine smoke only |
 | Ruby | native |8 original-code syntax/native HTTP cases on Ruby3.4.7: JSON/form/text/files/MIME/multipart/dollar and Ruby interpolation literals |
-| Rust | reqwest | reqwest POST fixture, generated snippet wrapped in async main |
+| Rust | reqwest |21 original-code compile/native HTTP profiles on Reqwest0.13.5/Tokio1.53.3/Rust1.99.0, including files, MIME, multipart, GET/HEAD, forms/empty and JSON controls/Bidi |
 | Shell | curl, curl_windows, wget, httpie | cURL POST fixture |
 | Swift | nsurlsession | Engine smoke only |
 | Postman CLI | postman_cli | Generation only; target CLI is an external runtime dependency |
@@ -546,3 +546,69 @@ escaped/nested parts, arbitrary method/header/auth/cookie/transport mapping,
 streaming and general response/error lifecycle handling remain open. Examples
 run as ESM and require matching files; Undici response streams need consumption
 or cleanup by the caller. This does not establish full Node or generation parity.
+
+
+## Rust Reqwest body and file runtime
+
+Ordinary and raw-file requests now use the same pinned Scalar Reqwest emitter;
+the raw-file-only Postman fallback is replaced by that repaired mature file branch.
+Raw files use std::fs::read and body(Vec), multipart files native Part::bytes with
+actual filename and MIME. Native Reqwest Form/Part owns boundaries, repeated field
+order and field/file metadata; text parts retain their kind. MIME errors propagate
+through Result instead of panic. Native form slices are explicitly typed so an
+empty form compiles and still sends application/x-www-form-urlencoded with0 bytes.
+Generation only references filenames; it never reads host files or embeds saved
+file bytes. File capability count stays31 because Rust already exposed that flag.
+
+Raw JSON is emitted through body with the original literal, retaining scalars,
+null, empty strings/objects, escaped controls and quote/hash sequences. The mature
+Rust literal helper escapes controls and Bidi formatting characters using valid
+Rust Unicode syntax. This avoids JSON's backslash-u syntax being parsed as invalid
+Rust escapes and the compiler's default text-direction-codepoint rejection. Raw
+text that parses as JSON remains text. Effective non-multipart MIME is retained
+unless an explicit Content-Type was supplied. Repeated URL-encoded forms are now
+accepted on this natively verified builder.
+
+The trusted driver compiles21 original snippets together as separate async
+functions in one isolated Cargo project, then executes each against native Node
+HTTP: Unicode/quotes JSON, repeated form/empty value, raw text/controls, binary,
+explicit binary MIME, multipart duplicates/disabled exclusion, dollar text, JSON
+literal traps/false/null/empty string/object, GET/HEAD file, DELETE JSON, JSON-shaped
+text, typed field/file MIME with Unicode/apostrophe filename, text-only multipart,
+quoted headers, JSON controls/Bidi/quote-hash literals and an empty form. Status200
+and exact fixture responses are asserted, including an empty HEAD response. Node
+observes actual method/auth/query/headers/MIME/bytes; stdlib MIME parsing verifies
+parts and no synthetic filename on text fields. Original source/snippet files stay
+unchanged; source/engine/lock/compiler/Cargo/Node/consumer hashes and actual resolved
+dependency tree are recorded. Old output reproduced5 failures: empty file parts,
+missing raw MIME, invalid JSON Unicode escapes, Bidi compiler rejection and empty
+form type inference (E0282).
+
+QA is Rust1.99.0/Linux, Reqwest0.13.5/Tokio1.53.3 with the standalone rust-runtime
+manifest/lock; required form/multipart/TLS/runtime features are explicit. The app's
+own Reqwest version is unchanged.98 generation cases,3 owned/local snippet API
+cases including Rust raw-file MIME/privacy/ownership,51 focused UI/i18n cases,
+strict scoped Clippy, formatting and production frontend/server builds pass.
+The engine rebuild is deterministic and a complete clean upstream patch produces
+exact emitter sources. Other54 representative adapter outputs stay byte-identical.
+
+Real owned-API browser checks cover English/light1280×900 multipart and Chinese/
+dark375×812 binary-filter Rust examples. Current async Result/runtime/features/file
+hints appear only after generation; no saved token/Base64 exposure or document
+horizontal overflow. Scoped axe0 verified violations/1 manual line-number contrast
+check on each; screenshots inspected. The final empty-form fix only changes the
+form branch, with the displayed multipart/binary examples unchanged. Evidence:
+`/tmp/moleapi-rust-snippet-final-3`, `/tmp/moleapi-rust-snippet-baseline` and
+`/tmp/moleapi-rust-snippet-*.log`.
+
+See rust-runtime/README.md and reproduce with:
+
+```sh
+python3 tools/snippets/verify-rust.py --node /absolute/node --output /absolute/fresh-output
+```
+
+These are snippets inside an async Result-returning function and compatible
+runtime/project, not standalone archives. Other Rust/Reqwest/OS ranges, streaming,
+advanced/empty/nested/escaped part shapes, arbitrary methods/header/auth/cookie/
+TLS/timeout/redirect options and broader response/error policies remain open with
+the full generation plan. Synchronous file reads materialize bytes in the consumer.

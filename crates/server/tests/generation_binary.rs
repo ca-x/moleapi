@@ -37,6 +37,7 @@ async fn binary_snippets_preserve_mime_and_ownership_without_exporting_saved_byt
     );
     for (target, client) in [
         ("csharp", "restsharp"),
+        ("rust", "reqwest"),
         ("node", "fetch"),
         ("node", "axios"),
         ("node", "ofetch"),

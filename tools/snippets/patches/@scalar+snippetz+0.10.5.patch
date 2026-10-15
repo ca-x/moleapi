@@ -1188,3 +1188,82 @@ diff --git a/node_modules/@scalar/snippetz/dist/plugins/shared/axios.js b/node_m
  
  ${setupBlock}const options = ${objectToString(options)}
  
+diff --git a/node_modules/@scalar/snippetz/dist/libs/rust.js b/node_modules/@scalar/snippetz/dist/libs/rust.js
+--- a/node_modules/@scalar/snippetz/dist/libs/rust.js
++++ b/node_modules/@scalar/snippetz/dist/libs/rust.js
+@@ -9,7 +9,8 @@
+         .replace(/\n/g, '\\n') // Escape newlines
+         .replace(/\r/g, '\\r') // Escape carriage returns
+         .replace(/\t/g, '\\t') // Escape tabs
+-        .replace(/\0/g, '\\0'); // Escape null bytes
++        .replace(/\0/g, '\\0')
++        .replace(/[\x01-\x08\x0b\x0c\x0e-\x1f\x7f\u202a-\u202e\u2066-\u2069]/g, (value) => `\\u{${value.codePointAt(0).toString(16)}}`);
+ }
+ /**
+  * Formats and escapes a string safely for use in Rust string literals.
+diff --git a/node_modules/@scalar/snippetz/dist/plugins/rust/reqwest/reqwest.js b/node_modules/@scalar/snippetz/dist/plugins/rust/reqwest/reqwest.js
+--- a/node_modules/@scalar/snippetz/dist/plugins/rust/reqwest/reqwest.js
++++ b/node_modules/@scalar/snippetz/dist/plugins/rust/reqwest/reqwest.js
+@@ -1,5 +1,5 @@
+ import { buildQueryString, buildUrl, normalizeRequest, processHeaders } from '../../../libs/http.js';
+-import { createChain, formatJson, indent, wrapInDoubleQuotes } from '../../../libs/rust.js';
++import { createChain, indent, wrapInDoubleQuotes } from '../../../libs/rust.js';
+ /**
+  * rust/reqwest plugin for generating Rust reqwest HTTP client code
+  */
+@@ -18,6 +18,8 @@
+         const url = buildUrl(normalizedRequest.url || '', queryString);
+         // Headers and cookies
+         const headers = processHeaders(normalizedRequest);
++        const mime = normalizedRequest.postData?.mimeType;
++        if (mime && mime !== 'multipart/form-data' && !Object.keys(headers).some((name) => name.toLowerCase() === 'content-type')) headers['Content-Type'] = mime;
+         // Chained calls
+         const chainedCalls = [];
+         // Auth
+@@ -40,14 +42,14 @@
+  * Helper function to create multipart form parts with proper indentation
+  */
+ const createMultipartPart = (param) => {
+-    if (param.fileName) {
++    if (param.fileName !== undefined) {
+         const part = [
+-            indent(2, `let part = reqwest::multipart::Part::text(${wrapInDoubleQuotes(param.value || '')})`),
++            indent(2, `let part = reqwest::multipart::Part::bytes(std::fs::read(${wrapInDoubleQuotes(param.fileName)})?)`),
+             indent(3, `.file_name(${wrapInDoubleQuotes(param.fileName)})`),
+         ];
+         if (param.contentType) {
+             part.push(indent(3, `.mime_str(${wrapInDoubleQuotes(param.contentType)})`));
+-            part.push(indent(3, '.unwrap();'));
++            part[part.length - 1] += '?;';
+         }
+         else {
+             part[part.length - 1] += ';';
+@@ -59,7 +61,7 @@
+         return [
+             indent(2, `let part = reqwest::multipart::Part::text(${wrapInDoubleQuotes(param.value || '')})`),
+             indent(3, `.mime_str(${wrapInDoubleQuotes(param.contentType)})`),
+-            indent(3, '.unwrap();'),
++            indent(3, '?;'),
+             indent(2, `form = form.part(${wrapInDoubleQuotes(param.name)}, part);`),
+         ].join('\n');
+     }
+@@ -88,16 +90,16 @@
+         return null;
+     }
+     const { mimeType, text, params } = postData;
++    if (postData.fileName !== undefined) return createChain('body', `std::fs::read(${wrapInDoubleQuotes(postData.fileName)})?`);
+     switch (mimeType) {
+         case 'application/json': {
+-            const formattedJson = formatJson(text);
+-            return createChain('json', `&serde_json::json!(${formattedJson})`);
++            return createChain('body', wrapInDoubleQuotes(text ?? ''));
+         }
+         case 'application/x-www-form-urlencoded': {
+             const formData = params
+                 ?.map((param) => `(${wrapInDoubleQuotes(param.name)}, ${wrapInDoubleQuotes(param.value || '')})`)
+                 .join(', ') || '';
+-            return createChain('form', `&[${formData}]`);
++            return createChain('form', `&[${formData}] as &[(&str, &str)]`);
+         }
+         case 'multipart/form-data': {
+             const formParts = params?.map(createMultipartPart).join('\n') || '';

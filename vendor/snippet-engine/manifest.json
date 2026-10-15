@@ -4,5 +4,5 @@
   "polyfills": "core-js@3.49.0",
   "supplemental_engine": "postman-code-generators@2.1.1",
   "collection_sdk": "postman-collection@5.3.1",
-  "sha256": "fa666593f4e8206d803ab4f83e3d12c1e86d904cb7743b24c661246fc1186da9"
+  "sha256": "ef32af504651860804e81376d82f6e4153e11270770cbf2da35af956200f88d7"
 }
