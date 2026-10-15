@@ -1,39 +1,101 @@
 diff --git a/node_modules/@scalar/snippetz/dist/plugins/node/fetch/fetch.js b/node_modules/@scalar/snippetz/dist/plugins/node/fetch/fetch.js
 --- a/node_modules/@scalar/snippetz/dist/plugins/node/fetch/fetch.js
 +++ b/node_modules/@scalar/snippetz/dist/plugins/node/fetch/fetch.js
-@@ -1,5 +1,5 @@
+@@ -1,5 +1,45 @@
  import { buildQueryString, normalizeMethod } from '../../../libs/http.js';
--import { Raw, objectToString } from '../../../libs/javascript.js';
-+import { Raw, objectToString, escapeJsString } from '../../../libs/javascript.js';
+ import { Raw, objectToString } from '../../../libs/javascript.js';
++// Native Node body setup shared by the existing fetch-like emitters.
++export const buildNodeBody = (request, options) => {
++    const data = request.postData;
++    if (!data) return '';
++    let prefix = '';
++    const mime = data.mimeType;
++    if (mime && mime !== 'multipart/form-data' && !Object.keys(options.headers ?? {}).some((name) => name.toLowerCase() === 'content-type')) {
++        options.headers = { ...options.headers, 'Content-Type': mime };
++    }
++    if (data.fileName !== undefined) {
++        prefix = "import fs from 'node:fs'\n\n";
++        options.body = new Raw(`fs.readFileSync(${JSON.stringify(data.fileName)})`);
++    }
++    else if (mime === 'multipart/form-data' && data.params) {
++        prefix = "import FormData from 'form-data'\n";
++        if (data.params.some((part) => part.fileName !== undefined)) prefix += "import fs from 'node:fs'\n";
++        prefix += '\nconst formData = new FormData()\n';
++        for (const part of data.params) {
++            const name = JSON.stringify(part.name);
++            if (part.fileName !== undefined) {
++                prefix += `formData.append(${name}, fs.readFileSync(${JSON.stringify(part.fileName)}), ${objectToString({filename: part.fileName, contentType: part.contentType || 'application/octet-stream'})})\n`;
++            }
++            else {
++                const metadata = part.contentType ? `, ${objectToString({contentType: part.contentType})}` : '';
++                prefix += `formData.append(${name}, ${JSON.stringify(part.value ?? '')}${metadata})\n`;
++            }
++        }
++        prefix += '\n';
++        options.body = new Raw('formData.getBuffer()');
++        options.headers = new Raw(`{ ...${objectToString(options.headers ?? {})}, ...formData.getHeaders() }`);
++    }
++    else if (mime === 'application/x-www-form-urlencoded' && data.params) {
++        options.body = new Raw(`new URLSearchParams(${objectToString(data.params.map((part) => [part.name, part.value ?? '']))}).toString()`);
++    }
++    else if (data.text !== undefined) {
++        // JSON scalars and JSON-shaped raw text remain literal, without object coercion.
++        options.body = data.text;
++    }
++    return prefix;
++};
  /**
   * node/fetch
   */
-@@ -48,7 +48,11 @@
-         if (normalizedRequest.postData) {
-             const { mimeType, text, params } = normalizedRequest.postData;
-             let hasFsImport = false;
+@@ -44,46 +84,10 @@
+                 delete options[key];
+             }
+         });
+-        // Add body
+-        if (normalizedRequest.postData) {
+-            const { mimeType, text, params } = normalizedRequest.postData;
+-            let hasFsImport = false;
 -            if (mimeType === 'application/json' && text) {
-+            if (normalizedRequest.postData.fileName !== undefined) {
-+                prefix = "import fs from 'node:fs'\n\n";
-+                options.body = new Raw(`fs.readFileSync('${escapeJsString(normalizedRequest.postData.fileName)}')`);
-+            }
-+            else if (mimeType === 'application/json' && text) {
-                 try {
-                     options.body = new Raw(`JSON.stringify(${objectToString(JSON.parse(text))})`);
-                 }
-@@ -64,10 +68,10 @@
-                             prefix = `import fs from 'node:fs'\n\n${prefix}`;
-                             hasFsImport = true;
-                         }
+-                try {
+-                    options.body = new Raw(`JSON.stringify(${objectToString(JSON.parse(text))})`);
+-                }
+-                catch {
+-                    options.body = text;
+-                }
+-            }
+-            else if (mimeType === 'multipart/form-data' && params) {
+-                prefix = 'const formData = new FormData()\n';
+-                params.forEach((param) => {
+-                    if (param.fileName !== undefined) {
+-                        if (!hasFsImport) {
+-                            prefix = `import fs from 'node:fs'\n\n${prefix}`;
+-                            hasFsImport = true;
+-                        }
 -                        prefix += `formData.append('${param.name}', new Blob([fs.readFileSync('${param.fileName}')]), '${param.fileName}')\n`;
-+                        prefix += `formData.append('${escapeJsString(param.name)}', new Blob([fs.readFileSync('${escapeJsString(param.fileName)}')], {type: '${escapeJsString(param.contentType ?? 'application/octet-stream')}'}), '${escapeJsString(param.fileName)}')\n`;
-                     }
-                     else if (param.value !== undefined) {
+-                    }
+-                    else if (param.value !== undefined) {
 -                        prefix += `formData.append('${param.name}', '${param.value}')\n`;
-+                        prefix += `formData.append('${escapeJsString(param.name)}', '${escapeJsString(param.value)}')\n`;
-                     }
-                 });
-                 prefix += '\n';
+-                    }
+-                });
+-                prefix += '\n';
+-                options.body = new Raw('formData');
+-            }
+-            else if (mimeType === 'application/x-www-form-urlencoded' && params) {
+-                const form = Object.fromEntries(params.map((p) => [p.name, p.value]));
+-                options.body = new Raw(`new URLSearchParams(${objectToString(form)})`);
+-            }
+-            else {
+-                options.body = normalizedRequest.postData.text;
+-            }
+-        }
++        prefix = buildNodeBody(normalizedRequest, options);
+         // Transform to JSON
+         const jsonOptions = Object.keys(options).length ? `, ${objectToString(options)}` : '';
+         // Code Template
+-        return `${prefix}fetch('${normalizedRequest.url}${queryString}'${jsonOptions})`;
++        return `${prefix}const response = await fetch('${normalizedRequest.url}${queryString}'${jsonOptions})`;
+     },
+ };
 diff --git a/node_modules/@scalar/snippetz/dist/plugins/go/native/native.js b/node_modules/@scalar/snippetz/dist/plugins/go/native/native.js
 --- a/node_modules/@scalar/snippetz/dist/plugins/go/native/native.js
 +++ b/node_modules/@scalar/snippetz/dist/plugins/go/native/native.js
@@ -1020,3 +1082,109 @@ diff --git a/node_modules/@scalar/snippetz/dist/plugins/php/laravel/laravel.js b
          const expression = chain.length > 0
              ? [`Http::${chain[0]}`, ...chain.slice(1).map((method) => `  ->${method}`), `  ->${requestCall}`].join('\n')
              : `Http::${requestCall}`;
+diff --git a/node_modules/@scalar/snippetz/dist/plugins/node/ofetch/ofetch.js b/node_modules/@scalar/snippetz/dist/plugins/node/ofetch/ofetch.js
+--- a/node_modules/@scalar/snippetz/dist/plugins/node/ofetch/ofetch.js
++++ b/node_modules/@scalar/snippetz/dist/plugins/node/ofetch/ofetch.js
+@@ -1,3 +1,4 @@
++import { buildNodeBody } from '../fetch/fetch.js';
+ import { normalizeMethod, reduceQueryParams } from '../../../libs/http.js';
+ import { objectToString } from '../../../libs/javascript.js';
+ /**
+@@ -45,20 +46,12 @@
+                 delete options[key];
+             }
+         });
+-        // Add body
+-        if (normalizedRequest.postData) {
+-            // Plain text
+-            options.body = normalizedRequest.postData.text;
+-            // JSON
+-            if (normalizedRequest.postData.mimeType === 'application/json') {
+-                options.body = JSON.parse(options.body);
+-            }
+-        }
++        const prefix = buildNodeBody(normalizedRequest, options);
+         // Transform to JSON
+         const jsonOptions = Object.keys(options).length ? `, ${objectToString(options)}` : '';
+         // Code Template
+-        return `import { ofetch } from 'ofetch'
++        return `${prefix}import { ofetch } from 'ofetch'
+ 
+-ofetch('${normalizedRequest.url}'${jsonOptions})`;
++const response = await ofetch('${normalizedRequest.url}'${jsonOptions})`;
+     },
+ };
+diff --git a/node_modules/@scalar/snippetz/dist/plugins/node/undici/undici.js b/node_modules/@scalar/snippetz/dist/plugins/node/undici/undici.js
+--- a/node_modules/@scalar/snippetz/dist/plugins/node/undici/undici.js
++++ b/node_modules/@scalar/snippetz/dist/plugins/node/undici/undici.js
+@@ -1,5 +1,6 @@
++import { buildNodeBody } from '../fetch/fetch.js';
+ import { buildQueryString, normalizeMethod } from '../../../libs/http.js';
+-import { Raw, objectToString } from '../../../libs/javascript.js';
++import { objectToString } from '../../../libs/javascript.js';
+ /**
+  * node/undici
+  */
+@@ -17,7 +18,7 @@
+         normalizedRequest.method = normalizeMethod(normalizedRequest.method);
+         // Reset undici defaults
+         const options = {
+-            method: normalizedRequest.method === 'GET' ? undefined : normalizedRequest.method,
++            method: normalizedRequest.method,
+         };
+         // Query
+         const queryString = buildQueryString(normalizedRequest.queryString);
+@@ -43,19 +44,11 @@
+                 delete options[key];
+             }
+         });
+-        // Add body
+-        if (normalizedRequest.postData) {
+-            // Plain text
+-            options.body = normalizedRequest.postData.text;
+-            // JSON
+-            if (normalizedRequest.postData.mimeType === 'application/json') {
+-                options.body = new Raw(`JSON.stringify(${objectToString(JSON.parse(options.body))})`);
+-            }
+-        }
++        const prefix = buildNodeBody(normalizedRequest, options);
+         // Transform to JSON
+         const jsonOptions = Object.keys(options).length ? `, ${objectToString(options)}` : '';
+         // Code Template
+-        return `import { request } from 'undici'
++        return `${prefix}import { request } from 'undici'
+ 
+ const { statusCode, body } = await request('${normalizedRequest.url}${queryString}'${jsonOptions})`;
+     },
+diff --git a/node_modules/@scalar/snippetz/dist/plugins/shared/axios.js b/node_modules/@scalar/snippetz/dist/plugins/shared/axios.js
+--- a/node_modules/@scalar/snippetz/dist/plugins/shared/axios.js
++++ b/node_modules/@scalar/snippetz/dist/plugins/shared/axios.js
+@@ -1,3 +1,4 @@
++import { buildNodeBody } from '../node/fetch/fetch.js';
+ import { accumulateRepeatedValue, normalizeMethod, reduceQueryParams } from '../../libs/http.js';
+ import { Raw, escapeJsString, objectToString } from '../../libs/javascript.js';
+ const addHeaderValue = (headers, name, value) => {
+@@ -113,12 +114,21 @@
+                 password: configuration.auth.password,
+             };
+         }
+-        const { setup, data } = buildData(normalizedRequest);
++        let setup, data, prefix = '';
++       if (target === 'node') {
++           const bodyOptions = { headers: options.headers };
++           prefix = buildNodeBody(normalizedRequest, bodyOptions);
++           if (bodyOptions.headers) options.headers = bodyOptions.headers;
++           data = bodyOptions.body;
++           setup = [];
++       } else {
++           ({ setup, data } = buildData(normalizedRequest));
++       }
+         if (data !== undefined) {
+             options.data = data;
+         }
+         const setupBlock = setup.length ? `${setup.join('\n')}\n\n` : '';
+-        return `import axios from 'axios'
++        return `${prefix}import axios from 'axios'
+ 
+ ${setupBlock}const options = ${objectToString(options)}
+ 

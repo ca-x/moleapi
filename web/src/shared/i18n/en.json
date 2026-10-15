@@ -1747,5 +1747,6 @@
   "Guzzle 示例需安装 guzzlehttp/guzzle 并加载 Composer autoload。文件流以二进制模式打开，请在请求结束后关闭。": "Guzzle examples need guzzlehttp/guzzle and Composer autoload. Files open in binary mode; close their streams after the request.",
   "Laravel 示例使用 Http Facade，需在已启动的 Laravel 应用中运行。文件示例需准备同名文件，并在请求后关闭文件流。": "Laravel examples use the Http facade and run in a bootstrapped Laravel application. Prepare matching files and close file streams after the request.",
   "HTTP_Request2 示例需安装 pear/http_request2，加载 Composer autoload 或配置 PEAR include_path；multipart 另需 guzzlehttp/psr7。文件示例需准备同名文件。": "HTTP_Request2 examples need pear/http_request2 with Composer autoload or a PEAR include_path. Multipart also needs guzzlehttp/psr7. Prepare matching files.",
-  "PECL HTTP 示例需启用 http 与 raphf 扩展；multipart 另需 guzzlehttp/psr7 并加载 Composer autoload。文件示例需准备同名文件。": "PECL HTTP examples need the http and raphf extensions. Multipart also needs guzzlehttp/psr7 and Composer autoload. Prepare matching files."
+  "PECL HTTP 示例需启用 http 与 raphf 扩展；multipart 另需 guzzlehttp/psr7 并加载 Composer autoload。文件示例需准备同名文件。": "PECL HTTP examples need the http and raphf extensions. Multipart also needs guzzlehttp/psr7 and Composer autoload. Prepare matching files.",
+  "Node.js 示例需以 ESM 运行（.mjs 或 type: module）。Fetch 使用内置客户端，其他 HTTP 库需安装对应依赖；multipart 另需 form-data。文件示例需准备同名文件。": "Run Node.js examples as ESM (.mjs or type: module). Fetch uses the built-in client; install the selected package for other HTTP libraries. Multipart also needs form-data. Prepare matching files."
 }

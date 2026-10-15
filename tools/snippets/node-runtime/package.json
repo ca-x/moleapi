@@ -1,0 +1,1 @@
+{"name":"moleapi-node-snippet-qa","private":true,"type":"module","dependencies":{"axios":"1.20.0","ofetch":"1.5.1","undici":"8.12.1","form-data":"4.0.6"}}

@@ -18,21 +18,22 @@ fn main() -> Result<()> {
         profile == "core"
             || matches!(
                 mode.as_deref(),
-                Some("java" | "kotlin" | "dart" | "ruby" | "python" | "php")
+                Some("java" | "kotlin" | "dart" | "ruby" | "python" | "php" | "node")
             ) && ["form", "text", "binary", "binary-mime", "multipart"]
                 .contains(&profile.as_str())
             || matches!(
                 mode.as_deref(),
-                Some("kotlin" | "dart" | "ruby" | "python" | "php")
+                Some("kotlin" | "dart" | "ruby" | "python" | "php" | "node")
             ) && profile == "dollar"
             || mode.as_deref() == Some("ruby") && profile == "interpolation"
-            || matches!(mode.as_deref(), Some("python" | "php"))
+            || matches!(mode.as_deref(), Some("python" | "php" | "node"))
                 && [
                     "json-values",
                     "json-scalar",
                     "json-null",
                     "json-empty",
                     "get-binary",
+                    "head-binary",
                     "delete-json",
                     "text-json",
                     "multipart-meta",
@@ -45,9 +46,9 @@ fn main() -> Result<()> {
     );
     let body_profile = if matches!(
         mode.as_deref(),
-        Some("java" | "kotlin" | "dart" | "ruby" | "python" | "php")
+        Some("java" | "kotlin" | "dart" | "ruby" | "python" | "php" | "node")
     ) {
-        if profile == "get-binary" {
+        if matches!(profile.as_str(), "get-binary" | "head-binary") {
             "binary"
         } else if profile == "delete-json" {
             "core"
@@ -59,6 +60,9 @@ fn main() -> Result<()> {
     };
     if profile == "get-binary" {
         workspace.data.collections[0].requests[0].method = "GET".into();
+    }
+    if profile == "head-binary" {
+        workspace.data.collections[0].requests[0].method = "HEAD".into();
     }
     if profile == "delete-json" {
         workspace.data.collections[0].requests[0].method = "DELETE".into();
@@ -145,13 +149,20 @@ fn main() -> Result<()> {
         workspace.data.collections[0].requests[0].body_kind = "multipart".into();
         workspace.data.collections[0].requests[0].body = json!({"parts": [{"id": "one", "name": "label", "value": {"kind": "text", "text": "鼹鼠 \"quotes\"\r\nvalue", "mime": ""}}, {"id": "two", "name": "label", "value": {"kind": "text", "text": "second", "mime": ""}}, {"id": "empty", "name": "empty", "value": {"kind": "text", "text": "", "mime": ""}}, {"id": "disabled", "name": "off", "enabled": false, "value": {"kind": "text", "text": "must-not-send", "mime": ""}}]}).to_string();
     }
-    if mode.as_deref() == Some("php") && body_profile == "multipart-meta" {
+    if matches!(mode.as_deref(), Some("php" | "node")) && body_profile == "multipart-meta" {
         let request = &mut workspace.data.collections[0].requests[0];
         request.body = request
             .body
             .replace("upload-鼹鼠.bin", "upload-鼹鼠'quote.bin");
     }
-    let targets = if mode.as_deref() == Some("php") {
+    let targets = if mode.as_deref() == Some("node") {
+        vec![
+            ("node", "fetch", "fetch.mjs"),
+            ("node", "axios", "axios.mjs"),
+            ("node", "ofetch", "ofetch.mjs"),
+            ("node", "undici", "undici.mjs"),
+        ]
+    } else if mode.as_deref() == Some("php") {
         vec![
             ("php", "curl", "curl.php"),
             ("php", "guzzle", "guzzle.php"),
@@ -233,8 +244,19 @@ fn main() -> Result<()> {
         ]
     };
     let mut hashes = serde_json::Map::new();
+    let mut rejections = serde_json::Map::new();
     for (target, client, filename) in targets {
-        let code = generate_request(&workspace, "r", target, client, true)?.code;
+        let result = generate_request(&workspace, "r", target, client, true);
+        if mode.as_deref() == Some("node")
+            && matches!(profile.as_str(), "get-binary" | "head-binary")
+            && matches!(client, "fetch" | "ofetch")
+        {
+            let error = result.unwrap_err().to_string();
+            ensure!(error.contains("cannot send GET/HEAD bodies"));
+            rejections.insert(client.into(), error.into());
+            continue;
+        }
+        let code = result?.code;
         hashes.insert(
             filename.into(),
             format!("{:x}", Sha256::digest(code.as_bytes())).into(),
@@ -243,7 +265,7 @@ fn main() -> Result<()> {
     }
     if matches!(
         mode.as_deref(),
-        Some("java" | "kotlin" | "dart" | "ruby" | "python" | "php")
+        Some("java" | "kotlin" | "dart" | "ruby" | "python" | "php" | "node")
     ) {
         let source = serde_json::to_vec(&workspace)?;
         std::fs::write(
@@ -253,7 +275,7 @@ fn main() -> Result<()> {
         std::fs::write(
             std::path::Path::new(&output).join("fixture-manifest.json"),
             serde_json::to_vec_pretty(
-                &json!({"engine":moleapi_generation::ENGINE,"target":mode,"profile":profile,"source_sha256":format!("{:x}",Sha256::digest(source)),"files":hashes}),
+                &json!({"engine":moleapi_generation::ENGINE,"target":mode,"profile":profile,"source_sha256":format!("{:x}",Sha256::digest(source)),"files":hashes,"rejections":rejections}),
             )?,
         )?;
     }
