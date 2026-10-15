@@ -63,6 +63,8 @@ Apple evidence checkpoint2026-10-15: run38707843936 ARM job116331593353 is now t
 
 Go request snippet checkpoint2026-10-15: pinned mature Go stdlib emitter now preserves raw numeric/CRLF/backtick/control JSON, repeated/empty forms, typed MIME/filename and native multipart ordering. Error-returning main path checks IO/NewRequest/Do/ReadAll/cleanup, avoids nil panics and prevents partial missing-file requests.24 unchanged complete programs pass gofmt/vet/race build and real HTTP on Go1.27.1 plus3 failure paths;7 old defects reproduced. File adapters stay31,54 other representative outputs unchanged.99 generation/3 API/52 UI-i18n cases, deterministic/clean patch and scoped gates pass; actual bilingual owned-API Go UI preserves hints/privacy/reflow. Apple shared-consumer run38748390974 remains on immutable3a18964; wider generation and later milestones stay open.
 
+User steering2026-10-15: generation is sufficiently advanced for now; prioritize the remaining non-generation functionality. Finish the already started C/libcurl request-code body slice, then advance milestone3 request/protocol work. Generation's open matrix rows and final platform/release gates remain required, but they no longer lead feature order.
+
 ## Slice 1: CLI runner labels
 
 **Files:** `crates/cli/src/args.rs` owns flags; `crates/cli/src/runners.rs` owns request payloads; `crates/cli/tests/runners.rs` owns real process/API fixtures; `docs/SELF-HOSTED-RUNNERS.md`, `docs/SELF-HOSTED-RUNNER-COVERAGE.md` and `docs/IMPLEMENTATION-STATUS.md` own usage/status.

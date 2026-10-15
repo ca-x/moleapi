@@ -19,7 +19,16 @@ fn main() -> Result<()> {
             || matches!(
                 mode.as_deref(),
                 Some(
-                    "java" | "kotlin" | "dart" | "ruby" | "python" | "php" | "node" | "rust" | "go"
+                    "java"
+                        | "kotlin"
+                        | "dart"
+                        | "ruby"
+                        | "python"
+                        | "php"
+                        | "node"
+                        | "rust"
+                        | "go"
+                        | "c"
                 )
             ) && ["form", "text", "binary", "binary-mime", "multipart"]
                 .contains(&profile.as_str())
@@ -30,7 +39,7 @@ fn main() -> Result<()> {
             || mode.as_deref() == Some("ruby") && profile == "interpolation"
             || matches!(
                 mode.as_deref(),
-                Some("python" | "php" | "node" | "rust" | "go")
+                Some("python" | "php" | "node" | "rust" | "go" | "c")
             ) && [
                 "json-values",
                 "json-scalar",
@@ -55,7 +64,7 @@ fn main() -> Result<()> {
     );
     let body_profile = if matches!(
         mode.as_deref(),
-        Some("java" | "kotlin" | "dart" | "ruby" | "python" | "php" | "node" | "rust" | "go")
+        Some("java" | "kotlin" | "dart" | "ruby" | "python" | "php" | "node" | "rust" | "go" | "c")
     ) {
         if matches!(profile.as_str(), "get-binary" | "head-binary") {
             "binary"
@@ -184,7 +193,9 @@ fn main() -> Result<()> {
             .body
             .replace("upload-鼹鼠.bin", "upload-鼹鼠'quote.bin");
     }
-    let targets = if mode.as_deref() == Some("go") {
+    let targets = if mode.as_deref() == Some("c") {
+        vec![("c", "libcurl", "snippet.c")]
+    } else if mode.as_deref() == Some("go") {
         vec![("go", "native", "snippet.go")]
     } else if mode.as_deref() == Some("rust") {
         vec![("rust", "reqwest", "snippet.rs")]
@@ -298,7 +309,7 @@ fn main() -> Result<()> {
     }
     if matches!(
         mode.as_deref(),
-        Some("java" | "kotlin" | "dart" | "ruby" | "python" | "php" | "node" | "rust" | "go")
+        Some("java" | "kotlin" | "dart" | "ruby" | "python" | "php" | "node" | "rust" | "go" | "c")
     ) {
         let source = serde_json::to_vec(&workspace)?;
         std::fs::write(

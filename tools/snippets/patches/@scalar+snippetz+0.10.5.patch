@@ -1443,3 +1443,93 @@ diff --git a/node_modules/@scalar/snippetz/dist/plugins/rust/reqwest/reqwest.js 
          }
          case 'multipart/form-data': {
              const formParts = params?.map(createMultipartPart).join('\n') || '';
+diff --git a/node_modules/@scalar/snippetz/dist/plugins/c/libcurl/libcurl.js b/node_modules/@scalar/snippetz/dist/plugins/c/libcurl/libcurl.js
+--- a/node_modules/@scalar/snippetz/dist/plugins/c/libcurl/libcurl.js
++++ b/node_modules/@scalar/snippetz/dist/plugins/c/libcurl/libcurl.js
+@@ -2,9 +2,7 @@
+ const escapeCString = (value) => value
+     .replaceAll('\\', '\\\\')
+     .replaceAll('"', '\\"')
+-    .replaceAll('\n', '\\n')
+-    .replaceAll('\r', '\\r')
+-    .replaceAll('\t', '\\t');
++    .replace(/[\x00-\x1f\x7f]/g, (char) => `\\${char.charCodeAt(0).toString(8).padStart(3, '0')}`);
+ const normalizeUrl = (url) => {
+     if (!url) {
+         return '';
+@@ -41,17 +39,6 @@
+     }
+     return params.map((param) => new URLSearchParams([[param.name, param.value ?? '']]).toString()).join('&');
+ };
+-const formatJsonBody = (text) => {
+-    if (text === undefined) {
+-        return '';
+-    }
+-    try {
+-        return JSON.stringify(JSON.parse(text), null, 2);
+-    }
+-    catch {
+-        return text;
+-    }
+-};
+ /**
+  * Builds the CURLOPT_POSTFIELDS statement.
+  *
+@@ -61,15 +48,14 @@
+  */
+ const buildPostFields = (value) => {
+     const sourceLines = value.split('\n');
+-    if (sourceLines.length <= 1) {
+-        return [`  curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "${escapeCString(value)}");`];
+-    }
+     return [
+-        '  curl_easy_setopt(curl, CURLOPT_POSTFIELDS,',
++        '  static const char body[] =',
+         ...sourceLines.map((line, index) => {
+             const isLastLine = index === sourceLines.length - 1;
+-            return `    "${escapeCString(line)}${isLastLine ? '' : '\\n'}"${isLastLine ? ');' : ''}`;
++            return `    "${escapeCString(line)}${isLastLine ? '' : '\\012'}"${isLastLine ? ';' : ''}`;
+         }),
++        '  curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body);',
++        '  curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE_LARGE, (curl_off_t)(sizeof(body) - 1));',
+     ];
+ };
+ /**
+@@ -134,7 +120,13 @@
+                         lines.push(`    curl_mime_name(part, "${escapeCString(param.name)}");`);
+                     }
+                     if (param.fileName !== undefined) {
+-                        lines.push(`    curl_mime_filedata(part, "${escapeCString(param.fileName)}");`);
++                        lines.push(`    if (curl_mime_filedata(part, "${escapeCString(param.fileName)}") != CURLE_OK) {`,
++                            '      curl_mime_free(mime);',
++                            '      curl_easy_cleanup(curl);',
++                            ...(hasHeaders ? ['      curl_slist_free_all(headers);'] : []),
++                            '      curl_global_cleanup();',
++                            '      return 1;',
++                            '    }');
+                     }
+                     else {
+                         lines.push(`    curl_mime_data(part, "${escapeCString(param.value ?? '')}", CURL_ZERO_TERMINATED);`);
+@@ -146,18 +138,14 @@
+                 });
+                 lines.push('', '  curl_easy_setopt(curl, CURLOPT_MIMEPOST, mime);');
+             }
+-            else if (body.mimeType === 'application/x-www-form-urlencoded' && body.params?.length) {
+-                const formBody = buildFormUrlEncodedBody(body.params);
+-                if (formBody !== null) {
+-                    lines.push('', `  curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "${escapeCString(formBody)}");`);
+-                }
++            else if (body.mimeType === 'application/x-www-form-urlencoded' && body.params) {
++                lines.push('', ...buildPostFields(buildFormUrlEncodedBody(body.params) ?? ''));
+             }
+             else if (body.mimeType === 'application/json' && body.text !== undefined) {
+-                lines.push('', ...buildPostFields(formatJsonBody(body.text)));
++                lines.push('', ...buildPostFields(body.text));
+             }
+             else if (body.text !== undefined) {
+-                const fallbackBody = body.mimeType === 'application/octet-stream' ? body.text : formatJsonBody(body.text);
+-                lines.push('', ...buildPostFields(fallbackBody));
++                lines.push('', ...buildPostFields(body.text));
+             }
+         }
+         lines.push('', '  CURLcode res = curl_easy_perform(curl);');

@@ -147,6 +147,7 @@ pub fn generate_request(
         || (target == "ruby" && client == "native")
         || (target == "rust" && client == "reqwest")
         || (target == "go" && client == "native")
+        || (target == "c" && client == "libcurl")
         || (target == "node" && matches!(client, "fetch" | "axios" | "ofetch" | "undici"))
         || (target == "php"
             && matches!(
@@ -762,6 +763,7 @@ mod tests {
             ("shell", "curl"),
             ("node", "fetch"),
             ("go", "native"),
+            ("c", "libcurl"),
             ("csharp", "httpclient"),
             ("python", "requests"),
             ("node", "native"),
@@ -837,6 +839,8 @@ mod tests {
     #[test]
     fn unsupported_repeated_fields_fail_instead_of_losing_values() {
         let mut w = workspace("form", "x=one&x=two");
+        let c = generate_request(&w, "r", "c", "libcurl", true).unwrap();
+        assert!(c.code.contains("x=one&x=two"));
         for (target, client) in [("js", "fetch"), ("node", "native"), ("js", "axios")] {
             assert!(
                 generate_request(&w, "r", target, client, true)

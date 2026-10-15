@@ -4,7 +4,7 @@ This is usable request-example generation, separate from typed OpenAPI SDK/serve
 
 | Language family | Libraries exposed by upstream | Actual compile/run evidence |
 | --- | --- | --- |
-| C | libcurl | libcurl POST fixture |
+| C | libcurl | Original C11/libcurl compiled and sent nine JSON/form/text/multipart profiles, plus missing-file failure; exact scope below |
 | C# | httpclient, restsharp | HttpClient and RestSharp114.0.0 POST fixtures compiled with .NET10.0.401/C#11; upstream snippets unchanged inside namespace/project wrappers |
 | Clojure | clj_http | Engine smoke only |
 | Dart | http, dio |14 original-source analyze/AOT/run cases on Dart3.13.5/http1.6.0/Dio5.11.1: text/form/JSON/files/MIME/multipart/dollar literals |
@@ -37,6 +37,14 @@ The saved HTTP request becomes HAR via the shared Rust adapter. Query encoding, 
 Environment placeholders remain static, with no runtime resolution or pre-script execution. Some libraries expect complete runnable programs, others emit snippets for an existing function/project. Required target libraries/runtimes must be supplied by the user. Python/http.client requires a concrete absolute HTTP(S) URL because upstream otherwise invents example.com for a base template. URLs with literal quote/backslash/newline characters are rejected rather than emitting unsafe upstream quoted source. Header/query/body placeholders still require review before execution.
 
 Repeated headers remain rejected outside shell/cURL. Repeated URL-encoded fields are accepted only by the explicitly verified native builders listed below; other adapters reject to prevent dictionary-based losses. Multipart repeated names have separate representative evidence below. Fetch-family JS/Node GET/HEAD bodies are rejected. Timeouts, TLS verification and redirect options are not yet mapped and this is stated in returned warnings. Shared multipart/files/binary execution is implemented. Multipart and raw-file snippet mappings are implemented with the target limits recorded here.
+
+## C/libcurl body verification
+
+Nine original generated C11 programs compiled with `-Wall -Wextra -Werror` and sent real loopback HTTP through libcurl8.22.0. Profiles cover original JSON and exact large integer/decimal tokens, CRLF JSON, text with NUL/control bytes, repeated and empty URL-encoded forms, repeated text multipart fields, typed multipart text/file parts, and exact binary file bytes/Unicode filename. Selected Bearer, transport-owned Host removal, custom header and encoded query survived each case. The emitted source and canonical fixture are hash-checked before execution. A missing multipart file exits nonzero before a request.
+
+The pinned Scalar C emitter retains source JSON/text bytes instead of reparsing JSON through JavaScript, quotes controls as fixed-width C octal escapes and sets `CURLOPT_POSTFIELDSIZE_LARGE` so NUL does not truncate a body. It uses libcurl's native MIME API and checks file admission before sending. Repeated forms use native URLSearchParams encoding without collapsing entries. The generated C remains a complete program; it does not read saved file bytes during generation. Reproduce with `python3 tools/snippets/verify-c.py --cc /absolute/gcc --output /absolute/new-directory`.
+
+Raw binary file bodies remain unavailable for C/libcurl in the catalog. C non-POST methods, special header/cookie values, all libcurl error/cleanup paths and other operating systems remain unverified. This evidence is scoped to the listed synthetic fixtures and does not establish complete request option parity.
 
 Multipart snippets reference saved filenames rather than embedding selected file bytes. Prepare the corresponding files in the target environment; generation never reads host files. A returned bilingual warning explains these prerequisites and target-library MIME/filename behavior. Browser examples may require a selected File/Blob. Default privacy screens structured fields without changing fixed enum/schema keys, clears file byte sources and hides sensitive text fields/copied values; original canonical requests stay unchanged. Explicit inclusion preserves text/auth values but file bytes still stay outside generated source.
 
