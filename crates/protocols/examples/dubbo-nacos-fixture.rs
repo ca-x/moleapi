@@ -1,6 +1,6 @@
 //! Compare checked Nacos HTTP discovery with Apache Dubbo's official registry lookup.
 use anyhow::{Result, ensure};
-use moleapi_core::{DubboConfig, NetworkPolicy, RequestSpec};
+use moleapi_core::{DubboConfig, DubboRegistryAuth, NetworkPolicy, RequestSpec};
 use moleapi_protocols::dubbo::{DubboRuntime, lookup_nacos, select_registry_provider};
 use serde_json::{Value, json};
 use std::{path::Path, time::Duration};
@@ -12,16 +12,28 @@ async fn main() -> Result<()> {
     let registry = args.next().expect("Nacos endpoint");
     let java = args.next().expect("Java executable");
     let jar = args.next().expect("pinned worker JAR");
-    let namespace = args.next().unwrap_or_default();
+    let options = args.collect::<Vec<_>>();
     ensure!(
-        matches!(namespace.as_str(), "" | "moleapi-qa"),
-        "Unexpected fixture namespace"
+        options.len() <= 2
+            && options
+                .iter()
+                .all(|value| matches!(value.as_str(), "moleapi-qa" | "--auth")),
+        "Unexpected Nacos fixture argument"
     );
-    ensure!(args.next().is_none(), "Unexpected Nacos fixture argument");
+    let namespace = if options.iter().any(|value| value == "moleapi-qa") {
+        "moleapi-qa".to_owned()
+    } else {
+        String::new()
+    };
+    let authenticated = options.iter().any(|value| value == "--auth");
     let config = DubboConfig {
         source_version: 2,
         source: "nacos".into(),
         registry_namespace: namespace.clone(),
+        registry_auth: authenticated.then(|| DubboRegistryAuth {
+            username: "nacos".into(),
+            password: "fixture-password".into(),
+        }),
         service: "fixture.RegistryService".into(),
         version: "1.0.0".into(),
         group: "qa".into(),
@@ -31,6 +43,24 @@ async fn main() -> Result<()> {
     let policy = NetworkPolicy {
         allow_private_network: true,
     };
+    if authenticated {
+        let mut anonymous = config.clone();
+        anonymous.registry_auth = None;
+        ensure!(
+            lookup_nacos(&registry, &anonymous, policy, Duration::from_secs(5))
+                .await
+                .is_err(),
+            "Anonymous Nacos lookup accessed authenticated providers"
+        );
+        let mut wrong = config.clone();
+        wrong.registry_auth.as_mut().unwrap().password = "incorrect-password".into();
+        ensure!(
+            lookup_nacos(&registry, &wrong, policy, Duration::from_secs(5))
+                .await
+                .is_err(),
+            "Incorrect Nacos password accessed authenticated providers"
+        );
+    }
     if !namespace.is_empty() {
         let mut public = config.clone();
         public.registry_namespace.clear();
@@ -65,6 +95,7 @@ async fn main() -> Result<()> {
       "protocol":{"kind":"dubbo","source_version":2,"source":"nacos","transport":"classic","serialization":"hessian2",
         "service":config.service,"method":"echo","version":"1.0.0","group":"qa",
         "registry_namespace":namespace,
+        "registry_auth":config.registry_auth,
         "arguments":[{"id":"name","type_name":"java.lang.String","value_source":"\"from-rust\"","secret":false}],
         "attachments":[]}
     }))?;

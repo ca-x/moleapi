@@ -3,7 +3,7 @@ use anyhow::{Context, Result, bail, ensure};
 use futures_util::StreamExt;
 use moleapi_core::{
     DubboConfig, NetworkPolicy, Protocol, RequestSpec, Response, ScriptLog, checked_destination,
-    dubbo_provider_url, dubbo_registry_url, dubbo_url,
+    dubbo_provider_url, dubbo_registry_url, dubbo_url, public_ip,
 };
 use percent_encoding::percent_decode_str;
 use serde_json::{Value, json};
@@ -201,10 +201,6 @@ pub async fn lookup_nacos(
 ) -> Result<Vec<String>> {
     let deadline = Instant::now() + timeout;
     let registry_url = dubbo_registry_url(registry, "nacos")?;
-    ensure!(
-        config.registry_auth.is_none(),
-        "Nacos registry credentials are not supported yet"
-    );
     let addresses = tokio::time::timeout(
         deadline.saturating_duration_since(Instant::now()),
         checked_destination(&registry_url, policy),
@@ -214,6 +210,10 @@ pub async fn lookup_nacos(
     let address = reachable_address(&addresses, deadline)
         .await
         .context("Nacos registry connection failed")?;
+    ensure!(
+        config.registry_auth.is_none() || !public_ip(address.ip()),
+        "Nacos HTTP credentials require a private registry address"
+    );
     let host = registry_url
         .host_str()
         .context("Nacos host missing")?
@@ -252,38 +252,60 @@ pub async fn lookup_nacos(
         .resolve(host, address)
         .timeout(deadline.saturating_duration_since(Instant::now()))
         .build()?;
-    let response = client
-        .get(endpoint)
-        .send()
+    let mut listing = client.get(endpoint.clone());
+    if let Some(auth) = &config.registry_auth {
+        let mut login_endpoint = endpoint.clone();
+        login_endpoint.set_path("/nacos/v1/auth/users/login");
+        login_endpoint.set_query(None);
+        let form = url::form_urlencoded::Serializer::new(String::new())
+            .append_pair("username", &auth.username)
+            .append_pair("password", &auth.password)
+            .finish();
+        let login = tokio::time::timeout(
+            deadline.saturating_duration_since(Instant::now()),
+            client
+                .post(login_endpoint)
+                .header(
+                    reqwest::header::CONTENT_TYPE,
+                    "application/x-www-form-urlencoded",
+                )
+                .body(form)
+                .send(),
+        )
         .await
-        .context("Nacos provider lookup failed")?;
+        .context("Nacos login timed out")?
+        .context("Nacos login failed")?;
+        ensure!(
+            login.status().is_success(),
+            "Nacos login returned {}",
+            login.status()
+        );
+        let login_body = bounded_nacos_body(login, 16 * 1024, deadline).await?;
+        let login_data: Value =
+            serde_json::from_slice(&login_body).context("Invalid Nacos login response")?;
+        let token = login_data
+            .get("accessToken")
+            .and_then(Value::as_str)
+            .context("Nacos login did not return an access token")?;
+        ensure!(
+            !token.is_empty() && token.len() <= 4096 && token.is_ascii(),
+            "Invalid Nacos access token"
+        );
+        listing = listing.bearer_auth(token);
+    }
+    let response = tokio::time::timeout(
+        deadline.saturating_duration_since(Instant::now()),
+        listing.send(),
+    )
+    .await
+    .context("Nacos provider lookup timed out")?
+    .context("Nacos provider lookup failed")?;
     ensure!(
         response.status().is_success(),
         "Nacos provider lookup returned {}",
         response.status()
     );
-    ensure!(
-        response
-            .content_length()
-            .is_none_or(|length| length <= MAX_INPUT as u64),
-        "Nacos provider response exceeds 1 MiB"
-    );
-    let mut body = Vec::new();
-    let mut stream = response.bytes_stream();
-    while let Some(chunk) = tokio::time::timeout(
-        deadline.saturating_duration_since(Instant::now()),
-        stream.next(),
-    )
-    .await
-    .context("Nacos provider response timed out")?
-    {
-        let chunk = chunk.context("Nacos provider response failed")?;
-        ensure!(
-            body.len().saturating_add(chunk.len()) <= MAX_INPUT,
-            "Nacos provider response exceeds 1 MiB"
-        );
-        body.extend_from_slice(&chunk);
-    }
+    let body = bounded_nacos_body(response, MAX_INPUT, deadline).await?;
     let data: Value = serde_json::from_slice(&body).context("Invalid Nacos provider response")?;
     let instances = data
         .get("hosts")
@@ -350,6 +372,36 @@ pub async fn lookup_nacos(
         sources.push(source);
     }
     Ok(sources)
+}
+
+async fn bounded_nacos_body(
+    response: reqwest::Response,
+    limit: usize,
+    deadline: Instant,
+) -> Result<Vec<u8>> {
+    ensure!(
+        response
+            .content_length()
+            .is_none_or(|length| length <= limit as u64),
+        "Nacos response exceeds {limit} bytes"
+    );
+    let mut body = Vec::new();
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = tokio::time::timeout(
+        deadline.saturating_duration_since(Instant::now()),
+        stream.next(),
+    )
+    .await
+    .context("Nacos response timed out")?
+    {
+        let chunk = chunk.context("Nacos response failed")?;
+        ensure!(
+            body.len().saturating_add(chunk.len()) <= limit,
+            "Nacos response exceeds {limit} bytes"
+        );
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
 }
 
 #[derive(Clone)]
@@ -638,7 +690,10 @@ mod tests {
         .to_string();
         for (body, expected) in [
             (invalid, "not a matching classic Dubbo provider"),
-            ("x".repeat(MAX_INPUT + 1), "response exceeds 1 MiB"),
+            (
+                "x".repeat(MAX_INPUT + 1),
+                "Nacos response exceeds 1048576 bytes",
+            ),
         ] {
             let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
             let port = listener.local_addr().unwrap().port();

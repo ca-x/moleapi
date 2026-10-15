@@ -18,9 +18,12 @@ public class NacosFixture {
     try (ServerSocket server = new ServerSocket(0)) { return server.getLocalPort(); }
   }
   public static void main(String[] args) throws Exception {
-    boolean namespaced = args.length == 1 && args[0].startsWith("--namespace");
+    boolean namespaced = args.length == 1 && args[0].contains("namespace");
+    boolean authenticated = args.length == 1 && args[0].contains("auth");
     String endpoint = "nacos://127.0.0.1:18848";
-    String registryAddress = endpoint + (namespaced ? "?namespace=moleapi-qa" : "");
+    String registryAddress = (authenticated
+        ? "nacos://nacos:fixture-password@127.0.0.1:18848" : endpoint)
+        + (namespaced ? "?namespace=moleapi-qa" : "");
     ApplicationConfig app = new ApplicationConfig("moleapi-nacos-qa");
     app.setQosEnable(false);
     app.setEnableFileCache(false);
@@ -54,7 +57,7 @@ public class NacosFixture {
       System.out.println("NACOS_PROVIDER=" + found.get(0).toFullString());
       System.out.println("NACOS_REGISTRY=" + endpoint);
       System.out.flush();
-      if (args.length==1 && (args[0].equals("--hold") || args[0].equals("--namespace-hold")))
+      if (args.length==1 && args[0].endsWith("hold"))
         new java.util.concurrent.CountDownLatch(1).await();
     } finally {
       service.unexport();

@@ -72,3 +72,29 @@ fn registry_credentials_are_private_in_default_backup_and_exact_in_explicit_expo
     assert!(full.contains("private-reader-qa"));
     assert!(full.contains("private-password-qa"));
 }
+
+#[test]
+fn nacos_namespace_and_private_credentials_roundtrip_through_export() {
+    let mut workspace = workspace();
+    let request = &mut workspace.data.collections[0].requests[0];
+    request.url = "nacos://registry.example:8848".into();
+    let Protocol::Dubbo { config } = &mut request.protocol else {
+        unreachable!()
+    };
+    config.source_version = 2;
+    config.source = "nacos".into();
+    config.group = "qa".into();
+    config.registry_namespace = "moleapi-qa".into();
+    config.registry_auth = Some(DubboRegistryAuth {
+        username: "private-nacos-reader".into(),
+        password: "private-nacos-password".into(),
+    });
+    let screened = export(&workspace, "moleapi", false).unwrap().content;
+    assert!(screened.contains("moleapi-qa"));
+    assert!(!screened.contains("private-nacos-reader"));
+    assert!(!screened.contains("private-nacos-password"));
+    let full = export(&workspace, "moleapi", true).unwrap().content;
+    assert!(full.contains("moleapi-qa"));
+    assert!(full.contains("private-nacos-reader"));
+    assert!(full.contains("private-nacos-password"));
+}

@@ -86,6 +86,11 @@ fn nacos_source_requires_a_plain_registry_endpoint() {
         unreachable!()
     };
     config.registry_namespace = "team-qa".into();
+    config.registry_auth = Some(DubboRegistryAuth {
+        username: "reader".into(),
+        password: "private".into(),
+    });
+    validate_request(&r, false).unwrap();
     validate_request(&r, false).unwrap();
     let Protocol::Dubbo { config } = &mut r.protocol else {
         unreachable!()

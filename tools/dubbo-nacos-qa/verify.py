@@ -13,6 +13,7 @@ import threading
 import time
 import urllib.request
 import urllib.parse
+import urllib.error
 
 ROOT = Path(__file__).resolve().parents[2]
 JAVA_PROJECT = ROOT / 'tools/dubbo-nacos-qa/java'
@@ -26,12 +27,14 @@ def ready():
         return reply.status == 200 and reply.read(32) == b'OK'
 
 
-def registered_instances(namespace=''):
+def registered_instances(namespace='', token=''):
     params = {'serviceName':'providers:fixture.RegistryService:1.0.0:qa',
               'groupName':'DEFAULT_GROUP','healthyOnly':'false'}
     if namespace: params['namespaceId'] = namespace
     query = urllib.parse.urlencode(params)
-    with urllib.request.urlopen(f'http://127.0.0.1:18848/nacos/v1/ns/instance/list?{query}',timeout=3) as reply:
+    request = urllib.request.Request(f'http://127.0.0.1:18848/nacos/v1/ns/instance/list?{query}')
+    if token: request.add_header('Authorization', 'Bearer ' + token)
+    with urllib.request.urlopen(request,timeout=3) as reply:
         return json.load(reply)['hosts']
 
 
@@ -41,6 +44,7 @@ def main():
     parser.add_argument('--jar', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--archive', type=Path)
+    parser.add_argument('--auth', action='store_true', help='Run an isolated Nacos authentication fixture')
     parser.add_argument('--classes', type=Path, default=JAVA_PROJECT / 'target/classes')
     parser.add_argument('--dependencies', type=Path, default=JAVA_PROJECT / 'target/dependency')
     args = parser.parse_args()
@@ -67,11 +71,17 @@ def main():
                 source.extractall(temp, filter='data')
             home = Path(temp) / 'nacos'
             server_log = args.output.with_suffix('.server.log').open('w')
-            server = subprocess.Popen([str(args.java), '-Xms256m', '-Xmx512m', '-Xmn128m',
+            server_command = [str(args.java), '-Xms256m', '-Xmx512m', '-Xmn128m',
                 '-Dnacos.standalone=true', f'-Dnacos.home={home}',
                 f'-Dloader.path={home}/plugins', '-jar', str(home / 'target/nacos-server.jar'),
                 f'--spring.config.additional-location=file:{home}/conf/', '--server.port=18848',
-                f'--logging.config={home}/conf/nacos-logback.xml'],
+                f'--logging.config={home}/conf/nacos-logback.xml']
+            if args.auth:
+                server_command += ['--nacos.core.auth.enabled=true',
+                    '--nacos.core.auth.server.identity.key=fixture-identity',
+                    '--nacos.core.auth.server.identity.value=fixture-value',
+                    '--nacos.core.auth.plugin.nacos.token.secret.key=bW9sZWFwaS1uYWNvcy1hdXRoLWZpeHR1cmUta2V5LTMyYnl0ZXM=']
+            server = subprocess.Popen(server_command,
                 cwd=home, stdout=server_log, stderr=subprocess.STDOUT)
         try:
             for _ in range(90):
@@ -83,10 +93,31 @@ def main():
                     raise RuntimeError('Pinned Nacos server exited before readiness')
                 time.sleep(.5)
             else: raise RuntimeError('Nacos server did not become ready')
+            token = ''
+            if args.auth:
+                assert args.archive, 'Authentication fixture requires an isolated pinned server archive'
+                init = urllib.request.Request('http://127.0.0.1:18848/nacos/v1/auth/users/admin',
+                    data=urllib.parse.urlencode({'password':'fixture-password'}).encode(), method='POST')
+                with urllib.request.urlopen(init, timeout=5) as reply:
+                    assert json.load(reply) == {'username':'nacos','password':'fixture-password'}
+                login = urllib.request.Request('http://127.0.0.1:18848/nacos/v1/auth/users/login',
+                    data=urllib.parse.urlencode({'username':'nacos','password':'fixture-password'}).encode(),
+                    method='POST')
+                for _ in range(30):
+                    try:
+                        with urllib.request.urlopen(login, timeout=5) as reply:
+                            token = json.load(reply)['accessToken']
+                        break
+                    except urllib.error.HTTPError as error:
+                        if error.code != 500: raise
+                        time.sleep(.2)
+                else: raise RuntimeError('Nacos test admin login did not become available')
+                assert 0 < len(token) <= 4096
             request = urllib.request.Request('http://127.0.0.1:18848/nacos/v1/console/namespaces',
                 data=urllib.parse.urlencode({'customNamespaceId':'moleapi-qa',
                     'namespaceName':'MoleAPI QA','namespaceDesc':'Isolated fixture'}).encode(),
                 method='POST')
+            if token: request.add_header('Authorization', 'Bearer ' + token)
             with urllib.request.urlopen(request, timeout=5) as reply:
                 assert reply.read(32) in (b'true', b'false')
 
@@ -110,6 +141,7 @@ def main():
                         assert registry == 'nacos://127.0.0.1:18848'
                         invoke = [str(example), original, registry, str(args.java), str(args.jar)]
                         if namespace: invoke.append(namespace)
+                        if args.auth: invoke.append('--auth')
                         result = subprocess.run(invoke, cwd=ROOT,
                             capture_output=True,text=True,timeout=40)
                         assert result.returncode == 0, result.stderr[-4000:]
@@ -120,14 +152,18 @@ def main():
                         except subprocess.TimeoutExpired:
                             provider.kill(); provider.wait(timeout=5)
                 for _ in range(80):
-                    if not registered_instances(namespace): break
+                    if not registered_instances(namespace, token): break
                     time.sleep(.5)
                 else: raise RuntimeError('Held Nacos provider remained registered after exit')
                 return original
 
-            original = held('--hold', '', 'held')
-            namespaced = held('--namespace-hold', 'moleapi-qa', 'namespace')
-            for mode, label in [(None, 'complete'), ('--namespace', 'namespace-complete')]:
+            original = held('--auth-hold' if args.auth else '--hold', '', 'auth-held' if args.auth else 'held')
+            namespaced = held('--auth-namespace-hold' if args.auth else '--namespace-hold',
+                              'moleapi-qa', 'auth-namespace' if args.auth else 'namespace')
+            complete_modes = ([('--auth', 'auth-complete'),
+                               ('--auth-namespace', 'auth-namespace-complete')] if args.auth
+                              else [(None, 'complete'), ('--namespace', 'namespace-complete')])
+            for mode, label in complete_modes:
                 with args.output.with_suffix(f'.{label}.log').open('w') as diagnostics:
                     complete = subprocess.run(command + ([mode] if mode else []), cwd=JAVA_PROJECT,
                         stdout=subprocess.PIPE, stderr=diagnostics,text=True,timeout=80)
@@ -140,7 +176,7 @@ def main():
                 except subprocess.TimeoutExpired:
                     server.kill(); server.wait(timeout=5)
                 server_log.close()
-    evidence = {'format':'moleapi-dubbo-nacos-qa-v1',
+    evidence = {'format':'moleapi-dubbo-nacos-auth-qa-v1' if args.auth else 'moleapi-dubbo-nacos-qa-v1',
                 'server_sha256':SERVER_SHA256 if args.archive else 'external',
                 'provider_source_sha256':hashlib.sha256(original.encode()).hexdigest(),
                 'namespace_source_sha256':hashlib.sha256(namespaced.encode()).hexdigest(),
@@ -148,7 +184,8 @@ def main():
                 'cases':['official_lookup','group_filter','version_filter','registered_instance_metadata',
                          'exact_provider_url_mapping','checked_http_snapshot','product_registry_rpc',
                          'hosted_registry_refusal','namespace_isolation','namespace_provider_rpc',
-                         'provider_removal']}
+                         'provider_removal'] + (['anonymous_auth_refusal','wrong_password_refusal',
+                         'bearer_auth_lookup','authenticated_namespace'] if args.auth else [])}
     args.output.write_text(json.dumps(evidence,indent=2)+'\n')
     print('PASS Nacos HTTP snapshot -> official provider URL -> checked Dubbo RPC -> removal',flush=True)
 

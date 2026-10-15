@@ -218,8 +218,8 @@ pub fn validate_dubbo(request: &RequestSpec, templates: bool) -> Result<()> {
     );
     if let Some(auth) = &config.registry_auth {
         ensure!(
-            config.source == "zookeeper",
-            "Dubbo registry authentication requires ZooKeeper"
+            matches!(config.source.as_str(), "zookeeper" | "nacos"),
+            "Dubbo registry authentication requires ZooKeeper or Nacos"
         );
         ensure!(
             !auth.username.is_empty()
@@ -229,7 +229,7 @@ pub fn validate_dubbo(request: &RequestSpec, templates: bool) -> Result<()> {
                 && !auth.password.is_empty()
                 && auth.password.len() <= 4096
                 && !auth.password.chars().any(char::is_control),
-            "Invalid ZooKeeper digest credentials"
+            "Invalid Dubbo registry credentials"
         );
     }
     ensure!(

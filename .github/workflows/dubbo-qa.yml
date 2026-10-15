@@ -173,6 +173,10 @@ jobs:
             --jar "$PWD/vendor/dubbo-worker/current/engine.jar" \
             --archive "$RUNNER_TEMP/nacos-qa/nacos-server-2.5.1.tar.gz" \
             --output "$RUNNER_TEMP/nacos-evidence.json"
+          python3 tools/dubbo-nacos-qa/verify.py --auth --java "$(readlink -f "$(command -v java)")" \
+            --jar "$PWD/vendor/dubbo-worker/current/engine.jar" \
+            --archive "$RUNNER_TEMP/nacos-qa/nacos-server-2.5.1.tar.gz" \
+            --output "$RUNNER_TEMP/nacos-auth-evidence.json"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -184,4 +188,10 @@ jobs:
             ${{ runner.temp }}/nacos-evidence.namespace.log
             ${{ runner.temp }}/nacos-evidence.complete.log
             ${{ runner.temp }}/nacos-evidence.namespace-complete.log
+            ${{ runner.temp }}/nacos-auth-evidence.json
+            ${{ runner.temp }}/nacos-auth-evidence.server.log
+            ${{ runner.temp }}/nacos-auth-evidence.auth-held.log
+            ${{ runner.temp }}/nacos-auth-evidence.auth-namespace.log
+            ${{ runner.temp }}/nacos-auth-evidence.auth-complete.log
+            ${{ runner.temp }}/nacos-auth-evidence.auth-namespace-complete.log
           if-no-files-found: warn
