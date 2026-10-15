@@ -37,6 +37,8 @@ async fn binary_snippets_preserve_mime_and_ownership_without_exporting_saved_byt
     );
     for (target, client) in [
         ("csharp", "restsharp"),
+        ("python", "python3"),
+        ("python", "aiohttp"),
         ("python", "requests"),
         ("python", "httpx_sync"),
         ("python", "httpx_async"),

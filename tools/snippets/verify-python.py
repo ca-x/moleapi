@@ -2,6 +2,8 @@
 """Syntax-check/run original trusted Python snippets against native HTTP."""
 import argparse
 import base64
+from email import policy
+from email.parser import BytesParser
 import urllib.parse
 import importlib.util
 import json
@@ -45,7 +47,7 @@ def verify(args):
         receiver.start()
         evidence = []
         for profile in args.profiles.split(','):
-            assert profile in ('core', 'form', 'text', 'binary', 'binary-mime', 'multipart', 'dollar', 'json-values', 'json-scalar', 'json-null', 'json-empty', 'get-binary', 'delete-json')
+            assert profile in ('core', 'form', 'text', 'binary', 'binary-mime', 'multipart', 'dollar', 'json-values', 'json-scalar', 'json-null', 'json-empty', 'get-binary', 'delete-json', 'text-json', 'multipart-meta', 'multipart-text')
             root = args.output / profile
             wire.run(['cargo', 'run', '--locked', '-p', 'moleapi-generation', '--example', 'fixture_snippets', '--', str(root),
                       f'http://127.0.0.1:{port}', 'python', profile], wire.ROOT, env)
@@ -55,26 +57,49 @@ def verify(args):
             saved = json.loads((root / 'fixture-request.json').read_text())
             expected = json.loads(saved['data']['collections'][0]['requests'][0]['body']) if profile.startswith('json-') else None
             for client in args.clients.split(','):
-                assert client in ('requests', 'httpx_sync', 'httpx_async')
+                assert client in ('python3', 'aiohttp', 'requests', 'httpx_sync', 'httpx_async')
                 snippet = root / (client + '.py')
                 original = snippet.read_bytes()
                 assert wire.digest(snippet) == manifest['files'][snippet.name]
                 project = root / client
                 project.mkdir()
                 (project / 'upload.bin').write_bytes(wire.BYTES)
+                (project / 'upload-鼹鼠.bin').write_bytes(wire.BYTES)
                 wrapper = project / 'consumer.py'
                 # Supply only imports/async entry point. Generated code is unchanged except indentation.
                 source = original.decode()
-                if client == 'httpx_async':
-                    source = 'import asyncio\nimport httpx\nasync def main():\n' + '\n'.join('    ' + line for line in source.split('\n')) + '\nasyncio.run(main())\n'
-                else:
+                if client in ('httpx_async', 'aiohttp'):
+                    package = 'httpx' if client == 'httpx_async' else 'aiohttp'
+                    source = f'import asyncio\nimport {package}\nasync def main():\n' + '\n'.join('    ' + line for line in source.split('\n')) + '\nasyncio.run(main())\n'
+                elif client != 'python3':
                     source = ('import requests\n' if client == 'requests' else 'import httpx\n') + source + '\n'
                 wrapper.write_text(source)
                 wire.run([str(args.python), '-m', 'py_compile', str(wrapper)], project, env)
                 wire.run([str(args.python), str(wrapper)], project, env, timeout=30)
                 record = records.get(timeout=10)
                 (project / 'wire-evidence.json').write_text(json.dumps(record, indent=2) + '\n')
-                if profile.startswith('json-'):
+                if profile in ('multipart-meta', 'multipart-text'):
+                    headers = record['headers']
+                    assert record['method'] == 'POST' and headers['authorization'] == 'Bearer fixture-token'
+                    assert headers['x-test'] == 'moleapi-fixture' and 'wrong.invalid' not in headers['host']
+                    assert urllib.parse.parse_qs(urllib.parse.urlsplit(record['path']).query) == {'existing': ['one'], 'q': ['space & +']}
+                    mime = headers['content-type']
+                    assert mime.startswith('multipart/form-data;') and 'obsolete' not in mime
+                    message = BytesParser(policy=policy.default).parsebytes(b'Content-Type: ' + mime.encode() + b'\r\nMIME-Version: 1.0\r\n\r\n' + base64.b64decode(record['body']))
+                    parts = list(message.iter_parts())
+                    expected_parts = [part for part in json.loads(saved['data']['collections'][0]['requests'][0]['body'])['parts'] if part.get('enabled', True)]
+                    assert len(parts) == len(expected_parts)
+                    for part, expected_part in zip(parts, expected_parts):
+                        assert part.get_param('name', header='Content-Disposition') == expected_part['name']
+                        value = expected_part['value']
+                        if value['kind'] == 'file':
+                            assert part.get_filename() == value['file']['file_name']
+                            assert part.get_content_type() == value['file']['mime']
+                            assert part.get_payload(decode=True) == wire.BYTES
+                        else:
+                            assert part.get_content_type() == (value['mime'] or 'text/plain')
+                            assert part.get_payload(decode=True) == value['text'].encode()
+                elif profile.startswith('json-'):
                     headers = record['headers']
                     assert record['method'] == 'POST' and headers['authorization'] == 'Bearer fixture-token'
                     assert headers['x-test'] == 'moleapi-fixture' and 'wrong.invalid' not in headers['host']
@@ -83,8 +108,8 @@ def verify(args):
                     observed = json.loads(base64.b64decode(record['body']))
                     assert json.dumps(observed, sort_keys=True) == json.dumps(expected, sort_keys=True)
                 else:
-                    wire.check('binary' if profile == 'get-binary' else 'core' if profile == 'delete-json' else 'text' if profile == 'dollar' else profile, record,
-                               expected_text='literal $ and ${1 + 2} 鼹鼠' if profile == 'dollar' else None,
+                    wire.check('binary' if profile == 'get-binary' else 'core' if profile == 'delete-json' else 'text' if profile in ('dollar', 'text-json') else profile, record,
+                               expected_text='literal $ and ${1 + 2} 鼹鼠' if profile == 'dollar' else saved['data']['collections'][0]['requests'][0]['body'] if profile == 'text-json' else None,
                                expected_method='GET' if profile == 'get-binary' else 'DELETE' if profile == 'delete-json' else 'POST')
                 assert records.empty() and snippet.read_bytes() == original
                 item = {'client': client, 'profile': profile, 'platform': platform.platform(), 'versions': versions,
@@ -107,6 +132,6 @@ if __name__ == '__main__':
     parser.add_argument('--python', type=Path, required=True)
     parser.add_argument('--node', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--profiles', default='core,form,text,binary,binary-mime,multipart,dollar,json-values,json-scalar,json-null,json-empty,get-binary,delete-json')
-    parser.add_argument('--clients', default='requests,httpx_sync,httpx_async')
+    parser.add_argument('--profiles', default='core,form,text,binary,binary-mime,multipart,dollar,json-values,json-scalar,json-null,json-empty,get-binary,delete-json,text-json,multipart-meta,multipart-text')
+    parser.add_argument('--clients', default='python3,aiohttp,requests,httpx_sync,httpx_async')
     verify(parser.parse_args())

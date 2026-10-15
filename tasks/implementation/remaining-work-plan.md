@@ -49,6 +49,8 @@ Ruby snippet checkpoint2026-10-15: reproduced original JSON heredoc escape loss 
 
 Python Requests/HTTPX checkpoint2026-10-15: shared pinned emitter preserves JSON literal tokens/root false/null, raw UTF-8 text/MIME and native binary files. Requests2.34.2/HTTPX0.28.1 sync+async pass39 syntax/native HTTP cases on Python3.14.8, including GET file/DELETE JSON; native forms preserve repeats. Raw-file adapters now21;50 other non-Python representative outputs unchanged.95 generation/3 API/39 UI-i18n cases, deterministic engine, scoped checks and real bilingual owned-API browser checks pass. Stdlib/aiohttp extended profiles, Apple native gates and the larger plan remain open.
 
+Python native-body checkpoint2026-10-15: http.client uses stdlib UTF-8/pathlib/JSON/form and explicit urllib3 multipart encoding; aiohttp3.14.5 uses native byte data/FormData. Text-only multipart is preserved across all5 Python variants.80 original syntax/native HTTP cases cover5 libraries×16 profiles, including Unicode filename/part MIME/text-only repeats/raw JSON-shaped text;10 old failures reproduced. Raw-file adapters now23,53 other representative core outputs unchanged.95 generation/3 API/41 UI-i18n cases, clean upstream patch and deterministic engine, scoped lint/build and bilingual owned-API browser checks pass. Apple original ARM remains queued and Intel retry remains active on its existing ref. All broader generation/later milestones stay open.
+
 ## Slice 1: CLI runner labels
 
 **Files:** `crates/cli/src/args.rs` owns flags; `crates/cli/src/runners.rs` owns request payloads; `crates/cli/tests/runners.rs` owns real process/API fixtures; `docs/SELF-HOSTED-RUNNERS.md`, `docs/SELF-HOSTED-RUNNER-COVERAGE.md` and `docs/IMPLEMENTATION-STATUS.md` own usage/status.

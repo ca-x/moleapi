@@ -145,7 +145,11 @@ pub fn generate_request(
         || (target == "kotlin" && client == "okhttp")
         || (target == "dart" && matches!(client, "http" | "dio"))
         || (target == "ruby" && client == "native")
-        || (target == "python" && matches!(client, "requests" | "httpx_sync" | "httpx_async"));
+        || (target == "python"
+            && matches!(
+                client,
+                "python3" | "aiohttp" | "requests" | "httpx_sync" | "httpx_async"
+            ));
     if request.body_kind == "form" && !(target == "shell" && client == "curl") && !native_form {
         let mut names = std::collections::BTreeSet::new();
         for (name, _) in url::form_urlencoded::parse(request.body.as_bytes()) {
@@ -290,7 +294,13 @@ mod tests {
         let mut w = workspace("binary", &body);
         w.data.collections[0].requests[0].auth.kind = "bearer".into();
         w.data.collections[0].requests[0].auth.token = "private-python-token".into();
-        for client in ["requests", "httpx_sync", "httpx_async"] {
+        for client in [
+            "python3",
+            "aiohttp",
+            "requests",
+            "httpx_sync",
+            "httpx_async",
+        ] {
             let private = generate_request(&w, "r", "python", client, false).unwrap();
             assert!(private.code.contains("read_bytes()") && private.code.contains("upload.bin"));
             assert!(
@@ -561,7 +571,7 @@ mod tests {
                 count += 1;
             }
         }
-        assert_eq!(count, 21);
+        assert_eq!(count, 23);
         assert_eq!(w.data.collections[0].requests[0].body, body);
     }
     #[test]
