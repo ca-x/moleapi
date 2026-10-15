@@ -15,7 +15,7 @@ This is usable request-example generation, separate from typed OpenAPI SDK/serve
 | JavaScript | fetch, axios, ofetch, jquery, xhr, native, request, unirest | Fetch on Node runtime; browser-specific variants remain unverified |
 | Julia | http | Engine smoke only |
 | Kotlin | okhttp |7 original-code compile/call profiles on Kotlin2.4/OkHttp4.12, including native files, MIME, multipart and literal dollar/interpolation text |
-| Node.js | fetch, axios, ofetch, undici, native, request, unirest | Fetch and Native/Request/Unirest POST fixtures |
+| Node.js | fetch, axios, ofetch, undici, native, request, unirest |72 original-code HTTP cases +4 native rejection probes for Fetch/Axios1.20.0/ofetch1.5.1/Undici8.12.1 on Node26.11.1; prior Native/Request/Unirest POST fixtures |
 | Objective-C | nsurlsession | Engine smoke only |
 | OCaml | cohttp | Engine smoke only |
 | PHP | curl, guzzle, laravel, httprequest2, pecl_http |90 original-code syntax/native HTTP cases across all5 clients on PHP8.5.11, including HTTP_Request2 2.8.0 default Socket and PECL HTTP4.3.1/raphf2.0.2 curl driver |
@@ -36,7 +36,7 @@ The saved HTTP request becomes HAR via the shared Rust adapter. Query encoding, 
 
 Environment placeholders remain static, with no runtime resolution or pre-script execution. Some libraries expect complete runnable programs, others emit snippets for an existing function/project. Required target libraries/runtimes must be supplied by the user. Python/http.client requires a concrete absolute HTTP(S) URL because upstream otherwise invents example.com for a base template. URLs with literal quote/backslash/newline characters are rejected rather than emitting unsafe upstream quoted source. Header/query/body placeholders still require review before execution.
 
-Repeated urlencoded form/header names are explicitly rejected outside verified shell/cURL; this avoids silent losses in dictionary-based upstream variants. Multipart repeated names have separate representative evidence below. Fetch-family JS/Node GET/HEAD bodies are rejected. Timeouts, TLS verification and redirect options are not yet mapped and this is stated in returned warnings. Shared multipart/files/binary execution is implemented. Multipart and raw-file snippet mappings are implemented with the target limits recorded here.
+Repeated headers remain rejected outside shell/cURL. Repeated URL-encoded fields are accepted only by the explicitly verified native builders listed below; other adapters reject to prevent dictionary-based losses. Multipart repeated names have separate representative evidence below. Fetch-family JS/Node GET/HEAD bodies are rejected. Timeouts, TLS verification and redirect options are not yet mapped and this is stated in returned warnings. Shared multipart/files/binary execution is implemented. Multipart and raw-file snippet mappings are implemented with the target limits recorded here.
 
 Multipart snippets reference saved filenames rather than embedding selected file bytes. Prepare the corresponding files in the target environment; generation never reads host files. A returned bilingual warning explains these prerequisites and target-library MIME/filename behavior. Browser examples may require a selected File/Blob. Default privacy screens structured fields without changing fixed enum/schema keys, clears file byte sources and hides sensitive text fields/copied values; original canonical requests stay unchanged. Explicit inclusion preserves text/auth values but file bytes still stay outside generated source.
 
@@ -477,3 +477,72 @@ This closes representative body/file runtime gaps for these two libraries, not
 all PHP behavior. Other dependency/PHP/OS ranges, advanced/empty/nested/escaped
 multipart shapes, arbitrary methods, response/error handling, streaming and full
 auth/timeout/TLS/redirect/cookie option mapping remain open with the overall plan.
+
+
+## Modern Node Fetch, Axios, ofetch and Undici bodies
+
+The existing pinned Scalar Node Fetch body setup is now shared by the Node Axios,
+ofetch and Undici emitters. It preserves JSON literal shape (including root false/
+null/empty string/object), raw Unicode/control text and effective MIME, reads raw
+files through node:fs, and uses native URLSearchParams pair lists for repeated
+forms. A common native form-data multipart builder preserves ordered text/files,
+repeated names, empty fields, explicit field/file MIME, filenames and exact bytes.
+Its optional consumer dependency is required only for multipart examples. WHATWG
+FormData with a typed Blob implicitly creates a filename; the form-data builder
+allows a canonical text part with MIME and no filename. The native verifier asserts
+that text parts stay text. Buffers/getBuffer materialize bytes in the consumer;
+these samples do not claim streaming.
+
+Axios stays on axios.request, ofetch on its native client and Undici on low-level
+request; Fetch stays on Node global Fetch. Undici now emits the saved method
+explicitly, since native request otherwise chooses PUT when a body is supplied.
+Axios/Undici GET and HEAD binary bodies pass actual method/byte checks. Fetch and
+ofetch reject both through the application and trusted direct native API probes;
+no body is dropped or method changed to obtain a passing request. The shared
+Axios browser path and other51 representative adapter outputs remain byte-identical.
+Raw-file support now covers31 adapters, with the three added Node clients routed
+to the same mature engine. Generation never reads host files or embeds saved bytes.
+
+The current driver covers4 clients ×19 trusted profiles:72 original-source syntax/
+native HTTP cases and4 separate generation/native rejection cases. Cases extend
+the PHP18 body profiles with HEAD binary, observing auth/manual-header replacement,
+query, MIME, raw JSON/text/control bytes, repeated forms, binary/effective MIME,
+multipart duplicates/disabled exclusion, typed text/file MIME and Unicode/apostrophe
+filename, text-only parts/empty fields, dollar text and quoted headers. Native Node
+HTTP owns framing and stdlib MIME parsing checks actual parts. Original .mjs files
+are hash-checked and stay unchanged inside consumers; only response assertions
+follow. Response bodies are consumed in the QA wrapper, including Undici's stream.
+Source/engine/snippet/Node/dependency-lock hashes and exact library versions are
+recorded. Ofetch/global Fetch native errors are recorded separately from successes.
+
+QA uses Node26.11.1/Linux, Axios1.20.0, ofetch1.5.1, Undici8.12.1 and form-data4.0.6;
+node-runtime/package.json/package-lock.json pin the entire isolated QA dependency
+tree. Node/packages are explicit consumer/QA tools, not MoleAPI runtime dependencies.
+Old output reproduced10 native defects: Fetch repeated-form collapse, root false
+becoming an object in Fetch/Undici, ofetch null omission, Axios empty file Blob,
+missing ofetch/Undici multipart and missing/wrong raw MIME in Axios/ofetch/Undici.
+
+97 generation cases,3 owned/local snippet API cases including all4 modern Node
+raw-file libraries,50 focused UI/i18n cases, scoped strict Clippy, formatting,
+frontend/server builds, deterministic engine and clean complete upstream patch
+application passed. Prior negative Node Fetch repeated-form assertions now assert
+support based on the real wire cases; unverified browser/legacy form and repeated
+header rejection checks remain. Real owned-API UI checks cover English/light
+1280×900 Axios multipart and Chinese/dark375×812 Undici raw files/binary filtering,
+with localized ESM/package/file hints, no saved-token/Base64 exposure or document
+horizontal overflow. Scoped axe0 verified violations/1 manual line-number contrast
+check on each; screenshots inspected. Evidence: `/tmp/moleapi-node-snippet-final-2`
+and `/tmp/moleapi-node-snippet-*.log`.
+
+To reproduce, copy node-runtime's package/lock into an isolated directory and run
+npm ci with scripts disabled; then select the actual Node binary/dependency root:
+
+```sh
+python3 tools/snippets/verify-node.py --node /absolute/node --dependencies /absolute/npm-project --output /absolute/fresh-output
+```
+
+Other Node/dependency/OS ranges, legacy/browser extended bodies, empty/advanced/
+escaped/nested parts, arbitrary method/header/auth/cookie/transport mapping,
+streaming and general response/error lifecycle handling remain open. Examples
+run as ESM and require matching files; Undici response streams need consumption
+or cleanup by the caller. This does not establish full Node or generation parity.

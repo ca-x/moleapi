@@ -145,6 +145,7 @@ pub fn generate_request(
         || (target == "kotlin" && client == "okhttp")
         || (target == "dart" && matches!(client, "http" | "dio"))
         || (target == "ruby" && client == "native")
+        || (target == "node" && matches!(client, "fetch" | "axios" | "ofetch" | "undici"))
         || (target == "php"
             && matches!(
                 client,
@@ -166,7 +167,7 @@ pub fn generate_request(
     }
     ensure!(
         !(matches!(target, "js" | "node")
-            && matches!(client, "fetch" | "ofetch" | "undici")
+            && matches!(client, "fetch" | "ofetch")
             && matches!(request.method.as_str(), "GET" | "HEAD")
             && request.body_kind != "none"),
         "Fetch adapters cannot send GET/HEAD bodies; choose a different HTTP library"
@@ -291,6 +292,50 @@ pub fn generate_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn modern_node_bodies_preserve_source_and_method_boundaries() {
+        let body =
+            json!({"file_name":"upload.bin","mime":"application/octet-stream","base64":"AP+AClg="})
+                .to_string();
+        let mut w = workspace("binary", &body);
+        w.data.collections[0].requests[0].auth.kind = "bearer".into();
+        w.data.collections[0].requests[0].auth.token = "private-node-token".into();
+        for client in ["fetch", "axios", "ofetch", "undici"] {
+            let code = generate_request(&w, "r", "node", client, false)
+                .unwrap()
+                .code;
+            assert!(
+                code.contains("readFileSync")
+                    && code.contains("upload.bin")
+                    && !code.contains("AP+AClg=")
+                    && !code.contains("private-node-token")
+            );
+            generate_request(
+                &workspace("form", "x=one&x=two&empty="),
+                "r",
+                "node",
+                client,
+                true,
+            )
+            .unwrap();
+            for method in ["GET", "HEAD"] {
+                w.data.collections[0].requests[0].method = method.into();
+                let result = generate_request(&w, "r", "node", client, true);
+                if matches!(client, "fetch" | "ofetch") {
+                    assert!(
+                        result
+                            .unwrap_err()
+                            .to_string()
+                            .contains("cannot send GET/HEAD bodies")
+                    );
+                } else {
+                    assert!(result.unwrap().code.contains("private-node-token"));
+                }
+            }
+            w.data.collections[0].requests[0].method = "POST".into();
+        }
+        assert_eq!(w.data.collections[0].requests[0].body, body);
+    }
     #[test]
     fn php_files_and_repeated_forms_preserve_source_privacy() {
         let body =
@@ -476,7 +521,7 @@ mod tests {
                 "fetch",
                 true
             )
-            .is_err()
+            .is_ok()
         );
     }
     #[test]
@@ -517,7 +562,7 @@ mod tests {
         assert_eq!(w.data.collections[0].requests[0].body, binary);
         let forms = workspace("form", "label=one&label=two&empty=");
         generate_request(&forms, "r", "kotlin", "okhttp", true).unwrap();
-        assert!(generate_request(&forms, "r", "node", "fetch", true).is_err());
+        assert!(generate_request(&forms, "r", "node", "fetch", true).is_ok());
     }
     #[test]
     fn java_okhttp_rejects_unsupported_method_bodies_instead_of_silently_dropping_them() {
@@ -580,7 +625,7 @@ mod tests {
         for client in ["nethttp", "okhttp", "asynchttp", "unirest"] {
             generate_request(&w, "r", "java", client, true).unwrap();
         }
-        assert!(generate_request(&w, "r", "node", "fetch", true).is_err());
+        assert!(generate_request(&w, "r", "node", "fetch", true).is_ok());
         assert_eq!(w.data.collections[0].requests[0].body, body);
     }
     #[test]
@@ -610,7 +655,7 @@ mod tests {
                 count += 1;
             }
         }
-        assert_eq!(count, 28);
+        assert_eq!(count, 31);
         assert_eq!(w.data.collections[0].requests[0].body, body);
     }
     #[test]
@@ -721,7 +766,7 @@ mod tests {
     #[test]
     fn unsupported_repeated_fields_fail_instead_of_losing_values() {
         let mut w = workspace("form", "x=one&x=two");
-        for (target, client) in [("js", "fetch"), ("node", "fetch"), ("go", "native")] {
+        for (target, client) in [("js", "fetch"), ("node", "native"), ("go", "native")] {
             assert!(
                 generate_request(&w, "r", target, client, true)
                     .unwrap_err()
