@@ -1,0 +1,7 @@
+# Pinned classic Dubbo worker resource
+
+`manifest.json` locks the exact shaded Apache Dubbo3.3.6 GenericService worker JAR. Its source and dependency versions are in `tools/dubbo-worker/pom.xml` and `Worker.java`; the product neither downloads Java code nor resolves a classpath during request execution. `scripts/prepare_dubbo_worker.py` verifies exact size/SHA256 and archive structure, then atomically stages `current/engine.jar` and a receipt. `current/` and Maven output are ignored by Git.
+
+Preparation can build from pinned Maven sources with an explicit installed Maven executable, or accept an already built absolute JAR path with the same verification. Reusing a verified `current/` does not require Maven. The release workflow builds this resource once on Java21 and supplies the exact same JAR to server/desktop matrix jobs; the Docker workflow stages it into the build context. The adjacent standalone layout is `runtime/dubbo/engine.jar`; Tauri uses the same relative path under its resource directory. Docker uses `/opt/moleapi/runtime/dubbo/engine.jar` with an explicit environment setting.
+
+The shaded worker contains upstream runtime dependencies. The product source retains their Maven coordinates and versions, and build artifacts must retain applicable upstream notices and licenses before final publication. A source receipt or archive match alone does not establish installed-platform behavior; `scripts/check-bundled-dubbo.py` starts the actual staged Java worker, and release gates require real native/server/container installation and call smoke.

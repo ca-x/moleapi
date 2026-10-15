@@ -9,7 +9,7 @@
     "test": "vitest run",
     "typecheck": "tsc -b",
     "desktop:dev": "tauri dev --config ../desktop/tauri.conf.json",
-    "desktop:build": "python ../scripts/prepare_openapi_generator.py && python ../scripts/prepare_java_runtime.py && tauri build --config ../desktop/tauri.conf.json --config ../desktop/tauri.java.json",
+    "desktop:build": "python ../scripts/prepare_openapi_generator.py && python ../scripts/prepare_dubbo_worker.py && python ../scripts/prepare_java_runtime.py && tauri build --config ../desktop/tauri.conf.json --config ../desktop/tauri.java.json",
     "postinstall": "patch-package"
   },
   "dependencies": {

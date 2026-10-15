@@ -26,6 +26,9 @@ __pycache__/
 /vendor/java-runtime/current/
 /vendor/java-runtime/downloads/
 /vendor/java-runtime/.java-*/
+/vendor/dubbo-worker/current/
+/vendor/dubbo-worker/.dubbo-*/
+/tools/dubbo-worker/target/
 /desktop/tauri.java.json
 
 /tools/newman/node_modules

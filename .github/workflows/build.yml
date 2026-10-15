@@ -31,8 +31,30 @@ jobs:
             echo 'available=false' >> "$GITHUB_OUTPUT"
             echo 'Application implementation is pending; no server or desktop artifact was built.' >> "$GITHUB_STEP_SUMMARY"
           fi
-  server:
+  dubbo-worker:
     needs: source
+    if: needs.source.outputs.available == 'true' && inputs.objc_qa != true
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: tools/dubbo-worker/pom.xml
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Build exact pinned Apache Dubbo worker
+        run: python scripts/prepare_dubbo_worker.py --maven "$(command -v mvn)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dubbo-worker
+          path: vendor/dubbo-worker/current/
+          if-no-files-found: error
+  server:
+    needs: [source, dubbo-worker]
     if: needs.source.outputs.available == 'true' && inputs.objc_qa != true
     strategy:
       fail-fast: false
@@ -56,6 +78,10 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dubbo-worker
+          path: vendor/dubbo-worker/current/
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -73,6 +99,7 @@ jobs:
       - run: npm --prefix web ci
       - run: npm --prefix web run build
       - run: python scripts/prepare_openapi_generator.py
+      - run: python scripts/prepare_dubbo_worker.py
       - run: python scripts/prepare_java_runtime.py --target ${{ matrix.target }}
       - run: cargo build --locked --release -p moleapi-server --target ${{ matrix.target }}
       - name: Verify standalone server worker dispatch
@@ -84,7 +111,9 @@ jobs:
           mkdir -p artifacts/staging/runtime
           cp target/${{ matrix.target }}/release/${{ matrix.binary }} artifacts/staging/
           cp -R vendor/java-runtime/current artifacts/staging/runtime/java
+          cp -R vendor/dubbo-worker/current artifacts/staging/runtime/dubbo
           python scripts/check-bundled-java.py artifacts/staging/${{ matrix.binary }}
+          python scripts/check-bundled-dubbo.py artifacts/staging/${{ matrix.binary }}
           tar -czf artifacts/moleapi-server-${{ matrix.target }}.tar.gz -C artifacts/staging .
       - uses: actions/upload-artifact@v4
         with:
@@ -92,7 +121,7 @@ jobs:
           path: artifacts/*.tar.gz
           if-no-files-found: error
   desktop:
-    needs: source
+    needs: [source, dubbo-worker]
     if: needs.source.outputs.available == 'true' && inputs.objc_qa != true
     strategy:
       fail-fast: false
@@ -113,6 +142,10 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dubbo-worker
+          path: vendor/dubbo-worker/current/
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -137,6 +170,7 @@ jobs:
         working-directory: desktop
         run: ../web/node_modules/.bin/tauri icon ../assets/brand/logo.png --output icons
       - run: python scripts/prepare_openapi_generator.py
+      - run: python scripts/prepare_dubbo_worker.py
       - run: python scripts/prepare_java_runtime.py --target ${{ matrix.target }}
       - uses: tauri-apps/tauri-action@v0
         with:

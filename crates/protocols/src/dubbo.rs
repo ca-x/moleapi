@@ -18,7 +18,7 @@ use tokio::{
 };
 
 pub const WORKER_JAR_SHA256: &str =
-    "fc91d31d99aff504cd33baabb96c454e1562b5bad5a29ed2a14d6b0a293f4709";
+    "7c5aec1be8baac437645ac58d98d27dcb6e08c6806950a86788f9625ebf7b59d";
 const MAX_INPUT: usize = 1024 * 1024;
 const MAX_OUTPUT: usize = 1024 * 1024;
 const MAX_STDERR: usize = 16 * 1024;

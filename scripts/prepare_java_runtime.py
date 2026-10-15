@@ -190,7 +190,10 @@ def prepare(repository, target, archive=None):
         (current / 'corresponding-source.json').write_text(json.dumps(manifest['corresponding_source'], indent=2) + '\n')
     config = repository / 'desktop/tauri.java.json'
     config.parent.mkdir(parents=True, exist_ok=True)
-    config.write_text(json.dumps({'bundle': {'resources': {'../vendor/java-runtime/current/': 'runtime/java/'}}}, indent=2) + '\n')
+    config.write_text(json.dumps({'bundle': {'resources': {
+        '../vendor/java-runtime/current/': 'runtime/java/',
+        '../vendor/dubbo-worker/current/': 'runtime/dubbo/'
+    }}}, indent=2) + '\n')
     print(f'PASS pinned Temurin{manifest["version"]}: {target}; original runtime files and legal notices verified')
     return current
 

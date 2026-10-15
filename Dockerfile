@@ -20,7 +20,9 @@ COPY Cargo.toml Cargo.lock ./
 COPY vendor/ ./vendor/
 COPY crates/ ./crates/
 COPY scripts/prepare_openapi_generator.py ./scripts/prepare_openapi_generator.py
+COPY scripts/prepare_dubbo_worker.py ./scripts/prepare_dubbo_worker.py
 RUN python3 scripts/prepare_openapi_generator.py
+RUN python3 scripts/prepare_dubbo_worker.py
 COPY desktop/ ./desktop/
 COPY --from=web /source/web/dist ./web/dist/
 RUN cargo build --locked --release -p moleapi-server
@@ -31,9 +33,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     && mkdir /data && chown moleapi:moleapi /data
 COPY --from=rust /source/target/release/moleapi-server /usr/local/bin/moleapi-server
 COPY --from=java /source/vendor/java-runtime/current /opt/moleapi/runtime/java
+COPY --from=rust /source/vendor/dubbo-worker/current /opt/moleapi/runtime/dubbo
 USER 10001:10001
 ENV MOLEAPI_BIND=0.0.0.0:8787
 ENV MOLEAPI_CODEGEN_JAVA=/opt/moleapi/runtime/java/payload/bin/java
+ENV MOLEAPI_DUBBO_WORKER_JAR=/opt/moleapi/runtime/dubbo/engine.jar
 WORKDIR /data
 VOLUME ["/data"]
 EXPOSE 8787

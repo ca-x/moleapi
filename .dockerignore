@@ -14,3 +14,5 @@ vendor/java-runtime/current
 vendor/java-runtime/downloads
 desktop/tauri.java.json
 vendor/java-runtime/.java-*
+vendor/dubbo-worker/.dubbo-*
+tools/dubbo-worker/target

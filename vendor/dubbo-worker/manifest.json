@@ -1,0 +1,6 @@
+{
+  "format": "moleapi-dubbo-worker-v1",
+  "dubbo_version": "3.3.6",
+  "worker_sha256": "7c5aec1be8baac437645ac58d98d27dcb6e08c6806950a86788f9625ebf7b59d",
+  "worker_bytes": 19235964
+}

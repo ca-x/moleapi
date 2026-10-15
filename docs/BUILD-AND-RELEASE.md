@@ -47,6 +47,8 @@ npm --prefix web run desktop:build
 读取对应资源，Docker 使用固定 /opt/moleapi/runtime/java/payload/bin/java。
 MOLEAPI_CODEGEN_JAVA 与已有桌面用户选择可覆盖默认自带 JRE。
 
+经典 Dubbo 使用同一份固定 Temurin JRE 和独立固定哈希的 Apache Dubbo worker JAR。构建前运行 `python scripts/prepare_dubbo_worker.py`（首次需要显式 Maven/JDK 或提供已构建且哈希匹配的 JAR）；独立服务端压缩包和桌面资源均放在 `runtime/dubbo/engine.jar`，Docker 固定路径为 `/opt/moleapi/runtime/dubbo/engine.jar`。`scripts/check-bundled-dubbo.py` 检查 JAR/JRE 原始字节并实际启动 worker；真实业务调用、原生安装与容器 smoke 仍以对应平台流水线为准。开发者可显式设置绝对路径 `MOLEAPI_DUBBO_WORKER_JAR`，运行时不会下载或接受工作区提供的可执行文件路径。
+
 发行验证用 scripts/check-bundled-java.py：在清空外部 Java 配置、使 PATH 不可用后，
 启动真实独立服务端，通过归属校验 API 生成 Go 文件并检查原始规范未变。
 `--runtime-only` 可检查桌面打包资源与实际 JVM。Docker CI 同时执行真实 JRE/生成 API

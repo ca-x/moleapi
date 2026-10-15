@@ -83,6 +83,14 @@ async fn main() -> Result<()> {
         );
         println!("PASS Rust host / {method}");
     }
+    let mut local = request(port, "echo", &["java.lang.String"], &[r#""localhost""#])?;
+    local.url = format!("dubbo://localhost:{port}");
+    let result = runtime.invoke(Path::new(&java), &local, allow).await?;
+    ensure!(
+        result.body == r#""echo:localhost""#,
+        "Checked localhost target failed"
+    );
+    println!("PASS Rust host / checked localhost IPv4-or-IPv6");
     let failure = runtime
         .invoke(
             Path::new(&java),
