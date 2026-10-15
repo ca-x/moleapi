@@ -1,0 +1,16 @@
+[package]
+name = "moleapi-dubbo-candidate-qa"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+anyhow = "1"
+dubbo-rs-common = "=0.1.2"
+dubbo-rs-protocol = "=0.1.0"
+dubbo-rs-protocol-dubbo = "=0.1.0"
+dubbo-rs-remoting = "=0.1.0"
+hex = "0.4"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "time"] }

@@ -1,0 +1,11 @@
+# Classic Dubbo wire gate
+
+This isolated QA checks a candidate classic TCP/Hessian2 Rust codec against a real Apache Dubbo Java 3.3.6 provider. It is not product transport. Its direct loopback socket is intentionally scoped to the CI fixture and must not be copied into the hosted application path.
+
+The Java provider exposes `fixture.EchoService` at version `1.0.0` with scalar, multiple, 64-bit, DTO, null and exception methods. The official Java consumer must pass all six profiles before a candidate result is meaningful. The Rust probe emits the candidate's original Hessian body, sends `echo(String)` and records the actual Dubbo status/body/decode result with a 64 KiB response cap and 15 second deadline. `verdict.py` reports observed compatibility without turning a completed QA job into a product support claim.
+
+Run the `Classic Dubbo interoperability QA` manual GitHub workflow. It uses Java21, Apache Dubbo3.3.6 and an isolated locked Cargo probe using `dubbo-rs-protocol-dubbo0.1.0`. The uploaded logs include the exact official JAR hash, Cargo lock hash, Maven dependency tree, tool versions and both client outputs. No imported/user endpoint is contacted.
+
+Official source evidence: `org.apache.dubbo:dubbo:3.3.6:sources`, SHA256 `b2b91d1afe07cee9acc0f1e2616d7e4a4a5df6aff0ecf58ca49fb2bd4fb89a`. `DubboCodec.encodeRequestData` writes five UTF fields then calls `writeObject` once for each typed argument; `DecodeableRpcInvocation.drawArgs` reads each object using the declared parameter class. The candidate `body::encode_request_body` instead writes a list followed by binary arguments, so source inspection predicts rejection by this provider. The runtime fixture will establish the actual result independently. The candidate also connects through an unchecked `TcpStream::connect` and allocates a peer-declared frame length; it cannot be integrated into hosted execution unchanged.
+
+Product acceptance remains in `docs/specs/dubbo-client.md`. The next engine choice follows the actual wire result. A mature official Java worker remains an option; it would require bounded IPC, process cleanup, pinned dependencies, explicit packaging and the shared checked network route before any UI or catalog support is claimed.

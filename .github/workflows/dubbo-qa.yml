@@ -1,0 +1,76 @@
+name: Classic Dubbo interoperability QA
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  classic-wire:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: tools/dubbo-qa/java/pom.xml
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Build independent official Apache provider and consumer
+        run: mvn -B --strict-checksums -f tools/dubbo-qa/java/pom.xml package dependency:copy-dependencies -DincludeScope=runtime
+      - name: Record exact tool and dependency versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          java -version > tools/dubbo-qa/java/versions.txt 2>&1
+          mvn -version >> tools/dubbo-qa/java/versions.txt
+          cargo --version >> tools/dubbo-qa/java/versions.txt
+          sha256sum "$HOME/.m2/repository/org/apache/dubbo/dubbo/3.3.6/dubbo-3.3.6.jar" tools/dubbo-qa/rust/Cargo.lock >> tools/dubbo-qa/java/versions.txt
+          mvn -B -f tools/dubbo-qa/java/pom.xml dependency:tree -DoutputFile=target/dependency-tree.txt
+      - name: Start official classic provider
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd tools/dubbo-qa/java
+          java -cp 'target/classes:target/dependency/*' fixture.Provider 20880 > provider.log 2>&1 &
+          echo "$!" > provider.pid
+          for attempt in {1..120}; do
+            if grep -q '^READY 20880$' provider.log; then exit 0; fi
+            if ! kill -0 "$(cat provider.pid)" 2>/dev/null; then cat provider.log; exit 1; fi
+            sleep 0.5
+          done
+          cat provider.log
+          exit 1
+      - name: Prove fixture with official Java client
+        run: java -cp 'tools/dubbo-qa/java/target/classes:tools/dubbo-qa/java/target/dependency/*' fixture.Consumer 20880 | tee tools/dubbo-qa/java/official-client.log
+      - name: Probe candidate Rust codec against official provider
+        shell: bash
+        run: |
+          set -uo pipefail
+          cargo run --locked --manifest-path tools/dubbo-qa/rust/Cargo.toml -- 20880 > tools/dubbo-qa/java/candidate.log 2>&1
+          printf '%s\n' "$?" > tools/dubbo-qa/java/candidate-exit.txt
+          cat tools/dubbo-qa/java/candidate.log
+          python3 tools/dubbo-qa/verdict.py tools/dubbo-qa/java/candidate.log tools/dubbo-qa/java/candidate-exit.txt | tee tools/dubbo-qa/java/verdict.json
+      - name: Stop owned provider
+        if: always()
+        shell: bash
+        run: |
+          if test -f tools/dubbo-qa/java/provider.pid; then
+            kill "$(cat tools/dubbo-qa/java/provider.pid)" 2>/dev/null || true
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dubbo-classic-wire
+          path: |
+            tools/dubbo-qa/java/provider.log
+            tools/dubbo-qa/java/official-client.log
+            tools/dubbo-qa/java/candidate.log
+            tools/dubbo-qa/java/candidate-exit.txt
+            tools/dubbo-qa/java/verdict.json
+            tools/dubbo-qa/java/versions.txt
+            tools/dubbo-qa/java/target/dependency-tree.txt
+          if-no-files-found: warn
