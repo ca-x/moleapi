@@ -78,6 +78,7 @@ public class RegistryFixture {
                 } finally { reference.destroy(); }
                 if (calls.get() != 1) throw new AssertionError("Provider invocation count changed during lookup");
                 System.out.println("ZOOKEEPER_PROVIDER=" + chosen.toFullString());
+                System.out.println("ZOOKEEPER_REGISTRY=" + registryAddress);
                 System.out.flush();
                 if (args.length == 1 && "--hold".equals(args[0])) {
                     new java.util.concurrent.CountDownLatch(1).await();

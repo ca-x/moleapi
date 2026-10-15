@@ -1,7 +1,7 @@
 //! Consume one original official ZooKeeper lookup result through Rust policy admission.
 use anyhow::{Result, ensure};
 use moleapi_core::{DubboConfig, NetworkPolicy, RequestSpec};
-use moleapi_protocols::dubbo::{DubboRuntime, select_registry_provider};
+use moleapi_protocols::dubbo::{DubboRuntime, lookup_zookeeper, select_registry_provider};
 use serde_json::{Value, json};
 use std::{path::Path, time::Duration};
 
@@ -9,6 +9,7 @@ use std::{path::Path, time::Duration};
 async fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
     let source = args.next().expect("original provider URL");
+    let registry = args.next().expect("ZooKeeper registry URL");
     let java = args.next().expect("Java executable");
     let jar = args.next().expect("pinned worker JAR");
     ensure!(
@@ -22,16 +23,39 @@ async fn main() -> Result<()> {
         method: "echo".into(),
         ..Default::default()
     };
-    let provider = select_registry_provider(
+    let snapshot = lookup_zookeeper(
+        &registry,
         &config,
-        std::slice::from_ref(&source),
         NetworkPolicy {
             allow_private_network: true,
         },
         Duration::from_secs(5),
     )
     .await?;
-    ensure!(provider.original_url() == source, "Registry source changed");
+    ensure!(
+        snapshot.len() == 1,
+        "ZooKeeper returned unexpected provider count"
+    );
+    // Apache lookup normalizes registry metadata (for example timestamp/check).
+    let raw = moleapi_core::dubbo_provider_url(&snapshot[0], &config)?;
+    let official = moleapi_core::dubbo_provider_url(&source, &config)?;
+    ensure!(
+        raw.host_str() == official.host_str() && raw.port() == official.port(),
+        "ZooKeeper provider destination differs from official lookup"
+    );
+    let provider = select_registry_provider(
+        &config,
+        &snapshot,
+        NetworkPolicy {
+            allow_private_network: true,
+        },
+        Duration::from_secs(5),
+    )
+    .await?;
+    ensure!(
+        provider.original_url() == snapshot[0],
+        "Registry source changed"
+    );
     let request: RequestSpec = serde_json::from_value(json!({
       "id":"registry-qa","name":"Registry QA","method":"GET",
       "url":format!("dubbo://{}",provider.destination()),"description":"",
@@ -57,10 +81,50 @@ async fn main() -> Result<()> {
         answer.status == 200 && serde_json::from_str::<Value>(&answer.body)? == "echo:from-rust",
         "Selected registered provider did not answer"
     );
+    let mut registry_request = request.clone();
+    registry_request.url = registry.clone();
+    if let moleapi_core::Protocol::Dubbo { config } = &mut registry_request.protocol {
+        config.source_version = 2;
+        config.source = "zookeeper".into();
+    }
+    let registry_answer = runtime
+        .invoke(
+            Path::new(&java),
+            &registry_request,
+            NetworkPolicy {
+                allow_private_network: true,
+            },
+        )
+        .await?;
+    ensure!(
+        registry_answer.status == 200
+            && serde_json::from_str::<Value>(&registry_answer.body)? == "echo:from-rust",
+        "Product registry route did not answer"
+    );
+    ensure!(
+        registry_answer
+            .logs
+            .iter()
+            .any(|entry| entry.message == format!("ZooKeeper → {}", provider.destination())),
+        "Selected provider was not shown in the response console"
+    );
+    ensure!(
+        runtime
+            .invoke(
+                Path::new(&java),
+                &registry_request,
+                NetworkPolicy {
+                    allow_private_network: false
+                },
+            )
+            .await
+            .is_err(),
+        "Hosted policy admitted a private ZooKeeper registry"
+    );
     ensure!(
         select_registry_provider(
             &config,
-            &[source],
+            &snapshot,
             NetworkPolicy {
                 allow_private_network: false
             },

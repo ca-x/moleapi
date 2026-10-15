@@ -1,9 +1,10 @@
 //! One-shot Apache Dubbo GenericService worker with Rust-owned network admission.
 use anyhow::{Context, Result, bail, ensure};
 use moleapi_core::{
-    DubboConfig, NetworkPolicy, Protocol, RequestSpec, Response, checked_destination,
+    DubboConfig, NetworkPolicy, Protocol, RequestSpec, Response, ScriptLog, checked_destination,
     dubbo_provider_url, dubbo_url,
 };
+use percent_encoding::percent_decode_str;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
@@ -80,6 +81,95 @@ pub async fn select_registry_provider(
     bail!("No reachable checked Dubbo provider")
 }
 
+/// Read one ZooKeeper provider snapshot. The SDK only sees a checked literal IP.
+pub async fn lookup_zookeeper(
+    registry: &str,
+    config: &DubboConfig,
+    policy: NetworkPolicy,
+    timeout: Duration,
+) -> Result<Vec<String>> {
+    let deadline = Instant::now() + timeout;
+    ensure!(
+        registry.len() <= 2048,
+        "ZooKeeper registry URL exceeds limit"
+    );
+    let url = url::Url::parse(registry).context("Invalid ZooKeeper registry URL")?;
+    ensure!(
+        url.scheme() == "zookeeper"
+            && url.host_str().is_some()
+            && url.port().is_some_and(|port| port > 0)
+            && url.username().is_empty()
+            && url.password().is_none()
+            && matches!(url.path(), "" | "/")
+            && url.query().is_none()
+            && url.fragment().is_none(),
+        "Unsupported ZooKeeper registry endpoint"
+    );
+    let addresses = tokio::time::timeout(
+        deadline.saturating_duration_since(Instant::now()),
+        checked_destination(&url, policy),
+    )
+    .await
+    .context("ZooKeeper address lookup timed out")??;
+    let address = reachable_address(&addresses, deadline)
+        .await
+        .context("ZooKeeper registry connection failed")?;
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    ensure!(!remaining.is_zero(), "ZooKeeper lookup timed out");
+    let client = tokio::time::timeout(
+        remaining,
+        zookeeper_async::ZooKeeper::connect(&address.to_string(), remaining, |_| {}),
+    )
+    .await
+    .context("ZooKeeper connection timed out")
+    .and_then(|result| result.map_err(anyhow::Error::from))?;
+    let encoded_service: String =
+        url::form_urlencoded::byte_serialize(config.service.as_bytes()).collect();
+    let path = format!("/dubbo/{encoded_service}/providers");
+    let lookup = tokio::time::timeout(
+        deadline.saturating_duration_since(Instant::now()),
+        client.get_children(&path, false),
+    )
+    .await
+    .context("ZooKeeper provider lookup timed out")?;
+    let _ = tokio::time::timeout(
+        deadline
+            .saturating_duration_since(Instant::now())
+            .min(Duration::from_millis(300)),
+        client.close(),
+    )
+    .await;
+    let children = match lookup {
+        Ok(children) => children,
+        Err(zookeeper_async::ZkError::NoNode) => Vec::new(),
+        Err(error) => return Err(error).context("ZooKeeper provider lookup failed"),
+    };
+    ensure!(
+        children.len() <= 256,
+        "ZooKeeper provider count exceeds limit"
+    );
+    let mut sources = Vec::with_capacity(children.len());
+    let mut total = 0usize;
+    for child in children {
+        ensure!(
+            child.len() <= 12 * 1024,
+            "ZooKeeper provider node exceeds limit"
+        );
+        let source = percent_decode_str(&child)
+            .decode_utf8()
+            .context("Invalid ZooKeeper provider node encoding")?
+            .into_owned();
+        ensure!(source.len() <= 4096, "ZooKeeper provider URL exceeds limit");
+        total += source.len();
+        ensure!(
+            total <= MAX_INPUT,
+            "ZooKeeper provider snapshot exceeds 1 MiB"
+        );
+        sources.push(source);
+    }
+    Ok(sources)
+}
+
 #[derive(Clone)]
 pub struct DubboRuntime {
     jar: Arc<[u8]>,
@@ -120,14 +210,32 @@ impl DubboRuntime {
         };
         let start = Instant::now();
         let deadline = start + Duration::from_millis(request.timeout_ms);
-        let original = dubbo_url(&request.url)?;
-        let addresses = tokio::time::timeout(
-            deadline.saturating_duration_since(Instant::now()),
-            checked_destination(&original, policy),
-        )
-        .await
-        .context("Dubbo address lookup timed out")??;
-        let target = reachable_address(&addresses, deadline).await?;
+        let target = if config.source == "zookeeper" {
+            let providers = lookup_zookeeper(
+                &request.url,
+                config,
+                policy,
+                deadline.saturating_duration_since(Instant::now()),
+            )
+            .await?;
+            select_registry_provider(
+                config,
+                &providers,
+                policy,
+                deadline.saturating_duration_since(Instant::now()),
+            )
+            .await?
+            .destination()
+        } else {
+            let original = dubbo_url(&request.url)?;
+            let addresses = tokio::time::timeout(
+                deadline.saturating_duration_since(Instant::now()),
+                checked_destination(&original, policy),
+            )
+            .await
+            .context("Dubbo address lookup timed out")??;
+            reachable_address(&addresses, deadline).await?
+        };
         let endpoint = pinned_url(target, &config.service);
         let attachments = config
             .attachments
@@ -214,7 +322,14 @@ impl DubboRuntime {
             private_auth_values: vec![],
             soap_fault: None,
             request_updates: vec![],
-            logs: vec![],
+            logs: if config.source == "zookeeper" {
+                vec![ScriptLog {
+                    level: "info".into(),
+                    message: format!("ZooKeeper → {target}"),
+                }]
+            } else {
+                vec![]
+            },
             variable_updates: vec![],
             status,
             status_text: status_text.into(),

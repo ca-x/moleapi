@@ -26,6 +26,7 @@ export interface GrpcConfig {
 export interface DubboConfig {
   kind: "dubbo";
   source_version: number;
+  source?: "direct" | "zookeeper";
   transport: "classic";
   serialization: "hessian2";
   service: string;

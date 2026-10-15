@@ -35,6 +35,8 @@ reqwest-websocket = "0.5.1"
 tungstenite = { version = "0.27", default-features = false }
 tokio-util = { version = "0.7", features = ["rt", "codec"] }
 url = "2"
+zookeeper-async = { path = "../../vendor/zookeeper-async" }
+percent-encoding = "2"
 
 rust_socketio = { version = "=0.6.0", features = ["async"] }
 rust_engineio = { version = "=0.6.0", features = ["async"] }

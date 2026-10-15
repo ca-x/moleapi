@@ -29,6 +29,11 @@ def main():
     jar_bytes = args.jar.read_bytes()
     assert len(jar_bytes) == manifest['worker_bytes']
     assert hashlib.sha256(jar_bytes).hexdigest() == manifest['worker_sha256']
+    build = subprocess.run(['cargo', 'build', '--locked', '-p', 'moleapi-protocols',
+                            '--example', 'dubbo-discovery-fixture'], cwd=ROOT,
+                           capture_output=True, text=True, timeout=600)
+    assert build.returncode == 0, build.stderr[-4000:]
+    example = ROOT / 'target/debug/examples/dubbo-discovery-fixture'
     classpath = os.pathsep.join((str(args.classes), str(args.dependencies / '*')))
     command = [str(args.java), '-cp', classpath, 'fixture.RegistryFixture']
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -37,23 +42,24 @@ def main():
     with held_log.open('w') as diagnostics:
         provider = subprocess.Popen(command + ['--hold'], cwd=JAVA_PROJECT,
                                     stdout=subprocess.PIPE, stderr=diagnostics, text=True)
-        results = queue.Queue(maxsize=1)
+        results = queue.Queue(maxsize=2)
         def watch():
             for line in provider.stdout:
-                if line.startswith('ZOOKEEPER_PROVIDER='):
-                    try: results.put_nowait(line.strip().split('=', 1)[1])
+                if line.startswith(('ZOOKEEPER_PROVIDER=', 'ZOOKEEPER_REGISTRY=')):
+                    try: results.put_nowait(line.strip())
                     except queue.Full: pass
             try: results.put_nowait(None)
             except queue.Full: pass
         threading.Thread(target=watch, daemon=True).start()
         try:
-            source = results.get(timeout=35)
-            if source is None: raise RuntimeError(f'ZooKeeper fixture exited before discovery: {held_log.read_text()[-2000:]}')
+            details = dict(results.get(timeout=35).split('=', 1) for _ in range(2))
+            source = details['ZOOKEEPER_PROVIDER']
+            registry = details['ZOOKEEPER_REGISTRY']
             assert len(source) <= 4096 and source.startswith('dubbo://')
-            result = subprocess.run(['cargo','run','-q','--locked','-p','moleapi-protocols',
-                                     '--example','dubbo-discovery-fixture','--',source,
+            result = subprocess.run([str(example), source, registry,
                                      str(args.java),str(args.jar)],cwd=ROOT,capture_output=True,
-                                    text=True,timeout=180,check=True)
+                                    text=True,timeout=40)
+            assert result.returncode == 0, result.stderr[-4000:]
             assert 'PASS original ZooKeeper provider URL -> checked Rust address -> official direct RPC' in result.stdout, result.stdout
         finally:
             provider.terminate()

@@ -309,6 +309,7 @@ pub(crate) async fn perform_deferred(
             .await
             .map_err(|e| ApiError::bad(e.to_string()))?
     };
+    logs.extend(std::mem::take(&mut response.logs));
     if !resolved.assertions.is_empty() {
         response.tests =
             moleapi_core::assertion_worker(&s.script_worker, &resolved.assertions, &response).await;

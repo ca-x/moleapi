@@ -18,10 +18,35 @@ fn request() -> RequestSpec {
 }
 
 #[test]
+fn zookeeper_source_preserves_direct_drafts_and_rejects_unsupported_endpoints() {
+    let mut r = request();
+    validate_request(&r, false).unwrap();
+    r.url = "zookeeper://example.com:2181".into();
+    let Protocol::Dubbo { config } = &mut r.protocol else {
+        unreachable!()
+    };
+    config.source_version = 2;
+    config.source = "zookeeper".into();
+    validate_request(&r, false).unwrap();
+    let restored: RequestSpec = serde_json::from_value(serde_json::to_value(&r).unwrap()).unwrap();
+    assert_eq!(restored, r);
+    for endpoint in [
+        "zookeeper://user:secret@example.com:2181",
+        "zookeeper://example.com:2181/a",
+        "zookeeper://example.com:2181?x=y",
+        "http://example.com:2181",
+    ] {
+        r.url = endpoint.into();
+        assert!(validate_request(&r, false).is_err(), "{endpoint}");
+    }
+}
+
+#[test]
 fn classic_draft_roundtrips_order_and_original_json_without_becoming_http() {
     let r = request();
     validate_request(&r, true).unwrap();
     let original = serde_json::to_value(&r).unwrap();
+    assert!(original["protocol"].get("source").is_none());
     let restored: RequestSpec = serde_json::from_value(original.clone()).unwrap();
     assert_eq!(serde_json::to_value(restored).unwrap(), original);
     let Protocol::Dubbo { config } = r.protocol else {

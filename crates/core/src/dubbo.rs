@@ -31,6 +31,8 @@ impl Default for DubboArgument {
 #[serde(default, deny_unknown_fields)]
 pub struct DubboConfig {
     pub source_version: u8,
+    #[serde(skip_serializing_if = "is_direct_source")]
+    pub source: String,
     pub transport: String,
     pub serialization: String,
     pub service: String,
@@ -41,10 +43,15 @@ pub struct DubboConfig {
     pub attachments: Vec<Pair>,
 }
 
+fn is_direct_source(value: &str) -> bool {
+    value == "direct"
+}
+
 impl Default for DubboConfig {
     fn default() -> Self {
         Self {
             source_version: 1,
+            source: "direct".into(),
             transport: "classic".into(),
             serialization: "hessian2".into(),
             service: String::new(),
@@ -97,7 +104,7 @@ pub fn dubbo_url(raw: &str) -> Result<url::Url> {
 /// Validate one untrusted registry result before the host resolves or connects it.
 pub fn dubbo_provider_url(raw: &str, config: &DubboConfig) -> Result<url::Url> {
     ensure!(
-        config.source_version == 1
+        matches!(config.source_version, 1 | 2)
             && config.transport == "classic"
             && config.serialization == "hessian2",
         "Unsupported Dubbo provider selection mode"
@@ -174,7 +181,8 @@ pub fn validate_dubbo(request: &RequestSpec, templates: bool) -> Result<()> {
         return Ok(());
     };
     ensure!(
-        config.source_version == 1,
+        (config.source_version == 1 && config.source == "direct")
+            || (config.source_version == 2 && config.source == "zookeeper"),
         "Unsupported Dubbo source version"
     );
     ensure!(
@@ -299,7 +307,22 @@ pub fn validate_dubbo(request: &RequestSpec, templates: bool) -> Result<()> {
         }
     }
     if !templates || !request.url.contains("{{") {
-        dubbo_url(&request.url)?;
+        if config.source == "direct" {
+            dubbo_url(&request.url)?;
+        } else {
+            let url = url::Url::parse(&request.url).context("Invalid ZooKeeper registry URL")?;
+            ensure!(
+                url.scheme() == "zookeeper"
+                    && url.host_str().is_some()
+                    && url.port().is_some_and(|port| port > 0)
+                    && url.username().is_empty()
+                    && url.password().is_none()
+                    && matches!(url.path(), "" | "/")
+                    && url.query().is_none()
+                    && url.fragment().is_none(),
+                "Invalid ZooKeeper registry endpoint"
+            );
+        }
     }
     Ok(())
 }

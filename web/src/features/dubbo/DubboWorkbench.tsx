@@ -2,13 +2,14 @@ import {Button, Checkbox, Flex, Separator, Text, TextArea, TextField} from "@rad
 import {t, useLanguage} from "../../shared/i18n";
 import {id} from "../../shared/model";
 import type {DubboConfig, RequestSpec} from "../../shared/types";
-import {Field, PairEditor} from "../../shared/ui";
+import {Choice, Field, PairEditor} from "../../shared/ui";
 
 export default function DubboWorkbench({request, update, disabled}:{request:RequestSpec;update:(patch:Partial<RequestSpec>)=>void;disabled:boolean}) {
   useLanguage();
   if (request.protocol?.kind !== "dubbo") return null;
   const config = request.protocol;
   const change = (patch:Partial<DubboConfig>) => update({protocol:{...config,...patch}});
+  const source = config.source ?? "direct";
   const move = (index:number, offset:number) => {
     const arguments0 = [...config.arguments];
     [arguments0[index], arguments0[index + offset]] = [arguments0[index + offset], arguments0[index]];
@@ -16,6 +17,15 @@ export default function DubboWorkbench({request, update, disabled}:{request:Requ
   };
   return <div className="form-panel">
     <Text size="2" color="gray">{t("使用经典 Dubbo/Hessian2。服务接口和参数类型必须与提供方的方法声明一致。")}</Text>
+    <Field label={t("Dubbo 来源")}>
+      <Choice value={source} disabled={disabled} label={t("Dubbo 来源")}
+        options={[{value:"direct",label:t("直连提供方")},{value:"zookeeper",label:"ZooKeeper"}]}
+        onChange={value=>update({
+          protocol:{...config,source:value,source_version:value==="direct"?1:2},
+          url:value==="direct"?"dubbo://localhost:20880":"zookeeper://localhost:2181",
+        })}/>
+    </Field>
+    {source==="zookeeper" && <Text size="2" color="gray">{t("在上方 URL 栏填写 ZooKeeper 地址。每次调用都会重新查找提供方；当前仅支持无需认证的 ZooKeeper。")}</Text>}
     <Flex gap="3" wrap="wrap">
       <Field label={t("Dubbo 服务")}><TextField.Root aria-label={t("Dubbo 服务")} value={config.service} maxLength={256} disabled={disabled} placeholder="com.example.DemoService" onChange={event=>change({service:event.target.value})}/></Field>
       <Field label={t("Dubbo 方法")}><TextField.Root aria-label={t("Dubbo 方法")} value={config.method} maxLength={128} disabled={disabled} placeholder="sayHello" onChange={event=>change({method:event.target.value})}/></Field>
