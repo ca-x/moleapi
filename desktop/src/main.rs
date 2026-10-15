@@ -91,7 +91,8 @@ fn main() {
             std::fs::create_dir_all(&directory)?;
             let runtime = moleapi_generation::project::ProjectRuntime::from_environment(
                 std::env::current_exe()?,
-            )?;
+            )?
+            .with_bundled_java(&app.path().resource_dir()?)?;
             let preference = directory.join("java-runtime.json");
             if preference.is_file() && runtime.restore_native_java(&preference).is_err() {
                 eprintln!(

@@ -1,0 +1,58 @@
+{
+  "format": "moleapi-java-runtime-assets-v1",
+  "distribution": "Eclipse Temurin",
+  "version": "21.0.12.1+1",
+  "license": "GPL-2.0-only WITH Classpath-exception-2.0",
+  "source": "https://github.com/adoptium/temurin21-binaries/releases/tag/jdk-21.0.12.1%2B1",
+  "assets": {
+    "x86_64-unknown-linux-gnu": {
+      "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jre_x64_linux_hotspot_21.0.12.1_1.tar.gz",
+      "sha256": "2413149700df0f7d440500a84a8f764c535f21e5a5e87d38328b64eec2c5b500",
+      "archive_bytes": 52059408,
+      "archive_root": "jdk-21.0.12.1+1-jre",
+      "java": "payload/bin/java",
+      "legal": "payload/legal"
+    },
+    "aarch64-unknown-linux-gnu": {
+      "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jre_aarch64_linux_hotspot_21.0.12.1_1.tar.gz",
+      "sha256": "14be1f35ebdbd1f6e8d57eb911a3ffb74d6d9aa255abc5daf2b1302002cf2cf2",
+      "archive_bytes": 51149460,
+      "archive_root": "jdk-21.0.12.1+1-jre",
+      "java": "payload/bin/java",
+      "legal": "payload/legal"
+    },
+    "x86_64-apple-darwin": {
+      "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jre_x64_mac_hotspot_21.0.12.1_1.tar.gz",
+      "sha256": "6717ec641fd9ce0bb209ca083ee23b42202ac68cb6fcc5753496e0e4a0f41989",
+      "archive_bytes": 42131876,
+      "archive_root": "jdk-21.0.12.1+1-jre",
+      "java": "payload/Contents/Home/bin/java",
+      "legal": "payload/Contents/Home/legal"
+    },
+    "aarch64-apple-darwin": {
+      "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jre_aarch64_mac_hotspot_21.0.12.1_1.tar.gz",
+      "sha256": "dec50fc6f9fcd4fe3ae8cabf5a5fa68f6afc48841f7698e468e9aa5d54beed84",
+      "archive_bytes": 48144965,
+      "archive_root": "jdk-21.0.12.1+1-jre",
+      "java": "payload/Contents/Home/bin/java",
+      "legal": "payload/Contents/Home/legal"
+    },
+    "x86_64-pc-windows-msvc": {
+      "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jre_x64_windows_hotspot_21.0.12.1_1.zip",
+      "sha256": "d35f31e712f0fcf6ac5a093edc90204fbff22f720ba3950bd09d331d5e621636",
+      "archive_bytes": 48999141,
+      "archive_root": "jdk-21.0.12.1+1-jre",
+      "java": "payload/bin/java.exe",
+      "legal": "payload/legal"
+    }
+  },
+  "corresponding_source": {
+    "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk-sources_21.0.12.1_1.tar.gz",
+    "sha256": "573057d03584ae793fb7ec9a14c76d826d9187a53efeefd99da47403a5308234",
+    "archive_bytes": 115126841,
+    "repository": "https://github.com/adoptium/jdk21u",
+    "revision": "1c417fbfc2f70ab03a565b0af0a5a3c6f5e15ad6",
+    "build_repository": "https://github.com/adoptium/temurin-build",
+    "build_revision": "e6ba7dec3d07654074559310376a3ae89da5f4ac"
+  }
+}

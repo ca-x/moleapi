@@ -51,6 +51,9 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -65,6 +68,7 @@ jobs:
       - run: npm --prefix web ci
       - run: npm --prefix web run build
       - run: python scripts/prepare_openapi_generator.py
+      - run: python scripts/prepare_java_runtime.py --target ${{ matrix.target }}
       - run: cargo build --locked --release -p moleapi-server --target ${{ matrix.target }}
       - name: Verify standalone server worker dispatch
         run: python scripts/check-script-worker.py target/${{ matrix.target }}/release/${{ matrix.binary }}
@@ -72,7 +76,11 @@ jobs:
         shell: bash
         run: |
           mkdir -p artifacts
-          tar -czf artifacts/moleapi-server-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release ${{ matrix.binary }}
+          mkdir -p artifacts/staging/runtime
+          cp target/${{ matrix.target }}/release/${{ matrix.binary }} artifacts/staging/
+          cp -R vendor/java-runtime/current artifacts/staging/runtime/java
+          python scripts/check-bundled-java.py artifacts/staging/${{ matrix.binary }}
+          tar -czf artifacts/moleapi-server-${{ matrix.target }}.tar.gz -C artifacts/staging .
       - uses: actions/upload-artifact@v4
         with:
           name: server-${{ matrix.target }}
@@ -100,6 +108,9 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -121,13 +132,16 @@ jobs:
         working-directory: desktop
         run: ../web/node_modules/.bin/tauri icon ../assets/brand/logo.png --output icons
       - run: python scripts/prepare_openapi_generator.py
+      - run: python scripts/prepare_java_runtime.py --target ${{ matrix.target }}
       - uses: tauri-apps/tauri-action@v0
         with:
           projectPath: desktop
           tauriScript: ../web/node_modules/.bin/tauri
-          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+          args: --config tauri.java.json --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
       - name: Verify desktop worker without opening a GUI
         run: python scripts/check-script-worker.py target/${{ matrix.target }}/release/moleapi
+      - name: Verify actual bundled desktop JVM and original runtime files
+        run: python scripts/check-bundled-java.py target/${{ matrix.target }}/release/moleapi --runtime-only
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-${{ matrix.target }}

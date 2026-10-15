@@ -10,3 +10,7 @@ desktop/gen
 *.db-wal
 *.db-shm
 .env
+vendor/java-runtime/current
+vendor/java-runtime/downloads
+desktop/tauri.java.json
+vendor/java-runtime/.java-*
