@@ -92,3 +92,15 @@ The Objective-C main and original generated files remain unchanged; GPB retains
 manual-reference-counting flags. Actual xcodeproj construction/inspection passes
 with the Swift unit/settings and all3 original GPB flags; Apple link/call proof
 still requires corrected native jobs. This is a QA build configuration correction.
+
+## ARM actual-call checkpoint
+
+Run38707843936 ARM job116331593353 on immutable62f08e8 passed original source and
+descriptor clients through unary/server/client/bidi against the actual generated
+Python servers. Artifacts retain exact original source hashes, descriptor identity,
+Xcode26.6/macOS26.6.2/arm64 and pinned gRPC1.84.0/Protobuf5.36.1. Intel retry
+38718238486 passed its source calls then timed out descriptor Release xcodebuild
+3600sec; it did not reach model checks. The downloaded ARM results establish the
+representative native arm64 target scope. Final dual-architecture and current-head
+release acceptance remains required; a separate host-only/shared-Pods QA fix keeps
+Release, both representations and all modes intact.

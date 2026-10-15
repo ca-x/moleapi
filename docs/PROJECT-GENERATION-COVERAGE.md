@@ -1261,3 +1261,17 @@ generation API fixture (17 Go files, source SHA81a56039ffb47ceaa48d388715bed1092
 HTTP/embedded frontend and script-worker smoke also passed before publication.
 This closes that exact dual-architecture container gate; it does not establish later
 commits or foreign-OS installed packages. Exact raw job logs remain in isolated QA.
+
+
+Objective-C Apple checkpoint2026-10-15: immutable62f08e8/run38707843936 ARM job
+116331593353 passed original source and descriptor GPB/gRPC clients in all4 modes
+and both3.0.3/3.1.0 Foundation model dialects. Actual macOS26.6.2/arm64/Xcode26.6,
+gRPC1.84.0/Protobuf5.36.1/protoc36.1 evidence and original hashes were audited.
+Catalog validation now records the exact representative Apple arm64 RPC scope;
+all18 Quicktype model languages have representative native roundtrip evidence,
+not universal schema or platform parity. Intel retry38718238486 passed source
+RPCs, then descriptor Release compilation exceeded3600sec before model checks.
+Its log exposed two-architecture builds and separate cold Pods consumers. The
+host-only/shared-consumer QA fix preserves Release, all modes/representations and
+pinned libraries, with local project/cache tests; its new Intel result remains a
+separate required gate. See MODEL-GENERATION-COVERAGE for exact feature evidence; the QA optimization remains pending on the development branch.
