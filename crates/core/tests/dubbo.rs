@@ -85,6 +85,20 @@ fn nacos_source_requires_a_plain_registry_endpoint() {
     let Protocol::Dubbo { config } = &mut r.protocol else {
         unreachable!()
     };
+    config.registry_namespace = "team-qa".into();
+    validate_request(&r, false).unwrap();
+    let Protocol::Dubbo { config } = &mut r.protocol else {
+        unreachable!()
+    };
+    config.registry_namespace = "bad/namespace".into();
+    assert!(validate_request(&r, false).is_err());
+    let Protocol::Dubbo { config } = &mut r.protocol else {
+        unreachable!()
+    };
+    config.registry_namespace = "team-qa".into();
+    let Protocol::Dubbo { config } = &mut r.protocol else {
+        unreachable!()
+    };
     config.group.clear();
     assert!(validate_request(&r, false).is_err());
     let Protocol::Dubbo { config } = &mut r.protocol else {

@@ -22,7 +22,8 @@ export default function DubboWorkbench({request, update, disabled}:{request:Requ
         options={[{value:"direct",label:t("直连提供方")},{value:"zookeeper",label:"ZooKeeper"},{value:"nacos",label:"Nacos"}]}
         onChange={value=>update({
           protocol:{...config,source:value,source_version:value==="direct"?1:2,
-            registry_auth:value==="zookeeper"?config.registry_auth:undefined},
+            registry_auth:value==="zookeeper"?config.registry_auth:undefined,
+            registry_namespace:value==="nacos"?config.registry_namespace??"":""},
           url:value==="direct"?"dubbo://localhost:20880":value==="zookeeper"?"zookeeper://localhost:2181":"nacos://localhost:8848",
         })}/>
     </Field>
@@ -34,7 +35,10 @@ export default function DubboWorkbench({request, update, disabled}:{request:Requ
       </Flex>
       <Text size="2" color="gray">{t("凭据留空表示无需认证；填写时使用 ZooKeeper digest 认证。")}</Text>
     </>}
-    {source==="nacos" && <Text size="2" color="gray">{t("在上方 URL 栏填写 Nacos 地址。当前支持公开命名空间的无认证 HTTP 服务发现。")}</Text>}
+    {source==="nacos" && <>
+      <Text size="2" color="gray">{t("在上方 URL 栏填写 Nacos 地址。当前支持无认证 HTTP 服务发现。命名空间 ID 留空表示 public。")}</Text>
+      <Field label={t("Nacos 命名空间 ID")}><TextField.Root aria-label={t("Nacos 命名空间 ID")} value={config.registry_namespace ?? ""} maxLength={128} disabled={disabled} placeholder="team-qa" onChange={event=>change({registry_namespace:event.target.value})}/></Field>
+    </>}
     <Flex gap="3" wrap="wrap">
       <Field label={t("Dubbo 服务")}><TextField.Root aria-label={t("Dubbo 服务")} value={config.service} maxLength={256} disabled={disabled} placeholder="com.example.DemoService" onChange={event=>change({service:event.target.value})}/></Field>
       <Field label={t("Dubbo 方法")}><TextField.Root aria-label={t("Dubbo 方法")} value={config.method} maxLength={128} disabled={disabled} placeholder="sayHello" onChange={event=>change({method:event.target.value})}/></Field>

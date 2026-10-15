@@ -237,6 +237,11 @@ pub async fn lookup_nacos(
         )
         .append_pair("groupName", "DEFAULT_GROUP")
         .append_pair("healthyOnly", "false");
+    if !config.registry_namespace.is_empty() {
+        endpoint
+            .query_pairs_mut()
+            .append_pair("namespaceId", &config.registry_namespace);
+    }
     let client = reqwest::Client::builder()
         .no_proxy()
         .redirect(reqwest::redirect::Policy::none())

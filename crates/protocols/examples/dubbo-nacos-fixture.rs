@@ -12,10 +12,16 @@ async fn main() -> Result<()> {
     let registry = args.next().expect("Nacos endpoint");
     let java = args.next().expect("Java executable");
     let jar = args.next().expect("pinned worker JAR");
+    let namespace = args.next().unwrap_or_default();
+    ensure!(
+        matches!(namespace.as_str(), "" | "moleapi-qa"),
+        "Unexpected fixture namespace"
+    );
     ensure!(args.next().is_none(), "Unexpected Nacos fixture argument");
     let config = DubboConfig {
         source_version: 2,
         source: "nacos".into(),
+        registry_namespace: namespace.clone(),
         service: "fixture.RegistryService".into(),
         version: "1.0.0".into(),
         group: "qa".into(),
@@ -25,6 +31,16 @@ async fn main() -> Result<()> {
     let policy = NetworkPolicy {
         allow_private_network: true,
     };
+    if !namespace.is_empty() {
+        let mut public = config.clone();
+        public.registry_namespace.clear();
+        ensure!(
+            lookup_nacos(&registry, &public, policy, Duration::from_secs(5))
+                .await?
+                .is_empty(),
+            "Namespaced provider leaked into the public Nacos namespace"
+        );
+    }
     let sources = lookup_nacos(&registry, &config, policy, Duration::from_secs(8)).await?;
     ensure!(
         sources == [official],
@@ -39,6 +55,7 @@ async fn main() -> Result<()> {
       "timeout_ms":10000,"follow_redirects":false,"verify_tls":true,"assertions":[],"examples":[],
       "protocol":{"kind":"dubbo","source_version":2,"source":"nacos","transport":"classic","serialization":"hessian2",
         "service":config.service,"method":"echo","version":"1.0.0","group":"qa",
+        "registry_namespace":namespace,
         "arguments":[{"id":"name","type_name":"java.lang.String","value_source":"\"from-rust\"","secret":false}],
         "attachments":[]}
     }))?;

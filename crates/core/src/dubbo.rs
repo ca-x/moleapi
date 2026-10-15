@@ -42,6 +42,8 @@ pub struct DubboConfig {
     pub source: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub registry_auth: Option<DubboRegistryAuth>,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub registry_namespace: String,
     pub transport: String,
     pub serialization: String,
     pub service: String,
@@ -62,6 +64,7 @@ impl Default for DubboConfig {
             source_version: 1,
             source: "direct".into(),
             registry_auth: None,
+            registry_namespace: String::new(),
             transport: "classic".into(),
             serialization: "hessian2".into(),
             service: String::new(),
@@ -229,6 +232,16 @@ pub fn validate_dubbo(request: &RequestSpec, templates: bool) -> Result<()> {
             "Invalid ZooKeeper digest credentials"
         );
     }
+    ensure!(
+        config.registry_namespace.is_empty()
+            || config.source == "nacos"
+                && config.registry_namespace.len() <= 128
+                && config
+                    .registry_namespace
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.')),
+        "Invalid Nacos namespace ID"
+    );
     ensure!(
         config.transport == "classic" && config.serialization == "hessian2",
         "Only classic Dubbo/Hessian2 is currently selected"

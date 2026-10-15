@@ -181,5 +181,7 @@ jobs:
             ${{ runner.temp }}/nacos-evidence.json
             ${{ runner.temp }}/nacos-evidence.server.log
             ${{ runner.temp }}/nacos-evidence.held.log
+            ${{ runner.temp }}/nacos-evidence.namespace.log
             ${{ runner.temp }}/nacos-evidence.complete.log
+            ${{ runner.temp }}/nacos-evidence.namespace-complete.log
           if-no-files-found: warn

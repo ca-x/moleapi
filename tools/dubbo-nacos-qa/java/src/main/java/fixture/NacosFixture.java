@@ -18,7 +18,9 @@ public class NacosFixture {
     try (ServerSocket server = new ServerSocket(0)) { return server.getLocalPort(); }
   }
   public static void main(String[] args) throws Exception {
-    String registryAddress = "nacos://127.0.0.1:18848";
+    boolean namespaced = args.length == 1 && args[0].startsWith("--namespace");
+    String endpoint = "nacos://127.0.0.1:18848";
+    String registryAddress = endpoint + (namespaced ? "?namespace=moleapi-qa" : "");
     ApplicationConfig app = new ApplicationConfig("moleapi-nacos-qa");
     app.setQosEnable(false);
     app.setEnableFileCache(false);
@@ -38,7 +40,7 @@ public class NacosFixture {
       service.export();
       NacosRegistryFactory factory = new NacosRegistryFactory();
       factory.setApplicationModel(ScopeModelUtil.getApplicationModel(service.getScopeModel()));
-      registry = factory.getRegistry(URL.valueOf(registryAddress + "?check=true&timeout=5000"));
+      registry = factory.getRegistry(URL.valueOf(registryAddress + (namespaced ? "&" : "?") + "check=true&timeout=5000"));
       List<URL> found = List.of();
       for (int i=0;i<40;i++) {
         found = registry.lookup(query);
@@ -50,9 +52,10 @@ public class NacosFixture {
       if (!registry.lookup(query.addParameter("version","wrong")).isEmpty()) throw new IllegalStateException("Version mismatch");
       if (calls.get()!=0) throw new IllegalStateException("Nacos lookup invoked the provider");
       System.out.println("NACOS_PROVIDER=" + found.get(0).toFullString());
-      System.out.println("NACOS_REGISTRY=" + registryAddress);
+      System.out.println("NACOS_REGISTRY=" + endpoint);
       System.out.flush();
-      if (args.length==1 && args[0].equals("--hold")) new java.util.concurrent.CountDownLatch(1).await();
+      if (args.length==1 && (args[0].equals("--hold") || args[0].equals("--namespace-hold")))
+        new java.util.concurrent.CountDownLatch(1).await();
     } finally {
       service.unexport();
       if (registry!=null) {

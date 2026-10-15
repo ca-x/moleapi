@@ -26,9 +26,11 @@ def ready():
         return reply.status == 200 and reply.read(32) == b'OK'
 
 
-def registered_instances():
-    query = urllib.parse.urlencode({'serviceName':'providers:fixture.RegistryService:1.0.0:qa',
-                                     'groupName':'DEFAULT_GROUP','healthyOnly':'false'})
+def registered_instances(namespace=''):
+    params = {'serviceName':'providers:fixture.RegistryService:1.0.0:qa',
+              'groupName':'DEFAULT_GROUP','healthyOnly':'false'}
+    if namespace: params['namespaceId'] = namespace
+    query = urllib.parse.urlencode(params)
     with urllib.request.urlopen(f'http://127.0.0.1:18848/nacos/v1/ns/instance/list?{query}',timeout=3) as reply:
         return json.load(reply)['hosts']
 
@@ -81,42 +83,56 @@ def main():
                     raise RuntimeError('Pinned Nacos server exited before readiness')
                 time.sleep(.5)
             else: raise RuntimeError('Nacos server did not become ready')
-            with args.output.with_suffix('.held.log').open('w') as diagnostics:
-                provider = subprocess.Popen(command + ['--hold'], cwd=JAVA_PROJECT,
-                    stdout=subprocess.PIPE, stderr=diagnostics, text=True)
-                results = queue.Queue(maxsize=2)
-                def watch():
-                    for line in provider.stdout:
-                        if line.startswith(('NACOS_PROVIDER=', 'NACOS_REGISTRY=')):
-                            try: results.put_nowait(line.strip())
-                            except queue.Full: pass
-                    try: results.put_nowait(None)
-                    except queue.Full: pass
-                threading.Thread(target=watch, daemon=True).start()
-                try:
-                    details = dict(results.get(timeout=45).split('=',1) for _ in range(2))
-                    original = details['NACOS_PROVIDER']
-                    registry = details['NACOS_REGISTRY']
-                    assert registry == 'nacos://127.0.0.1:18848'
-                    result = subprocess.run([str(example), original, registry,
-                        str(args.java), str(args.jar)], cwd=ROOT,
-                        capture_output=True,text=True,timeout=40)
-                    assert result.returncode == 0, result.stderr[-4000:]
-                    assert 'PASS official Nacos provider URL -> checked HTTP snapshot -> product Dubbo RPC' in result.stdout
-                finally:
-                    provider.terminate()
-                    try: provider.wait(timeout=15)
-                    except subprocess.TimeoutExpired:
-                        provider.kill(); provider.wait(timeout=5)
-            for _ in range(80):
-                if not registered_instances(): break
-                time.sleep(.5)
-            else: raise RuntimeError('Held Nacos provider remained registered after exit')
-            with args.output.with_suffix('.complete.log').open('w') as diagnostics:
-                complete = subprocess.run(command, cwd=JAVA_PROJECT, stdout=subprocess.PIPE,
-                    stderr=diagnostics,text=True,timeout=80)
-            assert complete.returncode == 0, complete.stdout[-2000:]
-            assert 'PASS NACOS lookup group version provider-removal' in complete.stdout
+            request = urllib.request.Request('http://127.0.0.1:18848/nacos/v1/console/namespaces',
+                data=urllib.parse.urlencode({'customNamespaceId':'moleapi-qa',
+                    'namespaceName':'MoleAPI QA','namespaceDesc':'Isolated fixture'}).encode(),
+                method='POST')
+            with urllib.request.urlopen(request, timeout=5) as reply:
+                assert reply.read(32) in (b'true', b'false')
+
+            def held(mode, namespace, label):
+                with args.output.with_suffix(f'.{label}.log').open('w') as diagnostics:
+                    provider = subprocess.Popen(command + [mode], cwd=JAVA_PROJECT,
+                        stdout=subprocess.PIPE, stderr=diagnostics, text=True)
+                    results = queue.Queue(maxsize=2)
+                    def watch():
+                        for line in provider.stdout:
+                            if line.startswith(('NACOS_PROVIDER=', 'NACOS_REGISTRY=')):
+                                try: results.put_nowait(line.strip())
+                                except queue.Full: pass
+                        try: results.put_nowait(None)
+                        except queue.Full: pass
+                    threading.Thread(target=watch, daemon=True).start()
+                    try:
+                        details = dict(results.get(timeout=45).split('=',1) for _ in range(2))
+                        original = details['NACOS_PROVIDER']
+                        registry = details['NACOS_REGISTRY']
+                        assert registry == 'nacos://127.0.0.1:18848'
+                        invoke = [str(example), original, registry, str(args.java), str(args.jar)]
+                        if namespace: invoke.append(namespace)
+                        result = subprocess.run(invoke, cwd=ROOT,
+                            capture_output=True,text=True,timeout=40)
+                        assert result.returncode == 0, result.stderr[-4000:]
+                        assert 'PASS official Nacos provider URL -> checked HTTP snapshot -> product Dubbo RPC' in result.stdout
+                    finally:
+                        provider.terminate()
+                        try: provider.wait(timeout=15)
+                        except subprocess.TimeoutExpired:
+                            provider.kill(); provider.wait(timeout=5)
+                for _ in range(80):
+                    if not registered_instances(namespace): break
+                    time.sleep(.5)
+                else: raise RuntimeError('Held Nacos provider remained registered after exit')
+                return original
+
+            original = held('--hold', '', 'held')
+            namespaced = held('--namespace-hold', 'moleapi-qa', 'namespace')
+            for mode, label in [(None, 'complete'), ('--namespace', 'namespace-complete')]:
+                with args.output.with_suffix(f'.{label}.log').open('w') as diagnostics:
+                    complete = subprocess.run(command + ([mode] if mode else []), cwd=JAVA_PROJECT,
+                        stdout=subprocess.PIPE, stderr=diagnostics,text=True,timeout=80)
+                assert complete.returncode == 0, complete.stdout[-2000:]
+                assert 'PASS NACOS lookup group version provider-removal' in complete.stdout
         finally:
             if server:
                 server.terminate()
@@ -127,10 +143,12 @@ def main():
     evidence = {'format':'moleapi-dubbo-nacos-qa-v1',
                 'server_sha256':SERVER_SHA256 if args.archive else 'external',
                 'provider_source_sha256':hashlib.sha256(original.encode()).hexdigest(),
+                'namespace_source_sha256':hashlib.sha256(namespaced.encode()).hexdigest(),
                 'worker_sha256':manifest['worker_sha256'],
                 'cases':['official_lookup','group_filter','version_filter','registered_instance_metadata',
                          'exact_provider_url_mapping','checked_http_snapshot','product_registry_rpc',
-                         'hosted_registry_refusal','provider_removal']}
+                         'hosted_registry_refusal','namespace_isolation','namespace_provider_rpc',
+                         'provider_removal']}
     args.output.write_text(json.dumps(evidence,indent=2)+'\n')
     print('PASS Nacos HTTP snapshot -> official provider URL -> checked Dubbo RPC -> removal',flush=True)
 
