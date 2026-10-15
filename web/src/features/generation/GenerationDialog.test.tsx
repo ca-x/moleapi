@@ -23,6 +23,16 @@ beforeEach(()=>{
   vi.mocked(useWorkbench).mockImplementation(()=>state);
 });
 afterEach(cleanup);
+it("shows Kotlin dependency and extension imports after generating a file reader",async()=>{
+ state.request={...state.request!,body_kind:"binary",body:JSON.stringify({file_name:"upload.bin",mime:"application/octet-stream",base64:"AP+AClg="})};
+ const choices={...catalog,targets:[{target:"kotlin",title:"Kotlin",clients:[{client:"okhttp",title:"OkHttp",binary_file:true}]}]};
+ vi.mocked(api).mockImplementation(path=>Promise.resolve(path.endsWith("catalog")?choices:{...snippet,target:"kotlin",client:"okhttp",code:"original-kotlin-file-reader"}));
+ render(<GenerationDialog open onOpenChange={vi.fn()}/>);await screen.findByRole("option",{name:"Kotlin"});
+ fireEvent.change(screen.getByLabelText("代码语言"),{target:{value:"kotlin"}});
+ fireEvent.click(screen.getByRole("button",{name:"生成"}));
+ expect(await screen.findByText("Kotlin 代码需放入方法体，并安装 OkHttp 依赖。请导入 asRequestBody、toRequestBody、toMediaTypeOrNull 扩展方法；文件示例还需要 java.io.File。")).toBeTruthy();
+ expect(screen.getByDisplayValue("original-kotlin-file-reader")).toBeTruthy();
+});
 it("offers verified Java file readers and explains native snippet prerequisites",async()=>{
  state.request={...state.request!,body_kind:"binary",body:JSON.stringify({file_name:"upload.bin",mime:"application/octet-stream",base64:"AP+AClg="})};
  const clients=["nethttp","okhttp","asynchttp","unirest"].map(client=>({client,title:client,binary_file:true}));

@@ -150,3 +150,51 @@ diff --git a/node_modules/@scalar/snippetz/dist/plugins/java/unirest/unirest.js 
              `HttpResponse<String> response = Unirest.request(${quoteJava(method)}, ${quoteJava(url)})`,
              ...headers.map(({ name, value }) => `  .header(${quoteJava(name)}, ${quoteJava(value)})`),
              ...(body ? ['  .body(body.toByteArray())'] : []),
+diff --git a/node_modules/@scalar/snippetz/dist/plugins/kotlin/okhttp/okhttp.js b/node_modules/@scalar/snippetz/dist/plugins/kotlin/okhttp/okhttp.js
+--- a/node_modules/@scalar/snippetz/dist/plugins/kotlin/okhttp/okhttp.js
++++ b/node_modules/@scalar/snippetz/dist/plugins/kotlin/okhttp/okhttp.js
+@@ -17,6 +17,7 @@
+         const url = normalizeUrl(joinUrlAndQuery(request?.url ?? '', request?.queryString));
+         const postData = request?.postData;
+         const lines = ['val client = OkHttpClient()', ''];
++        const contentType = collectHeaders(request?.headers, request?.cookies).find(({ name }) => name.toLowerCase() === 'content-type')?.value ?? postData?.mimeType ?? (postData?.fileName !== undefined ? 'application/octet-stream' : '');
+         // Body. Whenever a `val body` is emitted below, `hasBody` flips so the request
+         // builder passes it through for both dedicated and custom method calls.
+         let hasBody = false;
+@@ -32,10 +33,10 @@
+             lines.push('val body = MultipartBody.Builder()', '  .setType(MultipartBody.FORM)');
+             postData.params.forEach((param) => {
+                 if (param.fileName !== undefined) {
+-                    lines.push(`  .addFormDataPart(${quote(param.name ?? '')}, ${quote(param.fileName)}, RequestBody.create(MediaType.parse(${quote(param.contentType ?? 'application/octet-stream')}), File(${quote(param.fileName)})))`);
++                    lines.push(`  .addFormDataPart(${quote(param.name ?? '')}, ${quote(param.fileName)}, File(${quote(param.fileName)}).asRequestBody(${quote(param.contentType ?? 'application/octet-stream')}.toMediaTypeOrNull()))`);
+                 }
+                 else if (param.contentType) {
+-                    lines.push(`  .addFormDataPart(${quote(param.name)}, null, RequestBody.create(MediaType.parse(${quote(param.contentType)}), ${quote(param.value ?? '')}))`);
++                    lines.push(`  .addFormDataPart(${quote(param.name)}, null, ${quote(param.value ?? '')}.toRequestBody(${quote(param.contentType)}.toMediaTypeOrNull()))`);
+                 }
+                 else {
+                     lines.push(`  .addFormDataPart(${quote(param.name)}, ${quote(param.value ?? '')})`);
+@@ -44,16 +45,20 @@
+             lines.push('  .build()', '');
+             hasBody = true;
+         }
++        else if (postData?.fileName !== undefined) {
++            lines.push(`val body = File(${quote(postData.fileName)}).asRequestBody(${quote(contentType)}.toMediaTypeOrNull())`, '');
++            hasBody = true;
++        }
+         else if (postData) {
+-            lines.push(`val mediaType = MediaType.parse(${quote(postData.mimeType ?? '')})`);
+-            lines.push(`val body = RequestBody.create(mediaType, ${quote(postData.text ?? '')})`);
++            lines.push(`val mediaType = ${quote(contentType)}.toMediaTypeOrNull()`);
++            lines.push(`val body = ${quote(postData.text ?? '')}.toRequestBody(mediaType)`);
+             hasBody = true;
+         }
+         // Request builder
+         lines.push('val request = Request.Builder()', `  .url(${quote(url)})`);
+         // Method, mirroring OkHttp's dedicated builder calls and the generic `.method(...)` fallback
+         const emptyBody = ['POST', 'PUT', 'PATCH', 'PROPPATCH', 'REPORT'].includes(method)
+-            ? 'RequestBody.create(null, "")'
++            ? '"".toRequestBody(null)'
+             : 'null';
+         const bodyArg = hasBody ? 'body' : emptyBody;
+         if (!METHODS.includes(method)) {

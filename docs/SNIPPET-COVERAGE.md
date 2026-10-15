@@ -14,7 +14,7 @@ This is usable request-example generation, separate from typed OpenAPI SDK/serve
 | Java | asynchttp, nethttp, okhttp, unirest |24 original-source compile/call cases on JDK21: JSON, repeated form, text/control bytes, raw binary, explicit binary MIME and multipart files |
 | JavaScript | fetch, axios, ofetch, jquery, xhr, native, request, unirest | Fetch on Node runtime; browser-specific variants remain unverified |
 | Julia | http | Engine smoke only |
-| Kotlin | okhttp | Engine smoke only |
+| Kotlin | okhttp |7 original-code compile/call profiles on Kotlin2.4/OkHttp4.12, including native files, MIME, multipart and literal dollar/interpolation text |
 | Node.js | fetch, axios, ofetch, undici, native, request, unirest | Fetch and Native/Request/Unirest POST fixtures |
 | Objective-C | nsurlsession | Engine smoke only |
 | OCaml | cohttp | Engine smoke only |
@@ -119,3 +119,44 @@ The driver executes only this repository's trusted fixture requests. Optional
 --profiles selects core,form,text,binary,binary-mime,multipart; defaults cover all24.
 Install dependencies only into explicitly selected developer QA environments; these
 compilers/runtimes/dependencies are never downloaded or executed by product generation.
+
+
+## Kotlin modern OkHttp and original file bytes
+
+The original Kotlin2.4/OkHttp4.12.0 compile failed on MediaType.parse's error-level
+legacy API. The pinned mature Scalar Kotlin emitter now uses toMediaTypeOrNull,
+toRequestBody and File.asRequestBody. Original form/multipart/escaping/method/header
+logic remains upstream. Raw binary now follows this verified Scalar reader instead
+of a separate Postman rendering path; the existing binary_file capability count
+stays16. Repeated forms are accepted for this native builder, and GET/HEAD with a
+body reject before an OkHttp emitter could silently omit it.
+
+Seven actual Gradle8.14.5/Kotlin2.4.0/OkHttp4.12.0/JDK21.0.12.1+1/Linux cases compile
+the unchanged original snippet inside imports/main and native cleanup. Native HTTP
+observations preserve POST/auth/enabled header/query, Unicode JSON, duplicate form
+fields and empty value, text CRLF/NUL/vertical-tab, non-UTF8 raw bytes, explicit binary
+MIME, and multipart duplicate text fields/filename/MIME/file bytes with disabled parts
+omitted. A separate literal $ and ${1 + 2} profile proves no Kotlin interpolation.
+Gradle locks, resolved JAR/tool/engine/source hashes and wire/runtime evidence remain
+in isolated QA. Product generation still never reads host files or executes snippets.
+
+The localized Kotlin hint names required companion imports and File; the current
+Radix dialog/theme/keyboard/privacy and filename guidance are reused. Other54 adapters'
+representative sources stay byte-identical.8 original Java file/multipart regressions,
+92 generation cases,4 related API cases,34 focused UI/i18n cases, frontend build and
+scoped strict Clippy/format/Python checks pass; patch rebuild remains idempotent.
+Other Kotlin/OkHttp/JDK/OS versions, broader method/header/auth/transport/response and
+all remaining language/schema/SDK/product/release requirements remain open.
+
+```sh
+python3 tools/snippets/verify-kotlin.py --jdk /absolute/jdk --gradle /absolute/gradle --node /absolute/node --output /absolute/fresh-output
+```
+
+Use a fresh output root. Imports/main and cleanup are QA host responsibilities, not
+rewrites or replacement clients; dependency downloads belong only to developer QA.
+
+Real agent-browser interaction with the owned Rust generation API confirms the Kotlin
+file option, native asRequestBody code and localized import guidance in English/light
+1280px and Chinese/dark375px. Saved bytes/credentials are absent from the preview;
+scoped axe reports0 verified violations (one manual check per theme). No document
+horizontal overflow occurs. These UI observations do not add foreign-OS runtime proof.
