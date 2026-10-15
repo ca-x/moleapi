@@ -1,5 +1,5 @@
 #![recursion_limit = "256"]
-use moleapi_core::Workspace;
+use moleapi_core::{DubboRegistryAuth, Protocol, Workspace};
 use moleapi_formats::export;
 use serde_json::json;
 
@@ -48,4 +48,27 @@ fn external_exports_refuse_classic_dubbo_without_mislabeling_it_as_http() {
             "{error}"
         );
     }
+}
+
+#[test]
+fn registry_credentials_are_private_in_default_backup_and_exact_in_explicit_export() {
+    let mut w = workspace();
+    let request = &mut w.data.collections[0].requests[0];
+    request.url = "zookeeper://registry.example:2181".into();
+    let Protocol::Dubbo { config } = &mut request.protocol else {
+        unreachable!()
+    };
+    config.source_version = 2;
+    config.source = "zookeeper".into();
+    config.registry_auth = Some(DubboRegistryAuth {
+        username: "private-reader-qa".into(),
+        password: "private-password-qa".into(),
+    });
+    let private = export(&w, "moleapi", false).unwrap().content;
+    assert!(!private.contains("private-reader-qa"));
+    assert!(!private.contains("private-password-qa"));
+    assert!(private.contains("zookeeper://registry.example:2181"));
+    let full = export(&w, "moleapi", true).unwrap().content;
+    assert!(full.contains("private-reader-qa"));
+    assert!(full.contains("private-password-qa"));
 }

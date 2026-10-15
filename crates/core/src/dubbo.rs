@@ -16,6 +16,13 @@ pub struct DubboArgument {
     pub secret: bool,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct DubboRegistryAuth {
+    pub username: String,
+    pub password: String,
+}
+
 impl Default for DubboArgument {
     fn default() -> Self {
         Self {
@@ -33,6 +40,8 @@ pub struct DubboConfig {
     pub source_version: u8,
     #[serde(skip_serializing_if = "is_direct_source")]
     pub source: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub registry_auth: Option<DubboRegistryAuth>,
     pub transport: String,
     pub serialization: String,
     pub service: String,
@@ -52,6 +61,7 @@ impl Default for DubboConfig {
         Self {
             source_version: 1,
             source: "direct".into(),
+            registry_auth: None,
             transport: "classic".into(),
             serialization: "hessian2".into(),
             service: String::new(),
@@ -185,6 +195,22 @@ pub fn validate_dubbo(request: &RequestSpec, templates: bool) -> Result<()> {
             || (config.source_version == 2 && config.source == "zookeeper"),
         "Unsupported Dubbo source version"
     );
+    if let Some(auth) = &config.registry_auth {
+        ensure!(
+            config.source == "zookeeper",
+            "Dubbo registry authentication requires ZooKeeper"
+        );
+        ensure!(
+            !auth.username.is_empty()
+                && auth.username.len() <= 128
+                && !auth.username.contains(':')
+                && !auth.username.chars().any(char::is_control)
+                && !auth.password.is_empty()
+                && auth.password.len() <= 4096
+                && !auth.password.chars().any(char::is_control),
+            "Invalid ZooKeeper digest credentials"
+        );
+    }
     ensure!(
         config.transport == "classic" && config.serialization == "hessian2",
         "Only classic Dubbo/Hessian2 is currently selected"

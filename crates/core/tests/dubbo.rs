@@ -1,5 +1,6 @@
 use moleapi_core::{
-    DubboConfig, Environment, Protocol, RequestSpec, dubbo_provider_url, validate_request,
+    DubboConfig, DubboRegistryAuth, Environment, Protocol, RequestSpec, dubbo_provider_url,
+    validate_request,
 };
 use serde_json::{Value, json};
 
@@ -39,6 +40,35 @@ fn zookeeper_source_preserves_direct_drafts_and_rejects_unsupported_endpoints() 
         r.url = endpoint.into();
         assert!(validate_request(&r, false).is_err(), "{endpoint}");
     }
+}
+
+#[test]
+fn zookeeper_digest_credentials_are_explicit_and_bounded() {
+    let mut r = request();
+    r.url = "zookeeper://example.com:2181".into();
+    let Protocol::Dubbo { config } = &mut r.protocol else {
+        unreachable!()
+    };
+    config.source_version = 2;
+    config.source = "zookeeper".into();
+    config.registry_auth = Some(DubboRegistryAuth {
+        username: "reader".into(),
+        password: "private".into(),
+    });
+    validate_request(&r, false).unwrap();
+    let Protocol::Dubbo { config } = &mut r.protocol else {
+        unreachable!()
+    };
+    config.registry_auth.as_mut().unwrap().username = "bad:name".into();
+    assert!(validate_request(&r, false).is_err());
+    let Protocol::Dubbo { config } = &mut r.protocol else {
+        unreachable!()
+    };
+    config.registry_auth.as_mut().unwrap().username = "reader".into();
+    config.source = "direct".into();
+    config.source_version = 1;
+    r.url = "dubbo://example.com:20880".into();
+    assert!(validate_request(&r, false).is_err());
 }
 
 #[test]

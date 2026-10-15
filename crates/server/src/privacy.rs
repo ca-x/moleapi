@@ -273,6 +273,10 @@ pub(crate) fn request_values(
                 values(&value, argument.secret, &mut capture);
             }
         }
+        if let Some(auth) = &config.registry_auth {
+            capture(&auth.username);
+            capture(&auth.password);
+        }
         for attachment in config.attachments.iter().filter(|row| row.enabled) {
             if attachment.secret == Some(true) || moleapi_core::sensitive_query_key(&attachment.key)
             {
@@ -480,6 +484,23 @@ mod tests {
             .unwrap()
             .scrub(&mut history);
         assert!(!history.to_string().contains("private-value"));
+    }
+
+    #[test]
+    fn dubbo_registry_digest_credentials_taint_response_history() {
+        let request: moleapi_core::RequestSpec = serde_json::from_value(serde_json::json!({
+          "id":"registry","name":"Registry","method":"GET","url":"zookeeper://example.test:2181",
+          "description":"","query":[],"headers":[],"body_kind":"none","body":"",
+          "auth":{"kind":"none","token":"","username":"","password":""},
+          "timeout_ms":5000,"follow_redirects":false,"verify_tls":true,"assertions":[],"examples":[],
+          "protocol":{"kind":"dubbo","source_version":2,"source":"zookeeper",
+            "service":"fixture.EchoService","method":"echo", "arguments":[], "attachments":[],
+            "registry_auth":{"username":"digest-user-private","password":"digest-pass-private"}}
+        })).unwrap();
+        let mut scopes = moleapi_core::VariableScopes::default();
+        request_values(&request, &mut scopes).unwrap();
+        assert!(scopes.private_values.contains("digest-user-private"));
+        assert!(scopes.private_values.contains("digest-pass-private"));
     }
     #[test]
     fn encoded_jwt_signing_secret_and_resolved_source_are_private() {

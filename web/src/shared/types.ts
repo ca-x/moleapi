@@ -27,6 +27,7 @@ export interface DubboConfig {
   kind: "dubbo";
   source_version: number;
   source?: "direct" | "zookeeper";
+  registry_auth?: {username:string;password:string} | null;
   transport: "classic";
   serialization: "hessian2";
   service: string;

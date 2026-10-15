@@ -123,6 +123,16 @@ pub async fn lookup_zookeeper(
     .await
     .context("ZooKeeper connection timed out")
     .and_then(|result| result.map_err(anyhow::Error::from))?;
+    if let Some(auth) = &config.registry_auth {
+        let credentials = format!("{}:{}", auth.username, auth.password);
+        tokio::time::timeout(
+            deadline.saturating_duration_since(Instant::now()),
+            client.add_auth("digest", credentials.into_bytes()),
+        )
+        .await
+        .context("ZooKeeper authentication timed out")?
+        .context("ZooKeeper authentication failed")?;
+    }
     let encoded_service: String =
         url::form_urlencoded::byte_serialize(config.service.as_bytes()).collect();
     let path = format!("/dubbo/{encoded_service}/providers");

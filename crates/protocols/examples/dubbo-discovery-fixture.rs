@@ -1,6 +1,6 @@
 //! Consume one original official ZooKeeper lookup result through Rust policy admission.
 use anyhow::{Result, ensure};
-use moleapi_core::{DubboConfig, NetworkPolicy, RequestSpec};
+use moleapi_core::{DubboConfig, DubboRegistryAuth, NetworkPolicy, RequestSpec};
 use moleapi_protocols::dubbo::{DubboRuntime, lookup_zookeeper, select_registry_provider};
 use serde_json::{Value, json};
 use std::{path::Path, time::Duration};
@@ -12,17 +12,56 @@ async fn main() -> Result<()> {
     let registry = args.next().expect("ZooKeeper registry URL");
     let java = args.next().expect("Java executable");
     let jar = args.next().expect("pinned worker JAR");
+    let secure = match args.next() {
+        None => false,
+        Some(value) if value == "--auth" => true,
+        Some(_) => anyhow::bail!("Unexpected discovery fixture argument"),
+    };
     ensure!(
         args.next().is_none(),
         "Unexpected discovery fixture argument"
     );
-    let config = DubboConfig {
+    let mut config = DubboConfig {
         service: "fixture.RegistryService".into(),
         version: "1.0.0".into(),
         group: "qa".into(),
         method: "echo".into(),
         ..Default::default()
     };
+    if secure {
+        ensure!(
+            lookup_zookeeper(
+                &registry,
+                &config,
+                NetworkPolicy {
+                    allow_private_network: true
+                },
+                Duration::from_secs(5)
+            )
+            .await
+            .is_err(),
+            "Anonymous ZooKeeper lookup accessed protected providers"
+        );
+        config.registry_auth = Some(DubboRegistryAuth {
+            username: "fixture-reader".into(),
+            password: "fixture-password".into(),
+        });
+        let mut wrong_auth = config.clone();
+        wrong_auth.registry_auth.as_mut().unwrap().password = "incorrect-password".into();
+        ensure!(
+            lookup_zookeeper(
+                &registry,
+                &wrong_auth,
+                NetworkPolicy {
+                    allow_private_network: true
+                },
+                Duration::from_secs(5)
+            )
+            .await
+            .is_err(),
+            "Incorrect ZooKeeper digest password accessed protected providers"
+        );
+    }
     let snapshot = lookup_zookeeper(
         &registry,
         &config,
@@ -131,6 +170,14 @@ async fn main() -> Result<()> {
     if let moleapi_core::Protocol::Dubbo { config } = &mut registry_request.protocol {
         config.source_version = 2;
         config.source = "zookeeper".into();
+        config.registry_auth = if secure {
+            Some(DubboRegistryAuth {
+                username: "fixture-reader".into(),
+                password: "fixture-password".into(),
+            })
+        } else {
+            None
+        };
     }
     let registry_answer = runtime
         .invoke(

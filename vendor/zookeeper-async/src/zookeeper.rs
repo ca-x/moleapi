@@ -38,7 +38,6 @@ impl Debug for RawRequest {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         f.debug_struct("RawRequest")
             .field("opcode", &self.opcode)
-            .field("data", &self.data)
             .finish()
     }
 }

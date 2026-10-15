@@ -656,6 +656,10 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
                 }
                 moleapi_core::Protocol::Dubbo { config } => {
                     request.url = privacy.screen_text(&redact_url(&request.url));
+                    if let Some(auth) = &mut config.registry_auth {
+                        auth.username.clear();
+                        auth.password.clear();
+                    }
                     for argument in &mut config.arguments {
                         argument.value_source = if argument.secret {
                             "null".into()

@@ -140,5 +140,6 @@ jobs:
           path: |
             ${{ runner.temp }}/zookeeper-evidence.json
             ${{ runner.temp }}/zookeeper-evidence.held.log
+            ${{ runner.temp }}/zookeeper-evidence.auth.log
             ${{ runner.temp }}/zookeeper-evidence.complete.log
           if-no-files-found: warn

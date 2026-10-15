@@ -36,7 +36,11 @@ public class RegistryFixture {
 
     public static void main(String[] args) throws Exception {
         try (TestingServer server = new TestingServer(true)) {
-            String registryAddress = "zookeeper://" + server.getConnectString();
+            boolean secure = args.length == 1 && "--auth-hold".equals(args[0]);
+            String registryEndpoint = "zookeeper://" + server.getConnectString();
+            String registryAddress = secure
+                    ? "zookeeper://fixture-reader:fixture-password@" + server.getConnectString()
+                    : registryEndpoint;
             ApplicationConfig app = new ApplicationConfig("moleapi-zookeeper-qa");
             app.setQosEnable(false);
             app.setEnableFileCache(false);
@@ -89,9 +93,9 @@ public class RegistryFixture {
                 } finally { reference.destroy(); }
                 if (calls.get() != 1) throw new AssertionError("Provider invocation count changed during lookup");
                 System.out.println("ZOOKEEPER_PROVIDER=" + chosen.toFullString());
-                System.out.println("ZOOKEEPER_REGISTRY=" + registryAddress);
+                System.out.println("ZOOKEEPER_REGISTRY=" + registryEndpoint);
                 System.out.flush();
-                if (args.length == 1 && "--hold".equals(args[0])) {
+                if (args.length == 1 && ("--hold".equals(args[0]) || secure)) {
                     new java.util.concurrent.CountDownLatch(1).await();
                 }
                 System.out.println("PASS ZOOKEEPER lookup group version direct-call provider-removal");

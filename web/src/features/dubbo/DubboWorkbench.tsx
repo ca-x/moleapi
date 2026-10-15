@@ -21,11 +21,19 @@ export default function DubboWorkbench({request, update, disabled}:{request:Requ
       <Choice value={source} disabled={disabled} label={t("Dubbo 来源")}
         options={[{value:"direct",label:t("直连提供方")},{value:"zookeeper",label:"ZooKeeper"}]}
         onChange={value=>update({
-          protocol:{...config,source:value,source_version:value==="direct"?1:2},
+          protocol:{...config,source:value,source_version:value==="direct"?1:2,
+            registry_auth:value==="direct"?undefined:config.registry_auth},
           url:value==="direct"?"dubbo://localhost:20880":"zookeeper://localhost:2181",
         })}/>
     </Field>
-    {source==="zookeeper" && <Text size="2" color="gray">{t("在上方 URL 栏填写 ZooKeeper 地址。每次调用都会重新查找提供方；当前仅支持无需认证的 ZooKeeper。")}</Text>}
+    {source==="zookeeper" && <>
+      <Text size="2" color="gray">{t("在上方 URL 栏填写 ZooKeeper 地址。每次调用都会重新查找提供方。")}</Text>
+      <Flex gap="3" wrap="wrap">
+        <Field label={t("ZooKeeper 用户名")}><TextField.Root aria-label={t("ZooKeeper 用户名")} value={config.registry_auth?.username ?? ""} maxLength={128} disabled={disabled} onChange={event=>change({registry_auth:{username:event.target.value,password:config.registry_auth?.password ?? ""}})}/></Field>
+        <Field label={t("ZooKeeper 密码")}><TextField.Root type="password" aria-label={t("ZooKeeper 密码")} value={config.registry_auth?.password ?? ""} maxLength={4096} disabled={disabled} onChange={event=>change({registry_auth:{username:config.registry_auth?.username ?? "",password:event.target.value}})}/></Field>
+      </Flex>
+      <Text size="2" color="gray">{t("凭据留空表示无需认证；填写时使用 ZooKeeper digest 认证。")}</Text>
+    </>}
     <Flex gap="3" wrap="wrap">
       <Field label={t("Dubbo 服务")}><TextField.Root aria-label={t("Dubbo 服务")} value={config.service} maxLength={256} disabled={disabled} placeholder="com.example.DemoService" onChange={event=>change({service:event.target.value})}/></Field>
       <Field label={t("Dubbo 方法")}><TextField.Root aria-label={t("Dubbo 方法")} value={config.method} maxLength={128} disabled={disabled} placeholder="sayHello" onChange={event=>change({method:event.target.value})}/></Field>
