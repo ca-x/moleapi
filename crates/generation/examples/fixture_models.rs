@@ -20,7 +20,8 @@ async fn main() -> Result<()> {
             || profile == "date" && selected == "model-flow"
             || matches!(profile.as_str(), "flat" | "collision") && selected == "model-elm"
             || profile == "containers" && selected == "model-pike"
-            || profile == "enum-tags" && selected == "model-crystal",
+            || profile == "enum-tags" && selected == "model-crystal"
+            || profile == "multi" && selected == "model-haskell",
         "Unknown model fixture profile"
     );
     ensure!(
@@ -70,6 +71,14 @@ async fn main() -> Result<()> {
     if profile == "enum-tags" {
         specification["components"]["schemas"]["Pet"]["properties"]["status"]["enum"] =
             json!(["ready-state", "done/state", "#{1 + 2}"]);
+    }
+    if profile == "multi" {
+        specification["components"]["schemas"]["Empty"] =
+            json!({"type":"object","properties":{},"additionalProperties":false});
+        specification["components"]["schemas"]["PetArray"] =
+            json!({"type":"array","items":{"$ref":"#/components/schemas/Pet"}});
+        specification["components"]["schemas"]["PetMap"] =
+            json!({"type":"object","additionalProperties":{"$ref":"#/components/schemas/Pet"}});
     }
     for target in catalog.into_iter().filter(|target| {
         target.kind == "model" && (selected == "*" || selected.split(',').any(|id| id == target.id))

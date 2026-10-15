@@ -39,6 +39,7 @@ pub(super) fn catalog() -> Result<Vec<ProjectTarget>> {
                 | "model-elm"
                 | "model-pike"
                 | "model-crystal"
+                | "model-haskell"
         ) {
             target.validation = "representative-3.0-3.1-native-model-roundtrip-fixture".into();
         }
@@ -124,7 +125,7 @@ pub(super) fn generate(input: &ProjectInput) -> Result<ProjectArtifact> {
     let files: BTreeMap<String, String> = serde_json::from_str(&rendered)?;
     let engine = if matches!(
         input.target.as_str(),
-        "model-flow" | "model-elm" | "model-pike" | "model-crystal"
+        "model-flow" | "model-elm" | "model-pike" | "model-crystal" | "model-haskell"
     ) {
         format!("{ENGINE}+moleapi.1")
     } else {

@@ -26,7 +26,7 @@ Apifox's [model code list](https://docs.apifox.com/generate-code.md), checked202
 
 The specification generation dialog has a separate data-model category, language selection, all/exact component selection and expandable upstream serialization/style settings. Enum choices and booleans retain their types. Preview/copy/file/ZIP downloads, regeneration and owner/content/cancellation guards reuse project artifacts. SQL exports DDL only and requires the existing explicit Java runtime; the18 Quicktype targets work without Java or Node in hosted and offline applications.
 
-Actual evidence: all18 language targets generated recursive/enum/nullable component models in the host-free Rust VM; the capped application worker produced all20 target artifacts, including actual MySQL/PostgreSQL DDL. Generated Python, JavaScript, TypeScript, Go, C#, Java, Rust, Ruby, C++, Kotlin, Dart, Swift, Flow, Elm, Pike and Crystal models now run recursive/enum/nullable/Unicode serialization roundtrips in OpenAPI3.0.3/3.1.0 fixtures. TypeScript, Go, C#, Java, Rust, C++, Kotlin, Dart, Swift, Flow, Elm and Crystal compile with real toolchains; Python, JavaScript, Ruby and Pike run through their native runtimes. The other2 model language runtimes and execution of generated SQL DDL are not established by artifact generation. Required/optional/null serialization differences remain those of the upstream target; this is model conversion, not universal schema validation.
+Actual evidence: all18 language targets generated recursive/enum/nullable component models in the host-free Rust VM; the capped application worker produced all20 target artifacts, including actual MySQL/PostgreSQL DDL. Generated Python, JavaScript, TypeScript, Go, C#, Java, Rust, Ruby, C++, Kotlin, Dart, Swift, Flow, Elm, Pike, Crystal and Haskell models now run recursive/enum/nullable/Unicode serialization roundtrips in OpenAPI3.0.3/3.1.0 fixtures. TypeScript, Go, C#, Java, Rust, C++, Kotlin, Dart, Swift, Flow, Elm, Crystal and Haskell compile with real toolchains; Python, JavaScript, Ruby and Pike run through their native runtimes. The remaining Objective-C model runtime and execution of generated SQL DDL are not established by artifact generation. Required/optional/null serialization differences remain those of the upstream target; this is model conversion, not universal schema validation.
 
 API evidence covers authenticated ownership, anonymous/cross-owner rejection, default credential-example exclusion, exact component selection, typed-option rejection and unchanged canonical source. Component/UI tests cover typed model settings and existing late-reply fencing; English/Chinese catalogs include model flows.
 
@@ -278,3 +278,43 @@ python3 tools/models/verify-crystal.py --fixtures /absolute/crystal-models --dia
 Use fresh roots per dialect and append enum-tags to the fixture command for the
 separate authored-wire/interpolation case. Source/license/hash/idempotent build
 patches live in vendor/model-engine/compat; native Apple RPC acceptance is independent.
+
+
+## Haskell total Aeson decoding and multiple roots
+
+Four actual OpenAPI3.0.3/3.1.0 core/multiple-root cases compile with GHC9.6.7
+(-O2 -dynamic) and run using Aeson2.2.4.0 on Linux. Native Pet/Status models
+preserve decoded and constructed recursion, integer zero, explicit null and Unicode.
+Invalid enum values, non-object inputs, missing required IDs and nested invalid
+enums return typed Aeson failures rather than partial-pattern exceptions. The
+pinned mature renderer uses withObject and a failing enum fallback; its existing
+field, enum, class and serialization logic remains in control.
+
+Multiple selected roots compile with independently allocated dependency names:
+decodePet, decodeEmpty, decodePetArray and decodePetMap. Single-root output retains
+decodeTopLevel. Type aliases export without constructors; actual array/map aliases
+and empty-object decoding/rejection pass. Source files remain unchanged throughout
+native consumer verification; artifact engine is quicktype-core@26.0.0+moleapi.1.
+
+All17 other Quicktype target sources match their previous emitted bytes. Five prior
+native runtime regressions,80 generation cases,1 owned model API case, scoped strict
+Clippy, formatting, Python compilation and idempotent engine rebuild pass. Catalog
+records17 representative model runtimes. The isolated compiler/Aeson environment
+uses51 official Arch packages with repository SHA256s and individual signatures
+verified against the official keyring; exact tool/package/source/runtime records
+remain in QA. Product generation never downloads or executes these toolchains.
+
+These remain model conversions. Haskell machine Int ranges, missing/explicit-null
+membership fidelity, advanced unions/constraints/resources, other compiler/library/
+platform/options and Objective-C model execution still require evidence. SQL DDL
+execution, pending Apple protobuf RPC verification and the full generation/SDK/
+product/release scope remain open.
+
+```sh
+cargo run -p moleapi-generation --example fixture_models -- /absolute/haskell-models /absolute/moleapi-server /absolute/java 3.1.0 model-haskell
+python3 tools/models/verify-haskell.py --fixtures /absolute/haskell-models --dialect 3.1.0 --ghc /absolute/ghc-launcher
+```
+
+Use fresh roots per dialect and append multi to the fixture command for the
+multiple-root/empty-object/array/map profile. Explicit GHC launchers may select an
+isolated package DB and library prefix without modifying host packages.
