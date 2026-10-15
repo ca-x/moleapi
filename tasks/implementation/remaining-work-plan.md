@@ -45,6 +45,8 @@ Kotlin snippet checkpoint2026-10-15: reproduced error-level legacy MediaType.par
 
 Dart snippet checkpoint2026-10-15: original text body omission was reproduced; both adapters now reuse pinned Postman native Request/MultipartRequest/Dio/FormData with byte-safe raw/file and repeated form/MIME handling.14 original snippets pass analyze/fatal-infos, AOT compilation and real HTTP on Dart3.13.5/http1.6.0/Dio5.11.1. Raw-file adapters rise to18;53 other representative outputs stay byte-identical.93 generation/4 API/35 UI-i18n cases, prior7 native wires and strict checks pass. Real owned-API bilingual UI preserves privacy and prerequisites. Apple run38707843936 remains on its existing ref, with Intel native RPC work active and ARM queued; broader generation/later milestones remain open.
 
+Ruby snippet checkpoint2026-10-15: reproduced original JSON heredoc escape loss on real wire, then repaired pinned mature literals/interpolation and native binread/set_form binary paths. Eight original Ruby3.4.7 syntax/HTTP profiles pass; raw-file adapters now19,54 other representative outputs unchanged.94 generation/4 API/36 UI-i18n cases, prior7 native wires, patch idempotence and scoped checks pass. Actual bilingual owned-API UI preserves privacy/prerequisites. Both Apple native handles remain observed separately; all wider generation and later milestones remain open.
+
 ## Slice 1: CLI runner labels
 
 **Files:** `crates/cli/src/args.rs` owns flags; `crates/cli/src/runners.rs` owns request payloads; `crates/cli/tests/runners.rs` owns real process/API fixtures; `docs/SELF-HOSTED-RUNNERS.md`, `docs/SELF-HOSTED-RUNNER-COVERAGE.md` and `docs/IMPLEMENTATION-STATUS.md` own usage/status.

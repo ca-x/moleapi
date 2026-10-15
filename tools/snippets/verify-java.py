@@ -39,7 +39,7 @@ def run(command, cwd, env, timeout=300):
     return result.stdout
 
 
-def check(profile, record, expected_text=None):
+def check(profile, record, expected_text=None, expected_json=None):
     assert record['method'] == 'POST', record
     headers = record['headers']
     assert headers['authorization'] == 'Bearer fixture-token'
@@ -49,7 +49,7 @@ def check(profile, record, expected_text=None):
     body = base64.b64decode(record['body'])
     mime = headers['content-type']
     if profile == 'core':
-        assert mime.startswith('application/json') and json.loads(body) == {'message': NOTE}
+        assert mime.startswith('application/json') and json.loads(body) == (expected_json if expected_json is not None else {'message': NOTE})
     elif profile == 'form':
         assert mime.startswith('application/x-www-form-urlencoded')
         assert urllib.parse.parse_qs(body.decode(), keep_blank_values=True) == {'label': [NOTE, 'second'], 'empty': ['']}

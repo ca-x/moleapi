@@ -23,6 +23,15 @@ beforeEach(()=>{
   vi.mocked(useWorkbench).mockImplementation(()=>state);
 });
 afterEach(cleanup);
+it("offers Ruby file code and explains standard-library and binary IO prerequisites",async()=>{
+ state.request={...state.request!,body_kind:"binary",body:JSON.stringify({file_name:"upload.bin",mime:"application/octet-stream",base64:"AP+AClg="})};
+ const choices={...catalog,targets:[{target:"ruby",title:"Ruby",clients:[{client:"native",title:"net::http",binary_file:true}]}]};
+ vi.mocked(api).mockImplementation(path=>Promise.resolve(path.endsWith("catalog")?choices:{...snippet,target:"ruby",client:"native",code:"original-ruby-file-reader"}));
+ render(<GenerationDialog open onOpenChange={vi.fn()}/>);await screen.findByRole("option",{name:"Ruby"});
+ fireEvent.change(screen.getByLabelText("代码语言"),{target:{value:"ruby"}});fireEvent.click(screen.getByRole("button",{name:"生成"}));
+ expect(await screen.findByText("Ruby 示例使用标准库 Net::HTTP，可保存为 .rb 后运行。文件示例需准备同名文件，multipart 文件应以二进制模式打开并在请求完成后关闭。")).toBeTruthy();
+ expect(screen.getByDisplayValue("original-ruby-file-reader")).toBeTruthy();
+});
 it("offers both Dart file adapters with async and package prerequisites",async()=>{
  state.request={...state.request!,body_kind:"binary",body:JSON.stringify({file_name:"upload.bin",mime:"application/octet-stream",base64:"AP+AClg="})};
  const choices={...catalog,targets:[{target:"dart",title:"Dart",clients:[{client:"http",title:"Http",binary_file:true},{client:"dio",title:"Dio",binary_file:true}]}]};

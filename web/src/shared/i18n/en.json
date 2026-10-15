@@ -1738,5 +1738,6 @@
   "OkHttp cannot send GET/HEAD bodies; choose another Java HTTP library": "OkHttp cannot send GET/HEAD bodies; choose another Java HTTP library",
   "Kotlin 代码需放入方法体，并安装 OkHttp 依赖。请导入 asRequestBody、toRequestBody、toMediaTypeOrNull 扩展方法；文件示例还需要 java.io.File。": "Place Kotlin code inside a method and install OkHttp. Import the asRequestBody, toRequestBody and toMediaTypeOrNull extensions; file examples also need java.io.File.",
   "OkHttp cannot send GET/HEAD bodies; choose a different HTTP library": "OkHttp cannot send GET/HEAD bodies; choose a different HTTP library",
-  "Dart 示例需放入 async 方法，并安装所选 http／dio 及 http_parser 依赖。文件示例需要 dart:io，编码转换需要 dart:convert。": "Place Dart examples inside an async method and install the selected http/dio package and http_parser. File examples need dart:io; encoding uses dart:convert."
+  "Dart 示例需放入 async 方法，并安装所选 http／dio 及 http_parser 依赖。文件示例需要 dart:io，编码转换需要 dart:convert。": "Place Dart examples inside an async method and install the selected http/dio package and http_parser. File examples need dart:io; encoding uses dart:convert.",
+  "Ruby 示例使用标准库 Net::HTTP，可保存为 .rb 后运行。文件示例需准备同名文件，multipart 文件应以二进制模式打开并在请求完成后关闭。": "Ruby examples use standard-library Net::HTTP and can run from a .rb file. Prepare matching files; open multipart files in binary mode and close them after the request."
 }
