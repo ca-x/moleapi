@@ -23,6 +23,18 @@ export interface GrpcConfig {
   method: string;
   message_source: string;
 }
+export interface DubboConfig {
+  kind: "dubbo";
+  source_version: number;
+  transport: "classic";
+  serialization: "hessian2";
+  service: string;
+  method: string;
+  version: string;
+  group: string;
+  arguments: {id:string;type_name:string;value_source:string;secret:boolean}[];
+  attachments: Pair[];
+}
 export interface GraphQLConfig {
   kind: "graphql";
   document: string;
@@ -38,6 +50,7 @@ export type ProtocolConfig =
   | { kind: "http" | "sse" | "websocket" }
   | GraphQLConfig
   | GrpcConfig
+  | DubboConfig
   | SocketIoConfig
   | MqttConfig
   | SoapConfig

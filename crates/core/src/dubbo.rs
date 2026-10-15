@@ -1,0 +1,230 @@
+//! Saved classic Dubbo drafts. Apache Dubbo owns Hessian and invocation in the worker.
+use crate::{Pair, Protocol, RequestSpec};
+use anyhow::{Context, Result, ensure};
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+
+const MAX_ARGUMENT_SOURCE: usize = 64 * 1024;
+const MAX_ARGUMENTS_TOTAL: usize = 1024 * 1024;
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct DubboArgument {
+    pub id: String,
+    pub type_name: String,
+    pub value_source: String,
+    pub secret: bool,
+}
+
+impl Default for DubboArgument {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            type_name: String::new(),
+            value_source: "null".into(),
+            secret: false,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct DubboConfig {
+    pub source_version: u8,
+    pub transport: String,
+    pub serialization: String,
+    pub service: String,
+    pub method: String,
+    pub version: String,
+    pub group: String,
+    pub arguments: Vec<DubboArgument>,
+    pub attachments: Vec<Pair>,
+}
+
+impl Default for DubboConfig {
+    fn default() -> Self {
+        Self {
+            source_version: 1,
+            transport: "classic".into(),
+            serialization: "hessian2".into(),
+            service: String::new(),
+            method: String::new(),
+            version: String::new(),
+            group: String::new(),
+            arguments: Vec::new(),
+            attachments: Vec::new(),
+        }
+    }
+}
+
+fn java_name(value: &str, qualified: bool) -> bool {
+    let base = value.trim_end_matches("[]");
+    !base.is_empty()
+        && base.len() <= 256
+        && (qualified || !base.contains('.'))
+        && base.split('.').all(|part| {
+            let mut chars = part.chars();
+            chars
+                .next()
+                .is_some_and(|first| first.is_ascii_alphabetic() || matches!(first, '_' | '$'))
+                && chars.all(|next| next.is_ascii_alphanumeric() || matches!(next, '_' | '$'))
+        })
+}
+
+fn parameter_type(value: &str) -> bool {
+    matches!(
+        value,
+        "boolean" | "byte" | "char" | "short" | "int" | "long" | "float" | "double"
+    ) || java_name(value, true)
+}
+
+pub fn dubbo_url(raw: &str) -> Result<url::Url> {
+    let parsed = url::Url::parse(raw).context("Invalid Dubbo endpoint")?;
+    ensure!(
+        parsed.scheme() == "dubbo"
+            && parsed.host_str().is_some()
+            && parsed.port().is_some_and(|port| port > 0)
+            && parsed.username().is_empty()
+            && parsed.password().is_none()
+            && matches!(parsed.path(), "" | "/")
+            && parsed.query().is_none()
+            && parsed.fragment().is_none(),
+        "Classic Dubbo requires a direct dubbo://host:port endpoint"
+    );
+    Ok(parsed)
+}
+
+pub fn validate_dubbo(request: &RequestSpec, templates: bool) -> Result<()> {
+    let Protocol::Dubbo { config } = &request.protocol else {
+        return Ok(());
+    };
+    ensure!(
+        config.source_version == 1,
+        "Unsupported Dubbo source version"
+    );
+    ensure!(
+        config.transport == "classic" && config.serialization == "hessian2",
+        "Only classic Dubbo/Hessian2 is currently selected"
+    );
+    ensure!(
+        config.service.len() <= 256
+            && config.method.len() <= 128
+            && config.version.len() <= 128
+            && config.group.len() <= 128,
+        "Dubbo service or method exceeds size limit"
+    );
+    if !templates {
+        ensure!(
+            java_name(&config.service, true) && config.service.contains('.'),
+            "Invalid Dubbo service interface"
+        );
+        ensure!(java_name(&config.method, false), "Invalid Dubbo method");
+    }
+    for label in [&config.version, &config.group] {
+        if !templates || !label.contains("{{") {
+            ensure!(
+                label
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.')),
+                "Invalid Dubbo version/group"
+            );
+        }
+    }
+    ensure!(
+        request.method == "GET" && request.body_kind == "none" && request.body.is_empty(),
+        "Dubbo uses GET marker with no HTTP body"
+    );
+    ensure!(
+        request.query.iter().all(|row| !row.enabled)
+            && request.headers.iter().all(|row| !row.enabled),
+        "Dubbo arguments and attachments are not HTTP query/headers"
+    );
+    ensure!(
+        matches!(request.auth.kind.as_str(), "none" | "inherit"),
+        "Dubbo credentials require explicit attachments"
+    );
+    ensure!(
+        request.network.is_none(),
+        "Dubbo network settings require a verified transport mapping"
+    );
+    ensure!(
+        config.arguments.len() <= 32,
+        "Dubbo argument limit exceeded"
+    );
+    let mut ids = HashSet::new();
+    let mut total = 0usize;
+    for argument in &config.arguments {
+        ensure!(
+            !argument.id.is_empty() && argument.id.len() <= 128 && ids.insert(&argument.id),
+            "Dubbo argument IDs must be unique and nonempty"
+        );
+        ensure!(
+            argument.type_name.len() <= 256
+                && (templates && argument.type_name.is_empty()
+                    || parameter_type(&argument.type_name)),
+            "Invalid Dubbo parameter type"
+        );
+        ensure!(
+            argument.value_source.len() <= MAX_ARGUMENT_SOURCE,
+            "Dubbo argument source exceeds 64 KiB"
+        );
+        total = total.saturating_add(argument.value_source.len());
+        ensure!(total <= MAX_ARGUMENTS_TOTAL, "Dubbo arguments exceed 1 MiB");
+        if !templates || !argument.value_source.contains("{{") {
+            serde_json::from_str::<serde_json::Value>(&argument.value_source)
+                .context("Invalid Dubbo argument JSON")?;
+        }
+    }
+    ensure!(
+        config.attachments.len() <= 64,
+        "Dubbo attachment limit exceeded"
+    );
+    let mut attachment_keys = HashSet::new();
+    let mut attachment_total = 0usize;
+    for row in config.attachments.iter().filter(|row| row.enabled) {
+        ensure!(
+            !row.id.is_empty() && row.id.len() <= 128,
+            "Invalid Dubbo attachment ID"
+        );
+        ensure!(
+            row.key.len() <= 128
+                && row.value.len() <= 4096
+                && row
+                    .local_value
+                    .as_ref()
+                    .is_none_or(|value| value.len() <= 4096),
+            "Dubbo attachment exceeds size limit"
+        );
+        attachment_total = attachment_total.saturating_add(
+            row.key.len() + row.value.len() + row.local_value.as_ref().map_or(0, String::len),
+        );
+        ensure!(
+            attachment_total <= 64 * 1024,
+            "Dubbo attachments exceed 64 KiB"
+        );
+        if !templates || !row.key.contains("{{") {
+            ensure!(
+                row.key
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+                    && !row.key.is_empty(),
+                "Invalid Dubbo attachment name"
+            );
+            ensure!(
+                !matches!(
+                    row.key.to_ascii_lowercase().as_str(),
+                    "path" | "version" | "group" | "interface" | "method"
+                ),
+                "Dubbo attachment name is protocol-owned"
+            );
+            ensure!(
+                attachment_keys.insert(row.key.to_ascii_lowercase()),
+                "Duplicate Dubbo attachment name"
+            );
+        }
+    }
+    if !templates || !request.url.contains("{{") {
+        dubbo_url(&request.url)?;
+    }
+    Ok(())
+}

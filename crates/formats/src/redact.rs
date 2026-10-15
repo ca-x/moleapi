@@ -654,6 +654,26 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
                 moleapi_core::Protocol::Grpc { message_source, .. } => {
                     *message_source = redact_protocol_json(message_source);
                 }
+                moleapi_core::Protocol::Dubbo { config } => {
+                    request.url = privacy.screen_text(&redact_url(&request.url));
+                    for argument in &mut config.arguments {
+                        argument.value_source = if argument.secret {
+                            "null".into()
+                        } else {
+                            privacy.screen_json(&redact_protocol_json_or(
+                                &argument.value_source,
+                                "null",
+                            ))
+                        };
+                    }
+                    for attachment in &mut config.attachments {
+                        if attachment.secret == Some(true) || sensitive(&attachment.key) {
+                            attachment.value.clear();
+                        }
+                        attachment.value = privacy.screen_text(&attachment.value);
+                        attachment.local_value = None;
+                    }
+                }
                 moleapi_core::Protocol::Graphql {
                     variables,
                     variables_source,

@@ -151,6 +151,12 @@ pub fn resolve_request(
         value["protocol"]["arguments_source"] = "{}".into();
         value["protocol"]["config_source"] = serde_json::Value::Null;
     }
+    let dubbo_arguments = if let Protocol::Dubbo { config } = &request.protocol {
+        value["protocol"]["arguments"] = serde_json::json!([]);
+        Some(config.arguments.clone())
+    } else {
+        None
+    };
     let grpc = if let Protocol::Grpc { message_source, .. } = &request.protocol {
         let message: serde_json::Value =
             serde_json::from_str(message_source).context("Invalid gRPC JSON draft")?;
@@ -352,6 +358,21 @@ pub fn resolve_request(
     };
     let mut budget = 20 * 1024 * 1024;
     replace(&mut value, &vars, &mut budget)?;
+    if let Some(arguments) = dubbo_arguments {
+        let mut resolved = Vec::with_capacity(arguments.len());
+        for mut argument in arguments {
+            let mut source: serde_json::Value = serde_json::from_str(&argument.value_source)
+                .context("Invalid Dubbo argument JSON")?;
+            replace(&mut source, &vars, &mut budget)?;
+            argument.value_source = serde_json::to_string(&source)?;
+            ensure!(
+                argument.value_source.len() <= 64 * 1024,
+                "Resolved Dubbo argument exceeds 64 KiB"
+            );
+            resolved.push(argument);
+        }
+        value["protocol"]["arguments"] = serde_json::to_value(resolved)?;
+    }
     if let Some(c) = dormant_asap {
         value["auth"]["asap"] = c;
     }

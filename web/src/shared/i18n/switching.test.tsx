@@ -91,6 +91,17 @@ it("lets an existing HTTP request opt out of the cookie jar without changing its
   expect(update).toHaveBeenCalledWith({ use_cookie_jar: false });
   expect(JSON.stringify(request)).toBe(original);
 });
+it("recognizes a restored Dubbo draft without offering a misleading HTTP send", async () => {
+  await setLanguage("en");
+  const request = {...newRequest("Classic", "dubbo://example.com:20880"), protocol:{kind:"dubbo" as const,source_version:1,transport:"classic" as const,serialization:"hessian2" as const,service:"fixture.EchoService",method:"echo",version:"1.0.0",group:"",arguments:[],attachments:[]}};
+  const before = JSON.stringify(request);
+  render(<RequestEditor request={request} update={vi.fn()} send={vi.fn()} save={vi.fn()} dirty={false} saving={false} busy={false} sending={false} dark={false} response={null} error="" />, { wrapper: theme });
+  expect(await screen.findByText("Dubbo source is saved. Calling is not available yet.")).toBeTruthy();
+  expect(screen.getByText("Dubbo request")).toBeTruthy();
+  expect((screen.getByRole("button", { name: "Send" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.queryByRole("tab", { name: "Body" })).toBeNull();
+  expect(JSON.stringify(request)).toBe(before);
+});
 it("updates navigation and a pending interpolated guard without changing stored sample names", async () => {
   const data = initialData(), before = JSON.stringify(data);
   const state = { draft: { id: "w", name: "我的工作区", data }, view: "requests", setView: vi.fn(), setHistoryResponse: vi.fn(), openModal: vi.fn(), guard: { title: message("删除环境"), description: message("删除「{{value0}}」，保存后生效。", { value0: "我的环境" }), action: vi.fn() }, saving: false, setGuard: vi.fn(), confirmGuard: vi.fn() };

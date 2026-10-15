@@ -8,6 +8,8 @@ An owner creates a Dubbo request, selects a direct `dubbo://host:port` endpoint 
 
 The first executable slice is direct classic unary invocation with fixed endpoint, explicit service/method/version/group, ordered arguments and attachments. ZooKeeper/Nacos/EDAS provider discovery and metadata import are separate required slices. The source model must keep those future fields distinguishable and reject selected unsupported registry settings until implemented.
 
+The saved `Protocol::Dubbo` configuration now has source version 1, explicit `classic`/`hessian2`, Java service/method, version/group, ordered argument IDs/types/original JSON sources and attachments. The request URL is a direct `dubbo://host:port` address. The core accepts incomplete drafts but checks exact version, size, type names, reserved attachment names and URL before execution. JSON variables resolve inside values as escaped JSON strings in an execution copy; the saved source remains exact. This source integration is not a working client yet: the session API currently returns an explicit unavailable error. The editor recognizes restored Dubbo sources, shows their service/method and disables calling; it does not offer Dubbo as a new-request option until execution is ready.
+
 ## Source and runtime contract
 
 - Save the original source and parameter order; variables resolve into an execution copy. Native backup keeps original credentials and class names; default exports/history screen known private values. Unmapped Postman/OpenAPI exports reject rather than relabel the request as HTTP or gRPC.
@@ -20,6 +22,8 @@ The first executable slice is direct classic unary invocation with fixed endpoin
 ## Library finding and gate
 
 The recorded Apache `dubbo 0.4.0` Rust crate implements Triple only. `dubbo-rs-protocol-dubbo 0.1.0` claims classic TCP/Hessian2, but its `DubboClient` calls `TcpStream::connect` internally and `read_frame` allocates a peer-declared body length without an application bound. Its request body writes one list of Hessian binary items where Apache Java reads individual typed Hessian objects. Actual run38770639723 proved the mismatch against the official Java3.3.6 provider: the official typed client passed six semantic cases; the Rust candidate received Dubbo status40 and a request-decode error. The candidate is rejected for the product. The implementation path is a pinned official Java GenericService in an isolated, bundled-JRE one-call worker; the Rust host retains owner/network admission, checked literal-IP routing, output/deadline budgets and cancellation. Generic-call and worker runtime acceptance are still required before product use.
+
+Run38772485990 passed the official generic client through the same six semantic cases. Worker run38774226176 passed echo, multi, exact long, DTO and list, then exposed Fastjson2 omitting a successful null `value` field; the verifier failed at that point. The worker now explicitly writes JSON nulls and must rerun the full fixture, including exception and hostname rejection, before integration. Java packaging and the Rust host route are separate required gates.
 
 ## Acceptance evidence
 

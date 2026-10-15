@@ -111,6 +111,10 @@ pub enum Protocol {
         #[serde(default = "empty_message_source")]
         message_source: String,
     },
+    Dubbo {
+        #[serde(flatten)]
+        config: Box<crate::DubboConfig>,
+    },
     Graphql {
         #[serde(default)]
         document: String,
@@ -176,6 +180,9 @@ impl Protocol {
     }
     pub fn is_grpc(&self) -> bool {
         matches!(self, Self::Grpc { .. })
+    }
+    pub fn is_dubbo(&self) -> bool {
+        matches!(self, Self::Dubbo { .. })
     }
     pub fn is_graphql(&self) -> bool {
         matches!(self, Self::Graphql { .. })

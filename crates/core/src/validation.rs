@@ -9,6 +9,7 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
     validate_soap(r, templates)?;
     validate_graphql_draft(r, templates)?;
     validate_mqtt(r, templates)?;
+    validate_dubbo(r, templates)?;
     if let Protocol::Socketio {
         namespace,
         path,
@@ -270,6 +271,7 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
     if !(templates && r.protocol.is_a2a() && r.url.is_empty())
         && !r.protocol.is_mqtt()
         && !r.protocol.is_tcp()
+        && !r.protocol.is_dubbo()
         && !r.protocol.is_data()
         && !matches!(&r.protocol, Protocol::Mcp { config } if config.transport == "stdio" || templates && r.url.is_empty())
         && (!templates || !r.url.contains("{{"))

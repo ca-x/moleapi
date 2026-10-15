@@ -3,6 +3,7 @@ package app.moleapi.dubbo;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.alibaba.fastjson2.JSONWriter;
 import com.google.common.net.InetAddresses;
 import java.math.BigInteger;
 import java.net.URI;
@@ -147,7 +148,7 @@ public final class Worker {
     }
 
     private static void write(JSONObject value) throws Exception {
-        byte[] bytes = JSON.toJSONBytes(value);
+        byte[] bytes = JSON.toJSONBytes(value, JSONWriter.Feature.WriteMapNullValue);
         if (bytes.length > MAX_OUTPUT) bytes = JSON.toJSONBytes(error("worker_error", "OutputLimit", "Dubbo output exceeds 1 MiB"));
         System.out.write(bytes);
         System.out.flush();

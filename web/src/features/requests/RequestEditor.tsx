@@ -97,6 +97,7 @@ export default function RequestEditor({
   const kind = request.protocol?.kind || "http";
   const live = ["sse", "websocket"].includes(kind);
   const grpc = kind === "grpc";
+  const dubbo = kind === "dubbo";
   const socketio = kind === "socketio";
   const mqtt = kind === "mqtt";
   const soap = kind === "soap";
@@ -109,6 +110,10 @@ export default function RequestEditor({
   const mqttWebSocket =
     mqtt && (/^wss?:/i.test(request.url) || request.url.includes("{{"));
   useEffect(() => {
+    if (dubbo && !["docs", "settings"].includes(tab)) {
+      setTab("settings");
+      return;
+    }
     if (
       (data || tcp || live || grpc || socketio || mqtt || mcp || a2a) &&
       [
@@ -122,7 +127,7 @@ export default function RequestEditor({
       ].includes(tab)
     )
       setTab(data ? "auth" : tcp ? "scripts" : mcpStdio ? "settings" : mqtt ? "auth" : grpc ? "headers" : "query");
-  }, [data, tcp, live, grpc, socketio, mqtt, mcp, a2a, mcpStdio, mqttWebSocket, tab]);
+  }, [data, tcp, live, grpc, dubbo, socketio, mqtt, mcp, a2a, mcpStdio, mqttWebSocket, tab]);
   function changeProtocol(
     value:
       | "data"
@@ -132,12 +137,14 @@ export default function RequestEditor({
       | "websocket"
       | "graphql"
       | "grpc"
+      | "dubbo"
       | "socketio"
       | "mqtt"
       | "soap"
       | "mcp"
       | "a2a",
   ) {
+    if (value === "dubbo") return;
     let url = request.url;
     try {
       const parsed = new URL(url);
@@ -229,6 +236,7 @@ export default function RequestEditor({
               ? t("HTTP 请求")
               : data ? t("Data 客户端") : tcp ? t("TCP 客户端") : a2a ? t("A2A 客户端") : mcp ? t("MCP 客户端") : grpc
                 ? t("gRPC 请求")
+                : dubbo ? t("Dubbo 请求")
                 : soap
                   ? t("SOAP 请求")
                   : mqtt
@@ -278,6 +286,7 @@ export default function RequestEditor({
             { value: "websocket", label: "WebSocket" },
             { value: "graphql", label: "GraphQL" },
             { value: "grpc", label: "gRPC" },
+            ...(dubbo ? [{ value: "dubbo" as const, label: "Dubbo" }] : []),
             { value: "socketio", label: "Socket.IO" },
             { value: "mqtt", label: "MQTT" },
             { value: "soap", label: "SOAP" },
@@ -287,7 +296,7 @@ export default function RequestEditor({
             { value: "a2a", label: "A2A" },
           ]}
         />
-        {data ? <Badge className="protocol-handshake" color="gray">Data</Badge> : tcp ? <Badge className="protocol-handshake" color="gray">TCP</Badge> : a2a ? <Badge className="protocol-handshake" color="gray">A2A</Badge> : mcp ? <Badge className="protocol-handshake" color="gray">MCP</Badge> : mqtt ? (
+        {data ? <Badge className="protocol-handshake" color="gray">Data</Badge> : dubbo ? <Badge className="protocol-handshake" color="gray">Dubbo</Badge> : tcp ? <Badge className="protocol-handshake" color="gray">TCP</Badge> : a2a ? <Badge className="protocol-handshake" color="gray">A2A</Badge> : mcp ? <Badge className="protocol-handshake" color="gray">MCP</Badge> : mqtt ? (
           <Badge className="protocol-handshake" color="gray">
             MQTT Broker
           </Badge>
@@ -319,6 +328,7 @@ export default function RequestEditor({
           loading={busy}
           onClick={send}
           disabled={
+            dubbo ||
             (dataLocal ? false : request.protocol?.kind === "mcp" && mcpStdio ? !request.protocol.command : !request.url) ||
             sending ||
             ((data || tcp || live || grpc || socketio || mqtt) && protocolConnected) ||
@@ -335,6 +345,7 @@ export default function RequestEditor({
                 : t("连接")}
         </Button>
       </div>
+      {dubbo && <Text size="2" color="gray">{t("Dubbo 来源已保存；调用功能尚未开放。")}</Text>}
       <Group
         id="request-response-split"
         orientation="vertical"
@@ -359,7 +370,7 @@ export default function RequestEditor({
             <Tabs.List>
               {requestTabs
                 .filter((item) =>
-                  data ? ["auth","settings","docs"].includes(item.value) : tcp ? ["scripts","docs"].includes(item.value) : kind === "graphql" || soap
+                  dubbo ? ["settings","docs"].includes(item.value) : data ? ["auth","settings","docs"].includes(item.value) : tcp ? ["scripts","docs"].includes(item.value) : kind === "graphql" || soap
                     ? item.value !== "body"
                     : tcp || grpc || mqtt || mcp || a2a
                       ? ![
@@ -484,7 +495,8 @@ export default function RequestEditor({
             </Tabs.Content>
             <Tabs.Content value="settings">
               <div className="form-panel">
-                {(!data||(request.protocol?.kind==="data"&&request.protocol.source==="remote_file"))&&<NetworkSettings key={`${bodyScope}/${request.id}`} value={request.network} change={network=>update({network})} disabled={busy||sending} ntlm={request.auth.kind==="ntlm"} websocket={request.protocol?.kind==="websocket"||socketio} grpc={grpc} rawTcp={tcp} mqtt={mqtt}/>}
+                {dubbo && request.protocol?.kind === "dubbo" && <Text size="2" color="gray">{t("Dubbo 服务")}: {request.protocol.service || "—"} · {t("Dubbo 方法")}: {request.protocol.method || "—"}</Text>}
+                {!dubbo&&(!data||(request.protocol?.kind==="data"&&request.protocol.source==="remote_file"))&&<NetworkSettings key={`${bodyScope}/${request.id}`} value={request.network} change={network=>update({network})} disabled={busy||sending} ntlm={request.auth.kind==="ntlm"} websocket={request.protocol?.kind==="websocket"||socketio} grpc={grpc} rawTcp={tcp} mqtt={mqtt}/>}
                 {cookieWorkspace && ["http", "soap", "graphql"].includes(kind) && <>
                   <CookieManager key={bodyScope} workspace={cookieWorkspace} environment={workspaceData?.active_environment_id} url={request.url}/>
                   <label className="checkbox-label">
@@ -503,18 +515,18 @@ export default function RequestEditor({
                     }
                   />
                 </Field>
-                <label className="checkbox-label">
+                {!dubbo && <label className="checkbox-label">
                   <Checkbox
                     checked={request.follow_redirects}
                     onCheckedChange={(v) =>
                       update({ follow_redirects: v === true })
                     }
-                  /> {t("自动跟随重定向")} </label>
-                <label className="checkbox-label">
+                  /> {t("自动跟随重定向")} </label>}
+                {!dubbo && <label className="checkbox-label">
                   <Checkbox
                     checked={request.verify_tls}
                     onCheckedChange={(v) => update({ verify_tls: v === true })}
-                  /> {t("验证 TLS 证书")} </label>
+                  /> {t("验证 TLS 证书")} </label>}
               </div>
             </Tabs.Content>
           </Tabs.Root>

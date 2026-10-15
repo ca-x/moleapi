@@ -54,6 +54,8 @@ pub use assertion_worker::*;
 pub use extractions::*;
 mod grpc;
 pub use grpc::*;
+mod dubbo;
+pub use dubbo::*;
 mod graphql;
 pub use graphql::*;
 mod interpolation;

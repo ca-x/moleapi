@@ -243,6 +243,46 @@ pub(crate) fn request_values(
             }
         }
     }
+    if let moleapi_core::Protocol::Dubbo { config } = &request.protocol {
+        fn values(value: &serde_json::Value, private: bool, capture: &mut impl FnMut(&str)) {
+            match value {
+                serde_json::Value::String(text) if private => capture(text),
+                serde_json::Value::Number(number) if private => capture(&number.to_string()),
+                serde_json::Value::Array(items) => {
+                    for item in items {
+                        values(item, private, capture);
+                    }
+                }
+                serde_json::Value::Object(items) => {
+                    for (key, item) in items {
+                        values(
+                            item,
+                            private || moleapi_core::sensitive_query_key(key),
+                            capture,
+                        );
+                    }
+                }
+                _ => {}
+            }
+        }
+        for argument in &config.arguments {
+            if argument.secret {
+                capture(&argument.value_source);
+            }
+            if let Ok(value) = serde_json::from_str(&argument.value_source) {
+                values(&value, argument.secret, &mut capture);
+            }
+        }
+        for attachment in config.attachments.iter().filter(|row| row.enabled) {
+            if attachment.secret == Some(true) || moleapi_core::sensitive_query_key(&attachment.key)
+            {
+                capture(&attachment.value);
+                if let Some(local) = &attachment.local_value {
+                    capture(local);
+                }
+            }
+        }
+    }
     if let Some(c) = &request.network {
         for value in moleapi_core::network_private_sources(c) {
             capture(&value);
@@ -414,6 +454,33 @@ pub(crate) fn request_values(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dubbo_arguments_and_attachments_taint_response_history() {
+        let request: moleapi_core::RequestSpec = serde_json::from_value(serde_json::json!({
+          "id":"dubbo","name":"Dubbo","method":"GET","url":"dubbo://example.test:20880",
+          "description":"","query":[],"headers":[],"body_kind":"none","body":"",
+          "auth":{"kind":"none","token":"","username":"","password":""},
+          "timeout_ms":5000,"follow_redirects":false,"verify_tls":true,"assertions":[],"examples":[],
+          "protocol":{"kind":"dubbo","service":"fixture.EchoService","method":"echo",
+            "arguments":[{"id":"secret","type_name":"java.lang.String","value_source":"\"dubbo-private-value\"","secret":true},
+                         {"id":"nested","type_name":"java.util.Map","value_source":"{\"token\":\"nested-private-value\"}"}],
+            "attachments":[{"id":"auth","key":"credential","value":"attachment-private-value","enabled":true,"secret":true}]}
+        })).unwrap();
+        let mut scopes = moleapi_core::VariableScopes::default();
+        request_values(&request, &mut scopes).unwrap();
+        for value in [
+            "dubbo-private-value",
+            "nested-private-value",
+            "attachment-private-value",
+        ] {
+            assert!(scopes.private_values.contains(value), "missing {value}");
+        }
+        let mut history = serde_json::json!({"body":"dubbo-private-value nested-private-value attachment-private-value"});
+        Redactor::new(&scopes.private_values)
+            .unwrap()
+            .scrub(&mut history);
+        assert!(!history.to_string().contains("private-value"));
+    }
     #[test]
     fn encoded_jwt_signing_secret_and_resolved_source_are_private() {
         let request: moleapi_core::RequestSpec = serde_json::from_value(serde_json::json!({
