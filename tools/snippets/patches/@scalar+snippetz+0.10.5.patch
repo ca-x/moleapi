@@ -86,3 +86,67 @@ diff --git a/node_modules/@scalar/snippetz/dist/plugins/csharp/restsharp/restsha
                  if (text) {
                      let body = text;
                      try {
+diff --git a/node_modules/@scalar/snippetz/dist/libs/java.js b/node_modules/@scalar/snippetz/dist/libs/java.js
+--- a/node_modules/@scalar/snippetz/dist/libs/java.js
++++ b/node_modules/@scalar/snippetz/dist/libs/java.js
+@@ -7,7 +7,10 @@
+     return JSON.stringify(character).slice(1, -1);
+ }).join('')}"`;
+ /** Build a byte array while preserving binary file contents in multipart requests. */
+-export const javaBody = (body) => {
++export const javaBody = (body, fileName) => {
++    if (fileName !== undefined) {
++        body = [{ file: fileName }];
++    }
+     if (!body) {
+         return [];
+     }
+diff --git a/node_modules/@scalar/snippetz/dist/plugins/java/nethttp/nethttp.js b/node_modules/@scalar/snippetz/dist/plugins/java/nethttp/nethttp.js
+--- a/node_modules/@scalar/snippetz/dist/plugins/java/nethttp/nethttp.js
++++ b/node_modules/@scalar/snippetz/dist/plugins/java/nethttp/nethttp.js
+@@ -8,7 +8,7 @@
+     generate(request, configuration) {
+         const { url, method, headers, body } = prepareRequest(request, configuration);
+         return [
+-            ...javaBody(body),
++            ...javaBody(body, request?.postData?.fileName),
+             'HttpClient client = HttpClient.newHttpClient();',
+             'HttpRequest request = HttpRequest.newBuilder()',
+             `  .uri(java.net.URI.create(${quoteJava(url)}))`,
+diff --git a/node_modules/@scalar/snippetz/dist/plugins/java/okhttp/okhttp.js b/node_modules/@scalar/snippetz/dist/plugins/java/okhttp/okhttp.js
+--- a/node_modules/@scalar/snippetz/dist/plugins/java/okhttp/okhttp.js
++++ b/node_modules/@scalar/snippetz/dist/plugins/java/okhttp/okhttp.js
+@@ -36,6 +36,9 @@
+             }
+             lines.push('  .build();', '');
+         }
++        else if (postData?.fileName !== undefined) {
++            lines.push(`RequestBody body = RequestBody.create(MediaType.parse(${quoteJava(postData.mimeType ?? 'application/octet-stream')}), new java.io.File(${quoteJava(postData.fileName)}));`, '');
++        }
+         else if (postData) {
+             lines.push(`RequestBody body = RequestBody.create(${postData.mimeType ? `MediaType.parse(${quoteJava(postData.mimeType)})` : 'null'}, ${quoteJava(postData.text ?? '')});`, '');
+         }
+diff --git a/node_modules/@scalar/snippetz/dist/plugins/java/asynchttp/asynchttp.js b/node_modules/@scalar/snippetz/dist/plugins/java/asynchttp/asynchttp.js
+--- a/node_modules/@scalar/snippetz/dist/plugins/java/asynchttp/asynchttp.js
++++ b/node_modules/@scalar/snippetz/dist/plugins/java/asynchttp/asynchttp.js
+@@ -8,7 +8,7 @@
+     generate(request, configuration) {
+         const { url, method, headers, body } = prepareRequest(request, configuration);
+         return [
+-            ...javaBody(body),
++            ...javaBody(body, request?.postData?.fileName),
+             'try (AsyncHttpClient client = new DefaultAsyncHttpClient()) {',
+             `  Response response = client.prepare(${quoteJava(method)}, ${quoteJava(url)})`,
+             ...headers.map(({ name, value }) => `    .addHeader(${quoteJava(name)}, ${quoteJava(value)})`),
+diff --git a/node_modules/@scalar/snippetz/dist/plugins/java/unirest/unirest.js b/node_modules/@scalar/snippetz/dist/plugins/java/unirest/unirest.js
+--- a/node_modules/@scalar/snippetz/dist/plugins/java/unirest/unirest.js
++++ b/node_modules/@scalar/snippetz/dist/plugins/java/unirest/unirest.js
+@@ -8,7 +8,7 @@
+     generate(request, configuration) {
+         const { url, method, headers, body } = prepareRequest(request, configuration);
+         return [
+-            ...javaBody(body),
++            ...javaBody(body, request?.postData?.fileName),
+             `HttpResponse<String> response = Unirest.request(${quoteJava(method)}, ${quoteJava(url)})`,
+             ...headers.map(({ name, value }) => `  .header(${quoteJava(name)}, ${quoteJava(value)})`),
+             ...(body ? ['  .body(body.toByteArray())'] : []),

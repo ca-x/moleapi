@@ -1733,5 +1733,7 @@
   "选择已安装的 Java 17+ 可执行文件，配置会保存在此设备。": "Select an installed Java 17+ executable. This device will remember your choice.",
   "更换 Java…": "Change Java…",
   "选择 Java…": "Select Java…",
-  "无法配置 Java，请选择 Java 17+ 可执行文件，并检查应用设置的写入权限。": "Could not configure Java. Select a Java 17+ executable and check that app settings can be saved."
+  "无法配置 Java，请选择 Java 17+ 可执行文件，并检查应用设置的写入权限。": "Could not configure Java. Select a Java 17+ executable and check that app settings can be saved.",
+  "Java 代码需放入方法或 main，并补充所选 HTTP 库的 import 与 Maven／Gradle 依赖；java.net.http 使用 JDK 自带客户端。": "Place Java code inside a method or main and add imports and Maven/Gradle dependencies for the selected HTTP library. java.net.http is included in the JDK.",
+  "OkHttp cannot send GET/HEAD bodies; choose another Java HTTP library": "OkHttp cannot send GET/HEAD bodies; choose another Java HTTP library"
 }

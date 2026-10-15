@@ -1733,5 +1733,7 @@
   "选择已安装的 Java 17+ 可执行文件，配置会保存在此设备。": "选择已安装的 Java 17+ 可执行文件，配置会保存在此设备。",
   "更换 Java…": "更换 Java…",
   "选择 Java…": "选择 Java…",
-  "无法配置 Java，请选择 Java 17+ 可执行文件，并检查应用设置的写入权限。": "无法配置 Java，请选择 Java 17+ 可执行文件，并检查应用设置的写入权限。"
+  "无法配置 Java，请选择 Java 17+ 可执行文件，并检查应用设置的写入权限。": "无法配置 Java，请选择 Java 17+ 可执行文件，并检查应用设置的写入权限。",
+  "Java 代码需放入方法或 main，并补充所选 HTTP 库的 import 与 Maven／Gradle 依赖；java.net.http 使用 JDK 自带客户端。": "Java 代码需放入方法或 main，并补充所选 HTTP 库的 import 与 Maven／Gradle 依赖；java.net.http 使用 JDK 自带客户端。",
+  "OkHttp cannot send GET/HEAD bodies; choose another Java HTTP library": "OkHttp 无法发送带正文的 GET/HEAD 请求；请选择其他 Java HTTP 库。"
 }

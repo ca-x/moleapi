@@ -140,7 +140,9 @@ pub fn generate_request(
         );
         headers.push(json!({"name":row.key,"value":row.value}));
     }
-    if request.body_kind == "form" && !(target == "shell" && client == "curl") {
+    let java_native =
+        target == "java" && matches!(client, "nethttp" | "okhttp" | "asynchttp" | "unirest");
+    if request.body_kind == "form" && !(target == "shell" && client == "curl") && !java_native {
         let mut names = std::collections::BTreeSet::new();
         for (name, _) in url::form_urlencoded::parse(request.body.as_bytes()) {
             ensure!(
@@ -155,6 +157,13 @@ pub fn generate_request(
             && matches!(request.method.as_str(), "GET" | "HEAD")
             && request.body_kind != "none"),
         "Fetch adapters cannot send GET/HEAD bodies; choose a different HTTP library"
+    );
+    ensure!(
+        !(target == "java"
+            && client == "okhttp"
+            && matches!(request.method.as_str(), "GET" | "HEAD")
+            && request.body_kind != "none"),
+        "OkHttp cannot send GET/HEAD bodies; choose another Java HTTP library"
     );
     match request.auth.kind.as_str() {
         "none" => {},
@@ -270,6 +279,70 @@ pub fn generate_request(
 mod tests {
     use super::*;
     #[test]
+    fn java_okhttp_rejects_unsupported_method_bodies_instead_of_silently_dropping_them() {
+        let mut w = workspace("binary", &json!({"file_name":"upload.bin","mime":"application/octet-stream","base64":"AP+AClg="}).to_string());
+        for method in ["GET", "HEAD"] {
+            w.data.collections[0].requests[0].method = method.into();
+            assert!(
+                generate_request(&w, "r", "java", "okhttp", true)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("cannot send GET/HEAD bodies")
+            );
+        }
+        w.data.collections[0].requests[0].body_kind = "none".into();
+        generate_request(&w, "r", "java", "okhttp", true).unwrap();
+    }
+    #[test]
+    fn java_file_adapters_retain_explicit_filename_prerequisites_and_default_privacy() {
+        let body =
+            json!({"file_name":"upload.bin","mime":"application/octet-stream","base64":"AP+AClg="})
+                .to_string();
+        let mut w = workspace("binary", &body);
+        w.data.collections[0].requests[0].auth.kind = "bearer".into();
+        w.data.collections[0].requests[0].auth.token = "private-java-token".into();
+        let target = crate::catalog()
+            .unwrap()
+            .into_iter()
+            .find(|target| target.target == "java")
+            .unwrap();
+        for client in ["nethttp", "okhttp", "asynchttp", "unirest"] {
+            assert!(
+                target
+                    .clients
+                    .iter()
+                    .any(|entry| entry.client == client && entry.binary_file)
+            );
+            let private = generate_request(&w, "r", "java", client, false).unwrap();
+            assert!(private.code.contains("upload.bin") && !private.code.contains("AP+AClg="));
+            assert!(!private.code.contains("private-java-token"));
+            assert!(
+                private
+                    .warnings
+                    .iter()
+                    .any(|warning| warning.contains("文件上传代码引用文件名"))
+            );
+            assert!(
+                generate_request(&w, "r", "java", client, true)
+                    .unwrap()
+                    .code
+                    .contains("private-java-token")
+            );
+        }
+        assert_eq!(w.data.collections[0].requests[0].body, body);
+    }
+
+    #[test]
+    fn java_native_form_builders_accept_repeated_fields_without_mutating_source() {
+        let body = "label=one&label=two&empty=";
+        let w = workspace("form", body);
+        for client in ["nethttp", "okhttp", "asynchttp", "unirest"] {
+            generate_request(&w, "r", "java", client, true).unwrap();
+        }
+        assert!(generate_request(&w, "r", "node", "fetch", true).is_err());
+        assert_eq!(w.data.collections[0].requests[0].body, body);
+    }
+    #[test]
     fn raw_binary_catalog_generates_file_readers_without_embedding_saved_bytes() {
         let body =
             json!({"file_name":"upload.bin","mime":"application/octet-stream","base64":"AP+AClg="})
@@ -296,7 +369,7 @@ mod tests {
                 count += 1;
             }
         }
-        assert_eq!(count, 12);
+        assert_eq!(count, 16);
         assert_eq!(w.data.collections[0].requests[0].body, body);
     }
     #[test]

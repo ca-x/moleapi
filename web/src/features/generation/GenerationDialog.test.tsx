@@ -23,6 +23,21 @@ beforeEach(()=>{
   vi.mocked(useWorkbench).mockImplementation(()=>state);
 });
 afterEach(cleanup);
+it("offers verified Java file readers and explains native snippet prerequisites",async()=>{
+ state.request={...state.request!,body_kind:"binary",body:JSON.stringify({file_name:"upload.bin",mime:"application/octet-stream",base64:"AP+AClg="})};
+ const clients=["nethttp","okhttp","asynchttp","unirest"].map(client=>({client,title:client,binary_file:true}));
+ const choices={...catalog,targets:[{target:"java",title:"Java",clients}]};
+ vi.mocked(api).mockImplementation(path=>Promise.resolve(path.endsWith("catalog")?choices:{...snippet,target:"java",client:"unirest",code:"original-java-file-reader"}));
+ render(<GenerationDialog open onOpenChange={vi.fn()}/>);
+ await screen.findByRole("option",{name:"Java"});
+ fireEvent.change(screen.getByLabelText("代码语言"),{target:{value:"java"}});
+ for(const client of clients)expect(screen.getByRole("option",{name:client.title})).toBeTruthy();
+ fireEvent.change(screen.getByLabelText("代码 HTTP 库"),{target:{value:"unirest"}});
+ fireEvent.click(screen.getByRole("button",{name:"生成"}));
+ await waitFor(()=>expect(api).toHaveBeenCalledWith("/api/generation/snippets","POST",expect.objectContaining({target:"java",client:"unirest",include_secrets:false})));
+ expect(await screen.findByText("Java 代码需放入方法或 main，并补充所选 HTTP 库的 import 与 Maven／Gradle 依赖；java.net.http 使用 JDK 自带客户端。")).toBeTruthy();
+ expect(screen.getByDisplayValue("original-java-file-reader")).toBeTruthy();
+});
 it("offers binary-capable libraries and excludes file-placeholder adapters for raw file bodies",async()=>{
  state.request={...state.request!,body_kind:"binary",body:JSON.stringify({file_name:"upload.bin",mime:"application/octet-stream",base64:"AP+AClg="})};
  const choices={...catalog,targets:[{target:"shell",title:"Shell",clients:[{client:"curl",title:"cURL",binary_file:true},{client:"missing",title:"Placeholder library",binary_file:false}]},{target:"java",title:"Java",clients:[{client:"unsupported",title:"Placeholder reader",binary_file:false}]}]};
