@@ -7,7 +7,7 @@ This is usable request-example generation, separate from typed OpenAPI SDK/serve
 | C | libcurl | libcurl POST fixture |
 | C# | httpclient, restsharp | HttpClient and RestSharp114.0.0 POST fixtures compiled with .NET10.0.401/C#11; upstream snippets unchanged inside namespace/project wrappers |
 | Clojure | clj_http | Engine smoke only |
-| Dart | http, dio | Engine smoke only |
+| Dart | http, dio |14 original-source analyze/AOT/run cases on Dart3.13.5/http1.6.0/Dio5.11.1: text/form/JSON/files/MIME/multipart/dollar literals |
 | F# | httpclient | Engine smoke only |
 | Go | native | net/http POST fixture |
 | HTTP | http1.1 | Engine smoke only |
@@ -160,3 +160,49 @@ file option, native asRequestBody code and localized import guidance in English/
 1280px and Chinese/dark375px. Saved bytes/credentials are absent from the preview;
 scoped axe reports0 verified violations (one manual check per theme). No document
 horizontal overflow occurs. These UI observations do not add foreign-OS runtime proof.
+
+
+## Dart HTTP and Dio native body fidelity
+
+The original Scalar Dart/http text snippet compiled but sent an empty body without
+Content-Type. The verified Dart/http route now uses the already integrated pinned
+Postman native Request/MultipartRequest path; Dio uses its existing Postman native
+request/FormData path. Target catalog identity stays unchanged. Compatibility patches
+repair raw text/UTF8, native file byte reads, repeated URL-encoded fields and native
+multipart entries while preserving filenames and part MIME. The Dart-only adapter
+projects HAR MIME into absent headers; native multipart encoders own their boundaries.
+
+All14 original emitted snippets pass Dart3.13.5 analysis with fatal infos, AOT compile
+and real HTTP calls on Linux. Both http1.6.0 and Dio5.11.1 cover seven profiles:
+Unicode/quoted JSON, repeated form plus an empty value, text CRLF/NUL/vertical tab,
+non-UTF8 raw file bytes, explicit binary MIME override, repeated multipart text/file
+parts with disabled-part omission, and literal dollar/interpolation syntax. Native
+Node HTTP framing and standard email MIME parsing verify requests; the generated
+snippets are not rewritten or replaced. Bare snippets receive only imports/async main
+and Dio resource shutdown. Saved source/snippet/engine/tool hashes, pub locks with
+package checksums and AOT hashes remain in isolated QA.
+
+Both Dart binary_file capabilities are exposed, bringing raw-file adapters to18.
+Repeated form acceptance is scoped to these native paths; default credentials and
+saved bytes stay excluded and explicit file preparation warnings remain. The localized
+Dart hint names async placement/packages/imports using the existing dialog design.
+Other53 adapters' representative source bytes stay identical; pinned package/build
+patches are hash-verified and idempotent. Seven prior native wire regressions,
+93 generation/4 related API/35 focused UI-i18n cases, frontend build and scoped strict
+checks pass. Other SDK/package/OS ranges, arbitrary headers/methods/auth/transport/
+response profiles, browser platforms and all larger generation/product/release work
+remain open. Latest Dio metadata was pinned to5.11.1 rather than choosing older APIs.
+
+```sh
+python3 tools/snippets/verify-dart.py --dart /absolute/dart --node /absolute/node --output /absolute/fresh-output
+```
+
+The driver uses an explicit private pub cache and fresh output directory. It executes
+only repository-authored loopback fixtures; product generation never downloads these
+packages, reads host files or runs the emitted programs.
+
+Real agent-browser owned-API interaction confirms both Dart file adapters and native
+readAsBytes code with default credential/saved-byte exclusion in1280px English/light
+and375px Chinese/dark. The localized async/package/import hint reuses the current
+layout. Neither theme has document overflow or verified scoped axe violations; one
+manual axe check remains per theme. These UI cases do not prove other OS runtimes.

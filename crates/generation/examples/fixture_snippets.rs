@@ -16,13 +16,13 @@ fn main() -> Result<()> {
     ensure!(args.next().is_none(), "Unexpected fixture arguments");
     ensure!(
         profile == "core"
-            || matches!(mode.as_deref(), Some("java" | "kotlin"))
+            || matches!(mode.as_deref(), Some("java" | "kotlin" | "dart"))
                 && ["form", "text", "binary", "binary-mime", "multipart"]
                     .contains(&profile.as_str())
-            || mode.as_deref() == Some("kotlin") && profile == "dollar",
+            || matches!(mode.as_deref(), Some("kotlin" | "dart")) && profile == "dollar",
         "Unknown snippet fixture profile"
     );
-    let body_profile = if matches!(mode.as_deref(), Some("java" | "kotlin")) {
+    let body_profile = if matches!(mode.as_deref(), Some("java" | "kotlin" | "dart")) {
         profile.as_str()
     } else {
         mode.as_deref().unwrap_or("core")
@@ -64,7 +64,9 @@ fn main() -> Result<()> {
         request.body_kind = "multipart".into();
         request.body=json!({"parts":[{"id":"one","name":"label","value":{"kind":"text","text":"鼹鼠 'quotes' & +","mime":""}},{"id":"two","name":"label","value":{"kind":"text","text":"second","mime":""}},{"id":"upload","name":"upload","value":{"kind":"file","file":{"file_name":"upload.bin","mime":"application/octet-stream","base64":"AP+AClg="}}},{"id":"off","name":"disabled","enabled":false,"value":{"kind":"text","text":"must-not-send","mime":""}}]}).to_string();
     }
-    let targets = if mode.as_deref() == Some("kotlin") {
+    let targets = if mode.as_deref() == Some("dart") {
+        vec![("dart", "http", "http.dart"), ("dart", "dio", "dio.dart")]
+    } else if mode.as_deref() == Some("kotlin") {
         vec![("kotlin", "okhttp", "snippet.kt")]
     } else if mode.as_deref() == Some("java") {
         vec![
@@ -134,7 +136,7 @@ fn main() -> Result<()> {
         );
         std::fs::write(std::path::Path::new(&output).join(filename), code)?;
     }
-    if matches!(mode.as_deref(), Some("java" | "kotlin")) {
+    if matches!(mode.as_deref(), Some("java" | "kotlin" | "dart")) {
         let source = serde_json::to_vec(&workspace)?;
         std::fs::write(
             std::path::Path::new(&output).join("fixture-request.json"),

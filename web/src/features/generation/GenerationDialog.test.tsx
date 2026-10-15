@@ -23,6 +23,17 @@ beforeEach(()=>{
   vi.mocked(useWorkbench).mockImplementation(()=>state);
 });
 afterEach(cleanup);
+it("offers both Dart file adapters with async and package prerequisites",async()=>{
+ state.request={...state.request!,body_kind:"binary",body:JSON.stringify({file_name:"upload.bin",mime:"application/octet-stream",base64:"AP+AClg="})};
+ const choices={...catalog,targets:[{target:"dart",title:"Dart",clients:[{client:"http",title:"Http",binary_file:true},{client:"dio",title:"Dio",binary_file:true}]}]};
+ vi.mocked(api).mockImplementation(path=>Promise.resolve(path.endsWith("catalog")?choices:{...snippet,target:"dart",client:"dio",code:"original-dart-file-reader"}));
+ render(<GenerationDialog open onOpenChange={vi.fn()}/>);await screen.findByRole("option",{name:"Dart"});
+ fireEvent.change(screen.getByLabelText("代码语言"),{target:{value:"dart"}});
+ fireEvent.change(screen.getByLabelText("代码 HTTP 库"),{target:{value:"dio"}});
+ fireEvent.click(screen.getByRole("button",{name:"生成"}));
+ expect(await screen.findByText("Dart 示例需放入 async 方法，并安装所选 http／dio 及 http_parser 依赖。文件示例需要 dart:io，编码转换需要 dart:convert。")).toBeTruthy();
+ expect(screen.getByDisplayValue("original-dart-file-reader")).toBeTruthy();
+});
 it("shows Kotlin dependency and extension imports after generating a file reader",async()=>{
  state.request={...state.request!,body_kind:"binary",body:JSON.stringify({file_name:"upload.bin",mime:"application/octet-stream",base64:"AP+AClg="})};
  const choices={...catalog,targets:[{target:"kotlin",title:"Kotlin",clients:[{client:"okhttp",title:"OkHttp",binary_file:true}]}]};
