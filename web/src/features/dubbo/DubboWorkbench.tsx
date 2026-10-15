@@ -10,6 +10,8 @@ export default function DubboWorkbench({request, update, disabled}:{request:Requ
   const config = request.protocol;
   const change = (patch:Partial<DubboConfig>) => update({protocol:{...config,...patch}});
   const source = config.source ?? "direct";
+  const changeAuth = (username:string, password:string) =>
+    change({registry_auth:username || password ? {username,password} : undefined});
   const move = (index:number, offset:number) => {
     const arguments0 = [...config.arguments];
     [arguments0[index], arguments0[index + offset]] = [arguments0[index + offset], arguments0[index]];
@@ -30,8 +32,8 @@ export default function DubboWorkbench({request, update, disabled}:{request:Requ
     {source==="zookeeper" && <>
       <Text size="2" color="gray">{t("在上方 URL 栏填写 ZooKeeper 地址。每次调用都会重新查找提供方。")}</Text>
       <Flex gap="3" wrap="wrap">
-        <Field label={t("ZooKeeper 用户名")}><TextField.Root aria-label={t("ZooKeeper 用户名")} value={config.registry_auth?.username ?? ""} maxLength={128} disabled={disabled} onChange={event=>change({registry_auth:{username:event.target.value,password:config.registry_auth?.password ?? ""}})}/></Field>
-        <Field label={t("ZooKeeper 密码")}><TextField.Root type="password" aria-label={t("ZooKeeper 密码")} value={config.registry_auth?.password ?? ""} maxLength={4096} disabled={disabled} onChange={event=>change({registry_auth:{username:config.registry_auth?.username ?? "",password:event.target.value}})}/></Field>
+        <Field label={t("ZooKeeper 用户名")}><TextField.Root aria-label={t("ZooKeeper 用户名")} value={config.registry_auth?.username ?? ""} maxLength={128} disabled={disabled} onChange={event=>changeAuth(event.target.value,config.registry_auth?.password ?? "")}/></Field>
+        <Field label={t("ZooKeeper 密码")}><TextField.Root type="password" aria-label={t("ZooKeeper 密码")} value={config.registry_auth?.password ?? ""} maxLength={4096} disabled={disabled} onChange={event=>changeAuth(config.registry_auth?.username ?? "",event.target.value)}/></Field>
       </Flex>
       <Text size="2" color="gray">{t("凭据留空表示无需认证；填写时使用 ZooKeeper digest 认证。")}</Text>
     </>}
@@ -39,8 +41,8 @@ export default function DubboWorkbench({request, update, disabled}:{request:Requ
       <Text size="2" color="gray">{t("在上方 URL 栏填写 Nacos 地址。命名空间 ID 留空表示 public。")}</Text>
       <Field label={t("Nacos 命名空间 ID")}><TextField.Root aria-label={t("Nacos 命名空间 ID")} value={config.registry_namespace ?? ""} maxLength={128} disabled={disabled} placeholder="team-qa" onChange={event=>change({registry_namespace:event.target.value})}/></Field>
       <Flex gap="3" wrap="wrap">
-        <Field label={t("Nacos 用户名")}><TextField.Root aria-label={t("Nacos 用户名")} value={config.registry_auth?.username ?? ""} maxLength={128} disabled={disabled} onChange={event=>change({registry_auth:{username:event.target.value,password:config.registry_auth?.password ?? ""}})}/></Field>
-        <Field label={t("Nacos 密码")}><TextField.Root type="password" aria-label={t("Nacos 密码")} value={config.registry_auth?.password ?? ""} maxLength={4096} disabled={disabled} onChange={event=>change({registry_auth:{username:config.registry_auth?.username ?? "",password:event.target.value}})}/></Field>
+        <Field label={t("Nacos 用户名")}><TextField.Root aria-label={t("Nacos 用户名")} value={config.registry_auth?.username ?? ""} maxLength={128} disabled={disabled} onChange={event=>changeAuth(event.target.value,config.registry_auth?.password ?? "")}/></Field>
+        <Field label={t("Nacos 密码")}><TextField.Root type="password" aria-label={t("Nacos 密码")} value={config.registry_auth?.password ?? ""} maxLength={4096} disabled={disabled} onChange={event=>changeAuth(config.registry_auth?.username ?? "",event.target.value)}/></Field>
       </Flex>
       <Text size="2" color="gray">{t("Nacos 凭据留空表示无需认证；HTTP 认证仅支持私网地址。")}</Text>
     </>}
