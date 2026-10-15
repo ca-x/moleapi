@@ -1,0 +1,6 @@
+# Trusted developer QA only; never loaded by product generation.
+psycopg[binary]==3.3.3
+PyMySQL[rsa]==1.1.2
+cryptography==50.0.2
+cffi==2.1.1
+pycparser==3.11

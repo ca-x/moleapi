@@ -79,6 +79,7 @@ pub fn project_catalog() -> Result<Vec<ProjectTarget>> {
         }
         if matches!(target.id.as_str(), "mysql-schema" | "postgresql-schema") {
             target.kind = "model".into();
+            target.validation = "representative-3.0-3.1-native-ddl-fixture".into();
             target.title = Some(
                 if target.id == "mysql-schema" {
                     "SQL (MySQL)"
