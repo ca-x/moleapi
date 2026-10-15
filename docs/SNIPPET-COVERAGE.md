@@ -11,7 +11,7 @@ This is usable request-example generation, separate from typed OpenAPI SDK/serve
 | F# | httpclient | Engine smoke only |
 | Go | native | net/http POST fixture |
 | HTTP | http1.1 | Engine smoke only |
-| Java | asynchttp, nethttp, okhttp, unirest | Engine smoke only |
+| Java | asynchttp, nethttp, okhttp, unirest |24 original-source compile/call cases on JDK21: JSON, repeated form, text/control bytes, raw binary, explicit binary MIME and multipart files |
 | JavaScript | fetch, axios, ofetch, jquery, xhr, native, request, unirest | Fetch on Node runtime; browser-specific variants remain unverified |
 | Julia | http | Engine smoke only |
 | Kotlin | okhttp | Engine smoke only |
@@ -68,3 +68,54 @@ The existing BinaryBody source projects filename and effective MIME into a share
 Twelve adapters expose binary_file in the catalog: Node Fetch; Go Native; Python Requests; C# HttpClient/RestSharp; Rust reqwest; Kotlin OkHttp; cURL/Windows cURL/HTTPie/Wget; Postman CLI. Their mature file modes/writers read bytes without converting them to text. All12 generated filename-based examples without saved Base64 or generic file-content placeholders. Eight actual programs preserved raw bytes, POST/auth/query and MIME: Node Fetch, Go, Python Requests, both C# libraries, Rust reqwest, cURL and Wget. Kotlin, Windows cURL, HTTPie and vendor CLI execution remain unverified. Other adapters lack a usable upstream file reader and stay unavailable for binary bodies; their normal text/JSON/form/multipart language options are unchanged. Broader body/MIME/path/runtime configurations remain required.
 
 The dialog filters binary bodies using the advertised capability and moves invalid selections to an available adapter. Owned API tests cover cross-owner rejection, default/explicit withholding of saved bytes, explicit Content-Type precedence and exact original source retention. Reproduce raw cases with the same trusted script and `--mode binary`; it selects the eight runtime cases by default. Rust uses a separate fixture build cache. Locked clean install/contextual patch replay reproduced the verified bundle; the source carries no runtime host filesystem API.
+
+
+## Java native HTTP libraries and file bodies
+
+All four original emitted Java snippets compile and make real local HTTP requests
+using JDK21.0.12.1+1/Maven3.9.11/Linux.24 cases cover six profiles: JSON Unicode/
+quotes/ampersand/plus; repeated URL-encoded fields and an empty value; text with CRLF,
+NUL and vertical tab; raw non-UTF8 file bytes; explicit binary Content-Type overriding
+the file default; and multipart repeated text fields/file bytes/MIME/filename with a
+disabled part omitted. Selected Bearer auth, enabled header and existing/added encoded
+query survive; the authored Host/manual Authorization are replaced correctly.
+
+Libraries: JDK java.net.http, OkHttp4.12.0, AsyncHttpClient3.0.2 and Unirest3.14.5.
+The QA driver supplies only native imports/main and client shutdown, retains original
+snippet bytes and workspace/source hashes, and records resolved dependency trees,
+JAR/tool/engine/source hashes and actual wire observations. Node's native HTTP server
+handles framing; Python's standard email parser checks MIME parts. No generated source
+rewrite, alternate request client or handcrafted multipart encoder is used.
+
+Pinned Scalar compatibility diffs extend javaBody's existing byte-array construction
+with native Files.readAllBytes/Path.of for raw files, and use native RequestBody(File)
+for OkHttp. Existing native form/multipart/escaping/HTTP logic stays upstream. Java's
+four binary_file capabilities are now exposed, bringing raw-file adapters to16. Only
+these four verified native form adapters additionally accept repeated form fields;
+unverified adapters keep their explicit rejection. Java OkHttp GET/HEAD with any body
+reject before generation because OkHttp cannot send such bodies; no silent omission.
+
+Product generation references filenames only and never reads saved file bytes or
+executes target code. Default credential masking and explicit filename prerequisites
+remain covered. The Java-specific localized hint explains method/main placement,
+imports and selected-library dependencies; real agent-browser interaction with the
+Rust API shows all four file options and credential/byte exclusion in English/light
+and Chinese/dark. The request preview's gutter uses semantic gray-11 after an actual
+3.86:1 dark-theme contrast failure; the rendered code now has0 verified scoped axe
+violations and no375px horizontal document overflow. One manual axe check remains.
+
+51 other adapters' representative sources remain byte-identical; the pinned patch
+rebuild is idempotent. Seven prior native request-wire regressions,91 generation cases,
+4 snippet/file API cases,33 focused UI/i18n cases, frontend build and scoped strict
+Clippy/format/Python checks pass. Library/OS/JDK ranges, other methods/bodies/headers,
+timeouts/TLS/redirect/proxy/cookie mappings, response/error handling, other language
+runtimes and full generation/product/release scope remain open.
+
+```sh
+python3 tools/snippets/verify-java.py --jdk /absolute/jdk --maven /absolute/mvn --node /absolute/node --output /absolute/fresh-output
+```
+
+The driver executes only this repository's trusted fixture requests. Optional
+--profiles selects core,form,text,binary,binary-mime,multipart; defaults cover all24.
+Install dependencies only into explicitly selected developer QA environments; these
+compilers/runtimes/dependencies are never downloaded or executed by product generation.
