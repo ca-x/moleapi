@@ -111,3 +111,23 @@ is never rewritten by QA. Version/license/original/patched SHA guards and an
 idempotent build cover this target's26.0.0+moleapi.1 compatibility variant.
 Machine Int ranges, full schema validation, null/absence fidelity, advanced unions
 and additional runtime/options/platform combinations require separate acceptance.
+
+
+## Objective-C JSON enum and NSError repair candidate
+
+Actual Apple ARM run38687292636 decoded/constructed native recursive Pet/Status,
+zero/null/Unicode then failed because an unknown enum was silently accepted. The
+pinned renderer now gives JSON conversion a private fromJSONValue: enum path that
+rejects non-null unknown values through the existing exception/NSError boundary.
+Public nullable withValue: lookup remains unchanged, and original model/enum/container
+codecs remain mature-engine output. Nil/null behavior stays the existing conversion
+policy, not universal schema validation.
+
+The shared serialization wrapper supplies autoreleasing local NSError storage when
+NULL is passed and resets stale caller errors. Public error-pointer annotations now
+express optional output slots. A generated local name avoids the localError model
+parameter collision. Exact original/patched hashes, upstream Apache license and the
+idempotent patch are retained.17 other target outputs match prior bytes; existing
+native regressions and scoped generation/API checks pass. Linux Clang only preflights
+ARC pointer syntax: actual Apple Foundation/runtime validation remains pending.
+Objective-C artifacts identify26.0.0+moleapi.1 without marking the runtime verified.

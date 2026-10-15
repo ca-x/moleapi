@@ -125,7 +125,12 @@ pub(super) fn generate(input: &ProjectInput) -> Result<ProjectArtifact> {
     let files: BTreeMap<String, String> = serde_json::from_str(&rendered)?;
     let engine = if matches!(
         input.target.as_str(),
-        "model-flow" | "model-elm" | "model-pike" | "model-crystal" | "model-haskell"
+        "model-flow"
+            | "model-elm"
+            | "model-pike"
+            | "model-crystal"
+            | "model-haskell"
+            | "model-objc"
     ) {
         format!("{ENGINE}+moleapi.1")
     } else {
