@@ -21,7 +21,7 @@ def main():
     parser.add_argument('--provider-port', type=int, required=True)
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
-    for path in (args.server, args.java, args.jar, args.output):
+    for path in (args.server, args.java, args.jar):
         assert path.is_absolute()
     assert args.server.is_file() and args.java.is_file() and args.jar.is_file()
     with tempfile.TemporaryDirectory(prefix='moleapi-dubbo-hosted-') as directory:

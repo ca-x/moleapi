@@ -2,6 +2,8 @@ import NetworkSettings from "../network/NetworkSettings";
 import { liveError } from "./../../shared/i18n/errors";
 import { t, useLanguage, liveTranslation } from "../../shared/i18n";
 import CookieManager from "../cookies/CookieManager";
+import DubboWorkbench from "../dubbo/DubboWorkbench";
+import {dubboConfig} from "../dubbo/model";
 import ProtocolPane from "../protocols/ProtocolPane";
 import { authenticationEligibility } from "../authentication/eligibility";
 import { inheritedAuthSource } from "../authentication/inheritedSource";
@@ -25,6 +27,7 @@ import {
 } from "@radix-ui/themes";
 import { Braces, Copy, FileText, Save, Send } from "lucide-react";
 import { toast } from "sonner";
+import { api } from "../../shared/api";
 import { Choice, Editor, Field, PairEditor, ToolButton } from "../../shared/ui";
 import { curlTemplate, id } from "../../shared/model";
 import type { ApiResponse, RequestSpec } from "../../shared/types";
@@ -94,10 +97,25 @@ export default function RequestEditor({
   useLanguage();
   const [tab, setTab] = useState("query");
   const [generationOpen, setGenerationOpen] = useState(false);
+  const [dubboCapability, setDubboCapability] = useState<{scope:string;available:boolean}|null>(null);
   const kind = request.protocol?.kind || "http";
   const live = ["sse", "websocket"].includes(kind);
   const grpc = kind === "grpc";
   const dubbo = kind === "dubbo";
+  const dubboScope = `${bodyScope ?? ""}/${request.id}`;
+  const dubboAvailable = dubbo && dubboCapability?.scope === dubboScope && dubboCapability.available;
+  const queryCount = request.protocol?.kind === "dubbo" ? request.protocol.arguments.length : request.query.length;
+  useEffect(() => {
+    if (!dubbo) return;
+    let current = true;
+    setDubboCapability(null);
+    void api<{available:boolean}>("/api/dubbo/capability", "GET").then(result=>{
+      if (current) setDubboCapability({scope:dubboScope,available:result.available});
+    }).catch(()=>{
+      if (current) setDubboCapability({scope:dubboScope,available:false});
+    });
+    return () => {current=false;};
+  }, [dubbo,dubboScope]);
   const socketio = kind === "socketio";
   const mqtt = kind === "mqtt";
   const soap = kind === "soap";
@@ -110,10 +128,6 @@ export default function RequestEditor({
   const mqttWebSocket =
     mqtt && (/^wss?:/i.test(request.url) || request.url.includes("{{"));
   useEffect(() => {
-    if (dubbo && !["docs", "settings"].includes(tab)) {
-      setTab("settings");
-      return;
-    }
     if (
       (data || tcp || live || grpc || socketio || mqtt || mcp || a2a) &&
       [
@@ -144,9 +158,10 @@ export default function RequestEditor({
       | "mcp"
       | "a2a",
   ) {
-    if (value === "dubbo") return;
     let url = request.url;
-    try {
+    if (value === "dubbo") url = /^dubbo:\/\//i.test(url) ? url : "dubbo://localhost:20880";
+    else if (dubbo) url = "http://localhost:20880";
+    if (value !== "dubbo" && !dubbo) try {
       const parsed = new URL(url);
       if (value === "mqtt") {
         if (parsed.protocol === "http:") parsed.protocol = "mqtt:";
@@ -164,7 +179,7 @@ export default function RequestEditor({
     }
     update({
       protocol:
-        value === "data" ? dataConfig() : value === "tcp" ? tcpConfig() : value === "a2a" ? a2aConfig() : value === "mcp" ? mcpConfig() : value === "soap"
+        value === "dubbo" ? dubboConfig() : value === "data" ? dataConfig() : value === "tcp" ? tcpConfig() : value === "a2a" ? a2aConfig() : value === "mcp" ? mcpConfig() : value === "soap"
           ? {
               kind: "soap",
               version: "1.1",
@@ -199,6 +214,7 @@ export default function RequestEditor({
                     }
                   : { kind: value },
       url: value === "data" ? "postgresql://localhost:5432/postgres" : url,
+      ...(value === "dubbo" ? {method:"GET",body_kind:"none" as const,body:"",auth:{...request.auth,kind:"none" as const},headers:request.headers.map(row=>({...row,enabled:false})),query:request.query.map(row=>({...row,enabled:false})),network:undefined,follow_redirects:false} : {}),
       ...(request.network && (value === "grpc" || value === "websocket" || value === "tcp" || value === "mqtt" || value === "socketio")
         ? {network:{...request.network,http_mode:value === "grpc" ? "auto" : "http1"}} : {}),
       ...(value === "tcp" ? {auth:{...request.auth,kind:"none"},headers:request.headers.map(row=>({...row,enabled:false})),query:request.query.map(row=>({...row,enabled:false}))} : {}),
@@ -286,7 +302,7 @@ export default function RequestEditor({
             { value: "websocket", label: "WebSocket" },
             { value: "graphql", label: "GraphQL" },
             { value: "grpc", label: "gRPC" },
-            ...(dubbo ? [{ value: "dubbo" as const, label: "Dubbo" }] : []),
+            { value: "dubbo", label: "Dubbo" },
             { value: "socketio", label: "Socket.IO" },
             { value: "mqtt", label: "MQTT" },
             { value: "soap", label: "SOAP" },
@@ -320,7 +336,7 @@ export default function RequestEditor({
           aria-label={t("请求 URL")}
           disabled={mcpStdio || dataLocal || (data && protocolConnected)}
           value={mcpStdio ? "STDIO" : dataLocal && request.protocol?.kind==="data" ? request.protocol.file_name : request.url}
-          placeholder="https://api.example.com/v1/users"
+          placeholder={dubbo ? "dubbo://host:20880" : "https://api.example.com/v1/users"}
           onChange={(e) => update({ url: e.target.value })}
         />
         <Button
@@ -328,7 +344,7 @@ export default function RequestEditor({
           loading={busy}
           onClick={send}
           disabled={
-            dubbo ||
+            (dubbo && (!dubboAvailable || request.protocol?.kind !== "dubbo" || !request.protocol.service.trim() || !request.protocol.method.trim())) ||
             (dataLocal ? false : request.protocol?.kind === "mcp" && mcpStdio ? !request.protocol.command : !request.url) ||
             sending ||
             ((data || tcp || live || grpc || socketio || mqtt) && protocolConnected) ||
@@ -336,7 +352,7 @@ export default function RequestEditor({
           }
         >
           <Send size={16} />
-          {a2a ? (protocolConnected ? t("运行") : t("连接")) : mcp ? (protocolConnected ? t("运行") : t("加载能力")) : grpc
+          {a2a ? (protocolConnected ? t("运行") : t("连接")) : mcp ? (protocolConnected ? t("运行") : t("加载能力")) : grpc || dubbo
             ? t("调用")
             : !(data || tcp || live || socketio || mqtt)
               ? t("发送")
@@ -345,7 +361,7 @@ export default function RequestEditor({
                 : t("连接")}
         </Button>
       </div>
-      {dubbo && <Text size="2" color="gray">{t("Dubbo 来源已保存；调用功能尚未开放。")}</Text>}
+      {dubbo && <Text role="status" size="2" color="gray">{dubboCapability?.scope !== dubboScope ? t("正在检查 Dubbo 运行能力…") : dubboAvailable ? t("经典 Dubbo/Hessian2 调用已就绪。") : t("此实例尚未配置 Dubbo worker 和 Java；可先保存接口定义。")}</Text>}
       <Group
         id="request-response-split"
         orientation="vertical"
@@ -355,7 +371,7 @@ export default function RequestEditor({
         <Panel
           id="request-options-panel"
           defaultSize={
-            kind === "graphql" || data || tcp || grpc || socketio || mqtt || soap || mcp || a2a
+            dubbo ? "55%" : kind === "graphql" || data || tcp || grpc || socketio || mqtt || soap || mcp || a2a
               ? "20%"
               : "35%"
           }
@@ -370,7 +386,7 @@ export default function RequestEditor({
             <Tabs.List>
               {requestTabs
                 .filter((item) =>
-                  dubbo ? ["settings","docs"].includes(item.value) : data ? ["auth","settings","docs"].includes(item.value) : tcp ? ["scripts","docs"].includes(item.value) : kind === "graphql" || soap
+                  dubbo ? ["query","assertions","scripts","settings","docs"].includes(item.value) : data ? ["auth","settings","docs"].includes(item.value) : tcp ? ["scripts","docs"].includes(item.value) : kind === "graphql" || soap
                     ? item.value !== "body"
                     : tcp || grpc || mqtt || mcp || a2a
                       ? ![
@@ -389,10 +405,10 @@ export default function RequestEditor({
                         ),
                 )
                 .map((item) => (
-                  <Tabs.Trigger key={item.value} value={item.value} aria-label={grpc && item.value === "headers" ? "Metadata" : item.label}>
-                    {grpc && item.value === "headers" ? "Metadata" : item.label}
+                  <Tabs.Trigger key={item.value} value={item.value} aria-label={grpc && item.value === "headers" ? "Metadata" : dubbo && item.value === "query" ? t("Dubbo 参数") : item.label}>
+                    {grpc && item.value === "headers" ? "Metadata" : dubbo && item.value === "query" ? t("Dubbo 参数") : item.label}
                     {(item.value === "query"
-                      ? request.query.length
+                      ? queryCount
                       : item.value === "headers"
                         ? request.headers.length
                         : item.value === "assertions"
@@ -400,7 +416,7 @@ export default function RequestEditor({
                           : 0) > 0 && (
                       <span className="count">
                         {item.value === "query"
-                          ? request.query.length
+                          ? queryCount
                           : item.value === "headers"
                             ? request.headers.length
                             : request.assertions.length}
@@ -414,12 +430,12 @@ export default function RequestEditor({
               <RequestScripts request={request} update={update} dark={dark} />
             </Tabs.Content>
             <Tabs.Content value="query">
-              <PairEditor
+              {dubbo ? <DubboWorkbench request={request} update={update} disabled={busy||sending}/> : <PairEditor
                 rows={request.query}
                 onChange={(query) => update({ query })}
                 keyLabel={t("参数名")}
                 valueLabel={t("参数值")}
-              />
+              />}
             </Tabs.Content>
             <Tabs.Content value="headers">
               <PairEditor

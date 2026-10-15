@@ -4,6 +4,7 @@ mod auth;
 mod ci;
 mod cookies;
 mod credential_revocations;
+mod dubbo;
 mod entities;
 mod execution;
 mod formats;
@@ -284,6 +285,7 @@ async fn build(
                 .post(cookies::insert)
                 .delete(cookies::remove),
         )
+        .route("/dubbo/capability", get(dubbo::capability))
         .route(
             "/workspaces/{id}/webhooks",
             get(webhooks::list).post(webhooks::create),

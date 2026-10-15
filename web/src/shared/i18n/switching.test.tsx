@@ -93,14 +93,42 @@ it("lets an existing HTTP request opt out of the cookie jar without changing its
 });
 it("recognizes a restored Dubbo draft without offering a misleading HTTP send", async () => {
   await setLanguage("en");
+  vi.mocked(api).mockResolvedValue({available:false});
   const request = {...newRequest("Classic", "dubbo://example.com:20880"), protocol:{kind:"dubbo" as const,source_version:1,transport:"classic" as const,serialization:"hessian2" as const,service:"fixture.EchoService",method:"echo",version:"1.0.0",group:"",arguments:[],attachments:[]}};
   const before = JSON.stringify(request);
   render(<RequestEditor request={request} update={vi.fn()} send={vi.fn()} save={vi.fn()} dirty={false} saving={false} busy={false} sending={false} dark={false} response={null} error="" />, { wrapper: theme });
-  expect(await screen.findByText("Dubbo source is saved. Calling is not available yet.")).toBeTruthy();
+  expect(await screen.findByText("This instance needs a Dubbo worker and Java. You can save the request definition now.")).toBeTruthy();
   expect(screen.getByText("Dubbo request")).toBeTruthy();
-  expect((screen.getByRole("button", { name: "Send" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole("button", { name: "Call" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.getByRole("tab", { name: "Dubbo arguments" })).toBeTruthy();
   expect(screen.queryByRole("tab", { name: "Body" })).toBeNull();
   expect(JSON.stringify(request)).toBe(before);
+});
+it("edits a classic Dubbo call and enables invocation only after capability discovery", async () => {
+  await setLanguage("en");
+  vi.mocked(api).mockResolvedValue({available:true});
+  const request = {...newRequest("Classic", "dubbo://example.com:20880"), protocol:{kind:"dubbo" as const,source_version:1,transport:"classic" as const,serialization:"hessian2" as const,service:"fixture.EchoService",method:"echo",version:"1.0.0",group:"",arguments:[],attachments:[]}};
+  const update = vi.fn(), send = vi.fn();
+  render(<RequestEditor request={request} bodyScope="owner/workspace" update={update} send={send} save={vi.fn()} dirty={false} saving={false} busy={false} sending={false} dark={false} response={null} error="" />, {wrapper:theme});
+  expect(await screen.findByText("Classic Dubbo/Hessian2 calls are ready.")).toBeTruthy();
+  expect((screen.getByRole("button",{name:"Call"}) as HTMLButtonElement).disabled).toBe(false);
+  fireEvent.change(screen.getByRole("textbox",{name:"Dubbo method"}),{target:{value:"join"}});
+  expect(update).toHaveBeenCalledWith({protocol:expect.objectContaining({method:"join",service:"fixture.EchoService"})});
+  fireEvent.click(screen.getByRole("button",{name:"Add argument"}));
+  expect(update).toHaveBeenCalledWith({protocol:expect.objectContaining({arguments:[expect.objectContaining({type_name:"java.lang.String",value_source:'""'})]})});
+  fireEvent.click(screen.getByRole("button",{name:"Call"}));
+  expect(send).toHaveBeenCalledTimes(1);
+});
+it("creates a distinct classic Dubbo draft from the request protocol selector", async () => {
+  await setLanguage("en");
+  const update = vi.fn();
+  render(<RequestEditor request={newRequest("New", "https://example.com/")} update={update} send={vi.fn()} save={vi.fn()} dirty={false} saving={false} busy={false} sending={false} dark={false} response={null} error="" />, {wrapper:theme});
+  fireEvent.click(screen.getByRole("combobox",{name:"Request protocol"}));
+  fireEvent.click(await screen.findByRole("option",{name:"Dubbo"}));
+  expect(update).toHaveBeenCalledWith(expect.objectContaining({
+    url:"dubbo://localhost:20880",method:"GET",body_kind:"none",follow_redirects:false,
+    protocol:expect.objectContaining({kind:"dubbo",source_version:1,transport:"classic",serialization:"hessian2"}),
+  }));
 });
 it("updates navigation and a pending interpolated guard without changing stored sample names", async () => {
   const data = initialData(), before = JSON.stringify(data);
