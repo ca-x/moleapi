@@ -1742,5 +1742,8 @@
   "Ruby 示例使用标准库 Net::HTTP，可保存为 .rb 后运行。文件示例需准备同名文件，multipart 文件应以二进制模式打开并在请求完成后关闭。": "Ruby 示例使用标准库 Net::HTTP，可保存为 .rb 后运行。文件示例需准备同名文件，multipart 文件应以二进制模式打开并在请求完成后关闭。",
   "Python 示例需安装并导入所选 requests／httpx 库；异步 HTTPX 需放入 async 方法并由 asyncio.run 调用。文件示例需准备同名文件，multipart 文件应在请求完成后关闭。": "Python 示例需安装并导入所选 requests／httpx 库；异步 HTTPX 需放入 async 方法并由 asyncio.run 调用。文件示例需准备同名文件，multipart 文件应在请求完成后关闭。",
   "http.client 示例可保存为 .py 后运行；multipart 示例需安装 urllib3。文件示例需要准备同名文件，文件内容在示例运行时读取。": "http.client 示例可保存为 .py 后运行；multipart 示例需安装 urllib3。文件示例需要准备同名文件，文件内容在示例运行时读取。",
-  "aiohttp 示例需安装并导入 aiohttp，放入 async 方法并由 asyncio.run 调用。文件示例需准备同名文件，multipart 文件应在请求完成后关闭。": "aiohttp 示例需安装并导入 aiohttp，放入 async 方法并由 asyncio.run 调用。文件示例需准备同名文件，multipart 文件应在请求完成后关闭。"
+  "aiohttp 示例需安装并导入 aiohttp，放入 async 方法并由 asyncio.run 调用。文件示例需准备同名文件，multipart 文件应在请求完成后关闭。": "aiohttp 示例需安装并导入 aiohttp，放入 async 方法并由 asyncio.run 调用。文件示例需准备同名文件，multipart 文件应在请求完成后关闭。",
+  "PHP cURL 示例需启用 ext-curl；multipart 另需 guzzlehttp/psr7 并加载 Composer autoload。文件示例需准备同名文件。": "PHP cURL 示例需启用 ext-curl；multipart 另需 guzzlehttp/psr7 并加载 Composer autoload。文件示例需准备同名文件。",
+  "Guzzle 示例需安装 guzzlehttp/guzzle 并加载 Composer autoload。文件流以二进制模式打开，请在请求结束后关闭。": "Guzzle 示例需安装 guzzlehttp/guzzle 并加载 Composer autoload。文件流以二进制模式打开，请在请求结束后关闭。",
+  "Laravel 示例使用 Http Facade，需在已启动的 Laravel 应用中运行。文件示例需准备同名文件，并在请求后关闭文件流。": "Laravel 示例使用 Http Facade，需在已启动的 Laravel 应用中运行。文件示例需准备同名文件，并在请求后关闭文件流。"
 }

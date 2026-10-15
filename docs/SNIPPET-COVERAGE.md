@@ -18,7 +18,7 @@ This is usable request-example generation, separate from typed OpenAPI SDK/serve
 | Node.js | fetch, axios, ofetch, undici, native, request, unirest | Fetch and Native/Request/Unirest POST fixtures |
 | Objective-C | nsurlsession | Engine smoke only |
 | OCaml | cohttp | Engine smoke only |
-| PHP | curl, guzzle, laravel, httprequest2, pecl_http | Engine smoke only |
+| PHP | curl, guzzle, laravel, httprequest2, pecl_http |54 original-code syntax/native HTTP cases for cURL/Guzzle8.2.0/Laravel HTTP13.36.0 on PHP8.5.11; HTTP_Request2/PECL HTTP remain smoke only |
 | PowerShell | webrequest, restmethod | Engine smoke only |
 | Python | python3, requests, aiohttp, httpx_sync, httpx_async | 80 original-code syntax/native HTTP cases across all5 clients on Python3.14.8; aiohttp3.14.5, Requests2.34.2, HTTPX0.28.1, urllib3 2.8.0 multipart encoder |
 | R | httr2, httr, rcurl | Engine smoke only |
@@ -353,3 +353,76 @@ consumer cleanup, and native byte reads/encoders can materialize files in memory
 Empty multipart collections, advanced escaping/part shapes, streaming,
 response/error handling, dependency/OS ranges and full transport/auth option
 mapping remain open; this is representative runtime evidence for the named cases.
+
+
+## PHP cURL, Guzzle and Laravel native requests
+
+The pinned Scalar PHP emitters now preserve raw JSON/text literals, including
+null, empty JSON objects, dollar signs, apostrophes, backslashes and controls.
+The shared mature PHP object literal helper also escapes array keys; Laravel no
+longer pre-escapes keys before that helper. Repeated URL-encoded forms use mature
+URLSearchParams encoding, preserving duplicate names instead of overwriting or
+adding bracket indices. cURL retains ext-curl transport; PHP8.5.11 does not expose
+upstream's curl_mime_init/CURLOPT_MIMEPOST functions, so its multipart block uses
+Guzzle PSR7 MultipartStream, including native boundary, part headers, duplicate
+fields, rb file IO and cleanup. Only multipart cURL snippets require that Composer
+package; raw cURL bodies use native file_get_contents. The native handle is
+released with unset instead of the PHP8.5 deprecated no-op curl_close.
+
+Guzzle retains its native body/multipart request options and binary file streams.
+Laravel retains the Http facade, withBody/asMultipart/send and native PSR7 part
+arrays. Explicit filenames, field/file MIME, duplicates, text-only forms and saved
+method are preserved; scalar/null/raw bodies no longer depend on array coercion.
+All three support filename-only raw binary generation, bringing file-capable
+adapters to26. Generation never reads host files or embeds saved Base64 bytes;
+those reads occur only when the consumer executes the example. The examples need
+a PHP code context (opening PHP tag for a new file), Composer autoload where
+applicable, and a bootstrapped Laravel facade/application for that variant. They
+are request snippets, not standalone Composer projects. Localized post-generation
+hints distinguish each client's dependencies and file preparation.
+
+The trusted native driver verifies54 unchanged-original-source cases:
+3 clients ×18 profiles. These cover Unicode/quotes JSON, repeated form/empty value,
+raw text/controls, raw file/effective MIME, multipart duplicates/disabled exclusion,
+dollar text, JSON boolean/null/string traps, scalar false/null/empty string,
+GET file/DELETE JSON, JSON-shaped raw text, text/file MIME plus Unicode/apostrophe
+filename, text-only multipart, root empty JSON object and apostrophe header name/
+value/backslash/dollar. Actual Node HTTP records framing/headers/body bytes; stdlib
+MIME parsing checks parts. Wrappers supply only autoload, actual Illuminate
+Container/HTTP Factory facade binding, and status/response assertions; no HTTP
+fakes or test responses replace the real libraries. Engine/request/snippet/tool/
+Composer-lock hashes and actual installed versions are recorded. Old output
+reproduces10 defects: unavailable cURL MIME API, Guzzle/Laravel form repetition,
+Laravel null omission, empty-object-to-array changes in all3 clients, cURL raw text
+rewriting and cURL/Guzzle literal syntax failures.
+
+QA: PHP8.5.11 NTS/Linux, ext-curl/libcurl8.22.0, Guzzle8.2.0, Illuminate HTTP/
+Container13.36.0, PSR7 3.1.0; the complete48-package lock and manifest live under
+`tools/snippets/php-runtime`. These are explicit consumer/QA dependencies, not
+MoleAPI dependencies.96 generation cases,3 local/owned snippet API cases (including
+all3 PHP raw-file libraries with MIME/owner/privacy checks),44 focused UI/i18n cases,
+strict scoped Clippy, formatting, frontend/server builds, deterministic engine
+rebuild and clean integrity-checked upstream patch application passed. Other52
+representative adapter outputs are byte-identical.
+
+Real owned-API browser checks cover English/light1280×900 cURL multipart and
+Chinese/dark375×812 Laravel multipart, with correct dependency hints and no
+credential/saved-byte exposure or document horizontal overflow. Scoped axe reports
+0 verified violations/1 manual line-number contrast check on both; screenshots
+were visually inspected. Evidence: `/tmp/moleapi-php-snippet-final-2` and
+`/tmp/moleapi-php-snippet-*.log` on the validation host.
+
+To reproduce, copy php-runtime's composer.json/composer.lock into an isolated
+absolute directory, install that lock with the selected PHP/Composer and scripts/
+plugins disabled, then run:
+
+```sh
+python3 tools/snippets/verify-php.py --php /absolute/php --node /absolute/node --dependencies /absolute/composer-project --output /absolute/fresh-output
+```
+
+HTTP_Request2 and PECL HTTP, other PHP/framework/dependency/OS ranges, advanced
+empty/escaped/nested part shapes, arbitrary headers/methods, response/error/auth/
+transport options and streaming remain open. Raw reads and cURL multipart string
+conversion may materialize bodies in the consumer; native stream cleanup belongs
+to the consumer/client lifecycle. This is evidence for the named cases, not full
+PHP or request-generation parity.

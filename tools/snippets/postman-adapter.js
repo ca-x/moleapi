@@ -12,7 +12,7 @@ function clientId(language,variant){
 const implementations=new Map();
 const fileImplementations=new Map();
 const fileTargets=new Set(['csharp/httpclient','rust/reqwest','kotlin/okhttp','shell/curl','shell/httpie','shell/wget','postman-cli/postman_cli','dart/http','dart/dio']);
-const scalarFileTargets=new Set(['node/fetch','go/native','python/python3','python/aiohttp','python/requests','python/httpx_sync','python/httpx_async','csharp/restsharp','java/nethttp','java/okhttp','java/asynchttp','java/unirest','kotlin/okhttp','ruby/native']);
+const scalarFileTargets=new Set(['node/fetch','go/native','python/python3','python/aiohttp','python/requests','python/httpx_sync','python/httpx_async','csharp/restsharp','java/nethttp','java/okhttp','java/asynchttp','java/unirest','kotlin/okhttp','ruby/native','php/curl','php/guzzle','php/laravel']);
 export function mergePostmanCatalog(scalar){
  const result=scalar.map(target=>({...target,clients:target.clients.map(client=>({...client}))}));
  for(const language of postman.getLanguageList()){

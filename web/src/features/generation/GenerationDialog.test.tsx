@@ -23,6 +23,16 @@ beforeEach(()=>{
   vi.mocked(useWorkbench).mockImplementation(()=>state);
 });
 afterEach(cleanup);
+it.each([["curl","PHP cURL 示例需启用 ext-curl；multipart 另需 guzzlehttp/psr7 并加载 Composer autoload。文件示例需准备同名文件。"],["guzzle","Guzzle 示例需安装 guzzlehttp/guzzle 并加载 Composer autoload。文件流以二进制模式打开，请在请求结束后关闭。"],["laravel","Laravel 示例使用 Http Facade，需在已启动的 Laravel 应用中运行。文件示例需准备同名文件，并在请求后关闭文件流。"]])("offers PHP %s native files with matching dependencies",async(client,hint)=>{
+ state.request={...state.request!,body_kind:"binary",body:JSON.stringify({file_name:"upload.bin",mime:"application/octet-stream",base64:"AP+AClg="})};
+ const choices={...catalog,targets:[{target:"php",title:"PHP",clients:[{client,title:client,binary_file:true}]}]};
+ vi.mocked(api).mockImplementation(path=>Promise.resolve(path.endsWith("catalog")?choices:{...snippet,target:"php",client,code:"original-php-file-reader"}));
+ render(<GenerationDialog open onOpenChange={vi.fn()}/>);await screen.findByRole("option",{name:"PHP"});
+ fireEvent.change(screen.getByLabelText("代码语言"),{target:{value:"php"}});expect(screen.queryByText(hint)).toBeNull();
+ fireEvent.click(screen.getByRole("button",{name:"生成"}));expect(await screen.findByText(hint)).toBeTruthy();
+ expect(screen.getByDisplayValue("original-php-file-reader")).toBeTruthy();
+ expect(vi.mocked(api).mock.calls.at(-1)?.[2]).toMatchObject({target:"php",client,include_secrets:false});
+});
 it.each([["python3","http.client 示例可保存为 .py 后运行；multipart 示例需安装 urllib3。文件示例需要准备同名文件，文件内容在示例运行时读取。"],["aiohttp","aiohttp 示例需安装并导入 aiohttp，放入 async 方法并由 asyncio.run 调用。文件示例需准备同名文件，multipart 文件应在请求完成后关闭。"]])("offers Python %s native files with correct package guidance",async(client,hint)=>{
  state.request={...state.request!,body_kind:"binary",body:JSON.stringify({file_name:"upload.bin",mime:"application/octet-stream",base64:"AP+AClg="})};
  const choices={...catalog,targets:[{target:"python",title:"Python",clients:[{client,title:client,binary_file:true}]}]};

@@ -1,0 +1,1 @@
+{"name":"moleapi/fixture-php-snippets","require":{"guzzlehttp/guzzle":"8.2.0","illuminate/http":"13.36.0","illuminate/container":"13.36.0"},"config":{"allow-plugins":false}}

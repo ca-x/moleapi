@@ -626,3 +626,397 @@ diff --git a/node_modules/@scalar/snippetz/dist/plugins/python/aiohttp/aiohttp.j
              }
          }
          const sessionOpen = sessionArgs.length === 0
+diff --git a/node_modules/@scalar/snippetz/dist/libs/php.js b/node_modules/@scalar/snippetz/dist/libs/php.js
+--- a/node_modules/@scalar/snippetz/dist/libs/php.js
++++ b/node_modules/@scalar/snippetz/dist/libs/php.js
+@@ -59,7 +59,7 @@
+             return '[]';
+         }
+         const items = entries
+-            .map(([key, value]) => `'${key}' => ${objectToString(value, level + 1)}`)
++            .map(([key, value]) => `${objectToString(key)} => ${objectToString(value, level + 1)}`)
+             .join(',\n' + indent(level + 1));
+         return `[\n${indent(level + 1)}${items}\n${indent(level)}]`;
+     }
+diff --git a/node_modules/@scalar/snippetz/dist/plugins/php/curl/curl.js b/node_modules/@scalar/snippetz/dist/plugins/php/curl/curl.js
+--- a/node_modules/@scalar/snippetz/dist/plugins/php/curl/curl.js
++++ b/node_modules/@scalar/snippetz/dist/plugins/php/curl/curl.js
+@@ -1,5 +1,5 @@
+ import { normalizeMethod } from '../../../libs/http.js';
+-import { objectToString } from '../../../libs/php.js';
++import { Raw, objectToString } from '../../../libs/php.js';
+ /**
+  * php/curl
+  */
+@@ -29,38 +29,37 @@
+                     .join('&')
+             : '';
+         const url = `${normalizedRequest.url}${queryString}`;
+-        parts.push(`$ch = curl_init("${url}");`);
++        parts.push(`$ch = curl_init(${objectToString(url)});`);
+         parts.push('');
+         // Method
+-        if (normalizedRequest.method === 'POST') {
+-            parts.push('curl_setopt($ch, CURLOPT_POST, true);');
+-        }
+-        else if (normalizedRequest.method !== 'GET') {
+-            parts.push(`curl_setopt($ch, CURLOPT_CUSTOMREQUEST, '${normalizedRequest.method}');`);
+-        }
++        parts.push(`curl_setopt($ch, CURLOPT_CUSTOMREQUEST, ${objectToString(normalizedRequest.method)});`);
+         // Basic Auth
+         if (configuration?.auth?.username && configuration?.auth?.password) {
+-            parts.push(`curl_setopt($ch, CURLOPT_USERPWD, '${configuration.auth.username}:${configuration.auth.password}');`);
++            parts.push(`curl_setopt($ch, CURLOPT_USERPWD, ${objectToString(`${configuration.auth.username}:${configuration.auth.password}`)});`);
++        }
++        if (normalizedRequest.postData?.mimeType === 'multipart/form-data' && normalizedRequest.postData.params) {
++            hasMultipartMimeBody = true;
++            const fields = normalizedRequest.postData.params.map((param) => {
++                const part = { name: param.name, contents: param.fileName !== undefined ? new Raw(`fopen(${objectToString(param.fileName)}, 'rb')`) : param.value ?? '' };
++                if (param.fileName !== undefined) part.filename = param.fileName;
++                if (param.contentType) part.headers = { 'Content-Type': param.contentType };
++                return part;
++            });
++            parts.push(`$multipart = new GuzzleHttp\\Psr7\\MultipartStream(${objectToString(fields)});`);
+         }
+         // Collect all headers to emit once, avoiding duplicate CURLOPT_HTTPHEADER calls.
+         // Body processing may add a Content-Type header, so we determine it first.
+         const allHeaders = [...(normalizedRequest.headers || [])];
+         // Helper to add Content-Type header if not already present
+         const hasContentType = () => allHeaders.some((h) => h.name.toLowerCase() === 'content-type');
+-        // Determine Content-Type from body before emitting headers
+-        if (normalizedRequest.postData) {
+-            if (normalizedRequest.postData.mimeType === 'application/x-www-form-urlencoded' &&
+-                normalizedRequest.postData.params &&
+-                !hasContentType()) {
+-                allHeaders.push({ name: 'Content-Type', value: 'application/x-www-form-urlencoded' });
+-            }
+-            else if (normalizedRequest.postData.mimeType === 'application/octet-stream' && !hasContentType()) {
+-                allHeaders.push({ name: 'Content-Type', value: 'application/octet-stream' });
+-            }
++        const mime = normalizedRequest.postData?.mimeType;
++        if (mime && mime !== 'multipart/form-data' && !hasContentType()) {
++            allHeaders.push({ name: 'Content-Type', value: mime });
+         }
+         // Emit all headers once
+-        if (allHeaders.length) {
+-            const headerStrings = allHeaders.map((header) => `'${header.name}: ${header.value}'`);
++        if (allHeaders.length || hasMultipartMimeBody) {
++            const headerStrings = allHeaders.map((header) => objectToString(`${header.name}: ${header.value}`));
++            if (hasMultipartMimeBody) headerStrings.push("'Content-Type: multipart/form-data; boundary=' . $multipart->getBoundary()");
+             parts.push(`curl_setopt($ch, CURLOPT_HTTPHEADER, [${headerStrings.join(', ')}]);`);
+             // Add encoding option if Accept-Encoding header includes compression
+             const acceptEncoding = allHeaders.find((header) => header.name.toLowerCase() === 'accept-encoding');
+@@ -77,78 +76,31 @@
+                 return `${encodedName}=${encodedValue}`;
+             })
+                 .join('; ');
+-            parts.push(`curl_setopt($ch, CURLOPT_COOKIE, '${cookieString}');`);
++            parts.push(`curl_setopt($ch, CURLOPT_COOKIE, ${objectToString(cookieString)});`);
+         }
+-        // Body
+-        if (normalizedRequest.postData) {
+-            if (normalizedRequest.postData.mimeType === 'application/json') {
+-                // Convert JSON to PHP array syntax
+-                if (normalizedRequest.postData.text) {
+-                    try {
+-                        const jsonData = JSON.parse(normalizedRequest.postData.text);
+-                        const phpArray = objectToString(jsonData);
+-                        parts.push(`curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(${phpArray}));`);
+-                    }
+-                    catch {
+-                        parts.push(`curl_setopt($ch, CURLOPT_POSTFIELDS, '${normalizedRequest.postData.text}');`);
+-                    }
+-                }
+-            }
+-            else if (normalizedRequest.postData.mimeType === 'multipart/form-data' && normalizedRequest.postData.params) {
+-                // Build multipart payload with curl_mime_* so duplicate keys remain distinct parts.
+-                hasMultipartMimeBody = true;
+-                parts.push('$mime = curl_mime_init($ch);');
+-                normalizedRequest.postData.params.forEach((param, index) => {
+-                    const partName = `$part${index}`;
+-                    parts.push(`${partName} = curl_mime_addpart($mime);`);
+-                    parts.push(`curl_mime_name(${partName}, '${param.name}');`);
+-                    if (param.fileName !== undefined) {
+-                        parts.push(`curl_mime_filedata(${partName}, '${param.fileName}');`);
+-                    }
+-                    else if (param.value !== undefined) {
+-                        parts.push(`curl_mime_data(${partName}, '${param.value}');`);
+-                    }
+-                    if (param.contentType) {
+-                        parts.push(`curl_mime_type(${partName}, '${param.contentType}');`);
+-                    }
+-                });
+-                parts.push('curl_setopt($ch, CURLOPT_MIMEPOST, $mime);');
+-            }
+-            else if (normalizedRequest.postData.mimeType === 'application/x-www-form-urlencoded' &&
+-                normalizedRequest.postData.params) {
+-                // Handle URL-encoded form data
+-                const formData = normalizedRequest.postData.params
+-                    .map((param) => {
+-                    const encodedName = encodeURIComponent(param.name);
+-                    const encodedValue = param.value ? encodeURIComponent(param.value) : '';
+-                    return `${encodedName}=${encodedValue}`;
+-                })
+-                    .join('&');
+-                parts.push(`curl_setopt($ch, CURLOPT_POSTFIELDS, '${formData}');`);
+-            }
+-            else if (normalizedRequest.postData.mimeType === 'application/octet-stream') {
+-                parts.push(`curl_setopt($ch, CURLOPT_POSTFIELDS, '${normalizedRequest.postData.text || ''}');`);
+-            }
+-            else if (normalizedRequest.postData.text) {
+-                // Try to parse as JSON and convert to PHP array, otherwise use raw text
+-                try {
+-                    const jsonData = JSON.parse(normalizedRequest.postData.text);
+-                    const phpArray = objectToString(jsonData);
+-                    parts.push(`curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(${phpArray}));`);
+-                }
+-                catch {
+-                    parts.push(`curl_setopt($ch, CURLOPT_POSTFIELDS, '${normalizedRequest.postData.text}');`);
+-                }
+-            }
++        // Body: keep raw JSON/text literal; native clients own file/MIME IO.
++        const body = normalizedRequest.postData;
++        if (body?.fileName !== undefined) {
++            parts.push(`curl_setopt($ch, CURLOPT_POSTFIELDS, file_get_contents(${objectToString(body.fileName)}));`);
++        }
++        else if (hasMultipartMimeBody) {
++            parts.push('curl_setopt($ch, CURLOPT_POSTFIELDS, (string) $multipart);');
++        }
++        else if (body?.mimeType === 'application/x-www-form-urlencoded' && body.params) {
++            const encoded = new URLSearchParams(body.params.map((param) => [param.name, param.value ?? ''])).toString();
++            parts.push(`curl_setopt($ch, CURLOPT_POSTFIELDS, ${objectToString(encoded)});`);
++        }
++        else if (body?.text !== undefined) {
++            parts.push(`curl_setopt($ch, CURLOPT_POSTFIELDS, ${objectToString(body.text)});`);
+         }
+         // Execute and close
+         parts.push('');
+         parts.push('curl_exec($ch);');
+         if (hasMultipartMimeBody) {
+-            parts.push('curl_mime_free($mime);');
++            parts.push('$multipart->close();');
+         }
+         parts.push('');
+-        parts.push('curl_close($ch);');
++        parts.push('unset($ch);');
+         return parts.join('\n').replace(/\n\n\n/g, '\n\n');
+     },
+ };
+diff --git a/node_modules/@scalar/snippetz/dist/plugins/php/guzzle/guzzle.js b/node_modules/@scalar/snippetz/dist/plugins/php/guzzle/guzzle.js
+--- a/node_modules/@scalar/snippetz/dist/plugins/php/guzzle/guzzle.js
++++ b/node_modules/@scalar/snippetz/dist/plugins/php/guzzle/guzzle.js
+@@ -46,52 +46,28 @@
+         if (configuration?.auth?.username && configuration.auth.password) {
+             options.auth = [configuration.auth.username, configuration.auth.password];
+         }
+-        // Handle request body
+-        if (request.postData) {
+-            if (request.postData.mimeType === 'application/json') {
+-                try {
+-                    options.json = JSON.parse(request.postData.text || '{}');
+-                }
+-                catch (_e) {
+-                    // If JSON parsing fails, use the raw text
+-                    options.body = request.postData.text;
+-                }
++        // Keep raw values literal: JSON arrays/objects/scalars retain their authored shape.
++        const body = request.postData;
++        if (body) {
++            if (body.mimeType && body.mimeType !== 'multipart/form-data'
++                && !Object.keys(options.headers ?? {}).some((name) => name.toLowerCase() === 'content-type')) {
++                options.headers = { ...options.headers, 'Content-Type': body.mimeType };
+             }
+-            else if (request.postData.mimeType === 'multipart/form-data') {
+-                if (request.postData.params) {
+-                    options.multipart = request.postData.params.map((param) => {
+-                        const part = {
+-                            name: param.name,
+-                            contents: param.fileName ? new Raw(`fopen('${param.fileName}', 'r')`) : param.value || '',
+-                        };
+-                        if (param.contentType) {
+-                            part.headers = { 'Content-Type': param.contentType };
+-                        }
+-                        return part;
+-                    });
+-                }
+-                else if (request.postData.text) {
+-                    try {
+-                        options.form_params = JSON.parse(request.postData.text);
+-                    }
+-                    catch (_e) {
+-                        options.body = request.postData.text;
+-                    }
+-                }
++            if (body.fileName !== undefined) {
++                options.body = new Raw(`fopen(${objectToString(body.fileName)}, 'rb')`);
+             }
+-            else if (request.postData.mimeType === 'application/x-www-form-urlencoded') {
+-                if (request.postData.params) {
+-                    const formParams = {};
+-                    request.postData.params.forEach((param) => {
+-                        formParams[param.name] = param.value || '';
+-                    });
+-                    options.form_params = formParams;
+-                }
++            else if (body.mimeType === 'multipart/form-data' && body.params) {
++                options.multipart = body.params.map((param) => {
++                    const part = { name: param.name, contents: param.fileName !== undefined ? new Raw(`fopen(${objectToString(param.fileName)}, 'rb')`) : param.value ?? '' };
++                    if (param.fileName !== undefined) part.filename = param.fileName;
++                    if (param.contentType) part.headers = { 'Content-Type': param.contentType };
++                    return part;
++                });
+             }
+-            else {
+-                // For other mime types (like application/octet-stream), use the raw body
+-                options.body = request.postData.text;
++            else if (body.mimeType === 'application/x-www-form-urlencoded' && body.params) {
++                options.body = new URLSearchParams(body.params.map((param) => [param.name, param.value ?? ''])).toString();
+             }
++            else if (body.text !== undefined) options.body = body.text;
+         }
+         // Handle compressed responses
+         if (request.headers &&
+@@ -104,10 +80,10 @@
+         if (Object.keys(options).length > 0) {
+             // Format the options array with proper indentation
+             const formattedOptions = objectToString(options);
+-            code += `$response = $client->request('${method}', '${url}', ${formattedOptions});`;
++            code += `$response = $client->request(${objectToString(method)}, ${objectToString(url)}, ${formattedOptions});`;
+         }
+         else {
+-            code += `$response = $client->request('${method}', '${url}');`;
++            code += `$response = $client->request(${objectToString(method)}, ${objectToString(url)});`;
+         }
+         return code;
+     },
+diff --git a/node_modules/@scalar/snippetz/dist/plugins/php/laravel/laravel.js b/node_modules/@scalar/snippetz/dist/plugins/php/laravel/laravel.js
+--- a/node_modules/@scalar/snippetz/dist/plugins/php/laravel/laravel.js
++++ b/node_modules/@scalar/snippetz/dist/plugins/php/laravel/laravel.js
+@@ -1,21 +1,7 @@
+-import { isObjectLike } from '@scalar/helpers/object/is-object';
+ import { accumulateRepeatedValue, buildQueryString, normalizeMethod } from '../../../libs/http.js';
+-import { objectToString } from '../../../libs/php.js';
++import { Raw, objectToString } from '../../../libs/php.js';
+ const escapePhpString = (value) => value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+ const quotePhpString = (value) => `'${escapePhpString(value)}'`;
+-const escapePhpObjectKey = escapePhpString;
+-const escapeObjectKeys = (value) => {
+-    if (Array.isArray(value)) {
+-        return value.map((item) => escapeObjectKeys(item));
+-    }
+-    if (isObjectLike(value)) {
+-        return Object.entries(value).reduce((acc, [key, nestedValue]) => {
+-            acc[escapePhpObjectKey(key)] = escapeObjectKeys(nestedValue);
+-            return acc;
+-        }, {});
+-    }
+-    return value;
+-};
+ const getCookieDomain = (url) => {
+     if (!url) {
+         return 'localhost';
+@@ -51,82 +37,40 @@
+             normalizedRequest.headers.forEach((header) => {
+                 accumulateRepeatedValue(headers, header.name, header.value);
+             });
+-            chain.push(`withHeaders(${objectToString(escapeObjectKeys(headers))})`);
++            chain.push(`withHeaders(${objectToString(headers)})`);
+         }
+         if (normalizedRequest.cookies?.length) {
+             const cookies = {};
+             normalizedRequest.cookies.forEach((cookie) => {
+                 accumulateRepeatedValue(cookies, cookie.name, cookie.value);
+             });
+-            chain.push(`withCookies(${objectToString(escapeObjectKeys(cookies))}, ${quotePhpString(getCookieDomain(normalizedRequest.url ?? ''))})`);
++            chain.push(`withCookies(${objectToString(cookies)}, ${quotePhpString(getCookieDomain(normalizedRequest.url ?? ''))})`);
+         }
+-        let payload;
+-        if (normalizedRequest.postData) {
+-            if (normalizedRequest.postData.mimeType === 'application/json') {
+-                if (normalizedRequest.postData.text) {
+-                    try {
+-                        payload = JSON.parse(normalizedRequest.postData.text);
+-                    }
+-                    catch {
+-                        chain.push(`withBody(${quotePhpString(normalizedRequest.postData.text)}, 'application/json')`);
+-                    }
+-                }
++        let options;
++        const body = normalizedRequest.postData;
++        if (body) {
++            const mime = normalizedRequest.headers?.find((header) => header.name.toLowerCase() === 'content-type')?.value || body.mimeType || 'text/plain';
++            if (body.fileName !== undefined) {
++                chain.push(`withBody(file_get_contents(${quotePhpString(body.fileName)}), ${quotePhpString(mime)})`);
+             }
+-            else if (normalizedRequest.postData.mimeType === 'application/x-www-form-urlencoded' &&
+-                normalizedRequest.postData.params) {
+-                const formData = {};
+-                normalizedRequest.postData.params.forEach((param) => {
+-                    accumulateRepeatedValue(formData, param.name, param.value ?? '');
+-                });
+-                chain.push('asForm()');
+-                payload = formData;
++            else if (body.mimeType === 'multipart/form-data' && body.params) {
++                chain.push('asMultipart()');
++                options = { multipart: body.params.map((param) => {
++                    const part = { name: param.name, contents: param.fileName !== undefined ? new Raw(`fopen(${quotePhpString(param.fileName)}, 'rb')`) : param.value ?? '' };
++                    if (param.fileName !== undefined) part.filename = param.fileName;
++                    if (param.contentType) part.headers = { 'Content-Type': param.contentType };
++                    return part;
++                }) };
+             }
+-            else if (normalizedRequest.postData.mimeType === 'multipart/form-data' && normalizedRequest.postData.params) {
+-                const multipartData = {};
+-                normalizedRequest.postData.params.forEach((param) => {
+-                    if (param.fileName !== undefined) {
+-                        const args = [
+-                            quotePhpString(param.name),
+-                            `file_get_contents(${quotePhpString(param.fileName)})`,
+-                            quotePhpString(param.fileName),
+-                        ];
+-                        if (param.contentType) {
+-                            args.push(objectToString(escapeObjectKeys({ 'Content-Type': param.contentType })));
+-                        }
+-                        chain.push(`attach(${args.join(', ')})`);
+-                    }
+-                    else if (param.contentType) {
+-                        chain.push(`attach(${quotePhpString(param.name)}, ${quotePhpString(param.value ?? '')}, null, ${objectToString(escapeObjectKeys({ 'Content-Type': param.contentType }))})`);
+-                    }
+-                    else {
+-                        accumulateRepeatedValue(multipartData, param.name, param.value ?? '');
+-                    }
+-                });
+-                if (Object.keys(multipartData).length > 0) {
+-                    payload = multipartData;
+-                }
++            else if (body.mimeType === 'application/x-www-form-urlencoded' && body.params) {
++                const encoded = new URLSearchParams(body.params.map((param) => [param.name, param.value ?? ''])).toString();
++                chain.push(`withBody(${quotePhpString(encoded)}, ${quotePhpString(mime)})`);
+             }
+-            else if (normalizedRequest.postData.mimeType === 'application/octet-stream') {
+-                chain.push(`withBody(${quotePhpString(normalizedRequest.postData.text ?? '')}, 'application/octet-stream')`);
+-            }
+-            else if (normalizedRequest.postData.text) {
+-                try {
+-                    payload = JSON.parse(normalizedRequest.postData.text);
+-                }
+-                catch {
+-                    chain.push(`withBody(${quotePhpString(normalizedRequest.postData.text)}, ${quotePhpString(normalizedRequest.postData.mimeType || 'text/plain')})`);
+-                }
++            else if (body.text !== undefined) {
++                chain.push(`withBody(${quotePhpString(body.text)}, ${quotePhpString(mime)})`);
+             }
+         }
+-        const requestMethod = normalizedRequest.method.toLowerCase();
+-        const supportsDirectMethod = ['delete', 'get', 'head', 'patch', 'post', 'put'].includes(requestMethod);
+-        const requestCall = supportsDirectMethod
+-            ? payload !== undefined && requestMethod !== 'head'
+-                ? `${requestMethod}(${quotePhpString(url)}, ${objectToString(escapeObjectKeys(payload), 1)})`
+-                : `${requestMethod}(${quotePhpString(url)})`
+-            : payload !== undefined
+-                ? `send(${quotePhpString(normalizedRequest.method)}, ${quotePhpString(url)}, ${objectToString(escapeObjectKeys(payload), 1)})`
+-                : `send(${quotePhpString(normalizedRequest.method)}, ${quotePhpString(url)})`;
++        const requestCall = `send(${quotePhpString(normalizedRequest.method)}, ${quotePhpString(url)}${options ? `, ${objectToString(options, 1)}` : ''})`;
+         const expression = chain.length > 0
+             ? [`Http::${chain[0]}`, ...chain.slice(1).map((method) => `  ->${method}`), `  ->${requestCall}`].join('\n')
+             : `Http::${requestCall}`;

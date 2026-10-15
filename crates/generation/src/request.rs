@@ -145,6 +145,7 @@ pub fn generate_request(
         || (target == "kotlin" && client == "okhttp")
         || (target == "dart" && matches!(client, "http" | "dio"))
         || (target == "ruby" && client == "native")
+        || (target == "php" && matches!(client, "curl" | "guzzle" | "laravel"))
         || (target == "python"
             && matches!(
                 client,
@@ -286,6 +287,40 @@ pub fn generate_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn php_files_and_repeated_forms_preserve_source_privacy() {
+        let body =
+            json!({"file_name":"upload.bin","mime":"application/octet-stream","base64":"AP+AClg="})
+                .to_string();
+        let mut w = workspace("binary", &body);
+        w.data.collections[0].requests[0].auth.kind = "bearer".into();
+        w.data.collections[0].requests[0].auth.token = "private-php-token".into();
+        for client in ["curl", "guzzle", "laravel"] {
+            let code = generate_request(&w, "r", "php", client, false)
+                .unwrap()
+                .code;
+            assert!(
+                code.contains("upload.bin")
+                    && !code.contains("AP+AClg=")
+                    && !code.contains("private-php-token")
+            );
+            assert!(
+                generate_request(&w, "r", "php", client, true)
+                    .unwrap()
+                    .code
+                    .contains("private-php-token")
+            );
+            generate_request(
+                &workspace("form", "x=one&x=two&empty="),
+                "r",
+                "php",
+                client,
+                true,
+            )
+            .unwrap();
+        }
+        assert_eq!(w.data.collections[0].requests[0].body, body);
+    }
     #[test]
     fn python_native_bodies_preserve_literals_files_and_private_source() {
         let body =
@@ -571,7 +606,7 @@ mod tests {
                 count += 1;
             }
         }
-        assert_eq!(count, 23);
+        assert_eq!(count, 26);
         assert_eq!(w.data.collections[0].requests[0].body, body);
     }
     #[test]
