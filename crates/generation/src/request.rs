@@ -145,6 +145,7 @@ pub fn generate_request(
         || (target == "kotlin" && client == "okhttp")
         || (target == "dart" && matches!(client, "http" | "dio"))
         || (target == "ruby" && client == "native")
+        || (target == "rust" && client == "reqwest")
         || (target == "node" && matches!(client, "fetch" | "axios" | "ofetch" | "undici"))
         || (target == "php"
             && matches!(
@@ -292,6 +293,40 @@ pub fn generate_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn rust_native_body_builders_keep_source_private_and_support_repeated_forms() {
+        let body =
+            json!({"file_name":"upload.bin","mime":"application/octet-stream","base64":"AP+AClg="})
+                .to_string();
+        let mut w = workspace("binary", &body);
+        w.data.collections[0].requests[0].auth.kind = "bearer".into();
+        w.data.collections[0].requests[0].auth.token = "private-rust-token".into();
+        let code = generate_request(&w, "r", "rust", "reqwest", false)
+            .unwrap()
+            .code;
+        assert!(
+            code.contains("std::fs::read")
+                && code.contains("upload.bin")
+                && !code.contains("AP+AClg=")
+                && !code.contains("private-rust-token")
+        );
+        assert!(
+            generate_request(&w, "r", "rust", "reqwest", true)
+                .unwrap()
+                .code
+                .contains("private-rust-token")
+        );
+        generate_request(
+            &workspace("form", "x=one&x=two&empty="),
+            "r",
+            "rust",
+            "reqwest",
+            true,
+        )
+        .unwrap();
+        generate_request(&workspace("form", ""), "r", "rust", "reqwest", true).unwrap();
+        assert_eq!(w.data.collections[0].requests[0].body, body);
+    }
     #[test]
     fn modern_node_bodies_preserve_source_and_method_boundaries() {
         let body =

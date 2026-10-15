@@ -53,6 +53,8 @@ def check(profile, record, expected_text=None, expected_json=None, expected_meth
     elif profile == 'form':
         assert mime.startswith('application/x-www-form-urlencoded')
         assert urllib.parse.parse_qs(body.decode(), keep_blank_values=True) == {'label': [NOTE, 'second'], 'empty': ['']}
+    elif profile == 'form-empty':
+        assert mime.startswith('application/x-www-form-urlencoded') and body == b''
     elif profile == 'text':
         assert mime.startswith('text/plain') and body == (expected_text if expected_text is not None else NOTE + '\r\nline\0\vend').encode()
     elif profile in ('binary', 'binary-mime'):

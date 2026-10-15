@@ -23,6 +23,16 @@ beforeEach(()=>{
   vi.mocked(useWorkbench).mockImplementation(()=>state);
 });
 afterEach(cleanup);
+it("explains Rust native file, async Result and Reqwest feature prerequisites",async()=>{
+ state.request={...state.request!,body_kind:"binary",body:JSON.stringify({file_name:"upload.bin",mime:"application/octet-stream",base64:"AP+AClg="})};
+ const choices={...catalog,targets:[{target:"rust",title:"Rust",clients:[{client:"reqwest",title:"reqwest",binary_file:true}]}]};
+ vi.mocked(api).mockImplementation(path=>Promise.resolve(path.endsWith("catalog")?choices:{...snippet,target:"rust",client:"reqwest",code:"original-rust-file-reader"}));
+ render(<GenerationDialog open onOpenChange={vi.fn()}/>);await screen.findByRole("option",{name:"Rust"});
+ fireEvent.change(screen.getByLabelText("代码语言"),{target:{value:"rust"}});expect(screen.queryByText("Rust 示例需放入返回 Result 的异步方法，并准备 Tokio 等异步运行时。Reqwest 表单和 multipart 示例需启用对应的 form、multipart 特性；文件示例需准备同名文件。")).toBeNull();
+ fireEvent.click(screen.getByRole("button",{name:"生成"}));expect(await screen.findByText("Rust 示例需放入返回 Result 的异步方法，并准备 Tokio 等异步运行时。Reqwest 表单和 multipart 示例需启用对应的 form、multipart 特性；文件示例需准备同名文件。")).toBeTruthy();
+ expect(screen.getByDisplayValue("original-rust-file-reader")).toBeTruthy();
+ expect(vi.mocked(api).mock.calls.at(-1)?.[2]).toMatchObject({target:"rust",client:"reqwest",include_secrets:false});
+});
 it.each(["fetch","axios","ofetch","undici"])("offers Node %s files with ESM and package prerequisites",async client=>{
  state.request={...state.request!,body_kind:"binary",body:JSON.stringify({file_name:"upload.bin",mime:"application/octet-stream",base64:"AP+AClg="})};
  const choices={...catalog,targets:[{target:"node",title:"Node.js",clients:[{client,title:client,binary_file:true}]}]};
