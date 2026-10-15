@@ -99,17 +99,193 @@ diff --git a/node_modules/@scalar/snippetz/dist/plugins/node/fetch/fetch.js b/no
 diff --git a/node_modules/@scalar/snippetz/dist/plugins/go/native/native.js b/node_modules/@scalar/snippetz/dist/plugins/go/native/native.js
 --- a/node_modules/@scalar/snippetz/dist/plugins/go/native/native.js
 +++ b/node_modules/@scalar/snippetz/dist/plugins/go/native/native.js
-@@ -35,6 +35,10 @@
-             requestBody: 'nil',
+@@ -5,27 +5,7 @@
+     }
+     return goString(entry);
+ };
+-const goString = (value) => JSON.stringify(value);
+-const toPrettyJson = (text) => {
+-    if (text === undefined) {
+-        return '';
+-    }
+-    try {
+-        return JSON.stringify(JSON.parse(text), null, 2);
+-    }
+-    catch {
+-        return text;
+-    }
+-};
+-const canUseRawStringLiteral = (value) => {
+-    return !value.includes('`');
+-};
+-const toGoStringLiteral = (value, preferRawLiteral = false) => {
+-    if (preferRawLiteral && canUseRawStringLiteral(value)) {
+-        return `\`${value}\``;
+-    }
+-    return goString(value);
+-};
++const goString = (value) => JSON.stringify(value).replace(/[\u2028\u2029\u202a-\u202e\u2066-\u2069]/g, (char) => `\\u${char.codePointAt(0).toString(16).padStart(4, '0')}`);
+ const buildBodySection = (postData) => {
+     const imports = new Set();
+     if (!postData) {
+@@ -36,67 +16,63 @@
              needsMultipartContentTypeHeader: false,
          };
-+    }
+     }
+-    if (postData.mimeType === 'application/x-www-form-urlencoded' && postData.params?.length) {
 +    if (postData.fileName !== undefined) {
 +        imports.add('os');
-+        return {imports, setupLines:[`payload, err := os.Open(${goString(postData.fileName)})`, 'if err != nil { fmt.Println(err); return }', 'defer payload.Close()'], requestBody:'payload', needsMultipartContentTypeHeader:false};
-     }
-     if (postData.mimeType === 'application/x-www-form-urlencoded' && postData.params?.length) {
++        return {imports, setupLines:[`payload, err := os.Open(${goString(postData.fileName)})`, 'if err != nil {', '\treturn err', '}', '// net/http owns and closes this file after successful request construction.'], requestBody:'payload', closeOnRequestError:'payload', needsMultipartContentTypeHeader:false};
++    }
++    if (postData.mimeType === 'application/x-www-form-urlencoded' && postData.params) {
          imports.add('neturl "net/url"');
+         imports.add('strings');
+         return {
+             imports,
+             setupLines: [
+                 'postData := neturl.Values{}',
+-                ...postData.params.map((param) => `postData.Set(${goString(param.name)}, ${goString(param.value ?? '')})`),
++                ...postData.params.map((param) => `postData.Add(${goString(param.name)}, ${goString(param.value ?? '')})`),
+             ],
+             requestBody: 'strings.NewReader(postData.Encode())',
+             needsMultipartContentTypeHeader: false,
+         };
+     }
+-    if (postData.mimeType === 'multipart/form-data' && postData.params?.length) {
++    if (postData.mimeType === 'multipart/form-data' && postData.params) {
+         imports.add('bytes');
+         imports.add('mime/multipart');
+         const setupLines = ['payload := &bytes.Buffer{}', 'writer := multipart.NewWriter(payload)'];
+-        const hasFile = postData.params.some((param) => param.fileName !== undefined);
+-        let hasDeclaredPart = false;
+-        let hasDeclaredFile = false;
+-        if (hasFile) {
+-            imports.add('os');
+-            imports.add('io');
++        for (const param of postData.params) {
++            if (param.fileName !== undefined || param.contentType) {
++                imports.add('mime');
++                imports.add('net/textproto');
++                const entries = [`"name": ${goString(param.name)}`];
++                if (param.fileName !== undefined) entries.push(`"filename": ${goString(param.fileName)}`);
++                setupLines.push('{', '\theader := textproto.MIMEHeader{}', `\theader.Set("Content-Disposition", mime.FormatMediaType("form-data", map[string]string{${entries.join(', ')}}))`);
++                setupLines.push(`\theader.Set("Content-Type", ${goString(param.contentType || 'application/octet-stream')})`);
++                setupLines.push('\tpart, err := writer.CreatePart(header)', '\tif err != nil {', '\t\treturn err', '\t}');
++                if (param.fileName !== undefined) {
++                    imports.add('os');
++                    setupLines.push(`\tf, err := os.Open(${goString(param.fileName)})`, '\tif err != nil {', '\t\treturn err', '\t}', '\t_, copyErr := io.Copy(part, f)', '\tif err := errors.Join(copyErr, f.Close()); err != nil {', '\t\treturn err', '\t}');
++                } else {
++                    setupLines.push(`\tif _, err := io.WriteString(part, ${goString(param.value ?? '')}); err != nil {`, '\t\treturn err', '\t}');
++                }
++                setupLines.push('}');
++            } else {
++                setupLines.push(`if err := writer.WriteField(${goString(param.name)}, ${goString(param.value ?? '')}); err != nil {`, '\treturn err', '}');
++            }
+         }
+-        postData.params.forEach((param) => {
+-            setupLines.push('');
+-            if (param.fileName !== undefined) {
+-                setupLines.push(`part, _ ${hasDeclaredPart ? '=' : ':='} writer.CreateFormFile(${goString(param.name)}, ${goString(param.fileName)})`);
+-                setupLines.push('');
+-                setupLines.push(`f, _ ${hasDeclaredFile ? '=' : ':='} os.Open(${goString(param.fileName)})`);
+-                setupLines.push('defer f.Close()');
+-                setupLines.push('');
+-                setupLines.push('_, _ = io.Copy(part, f)');
+-                hasDeclaredPart = true;
+-                hasDeclaredFile = true;
+-            }
+-            else {
+-                setupLines.push(`_ = writer.WriteField(${goString(param.name)}, ${goString(param.value ?? '')})`);
+-            }
+-        });
+-        setupLines.push('writer.Close()');
+-        return {
+-            imports,
+-            setupLines,
+-            requestBody: 'payload',
+-            needsMultipartContentTypeHeader: true,
+-        };
++        setupLines.push('if err := writer.Close(); err != nil {', '\treturn err', '}');
++        return { imports, setupLines, requestBody: 'payload', needsMultipartContentTypeHeader: true };
+     }
+     imports.add('strings');
+-    const payload = postData.mimeType === 'application/json' ? toPrettyJson(postData.text) : (postData.text ?? '');
++    const payload = postData.text ?? '';
+     return {
+         imports,
+         setupLines: [
+-            `payload := strings.NewReader(${toGoStringLiteral(payload, postData.mimeType === 'application/json')})`,
++            `payload := strings.NewReader(${goString(payload)})`,
+         ],
+         requestBody: 'payload',
+         needsMultipartContentTypeHeader: false,
+     };
+ };
+ const buildImports = (bodyImports) => {
+-    return Array.from(new Set(['fmt', 'io', 'net/http', ...bodyImports])).sort();
++    return Array.from(new Set(['errors', 'fmt', 'io', 'net/http', 'os', ...bodyImports])).sort();
+ };
+ /**
+  * go/native
+@@ -112,6 +88,8 @@
+         const method = normalizeMethod(request.method);
+         const fullUrl = normalizeUrl(joinUrlAndQuery(request.url ?? '', request.queryString));
+         const headers = collectHeaders(request.headers, request.cookies);
++        const mime = request.postData?.mimeType;
++        if (mime && mime !== 'multipart/form-data' && !headers.some((header) => header.name.toLowerCase() === 'content-type')) headers.push({name:'Content-Type', value:mime});
+         const bodySection = buildBodySection(request.postData);
+         const imports = buildImports(bodySection.imports);
+         const lines = [
+@@ -122,14 +100,24 @@
+             ')',
+             '',
+             'func main() {',
+-            `\trequestUrl := ${goString(fullUrl)}`,
++            '\tif err := run(); err != nil {',
++            '\t\tfmt.Fprintln(os.Stderr, err)',
++            '\t\tos.Exit(1)',
++            '\t}',
++            '}',
++            '',
++            'func run() (err error) {',
++            `\trequestURL := ${goString(fullUrl)}`,
+             '',
+             ...bodySection.setupLines.map((line) => (line ? `\t${line}` : '')),
+         ];
+         if (bodySection.setupLines.length) {
+             lines.push('');
+         }
+-        lines.push(`\treq, _ := http.NewRequest(${goString(method)}, requestUrl, ${bodySection.requestBody})`);
++        lines.push(`\treq, err := http.NewRequest(${goString(method)}, requestURL, ${bodySection.requestBody})`);
++        lines.push('\tif err != nil {');
++        lines.push(bodySection.closeOnRequestError ? `\t\treturn errors.Join(err, ${bodySection.closeOnRequestError}.Close())` : '\t\treturn err');
++        lines.push('\t}');
+         lines.push('');
+         if (bodySection.needsMultipartContentTypeHeader) {
+             lines.push('\treq.Header.Set("Content-Type", writer.FormDataContentType())');
+@@ -145,15 +133,18 @@
+             (configuration?.auth?.username && configuration.auth.password)) {
+             lines.push('');
+         }
+-        lines.push('\tres, _ := http.DefaultClient.Do(req)');
++        lines.push('\tres, err := http.DefaultClient.Do(req)');
++        lines.push('\tif err != nil {', '\t\treturn err', '\t}');
+         lines.push('');
+-        lines.push('\tdefer res.Body.Close()');
+-        lines.push('\tbody, _ := io.ReadAll(res.Body)');
++        lines.push('\tdefer func() { err = errors.Join(err, res.Body.Close()) }()');
++        lines.push('\tbody, err := io.ReadAll(res.Body)');
++        lines.push('\tif err != nil {', '\t\treturn err', '\t}');
+         lines.push('');
+         lines.push('\tfmt.Println(res)');
+         lines.push('\tfmt.Println(string(body))');
+         lines.push('');
++        lines.push('\treturn nil');
+         lines.push('}');
+-        return lines.join('\n');
++        return lines.join('\n') + '\n';
+     },
+ };
 diff --git a/node_modules/@scalar/snippetz/dist/plugins/python/requestsLike.js b/node_modules/@scalar/snippetz/dist/plugins/python/requestsLike.js
 --- a/node_modules/@scalar/snippetz/dist/plugins/python/requestsLike.js
 +++ b/node_modules/@scalar/snippetz/dist/plugins/python/requestsLike.js

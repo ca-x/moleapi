@@ -146,6 +146,7 @@ pub fn generate_request(
         || (target == "dart" && matches!(client, "http" | "dio"))
         || (target == "ruby" && client == "native")
         || (target == "rust" && client == "reqwest")
+        || (target == "go" && client == "native")
         || (target == "node" && matches!(client, "fetch" | "axios" | "ofetch" | "undici"))
         || (target == "php"
             && matches!(
@@ -293,6 +294,41 @@ pub fn generate_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn go_native_files_forms_and_json_numbers_preserve_private_source() {
+        let body =
+            json!({"file_name":"upload.bin","mime":"application/octet-stream","base64":"AP+AClg="})
+                .to_string();
+        let mut w = workspace("binary", &body);
+        w.data.collections[0].requests[0].auth.kind = "bearer".into();
+        w.data.collections[0].requests[0].auth.token = "private-go-token".into();
+        let code = generate_request(&w, "r", "go", "native", false)
+            .unwrap()
+            .code;
+        assert!(
+            code.contains("os.Open")
+                && code.contains("upload.bin")
+                && !code.contains("AP+AClg=")
+                && !code.contains("private-go-token")
+        );
+        assert!(
+            generate_request(&w, "r", "go", "native", true)
+                .unwrap()
+                .code
+                .contains("private-go-token")
+        );
+        for form in ["x=one&x=two&empty=", ""] {
+            generate_request(&workspace("form", form), "r", "go", "native", true).unwrap();
+        }
+        let numbers = r#"{"id":9007199254740993,"max":18446744073709551615}"#;
+        for include in [false, true] {
+            let code = generate_request(&workspace("json", numbers), "r", "go", "native", include)
+                .unwrap()
+                .code;
+            assert!(code.contains("9007199254740993") && code.contains("18446744073709551615"));
+        }
+        assert_eq!(w.data.collections[0].requests[0].body, body);
+    }
     #[test]
     fn rust_native_body_builders_keep_source_private_and_support_repeated_forms() {
         let body =
@@ -801,7 +837,7 @@ mod tests {
     #[test]
     fn unsupported_repeated_fields_fail_instead_of_losing_values() {
         let mut w = workspace("form", "x=one&x=two");
-        for (target, client) in [("js", "fetch"), ("node", "native"), ("go", "native")] {
+        for (target, client) in [("js", "fetch"), ("node", "native"), ("js", "axios")] {
             assert!(
                 generate_request(&w, "r", target, client, true)
                     .unwrap_err()

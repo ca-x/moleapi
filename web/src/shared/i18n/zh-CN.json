@@ -1749,5 +1749,6 @@
   "HTTP_Request2 示例需安装 pear/http_request2，加载 Composer autoload 或配置 PEAR include_path；multipart 另需 guzzlehttp/psr7。文件示例需准备同名文件。": "HTTP_Request2 示例需安装 pear/http_request2，加载 Composer autoload 或配置 PEAR include_path；multipart 另需 guzzlehttp/psr7。文件示例需准备同名文件。",
   "PECL HTTP 示例需启用 http 与 raphf 扩展；multipart 另需 guzzlehttp/psr7 并加载 Composer autoload。文件示例需准备同名文件。": "PECL HTTP 示例需启用 http 与 raphf 扩展；multipart 另需 guzzlehttp/psr7 并加载 Composer autoload。文件示例需准备同名文件。",
   "Node.js 示例需以 ESM 运行（.mjs 或 type: module）。Fetch 使用内置客户端，其他 HTTP 库需安装对应依赖；multipart 另需 form-data。文件示例需准备同名文件。": "Node.js 示例需以 ESM 运行（.mjs 或 type: module）。Fetch 使用内置客户端，其他 HTTP 库需安装对应依赖；multipart 另需 form-data。文件示例需准备同名文件。",
-  "Rust 示例需放入返回 Result 的异步方法，并准备 Tokio 等异步运行时。Reqwest 表单和 multipart 示例需启用对应的 form、multipart 特性；文件示例需准备同名文件。": "Rust 示例需放入返回 Result 的异步方法，并准备 Tokio 等异步运行时。Reqwest 表单和 multipart 示例需启用对应的 form、multipart 特性；文件示例需准备同名文件。"
+  "Rust 示例需放入返回 Result 的异步方法，并准备 Tokio 等异步运行时。Reqwest 表单和 multipart 示例需启用对应的 form、multipart 特性；文件示例需准备同名文件。": "Rust 示例需放入返回 Result 的异步方法，并准备 Tokio 等异步运行时。Reqwest 表单和 multipart 示例需启用对应的 form、multipart 特性；文件示例需准备同名文件。",
+  "Go 示例仅使用标准库，可保存为 main.go 后运行。文件示例需准备同名文件；程序会处理文件及网络错误，并关闭上传文件和响应体。": "Go 示例仅使用标准库，可保存为 main.go 后运行。文件示例需准备同名文件；程序会处理文件及网络错误，并关闭上传文件和响应体。"
 }

@@ -1,0 +1,17 @@
+# Go net/http request body completeness
+
+Continue the full generation milestone through the existing pinned Scalar Go emitter.
+
+- Retain Go's native net/http, mime/multipart, mime.FormatMediaType, net/textproto, url.Values and file IO. Do not add an application emitter/MIME encoder or external Go runtime dependency.
+- Preserve raw JSON/text literals, including large numeric JSON, controls, Bidi and backticks. Do not parse JSON through JavaScript or use Go raw strings that drop CR. Repeated forms use Values.Add; empty forms remain valid.
+- Multipart keeps enabled source order, duplicate fields, explicit field/file MIME and filename. Native headers use FormatMediaType and Writer.CreatePart; read/copy/close failures prevent any partial request. Close upload files immediately after copy and close the writer with error checking.
+- Keep filename-only raw file streaming, default privacy, selected auth/header/query and source immutability. Generated main delegates to one Result-style error-returning function, reports errors with nonzero exit after deferred cleanup and handles NewRequest/Do/ReadAll failures without nil dereferences.
+- Apply go-best-practices and the version-specific use-modern-go CLI guidance. Write implementation and trusted verifier before batch tests. Execute original complete Go programs with explicit Go1.27.1/Node tools, gofmt/vet/race build, owned HTTP and all21 Rust body profiles plus JSON numeric/backtick/CR fidelity cases and missing-file/connection failures. No imported user programs run.
+- UI uses ui-ux-pro-max/emil-design-eng for contextual standard-library/runtime/file instructions with current type/theme/focus/reflow.
+- Batch actual wire/original-code/previous-output evidence, generation/API/UI regressions, deterministic/clean patch checks, strict scoped lint/fmt/frontend then stable server build and actual bilingual owned-API UI. Commit explicit files, integrate the verified slice to main and push both branches. Preserve pending Apple shared-consumer native CI and untracked drafts; full395-feature scope remains open.
+
+## Verified checkpoint
+
+24 original complete Go1.27.1 programs pass unchanged-source gofmt/vet/race builds and native HTTP, with exact raw JSON numeric/backtick/CRLF bytes and all source/auth/query/file/metadata checks. Three native failure paths pass: missing raw/multipart files produce nonzero errors without any partial request, and connection refusal does not panic. Seven previous emitter defects reproduced. Raw file lifecycle follows net/http ownership, with explicit construction-error cleanup; multipart files close immediately and response cleanup joins returned errors. Modern Go Guidelines1.27 list was read before generated-code edits; no Go JSON decoder/codec was introduced.
+
+99 generation/3 snippet API/52 UI-i18n tests, scoped strict Clippy/fmt, frontend/server builds and deterministic/clean upstream patch checks pass;54 other representative outputs byte-identical. Actual owned-API en/light1280 typed-MIME multipart and zh/dark375 binary Go UI shows correct instructions/privacy/reflow, inspected screenshots and axe0 verified violations/1 manual contrast check. Evidence `/tmp/moleapi-go-snippet-final` and `/tmp/moleapi-go-snippet-*.log`. Other dependency/platform/advanced body/transport/status scopes and the full395-feature goal remain open. Apple native CI continues without restarting the live run.

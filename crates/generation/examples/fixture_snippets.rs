@@ -18,37 +18,44 @@ fn main() -> Result<()> {
         profile == "core"
             || matches!(
                 mode.as_deref(),
-                Some("java" | "kotlin" | "dart" | "ruby" | "python" | "php" | "node" | "rust")
+                Some(
+                    "java" | "kotlin" | "dart" | "ruby" | "python" | "php" | "node" | "rust" | "go"
+                )
             ) && ["form", "text", "binary", "binary-mime", "multipart"]
                 .contains(&profile.as_str())
             || matches!(
                 mode.as_deref(),
-                Some("kotlin" | "dart" | "ruby" | "python" | "php" | "node" | "rust")
+                Some("kotlin" | "dart" | "ruby" | "python" | "php" | "node" | "rust" | "go")
             ) && profile == "dollar"
             || mode.as_deref() == Some("ruby") && profile == "interpolation"
-            || matches!(mode.as_deref(), Some("python" | "php" | "node" | "rust"))
-                && [
-                    "json-values",
-                    "json-scalar",
-                    "json-null",
-                    "json-empty",
-                    "get-binary",
-                    "head-binary",
-                    "delete-json",
-                    "text-json",
-                    "multipart-meta",
-                    "multipart-text",
-                    "json-object",
-                    "headers-quoted",
-                    "json-controls",
-                    "form-empty"
-                ]
-                .contains(&profile.as_str()),
+            || matches!(
+                mode.as_deref(),
+                Some("python" | "php" | "node" | "rust" | "go")
+            ) && [
+                "json-values",
+                "json-scalar",
+                "json-null",
+                "json-empty",
+                "get-binary",
+                "head-binary",
+                "delete-json",
+                "text-json",
+                "multipart-meta",
+                "multipart-text",
+                "json-object",
+                "headers-quoted",
+                "json-controls",
+                "form-empty",
+                "json-numbers",
+                "json-backticks",
+                "json-crlf"
+            ]
+            .contains(&profile.as_str()),
         "Unknown snippet fixture profile"
     );
     let body_profile = if matches!(
         mode.as_deref(),
-        Some("java" | "kotlin" | "dart" | "ruby" | "python" | "php" | "node" | "rust")
+        Some("java" | "kotlin" | "dart" | "ruby" | "python" | "php" | "node" | "rust" | "go")
     ) {
         if matches!(profile.as_str(), "get-binary" | "head-binary") {
             "binary"
@@ -116,6 +123,16 @@ fn main() -> Result<()> {
         workspace.data.collections[0].requests[0].body =
             json!({"message":"\0\u{b}\u{1f}\u{202e} \"# raw text"}).to_string();
     }
+    if body_profile == "json-numbers" {
+        workspace.data.collections[0].requests[0].body = r#"{"id":9007199254740993,"max":18446744073709551615,"decimal":1.0000000000000000000000001}"#.into();
+    }
+    if body_profile == "json-backticks" {
+        workspace.data.collections[0].requests[0].body =
+            json!({"message":"literal `backtick` and \"quotes\""}).to_string();
+    }
+    if body_profile == "json-crlf" {
+        workspace.data.collections[0].requests[0].body = "{\r\n  \"message\": \"鼹鼠\"\r\n}".into();
+    }
     if body_profile == "json-values" {
         workspace.data.collections[0].requests[0].body = json!({"yes":true,"no":false,"nil":null,"list":[true,false,null],"strings":["x: true, text","x: false, text","x: null, text","\"true\"", "\\false"]}).to_string();
     }
@@ -159,14 +176,17 @@ fn main() -> Result<()> {
         workspace.data.collections[0].requests[0].body_kind = "multipart".into();
         workspace.data.collections[0].requests[0].body = json!({"parts": [{"id": "one", "name": "label", "value": {"kind": "text", "text": "鼹鼠 \"quotes\"\r\nvalue", "mime": ""}}, {"id": "two", "name": "label", "value": {"kind": "text", "text": "second", "mime": ""}}, {"id": "empty", "name": "empty", "value": {"kind": "text", "text": "", "mime": ""}}, {"id": "disabled", "name": "off", "enabled": false, "value": {"kind": "text", "text": "must-not-send", "mime": ""}}]}).to_string();
     }
-    if matches!(mode.as_deref(), Some("php" | "node" | "rust")) && body_profile == "multipart-meta"
+    if matches!(mode.as_deref(), Some("php" | "node" | "rust" | "go"))
+        && body_profile == "multipart-meta"
     {
         let request = &mut workspace.data.collections[0].requests[0];
         request.body = request
             .body
             .replace("upload-鼹鼠.bin", "upload-鼹鼠'quote.bin");
     }
-    let targets = if mode.as_deref() == Some("rust") {
+    let targets = if mode.as_deref() == Some("go") {
+        vec![("go", "native", "snippet.go")]
+    } else if mode.as_deref() == Some("rust") {
         vec![("rust", "reqwest", "snippet.rs")]
     } else if mode.as_deref() == Some("node") {
         vec![
@@ -278,7 +298,7 @@ fn main() -> Result<()> {
     }
     if matches!(
         mode.as_deref(),
-        Some("java" | "kotlin" | "dart" | "ruby" | "python" | "php" | "node" | "rust")
+        Some("java" | "kotlin" | "dart" | "ruby" | "python" | "php" | "node" | "rust" | "go")
     ) {
         let source = serde_json::to_vec(&workspace)?;
         std::fs::write(

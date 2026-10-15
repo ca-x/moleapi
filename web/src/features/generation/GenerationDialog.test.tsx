@@ -23,6 +23,16 @@ beforeEach(()=>{
   vi.mocked(useWorkbench).mockImplementation(()=>state);
 });
 afterEach(cleanup);
+it("explains Go standard-library file and error handling prerequisites",async()=>{
+ state.request={...state.request!,body_kind:"binary",body:JSON.stringify({file_name:"upload.bin",mime:"application/octet-stream",base64:"AP+AClg="})};
+ const choices={...catalog,targets:[{target:"go",title:"Go",clients:[{client:"native",title:"NewRequest",binary_file:true}]}]};
+ vi.mocked(api).mockImplementation(path=>Promise.resolve(path.endsWith("catalog")?choices:{...snippet,target:"go",client:"native",code:"original-go-file-reader"}));
+ render(<GenerationDialog open onOpenChange={vi.fn()}/>);await screen.findByRole("option",{name:"Go"});
+ fireEvent.change(screen.getByLabelText("代码语言"),{target:{value:"go"}});expect(screen.queryByText("Go 示例仅使用标准库，可保存为 main.go 后运行。文件示例需准备同名文件；程序会处理文件及网络错误，并关闭上传文件和响应体。")).toBeNull();
+ fireEvent.click(screen.getByRole("button",{name:"生成"}));expect(await screen.findByText("Go 示例仅使用标准库，可保存为 main.go 后运行。文件示例需准备同名文件；程序会处理文件及网络错误，并关闭上传文件和响应体。")).toBeTruthy();
+ expect(screen.getByDisplayValue("original-go-file-reader")).toBeTruthy();
+ expect(vi.mocked(api).mock.calls.at(-1)?.[2]).toMatchObject({target:"go",client:"native",include_secrets:false});
+});
 it("explains Rust native file, async Result and Reqwest feature prerequisites",async()=>{
  state.request={...state.request!,body_kind:"binary",body:JSON.stringify({file_name:"upload.bin",mime:"application/octet-stream",base64:"AP+AClg="})};
  const choices={...catalog,targets:[{target:"rust",title:"Rust",clients:[{client:"reqwest",title:"reqwest",binary_file:true}]}]};

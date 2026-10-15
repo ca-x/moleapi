@@ -9,7 +9,7 @@ This is usable request-example generation, separate from typed OpenAPI SDK/serve
 | Clojure | clj_http | Engine smoke only |
 | Dart | http, dio |14 original-source analyze/AOT/run cases on Dart3.13.5/http1.6.0/Dio5.11.1: text/form/JSON/files/MIME/multipart/dollar literals |
 | F# | httpclient | Engine smoke only |
-| Go | native | net/http POST fixture |
+| Go | native |24 original complete-program format/vet/race-build/native HTTP cases and3 failure paths on Go1.27.1; stdlib IO/MIME/forms and numeric JSON fidelity |
 | HTTP | http1.1 | Engine smoke only |
 | Java | asynchttp, nethttp, okhttp, unirest |24 original-source compile/call cases on JDK21: JSON, repeated form, text/control bytes, raw binary, explicit binary MIME and multipart files |
 | JavaScript | fetch, axios, ofetch, jquery, xhr, native, request, unirest | Fetch on Node runtime; browser-specific variants remain unverified |
@@ -612,3 +612,68 @@ runtime/project, not standalone archives. Other Rust/Reqwest/OS ranges, streamin
 advanced/empty/nested/escaped part shapes, arbitrary methods/header/auth/cookie/
 TLS/timeout/redirect options and broader response/error policies remain open with
 the full generation plan. Synchronous file reads materialize bytes in the consumer.
+
+
+## Go net/http body, metadata and error handling
+
+The pinned Scalar Go emitter retains standard-library net/http, url.Values,
+mime/multipart, mime.FormatMediaType and net/textproto. Repeated forms now use Add
+instead of Set, preserving all values; empty forms work. Raw JSON/text is quoted
+without JavaScript JSON parsing, pretty-printing or Go raw-string CR removal.
+Large integer/decimal JSON, original CRLF, backticks, controls and Bidi literals
+retain the explicit source bytes. Default/explicit generation also preserves the
+covered64-bit integer values while canonical saved source stays unchanged.
+
+Multipart field/file MIME and filename are carried by native MIMEHeader/CreatePart
+and FormatMediaType, preserving source order, duplicate names and text/file kind.
+Native writer errors, open/read/copy/close errors and writer finalization are
+checked before sending. Multipart files close immediately after copy. Raw files
+stream from os.File; ownership passes to net/http after request construction and
+construction errors close the file explicitly. The complete generated main calls
+one error-returning request function; Response.Body cleanup joins errors before
+main reports them and exits nonzero. Failed NewRequest/Do/ReadAll never dereference
+an absent request/response. No MIME encoder or transport was implemented in the
+application. File generation references names and never embeds saved bytes or
+reads app-host files. Existing file capability count stays31.
+
+Current evidence: Go1.27.1/Linux/amd64, original complete programs pass gofmt diff,
+go vet and -race -trimpath builds, then24 actual native HTTP profiles. These are
+the21 Rust body profiles plus exact large JSON numbers, backticks and original
+CRLF JSON. The driver checks raw JSON bytes as well as semantic values, selected
+Bearer/manual-header replacement, Host filtering, query, MIME, GET/HEAD raw files,
+repeated/empty forms, raw controls, multipart duplicates/text-only/typed text and
+file MIME/Unicode-apostrophe filename/disabled exclusion. Original source/snippet/
+engine/Go/gofmt/Node/consumer hashes and actual tool environment are recorded.
+Three additional native negatives prove raw-file and multipart missing-file errors
+exit nonzero without a partial request, and connection refusal returns an error
+without a nil-response panic. No imported user programs run or responses are mocked.
+
+Old output reproduced7 problems: duplicate values overwritten, large JSON integers
+rounded, source JSON bytes rewritten, raw MIME omitted, field/file MIME ignored,
+missing multipart files sent as empty success and connection failure panics. The
+new code follows the version-specific Modern Go Guidelines and Go lifecycle guidance,
+using errors.Join for cleanup/error composition. It uses only Go's standard library;
+no external Go dependency or compiler is needed by MoleAPI itself.
+
+99 generation cases,3 owned/local snippet API cases including Go file MIME/privacy/
+ownership,52 UI/i18n cases, strict scoped Clippy, formatting and frontend/server
+builds passed. The engine rebuild is deterministic and a complete clean upstream
+patch matches the actual emitter. Other54 representative adapter outputs remain
+byte-identical. Raw/repeated-form negative tests were updated only for the now
+verified Go adapter; browser/legacy/header rejection guards remain scoped.
+
+Owned-API UI checks cover English/light1280×900 typed-MIME multipart and Chinese/
+dark375×812 binary-filter Go examples, correct localized run/file/error hints, no
+saved token/Base64 exposure or document horizontal overflow. Scoped axe0 verified
+violations/1 manual line-number contrast check each; screenshots inspected.
+Evidence `/tmp/moleapi-go-snippet-final`, `/tmp/moleapi-go-snippet-baseline` and
+`/tmp/moleapi-go-snippet-*.log`. Reproduce with explicit developer tools:
+
+```sh
+python3 tools/snippets/verify-go.py --go /absolute/go --node /absolute/node --output /absolute/fresh-output
+```
+
+Raw files stream through the native transport; multipart construction and response
+reading still buffer data in the consumer. Other Go/OS ranges, empty/advanced part
+shapes, nonseekable/custom sources, full HTTP status/error policy, cookie/auth/
+TLS/timeout/redirect settings and other matrix rows remain open with the full plan.
