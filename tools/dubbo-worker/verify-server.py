@@ -5,12 +5,35 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import selectors
+import queue
 import subprocess
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.request
+
+
+def announced_address(server, timeout=90):
+    listening = queue.Queue(maxsize=1)
+    recent = []
+
+    def drain():
+        for line in server.stdout:
+            recent.append(line.rstrip()[:500])
+            if len(recent) > 20: recent.pop(0)
+            if line.startswith('MoleAPI listening on '):
+                try: listening.put_nowait(line.strip().split(' on ', 1)[1])
+                except queue.Full: pass
+
+    threading.Thread(target=drain, daemon=True).start()
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if server.poll() is not None:
+            raise RuntimeError(f'hosted server exited {server.returncode}: {recent}')
+        try: return listening.get(timeout=1)
+        except queue.Empty: pass
+    raise RuntimeError(f'hosted server did not announce its address: {recent}')
 
 
 def main():
@@ -36,18 +59,7 @@ def main():
                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                   text=True, bufsize=1)
         try:
-            watcher = selectors.DefaultSelector()
-            watcher.register(server.stdout, selectors.EVENT_READ)
-            deadline = time.monotonic() + 90
-            base = None
-            while time.monotonic() < deadline and base is None:
-                if server.poll() is not None:
-                    raise RuntimeError(f'hosted server exited {server.returncode}')
-                if watcher.select(timeout=1):
-                    line = server.stdout.readline()
-                    if line.startswith('MoleAPI listening on '):
-                        base = line.strip().split(' on ', 1)[1]
-            assert base, 'hosted server did not start'
+            base = announced_address(server)
 
             def call(method, path, body=None, token=None):
                 payload = None if body is None else json.dumps(body, ensure_ascii=False).encode()
@@ -104,10 +116,25 @@ def main():
             error_request['protocol']['arguments'][0]['value_source'] = '"expected"'
             status, result = call('POST', '/api/execute', {'workspace_id':'w','request':error_request}, owner)
             assert status == 200 and result['status'] == 500 and 'fixture:expected' in result['body'], result
+            grouped = json.loads(json.dumps(source))
+            grouped['protocol']['group'] = 'qa'
+            grouped['protocol']['arguments'][0]['value_source'] = '"grouped"'
+            grouped['protocol']['arguments'][0]['secret'] = False
+            status, result = call('POST', '/api/execute', {'workspace_id':'w','request':grouped}, owner)
+            assert status == 200 and json.loads(result['body']) == 'echo:grouped', result
+            attached = json.loads(json.dumps(source))
+            attached['protocol']['method'] = 'attachment'
+            attached['protocol']['arguments'][0]['value_source'] = '"trace-id"'
+            attached['protocol']['arguments'][0]['secret'] = False
+            attached['protocol']['attachments'] = [{'id':'trace','key':'trace-id','value':'private-hosted-attachment','enabled':True,'secret':True}]
+            status, result = call('POST', '/api/execute', {'workspace_id':'w','request':attached}, owner)
+            assert status == 200 and json.loads(result['body']) == 'private-hosted-attachment', result
+            status, history = call('GET', '/api/workspaces/w/history', token=owner)
+            assert status == 200 and 'private-hosted-attachment' not in json.dumps(history), history
             evidence = {'format':'moleapi-dubbo-hosted-qa-v1',
                         'worker_sha256':hashlib.sha256(args.jar.read_bytes()).hexdigest(),
                         'cases':['owner_isolation','echo','history_privacy','source_preservation',
-                                 'null','remote_exception']}
+                                 'null','remote_exception','service_group','request_attachment']}
             args.output.write_text(json.dumps(evidence, indent=2) + '\n')
             print('PASS hosted classic Dubbo owner/privacy/null/exception', flush=True)
         finally:

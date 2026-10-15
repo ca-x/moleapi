@@ -1,6 +1,6 @@
 //! Real official Apache Dubbo provider + shaded worker acceptance, never a user request.
 use anyhow::{Result, ensure};
-use moleapi_core::{NetworkPolicy, RequestSpec};
+use moleapi_core::{NetworkPolicy, Protocol, RequestSpec};
 use moleapi_protocols::dubbo::DubboRuntime;
 use serde_json::{Value, json};
 use std::path::Path;
@@ -95,6 +95,28 @@ async fn main() -> Result<()> {
         "Remote exception was lost"
     );
     println!("PASS Rust host / remote exception");
+    let mut grouped = request(port, "echo", &["java.lang.String"], &[r#""grouped""#])?;
+    if let Protocol::Dubbo { config } = &mut grouped.protocol {
+        config.group = "qa".into();
+    }
+    let result = runtime.invoke(Path::new(&java), &grouped, allow).await?;
+    ensure!(result.body == r#""echo:grouped""#, "Dubbo group was lost");
+    println!("PASS Rust host / service group");
+    let mut attached = request(
+        port,
+        "attachment",
+        &["java.lang.String"],
+        &[r#""trace-id""#],
+    )?;
+    if let Protocol::Dubbo { config } = &mut attached.protocol {
+        config.attachments.push(serde_json::from_value(json!({"id":"trace","key":"trace-id","value":"host-attachment","enabled":true,"secret":true}))?);
+    }
+    let result = runtime.invoke(Path::new(&java), &attached, allow).await?;
+    ensure!(
+        result.body == r#""host-attachment""#,
+        "Dubbo attachment was lost"
+    );
+    println!("PASS Rust host / request attachment");
     let blocked = runtime
         .invoke(
             Path::new(&java),

@@ -8,4 +8,5 @@ public interface EchoService {
     String names(java.util.List<String> values);
     String maybeNull(String value);
     String fail(String value);
+    String attachment(String key);
 }

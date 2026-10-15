@@ -66,6 +66,8 @@ jobs:
           npm --prefix web ci
           npm --prefix web run build
           cargo build --locked -p moleapi-server
+      - name: Verify hosted startup watcher
+        run: python3 -m unittest tools/dubbo-worker/test_verify_server.py
       - name: Verify hosted owner and saved-run behavior
         run: |
           python3 tools/dubbo-worker/verify-server.py --server "$PWD/target/debug/moleapi-server" --java "$(readlink -f "$(command -v java)")" --jar "$PWD/tools/dubbo-worker/target/moleapi-dubbo-worker-0.1.0.jar" --provider-port 20880 --output tools/dubbo-qa/java/hosted-evidence.json

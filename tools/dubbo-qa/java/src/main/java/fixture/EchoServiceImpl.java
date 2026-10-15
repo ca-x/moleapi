@@ -8,4 +8,5 @@ public class EchoServiceImpl implements EchoService {
     public String names(java.util.List<String> values) { return String.join("|", values); }
     public String maybeNull(String value) { return "null".equals(value) ? null : value; }
     public String fail(String value) { throw new IllegalArgumentException("fixture:" + value); }
+    public String attachment(String key) { return org.apache.dubbo.rpc.RpcContext.getServerAttachment().getAttachment(key); }
 }

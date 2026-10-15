@@ -48,6 +48,14 @@ def main():
                    'argument_sources':['"expected"']})
     assert failed['ok'] is False and failed['kind'] == 'remote_exception' and 'fixture:expected' in failed['message'], failed
     results.append({'case':'remote_exception', 'passed':True})
+    grouped = call({**base, 'group':'qa', 'method':'echo', 'parameter_types':['java.lang.String'],
+                    'argument_sources':['"grouped"']})
+    assert grouped == {'ok':True,'value':'echo:grouped'}, grouped
+    results.append({'case':'service_group', 'passed':True})
+    attachment = call({**base, 'method':'attachment', 'parameter_types':['java.lang.String'],
+                       'argument_sources':['"trace-id"'], 'attachments':{'trace-id':'worker-attachment'}})
+    assert attachment == {'ok':True,'value':'worker-attachment'}, attachment
+    results.append({'case':'request_attachment', 'passed':True})
     rejected = call({**base, 'endpoint':'dubbo://example.com:20880/fixture.EchoService',
                      'method':'echo', 'parameter_types':['java.lang.String'],
                      'argument_sources':['"moleapi"']})

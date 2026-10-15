@@ -9,8 +9,9 @@ import org.apache.dubbo.rpc.service.GenericService;
 public class GenericConsumer {
     public static void main(String[] args) {
         int port = Integer.parseInt(args[0]);
+        ApplicationConfig application = new ApplicationConfig("moleapi-dubbo-qa-generic");
         ReferenceConfig<GenericService> reference = new ReferenceConfig<>();
-        reference.setApplication(new ApplicationConfig("moleapi-dubbo-qa-generic"));
+        reference.setApplication(application);
         reference.setInterface("fixture.EchoService");
         reference.setVersion("1.0.0");
         reference.setGeneric("true");
@@ -26,6 +27,8 @@ public class GenericConsumer {
         greeting.put("count", 0);
         if (!"鼹鼠:0".equals(client.$invoke("describe", new String[]{"fixture.Greeting"}, new Object[]{greeting}))) throw new AssertionError("generic DTO");
         if (!"first|鼹鼠".equals(client.$invoke("names", new String[]{"java.util.List"}, new Object[]{java.util.List.of("first", "鼹鼠")}))) throw new AssertionError("generic list");
+        org.apache.dubbo.rpc.RpcContext.getClientAttachment().setAttachment("trace-id", "generic-attachment");
+        if (!"generic-attachment".equals(client.$invoke("attachment", new String[]{"java.lang.String"}, new Object[]{"trace-id"}))) throw new AssertionError("generic attachment");
         if (client.$invoke("maybeNull", new String[]{"java.lang.String"}, new Object[]{"null"}) != null) throw new AssertionError("generic null");
         try {
             client.$invoke("fail", new String[]{"java.lang.String"}, new Object[]{"expected"});
@@ -33,7 +36,16 @@ public class GenericConsumer {
         } catch (RuntimeException expected) {
             if (!expected.toString().contains("fixture:expected")) throw expected;
         }
-        System.out.println("GENERIC_CLIENT_PASS echo join long DTO list null exception");
+        ReferenceConfig<GenericService> grouped = new ReferenceConfig<>();
+        grouped.setApplication(application);
+        grouped.setInterface("fixture.EchoService");
+        grouped.setVersion("1.0.0");
+        grouped.setGroup("qa");
+        grouped.setGeneric("true");
+        grouped.setUrl("dubbo://127.0.0.1:" + port + "/fixture.EchoService");
+        if (!"echo:grouped".equals(grouped.get().$invoke("echo", new String[]{"java.lang.String"}, new Object[]{"grouped"}))) throw new AssertionError("generic group");
+        grouped.destroy();
+        System.out.println("GENERIC_CLIENT_PASS echo join long DTO list null exception attachment group");
         reference.destroy();
     }
 }
