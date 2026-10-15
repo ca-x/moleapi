@@ -9,6 +9,11 @@ on:
         description: Run only native Objective-C protobuf interoperability QA
         type: boolean
         default: false
+      objc_runner:
+        description: Native Objective-C QA architecture (both remain required for acceptance)
+        type: choice
+        options: [all, intel, arm]
+        default: all
 permissions:
   contents: read
 jobs:
@@ -155,11 +160,11 @@ jobs:
           if-no-files-found: error
   objc-qa:
     if: github.event_name == 'workflow_dispatch' && inputs.objc_qa == true
-    timeout-minutes: 90
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
-        runner: [macos-15-intel, macos-latest]
+        runner: ${{ fromJSON(inputs.objc_runner == 'intel' && '["macos-15-intel"]' || inputs.objc_runner == 'arm' && '["macos-latest"]' || '["macos-15-intel","macos-latest"]') }}
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4

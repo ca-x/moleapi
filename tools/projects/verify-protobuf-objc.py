@@ -46,7 +46,7 @@ end
     run(['pod', 'install'], consumer)
     run(['xcodebuild', '-workspace', 'FixtureQA.xcworkspace', '-scheme', 'FixtureQA',
          '-configuration', 'Release', '-derivedDataPath', str(consumer / 'build'),
-         'CODE_SIGNING_ALLOWED=NO', 'build'], consumer)
+         'CODE_SIGNING_ALLOWED=NO', 'build'], consumer, timeout=3600)
     binary = consumer / 'build/Build/Products/Release/FixtureQA'
     assert binary.is_file()
     sys.path.insert(0, str(args.server_dir))
