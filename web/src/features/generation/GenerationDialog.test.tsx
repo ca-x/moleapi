@@ -23,7 +23,7 @@ beforeEach(()=>{
   vi.mocked(useWorkbench).mockImplementation(()=>state);
 });
 afterEach(cleanup);
-it.each([["curl","PHP cURL 示例需启用 ext-curl；multipart 另需 guzzlehttp/psr7 并加载 Composer autoload。文件示例需准备同名文件。"],["guzzle","Guzzle 示例需安装 guzzlehttp/guzzle 并加载 Composer autoload。文件流以二进制模式打开，请在请求结束后关闭。"],["laravel","Laravel 示例使用 Http Facade，需在已启动的 Laravel 应用中运行。文件示例需准备同名文件，并在请求后关闭文件流。"]])("offers PHP %s native files with matching dependencies",async(client,hint)=>{
+it.each([["curl", "PHP cURL 示例需启用 ext-curl；multipart 另需 guzzlehttp/psr7 并加载 Composer autoload。文件示例需准备同名文件。"], ["guzzle", "Guzzle 示例需安装 guzzlehttp/guzzle 并加载 Composer autoload。文件流以二进制模式打开，请在请求结束后关闭。"], ["laravel", "Laravel 示例使用 Http Facade，需在已启动的 Laravel 应用中运行。文件示例需准备同名文件，并在请求后关闭文件流。"], ["httprequest2", "HTTP_Request2 示例需安装 pear/http_request2，加载 Composer autoload 或配置 PEAR include_path；multipart 另需 guzzlehttp/psr7。文件示例需准备同名文件。"], ["pecl_http", "PECL HTTP 示例需启用 http 与 raphf 扩展；multipart 另需 guzzlehttp/psr7 并加载 Composer autoload。文件示例需准备同名文件。"]])("offers PHP %s native files with matching dependencies",async(client,hint)=>{
  state.request={...state.request!,body_kind:"binary",body:JSON.stringify({file_name:"upload.bin",mime:"application/octet-stream",base64:"AP+AClg="})};
  const choices={...catalog,targets:[{target:"php",title:"PHP",clients:[{client,title:client,binary_file:true}]}]};
  vi.mocked(api).mockImplementation(path=>Promise.resolve(path.endsWith("catalog")?choices:{...snippet,target:"php",client,code:"original-php-file-reader"}));

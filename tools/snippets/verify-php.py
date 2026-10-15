@@ -28,14 +28,27 @@ def verify(args):
     # The fixture owns its loopback endpoint; PHP should not proxy it externally.
     for name in ('HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy'):
         env.pop(name, None)
-    versions = {'php': wire.run([str(args.php), '--version'], args.output, env),
+    php = [str(args.php)]
+    extension_hashes = {}
+    if args.extensions is not None:
+        assert args.extensions.is_absolute() and args.extensions.is_dir()
+        for name in ('raphf', 'http'):
+            module = args.extensions / (name + '.so')
+            assert module.is_file()
+            php += ['-d', 'extension=' + str(module)]
+            extension_hashes[name] = wire.digest(module)
+    versions = {'php': wire.run([*php, '--version'], args.output, env),
                 'node': wire.run([str(args.node), '--version'], args.output, env)}
     assert args.dependencies.is_absolute() and (args.dependencies / 'vendor/autoload.php').is_file()
     lock = Path(__file__).with_name('php-runtime') / 'composer.lock'
     assert (args.dependencies / 'composer.lock').read_bytes() == lock.read_bytes(), 'Install the pinned PHP QA Composer lock in an isolated directory'
-    metadata = wire.run([str(args.php), '-r', 'require '+json.dumps(str(args.dependencies / 'vendor/autoload.php'))+'; echo json_encode(["php_binary"=>PHP_BINARY,"guzzle"=>Composer\\InstalledVersions::getPrettyVersion("guzzlehttp/guzzle"),"laravel"=>Composer\\InstalledVersions::getPrettyVersion("illuminate/http"),"psr7"=>Composer\\InstalledVersions::getPrettyVersion("guzzlehttp/psr7"),"curl"=>curl_version()["version"]]);'], args.output, env)
+    metadata = wire.run([*php, '-r', 'require '+json.dumps(str(args.dependencies / 'vendor/autoload.php'))+'; echo json_encode(["php_binary"=>PHP_BINARY,"request2"=>Composer\\InstalledVersions::getPrettyVersion("pear/http_request2"),"guzzle"=>Composer\\InstalledVersions::getPrettyVersion("guzzlehttp/guzzle"),"laravel"=>Composer\\InstalledVersions::getPrettyVersion("illuminate/http"),"psr7"=>Composer\\InstalledVersions::getPrettyVersion("guzzlehttp/psr7"),"curl"=>curl_version()["version"]]);'], args.output, env)
     versions['runtime'] = json.loads(metadata)
+    versions['extensions'] = json.loads(wire.run([*php, '-r', 'echo json_encode(["http"=>phpversion("http"),"raphf"=>phpversion("raphf")]);'], args.output, env))
+    if 'pecl_http' in args.clients.split(','):
+        assert versions['extensions']['http'] and versions['extensions']['raphf'], 'Load the selected native PECL HTTP/raphf extensions'
     tools = {'php_launcher': wire.digest(args.php), 'php_binary': wire.digest(Path(versions['runtime']['php_binary'])), 'node': wire.digest(args.node), 'composer_lock': wire.digest(lock)}
+    tools.update(extension_hashes)
     records = queue.Queue()
     server_file = args.output / 'server.cjs'
     server_file.write_text("""const http=require('http');const server=http.createServer((request,response)=>{const chunks=[];request.on('data',part=>chunks.push(part));request.on('end',()=>{console.log(JSON.stringify({method:request.method,path:request.url,headers:request.headers,body:Buffer.concat(chunks).toString('base64')}));response.writeHead(200,{'Content-Type':'application/json'});response.end('{"ok":true}');});});server.listen(0,'127.0.0.1',()=>console.log(JSON.stringify({port:server.address().port})));""")
@@ -59,7 +72,7 @@ def verify(args):
             saved = json.loads((root / 'fixture-request.json').read_text())
             expected = json.loads(saved['data']['collections'][0]['requests'][0]['body']) if profile.startswith('json-') else None
             for client in args.clients.split(','):
-                assert client in ('curl', 'guzzle', 'laravel')
+                assert client in ('curl', 'guzzle', 'laravel', 'httprequest2', 'pecl_http')
                 snippet = root / (client + '.php')
                 original = snippet.read_bytes()
                 assert wire.digest(snippet) == manifest['files'][snippet.name]
@@ -75,9 +88,14 @@ def verify(args):
                 elif client == 'curl':
                     prelude += 'ob_start();\n'
                 assertion = '\nif ($response->getStatusCode() !== 200) throw new RuntimeException("Guzzle status");\n' if client == 'guzzle' else '\nif ($response->status() !== 200) throw new RuntimeException("Laravel status");\n' if client == 'laravel' else '\nif (json_decode(ob_get_clean(), true) !== ["ok"=>true]) throw new RuntimeException("cURL response");\n'
-                wrapper.write_text(prelude + original.decode() + assertion)
-                wire.run([str(args.php), '-l', str(wrapper)], project, env)
-                wire.run([str(args.php), str(wrapper)], project, env, timeout=30)
+                if client == 'httprequest2':
+                    assertion = '\nif (!isset($response) || $response->getStatus() !== 200) throw new RuntimeException("HTTP_Request2 status");\n'
+                elif client == 'pecl_http':
+                    assertion = '\nif ($response->getResponseCode() !== 200) throw new RuntimeException("PECL HTTP status");\n'
+                source = prelude + ('?>' if original.startswith(b'<?php') else '') + original.decode() + assertion
+                wrapper.write_text(source)
+                wire.run([*php, '-l', str(wrapper)], project, env)
+                wire.run([*php, str(wrapper)], project, env, timeout=30)
                 record = records.get(timeout=10)
                 (project / 'wire-evidence.json').write_text(json.dumps(record, indent=2) + '\n')
                 if profile in ('multipart-meta', 'multipart-text'):
@@ -137,6 +155,7 @@ if __name__ == '__main__':
     parser.add_argument('--node', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--profiles', default='core,form,text,binary,binary-mime,multipart,dollar,json-values,json-scalar,json-null,json-empty,get-binary,delete-json,text-json,multipart-meta,multipart-text,json-object,headers-quoted')
-    parser.add_argument('--clients', default='curl,guzzle,laravel')
+    parser.add_argument('--clients', default='curl,guzzle,laravel,httprequest2,pecl_http')
     parser.add_argument('--dependencies', type=Path, required=True)
+    parser.add_argument('--extensions', type=Path, help='Explicit directory containing native raphf.so and http.so')
     verify(parser.parse_args())

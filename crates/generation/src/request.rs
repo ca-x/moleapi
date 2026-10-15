@@ -145,7 +145,11 @@ pub fn generate_request(
         || (target == "kotlin" && client == "okhttp")
         || (target == "dart" && matches!(client, "http" | "dio"))
         || (target == "ruby" && client == "native")
-        || (target == "php" && matches!(client, "curl" | "guzzle" | "laravel"))
+        || (target == "php"
+            && matches!(
+                client,
+                "curl" | "guzzle" | "laravel" | "httprequest2" | "pecl_http"
+            ))
         || (target == "python"
             && matches!(
                 client,
@@ -295,7 +299,7 @@ mod tests {
         let mut w = workspace("binary", &body);
         w.data.collections[0].requests[0].auth.kind = "bearer".into();
         w.data.collections[0].requests[0].auth.token = "private-php-token".into();
-        for client in ["curl", "guzzle", "laravel"] {
+        for client in ["curl", "guzzle", "laravel", "httprequest2", "pecl_http"] {
             let code = generate_request(&w, "r", "php", client, false)
                 .unwrap()
                 .code;
@@ -606,7 +610,7 @@ mod tests {
                 count += 1;
             }
         }
-        assert_eq!(count, 26);
+        assert_eq!(count, 28);
         assert_eq!(w.data.collections[0].requests[0].body, body);
     }
     #[test]

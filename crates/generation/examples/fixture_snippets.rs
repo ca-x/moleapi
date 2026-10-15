@@ -156,6 +156,8 @@ fn main() -> Result<()> {
             ("php", "curl", "curl.php"),
             ("php", "guzzle", "guzzle.php"),
             ("php", "laravel", "laravel.php"),
+            ("php", "httprequest2", "httprequest2.php"),
+            ("php", "pecl_http", "pecl_http.php"),
         ]
     } else if mode.as_deref() == Some("python") {
         vec![

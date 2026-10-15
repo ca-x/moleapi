@@ -11,7 +11,7 @@ function clientId(language,variant){
 }
 const implementations=new Map();
 const fileImplementations=new Map();
-const fileTargets=new Set(['csharp/httpclient','rust/reqwest','kotlin/okhttp','shell/curl','shell/httpie','shell/wget','postman-cli/postman_cli','dart/http','dart/dio']);
+const fileTargets=new Set(['csharp/httpclient','rust/reqwest','kotlin/okhttp','shell/curl','shell/httpie','shell/wget','postman-cli/postman_cli','dart/http','dart/dio','php/httprequest2','php/pecl_http']);
 const scalarFileTargets=new Set(['node/fetch','go/native','python/python3','python/aiohttp','python/requests','python/httpx_sync','python/httpx_async','csharp/restsharp','java/nethttp','java/okhttp','java/asynchttp','java/unirest','kotlin/okhttp','ruby/native','php/curl','php/guzzle','php/laravel']);
 export function mergePostmanCatalog(scalar){
  const result=scalar.map(target=>({...target,clients:target.clients.map(client=>({...client}))}));
@@ -49,7 +49,7 @@ export function postmanSnippet(target,client,har){
  if(!implementation)return null;
  const body=har.postData;
  const headers=[...(har.headers??[])];
- if(target==='dart'&&body?.mimeType&&body.mimeType!=='multipart/form-data'&&!headers.some(header=>header.name.toLowerCase()==='content-type'))headers.push({name:'Content-Type',value:body.mimeType});
+ if((target==='dart'||target==='php')&&body?.mimeType&&body.mimeType!=='multipart/form-data'&&!headers.some(header=>header.name.toLowerCase()==='content-type'))headers.push({name:'Content-Type',value:body.mimeType});
  const request=new Request({method:har.method,url:har.url,header:headers.map(header=>({key:header.name,value:header.value})),body:!body?undefined:body.fileName!==undefined?{mode:'file',file:{src:body.fileName}}:body.mimeType==='multipart/form-data'?{mode:'formdata',formdata:(body.params??[]).map(parameter=>({key:parameter.name,...(parameter.fileName!==undefined?{type:'file',src:parameter.fileName}:{type:'text',value:parameter.value??''}),...(parameter.contentType?{contentType:parameter.contentType}:{})}))}:body.mimeType==='application/x-www-form-urlencoded'?{mode:'urlencoded',urlencoded:(body.params??[]).map(parameter=>({key:parameter.name,value:parameter.value??''}))}:{mode:'raw',raw:body.text??'',options:{raw:{language:body.mimeType==='application/json'?'json':'text'}}}});
  let complete=false,error=null,code=null;
  postman.convert(implementation.language,implementation.variant,request,{...implementation.options,trimRequestBody:false,addCacheHeader:false},(failure,result)=>{complete=true;error=failure;code=result;});
