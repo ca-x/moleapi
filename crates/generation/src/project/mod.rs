@@ -1,5 +1,6 @@
 //! Mature SDK/server emitters produce isolated, bounded artifacts.
 mod artifact;
+mod bundled_java;
 mod discriminator;
 mod import;
 mod java_selection;

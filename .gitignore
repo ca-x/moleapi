@@ -23,5 +23,9 @@ __pycache__/
 /tools/models/node_modules
 
 /vendor/openapi-generator/engine.jar
+/vendor/java-runtime/current/
+/vendor/java-runtime/downloads/
+/vendor/java-runtime/.java-*/
+/desktop/tauri.java.json
 
 /tools/newman/node_modules

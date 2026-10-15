@@ -399,7 +399,12 @@ impl ProjectRuntime {
         let messages = std::env::var_os("MOLEAPI_CODEGEN_PROTO_GO")
             .map(|path| std::collections::BTreeMap::from([("go".into(), PathBuf::from(path))]))
             .unwrap_or_default();
+        let resources = worker
+            .parent()
+            .context("Application resource directory missing")?
+            .to_owned();
         Self::new(worker, java)?
+            .with_bundled_java(&resources)?
             .with_protoc(protoc, plugins)?
             .with_protobuf_plugins(messages)
     }

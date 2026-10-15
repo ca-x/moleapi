@@ -70,6 +70,7 @@ jobs:
           test "$ready" = true
           curl --fail --silent http://127.0.0.1:8787/ | grep -q '<div id="root"'
           python scripts/check-script-worker.py --container moleapi-smoke
+          python scripts/check-bundled-java.py --container moleapi-smoke --url http://127.0.0.1:8787 --setup-token ci-smoke-token
       - uses: docker/build-push-action@v6
         id: publish
         if: github.event_name != 'pull_request'

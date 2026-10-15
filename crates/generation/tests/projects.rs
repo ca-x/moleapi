@@ -2,6 +2,27 @@ use moleapi_generation::project::*;
 use serde_json::json;
 use std::{collections::BTreeMap, path::PathBuf};
 use tokio_util::sync::CancellationToken;
+#[tokio::test]
+#[ignore = "requires prepared pinned runtime resources"]
+async fn bundled_java_generates_original_code_without_an_explicit_executable() {
+    let resources = PathBuf::from(
+        std::env::var_os("MOLEAPI_CODEGEN_TEST_BUNDLE_ROOT")
+            .expect("explicit prepared resource root"),
+    );
+    let runtime = ProjectRuntime::new(std::env::current_exe().unwrap(), None)
+        .unwrap()
+        .with_bundled_java(&resources)
+        .unwrap();
+    assert!(runtime.java_available());
+    let artifact = runtime.generate(ProjectInput {specification:json!({"openapi":"3.1.0","info":{"title":"Bundled runtime","version":"1"},"paths":{},"components":{"schemas":{"Pet":{"type":"object","properties":{"id":{"type":"integer"}}}}}}),target:"go".into(),options:BTreeMap::new(),include_secrets:false,templates:None},CancellationToken::new()).await.unwrap();
+    assert_eq!(artifact.engine, "openapi-generator@7.26.0");
+    assert!(
+        artifact
+            .files
+            .iter()
+            .any(|file| file.path == "model_pet.go" && file.content.contains("type Pet struct"))
+    );
+}
 #[cfg(unix)]
 #[tokio::test]
 #[ignore = "requires explicitly configured Java17+ test runtime"]

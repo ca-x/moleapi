@@ -25,3 +25,30 @@ CI 分层：
 6. macOS/Windows 签名与 Tauri updater 需要真实证书/密钥；没有这些凭据时，构建只能如实标明签名状态，不能宣称已完成公证或签名。发布流程不得输出 secrets。
 
 建议复用成熟工具：tauri-action、docker/setup-buildx-action、docker/build-push-action、docker/metadata-action、Cargo/Rust 缓存、平台原生 runners。要固定工具版本、限制 workflow 权限，发行后的自动更新资产需有可信签名。Docker/Release 流程与功能验收是两件事，工作流成功不证明功能与竞品对齐。
+
+
+## 随发行包交付 Java 运行时
+
+正式服务端归档、桌面安装包和 Docker 构建现在使用固定的 Eclipse Temurin
+JRE21.0.12.1+1。构建脚本按目标平台核对原始包大小/SHA256，并保留全部上游 legal
+文件及对应源码版本/下载信息；应用运行时不下载 JRE，也不搜索 PATH。
+
+```sh
+python scripts/prepare_openapi_generator.py
+python scripts/prepare_java_runtime.py --target x86_64-unknown-linux-gnu
+# 默认本机桌面构建会准备这两个资源，再传入生成的资源配置。
+npm --prefix web run desktop:build
+```
+
+交叉构建必须先为实际目标准备 JRE，再在 desktop 目录向 Tauri 传入
+`--config tauri.java.json --target <目标>`。同一工作树一次只准备一个目标。
+桌面 release 构建拒绝缺失资源配置或与 TARGET 不一致的 JRE；缓存/下载文件不进 Git。
+服务端归档包含 executable 与 runtime/java，需一起解包。桌面用 Tauri resource_dir
+读取对应资源，Docker 使用固定 /opt/moleapi/runtime/java/payload/bin/java。
+MOLEAPI_CODEGEN_JAVA 与已有桌面用户选择可覆盖默认自带 JRE。
+
+发行验证用 scripts/check-bundled-java.py：在清空外部 Java 配置、使 PATH 不可用后，
+启动真实独立服务端，通过归属校验 API 生成 Go 文件并检查原始规范未变。
+`--runtime-only` 可检查桌面打包资源与实际 JVM。Docker CI 同时执行真实 JRE/生成 API
+验收。Linux 本机归档/原生界面已验证；其余 OS、安装包实际安装、容器新提交、签名/
+公证以及对应源码的最终发布仍按原有发布门禁确认，不能从资源清单推断通过。

@@ -25,7 +25,7 @@ Explicit Mustache overrides now reuse the embedded OpenAPI Generator and mature 
 
 The upstream catalog contains165 non-deprecated targets across client/server/schema/docs/config categories. The UI currently selects client/server projects; native Rust is a separate entry. Swift's current non-deprecated target is swift6, not the older swift5 ID. Naming/library inputs are checked against actual target option catalogs, not silently ignored. Native Rust package/interface fields and multi-language package/namespace/library/version fields are supported where upstream exposes them.
 
-Release builds run `python scripts/prepare_openapi_generator.py` to fetch and verify the pinned build asset, then embed it. Runtime never downloads an engine. Hosted generation uses an explicitly configured Java17+ path via `MOLEAPI_CODEGEN_JAVA`; desktop users can also select an installed executable in the generation dialog. There is no PATH discovery. Java/JRE installation/bundling/platform distribution remains required deployment work, while native Rust requires no Java. Capture the upstream defaults with `node scripts/capture_codegen_catalog.cjs /absolute/path/to/java` after frontend dependencies are installed.
+Release builds run `python scripts/prepare_openapi_generator.py` to fetch and verify the pinned build asset, then embed it. Runtime never downloads an engine. Official server/desktop packages and containers now prepare a pinned Temurin21 runtime at build time. Explicit `MOLEAPI_CODEGEN_JAVA` still overrides it; desktop users can also choose an installed executable. There is no PATH discovery or runtime download. Official-package JRE preparation is now implemented; actual installed-package/foreign-platform verification and final signing remain release work. Native Rust requires no Java. Capture the upstream defaults with `node scripts/capture_codegen_catalog.cjs /absolute/path/to/java` after frontend dependencies are installed.
 
 Artifacts contain exact generated file content, byte counts, executable flags and SHA256. `moleapi-generation.json` records engine, source digest, effective options, private-inclusion mode and generated-file hashes; ZIP preserves safe executable permissions. No authored files are automatically overwritten. Worker/process/file/reply budgets, local-reference checks, symlink/path escape rejection, explicit cancellation/kill/reap and logout/workspace deletion fences apply. Default generation screens credential examples, scoped copies and naming-option copies; explicit private inclusion preserves original selected source. Source definitions remain unchanged.
 
@@ -1204,3 +1204,51 @@ and helper executables at their expected FHS paths, with private QA app/cache/ru
 folders and software rendering. This changes no host libraries or user app data.
 The source JAR and generated code are unchanged. Other OS/desktop/runtime combinations,
 Java bundling/installation/signing and full module/release work remain separate gates.
+
+
+## Pinned Java runtime packaging
+
+Build preparation now pins official Eclipse Temurin JRE21.0.12.1+1 for standalone
+Linux x64/arm64, macOS x64/arm64 and Windows x64 targets. All5 original archives match
+their official exact sizes/SHA256s. All5 extraction/inventory/legal/layout cases pass,
+including actual release-file OS/CPU/version fields. This is archive evidence, not
+foreign-OS execution. The source/build revisions and matching OpenJDK source-archive
+URL/SHA256 travel with the prepared metadata; the full upstream legal tree is retained.
+
+The Python build helper caps downloads and extraction, rejects unsafe paths/types/
+links/duplicates, validates cached files before reuse and activates only a verified
+complete payload. Materialized internal aliases retain original file bytes across
+Windows/Tauri copies. The receipt identifies exact target/version/archive hash.
+Downloaded archives/current payloads are ignored by Git/Docker context. Native builds
+and both container architectures download at build time only; runtime generation never
+fetches a JVM. Source/publication and OS signing gates remain separately required.
+
+Official standalone archive jobs stage runtime/java beside the executable. Desktop
+jobs pass the generated Tauri resource override; release builds require matching
+prepared target/resources. npm desktop:build prepares both pinned engines and uses
+the override. Docker copies the same runtime from a Python build stage and configures
+its fixed absolute Java path. Hosted/developer builds can still explicitly configure
+Java, and desktop user preferences keep their priority. An absent bundle preserves the
+existing dependency state; malformed/mismatched receipts or escaping paths reject.
+Only compiled platform-specific owned resource locations are inspected, without PATH
+search or executable paths from imported specifications.
+
+Actual Linux standalone staging passes with no MOLEAPI_CODEGEN_JAVA/JAVA_HOME and an
+invalid PATH. Its bundled JVM starts, then the actual authenticated server creates an
+owned canonical3.1 workspace and generates17 original Go files using engine7.26.0;
+GET confirms unchanged authored source and matching artifact manifest. The Rust bundled
+runtime fixture also runs real generation with invalid inherited JAVA_TOOL_OPTIONS.
+A full native Linux desktop build passes original runtime inventory/license/JVM checks.
+With embedded production frontend assets, an actual Xvfb native application using a
+fresh private profile and no Java preference/override immediately generates45 C# files.
+The native UI/backend/worker/JVM are real; no bridge test double is used in this case.
+
+Scripts/check-bundled-java.py reproduces the packaged server/API or native-resource
+cases; the Docker workflow runs actual JVM and owned generation API smoke before image
+publication. Five archive layouts,8 Python tests,88 generation regressions, the real
+bundled-JVM fixture,14 API cases and scoped strict checks are tracked in this batch.
+Local Linux evidence does not establish the newly wired foreign-OS package jobs or
+Docker images in advance: those require their actual CI and installed-package results.
+The host has no local Docker/Podman daemon; container execution remains a CI gate.
+Java signing/notarization, actual installer upgrades and broader native/architecture/
+framework/schema/SDK/runtime combinations and all later milestones remain open.

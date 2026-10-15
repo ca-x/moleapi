@@ -29,3 +29,4 @@ zbus = "5.9"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+serde_json.workspace = true
