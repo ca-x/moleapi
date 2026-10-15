@@ -89,21 +89,24 @@ fn main() {
         .setup(|app| {
             let directory = app.path().app_data_dir()?;
             std::fs::create_dir_all(&directory)?;
+            let resources = app.path().resource_dir()?;
             let runtime = moleapi_generation::project::ProjectRuntime::from_environment(
                 std::env::current_exe()?,
             )?
-            .with_bundled_java(&app.path().resource_dir()?)?;
+            .with_bundled_java(&resources)?;
             let preference = directory.join("java-runtime.json");
             if preference.is_file() && runtime.restore_native_java(&preference).is_err() {
                 eprintln!(
                     "Saved Java selection is unavailable; select Java again in project generation"
                 );
             }
-            let router =
-                tauri::async_runtime::block_on(moleapi_server::local_with_project_runtime(
+            let router = tauri::async_runtime::block_on(
+                moleapi_server::local_with_project_runtime_and_resources(
                     &directory.join("moleapi.db"),
                     runtime.clone(),
-                ))?;
+                    Some(&resources),
+                ),
+            )?;
             app.manage(generation::NativeGeneration {
                 runtime,
                 preference,

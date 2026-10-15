@@ -164,6 +164,15 @@ pub async fn local_with_project_runtime(
     database_path: &Path,
     runtime: moleapi_generation::project::ProjectRuntime,
 ) -> anyhow::Result<Router> {
+    local_with_project_runtime_and_resources(database_path, runtime, None).await
+}
+
+/// Native embedder may pass its platform resource directory for pinned protocol engines.
+pub async fn local_with_project_runtime_and_resources(
+    database_path: &Path,
+    runtime: moleapi_generation::project::ProjectRuntime,
+    resource_root: Option<&Path>,
+) -> anyhow::Result<Router> {
     let worker = runtime.worker.clone();
     build(
         Config {
@@ -176,6 +185,7 @@ pub async fn local_with_project_runtime(
         worker,
         true,
         Some(runtime),
+        resource_root.map(Path::to_owned),
     )
     .await
 }
@@ -188,7 +198,7 @@ pub async fn hosted(config: Config) -> anyhow::Result<Router> {
 
 /// Embedder entrypoint with an explicitly trusted worker executable.
 pub async fn hosted_with_worker(config: Config, worker: &Path) -> anyhow::Result<Router> {
-    build(config, false, worker.to_owned(), true, None).await
+    build(config, false, worker.to_owned(), true, None, None).await
 }
 pub async fn setup_required(database_url: &str) -> anyhow::Result<bool> {
     use sea_orm::EntityTrait;
@@ -210,6 +220,7 @@ pub async fn offline_with_worker(database_path: &Path, worker: &Path) -> anyhow:
         worker.to_owned(),
         false,
         None,
+        None,
     )
     .await
 }
@@ -219,6 +230,7 @@ async fn build(
     script_worker: PathBuf,
     background: bool,
     project_runtime: Option<moleapi_generation::project::ProjectRuntime>,
+    resource_root: Option<PathBuf>,
 ) -> anyhow::Result<Router> {
     anyhow::ensure!(
         script_worker.is_absolute(),
@@ -226,8 +238,17 @@ async fn build(
     );
     let db = storage::connect(&config.database_url).await?;
     let credential_revisions = credential_revocations::revisions(&db).await?;
-    let dubbo_runtime = std::env::var_os("MOLEAPI_DUBBO_WORKER_JAR")
-        .map(|path| moleapi_protocols::dubbo::DubboRuntime::new(&PathBuf::from(path)).map(Arc::new))
+    let dubbo_jar = std::env::var_os("MOLEAPI_DUBBO_WORKER_JAR")
+        .map(PathBuf::from)
+        .or_else(|| {
+            let root = resource_root
+                .as_deref()
+                .or_else(|| script_worker.parent())?;
+            let bundled = root.join("runtime/dubbo/engine.jar");
+            bundled.is_file().then_some(bundled)
+        });
+    let dubbo_runtime = dubbo_jar
+        .map(|path| moleapi_protocols::dubbo::DubboRuntime::new(&path).map(Arc::new))
         .transpose()?;
     let state = AppState {
         credential_revisions: Arc::new(tokio::sync::Mutex::new(credential_revisions)),
