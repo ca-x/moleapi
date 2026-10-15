@@ -31,7 +31,10 @@ fn main() -> Result<()> {
                     "json-null",
                     "json-empty",
                     "get-binary",
-                    "delete-json"
+                    "delete-json",
+                    "text-json",
+                    "multipart-meta",
+                    "multipart-text"
                 ]
                 .contains(&profile.as_str()),
         "Unknown snippet fixture profile"
@@ -60,6 +63,10 @@ fn main() -> Result<()> {
         let request = &mut workspace.data.collections[0].requests[0];
         request.body_kind = "form".into();
         request.body = "label=%E9%BC%B9%E9%BC%A0+%22quotes%22+%26+%2B&label=second&empty=".into();
+    }
+    if body_profile == "text-json" {
+        workspace.data.collections[0].requests[0].body_kind = "text".into();
+        workspace.data.collections[0].requests[0].body = "{\"b\": 1, \"a\":2}".into();
     }
     if body_profile == "text" {
         let request = &mut workspace.data.collections[0].requests[0];
@@ -110,8 +117,19 @@ fn main() -> Result<()> {
         request.body_kind = "multipart".into();
         request.body=json!({"parts":[{"id":"one","name":"label","value":{"kind":"text","text":"鼹鼠 'quotes' & +","mime":""}},{"id":"two","name":"label","value":{"kind":"text","text":"second","mime":""}},{"id":"upload","name":"upload","value":{"kind":"file","file":{"file_name":"upload.bin","mime":"application/octet-stream","base64":"AP+AClg="}}},{"id":"off","name":"disabled","enabled":false,"value":{"kind":"text","text":"must-not-send","mime":""}}]}).to_string();
     }
+    if body_profile == "multipart-meta" {
+        let request = &mut workspace.data.collections[0].requests[0];
+        request.body_kind = "multipart".into();
+        request.body = json!({"parts": [{"id": "text", "name": "metadata", "value": {"kind": "text", "text": "鼹鼠 \"quotes\"\r\nvalue", "mime": "text/x-moleapi-field"}}, {"id": "file", "name": "upload", "value": {"kind": "file", "file": {"file_name": "upload-鼹鼠.bin", "mime": "application/x-moleapi-file", "base64": "AP+AClg="}}}]}).to_string();
+    }
+    if body_profile == "multipart-text" {
+        workspace.data.collections[0].requests[0].body_kind = "multipart".into();
+        workspace.data.collections[0].requests[0].body = json!({"parts": [{"id": "one", "name": "label", "value": {"kind": "text", "text": "鼹鼠 \"quotes\"\r\nvalue", "mime": ""}}, {"id": "two", "name": "label", "value": {"kind": "text", "text": "second", "mime": ""}}, {"id": "empty", "name": "empty", "value": {"kind": "text", "text": "", "mime": ""}}, {"id": "disabled", "name": "off", "enabled": false, "value": {"kind": "text", "text": "must-not-send", "mime": ""}}]}).to_string();
+    }
     let targets = if mode.as_deref() == Some("python") {
         vec![
+            ("python", "python3", "python3.py"),
+            ("python", "aiohttp", "aiohttp.py"),
             ("python", "requests", "requests.py"),
             ("python", "httpx_sync", "httpx_sync.py"),
             ("python", "httpx_async", "httpx_async.py"),

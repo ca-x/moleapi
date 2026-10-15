@@ -20,7 +20,7 @@ This is usable request-example generation, separate from typed OpenAPI SDK/serve
 | OCaml | cohttp | Engine smoke only |
 | PHP | curl, guzzle, laravel, httprequest2, pecl_http | Engine smoke only |
 | PowerShell | webrequest, restmethod | Engine smoke only |
-| Python | python3, requests, aiohttp, httpx_sync, httpx_async | python3/http.client POST fixture;39 original-code Requests2.34.2 / HTTPX0.28.1 sync+async HTTP cases on Python3.14.8 |
+| Python | python3, requests, aiohttp, httpx_sync, httpx_async | 80 original-code syntax/native HTTP cases across all5 clients on Python3.14.8; aiohttp3.14.5, Requests2.34.2, HTTPX0.28.1, urllib3 2.8.0 multipart encoder |
 | R | httr2, httr, rcurl | Engine smoke only |
 | Ruby | native |8 original-code syntax/native HTTP cases on Ruby3.4.7: JSON/form/text/files/MIME/multipart/dollar and Ruby interpolation literals |
 | Rust | reqwest | reqwest POST fixture, generated snippet wrapped in async main |
@@ -287,9 +287,8 @@ line-number contrast check on each; screenshots were visually inspected.
 95 generation cases, three owned/local snippet API cases (including all three
 Python file libraries),39 focused UI/i18n cases, strict scoped Clippy, formatting,
 frontend/server builds and deterministic engine rebuild passed. All50 other
-non-Python representative outputs remain byte-identical. Historical core evidence
-for http.client remains; its extended bodies and aiohttp native verification are
-still pending. Other OS/dependency ranges, advanced form/file ordering/types,
+non-Python representative outputs remain byte-identical. The following section records the subsequent http.client/aiohttp extension.
+Other OS/dependency ranges, advanced form/file ordering/types,
 streaming, remaining methods/auth/transport and full generation parity stay open.
 
 Reproduce with an isolated Python environment and explicit tools:
@@ -298,3 +297,59 @@ Reproduce with an isolated Python environment and explicit tools:
 /absolute/venv/bin/python -m pip install -r tools/snippets/python-requirements.txt
 python3 tools/snippets/verify-python.py --python /absolute/venv/bin/python --node /absolute/node --output /absolute/fresh-output
 ```
+
+
+## Python http.client and aiohttp extended bodies
+
+The pinned http.client emitter now sends raw text as UTF-8 bytes, including CRLF,
+NUL, vertical tab and text that parses as JSON. Raw files use native pathlib IO.
+JSON still uses stdlib json, forms stdlib urllib.parse with doseq, and the native
+http.client transport owns the HTTP connection. Its old multipart string joining
+is replaced by urllib3.filepost.encode_multipart_formdata and RequestField for
+explicit text-part MIME. Only multipart examples require the consumer to install
+urllib3; ordinary examples retain standard-library-only dependencies. No file
+read, package install or request execution occurs inside MoleAPI generation.
+
+The aiohttp emitter keeps ClientSession and FormData, emits raw files/text as
+bytes, preserves effective MIME, and sends root JSON null as literal bytes instead
+of the native json=None sentinel. FormData uses quote_fields=False to preserve
+Unicode filenames and default_to_multipart=True to keep text-only multipart.
+Requests and both HTTPX emitters now use native no-filename file tuples for every
+multipart text field; this also preserves source part order across files/text and
+prevents text-only forms silently changing to URL encoding. Native libraries own
+all boundaries and byte encoding. Canonical request validation continues rejecting
+manual multipart Content-Type/boundary headers; that invariant was retained when
+an invalid QA source was rejected. Raw binary capability now covers23 adapters.
+
+The current Python driver records80 original-source syntax/native HTTP cases:
+all5 Python clients ×16 profiles. The13 preceding profiles are extended with
+JSON-shaped raw text, Unicode filename/explicit text+file MIME, and text-only
+multipart (repeated names, empty value, disabled exclusion). Observations validate
+actual method/auth/query/headers/MIME/body/file bytes through native Node HTTP and
+stdlib MIME parsing; wrappers add only imports/async entry points. The pinned QA
+environment is Python3.14.8/Linux, aiohttp3.14.5, Requests2.34.2, HTTPX0.28.1 and
+urllib3 2.8.0, with transitive versions in python-requirements.txt. Previous output
+reproduced10 failures: stdlib Unicode text/multipart errors and raw text rewriting,
+aiohttp null omission, text-only MIME changes in aiohttp/Requests/both HTTPX, and
+missing raw-file routes in http.client/aiohttp. Other53 representative core
+adapter outputs remain byte-identical. This does not claim unchanged output for
+the intentionally repaired Python multipart cases.
+
+95 generation cases,3 local/owned snippet API cases (including all5 Python file
+adapters with owner/privacy/MIME checks),41 focused UI/i18n cases, strict scoped
+Clippy, formatting and production frontend/embedded server builds passed. The
+embedded engine rebuild is deterministic, and a complete clean patch application
+against the integrity-checked upstream archive produces exact emitter sources.
+Real owned-API browser checks cover English/light1280×900 http.client multipart
+and Chinese/dark375×812 aiohttp multipart: correct localized package/async/file
+instructions, no saved token/base64 exposure or document horizontal overflow;
+scoped axe0 verified violations/1 manual line-number contrast check per view.
+Screenshots were visually inspected. Evidence: `/tmp/moleapi-python-native-final-3`
+and `/tmp/moleapi-python-native-*.log` on the validation host.
+
+Use the preceding reproduce commands with the updated pinned requirements; the
+default driver now covers all5 clients/16 profiles. Multipart file resources need
+consumer cleanup, and native byte reads/encoders can materialize files in memory.
+Empty multipart collections, advanced escaping/part shapes, streaming,
+response/error handling, dependency/OS ranges and full transport/auth option
+mapping remain open; this is representative runtime evidence for the named cases.

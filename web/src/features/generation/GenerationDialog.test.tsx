@@ -23,6 +23,18 @@ beforeEach(()=>{
   vi.mocked(useWorkbench).mockImplementation(()=>state);
 });
 afterEach(cleanup);
+it.each([["python3","http.client 示例可保存为 .py 后运行；multipart 示例需安装 urllib3。文件示例需要准备同名文件，文件内容在示例运行时读取。"],["aiohttp","aiohttp 示例需安装并导入 aiohttp，放入 async 方法并由 asyncio.run 调用。文件示例需准备同名文件，multipart 文件应在请求完成后关闭。"]])("offers Python %s native files with correct package guidance",async(client,hint)=>{
+ state.request={...state.request!,body_kind:"binary",body:JSON.stringify({file_name:"upload.bin",mime:"application/octet-stream",base64:"AP+AClg="})};
+ const choices={...catalog,targets:[{target:"python",title:"Python",clients:[{client,title:client,binary_file:true}]}]};
+ vi.mocked(api).mockImplementation(path=>Promise.resolve(path.endsWith("catalog")?choices:{...snippet,target:"python",client,code:"original-python-native-reader"}));
+ render(<GenerationDialog open onOpenChange={vi.fn()}/>);await screen.findByRole("option",{name:"Python"});
+ fireEvent.change(screen.getByLabelText("代码语言"),{target:{value:"python"}});
+ expect(screen.queryByText(hint)).toBeNull();
+ fireEvent.click(screen.getByRole("button",{name:"生成"}));
+ expect(await screen.findByText(hint)).toBeTruthy();
+ expect(screen.getByDisplayValue("original-python-native-reader")).toBeTruthy();
+ expect(vi.mocked(api).mock.calls.at(-1)?.[2]).toMatchObject({target:"python",client,include_secrets:false});
+});
 it.each(["requests","httpx_sync","httpx_async"])("offers Python %s files with scoped runtime guidance",async client=>{
  state.request={...state.request!,body_kind:"binary",body:JSON.stringify({file_name:"upload.bin",mime:"application/octet-stream",base64:"AP+AClg="})};
  const choices={...catalog,targets:[{target:"python",title:"Python",clients:[{client,title:client,binary_file:true}]}]};

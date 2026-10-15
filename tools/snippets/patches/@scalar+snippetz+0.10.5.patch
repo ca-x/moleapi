@@ -95,7 +95,7 @@ diff --git a/node_modules/@scalar/snippetz/dist/plugins/python/requestsLike.js b
      }
      // Add query parameters if present
      if (normalizedRequest.queryString?.length) {
-@@ -58,16 +55,20 @@
+@@ -58,20 +55,23 @@
      // Handle request body
      if (normalizedRequest.postData) {
          const { mimeType, text, params } = normalizedRequest.postData;
@@ -120,7 +120,39 @@ diff --git a/node_modules/@scalar/snippetz/dist/plugins/python/requestsLike.js b
          }
          else if (mimeType === 'multipart/form-data' && params) {
              const files = [];
-@@ -111,11 +112,15 @@
+-            const formData = {};
+             params.forEach((param) => {
+                 if (param.fileName !== undefined) {
+                     const name = JSON.stringify(param.name);
+@@ -86,22 +86,15 @@
+                     }
+                 }
+                 else if (param.value !== undefined) {
+-                    if (param.contentType) {
+-                        const name = JSON.stringify(param.name);
+-                        const value = JSON.stringify(param.value);
+-                        const contentType = JSON.stringify(param.contentType);
+-                        files.push(`(${name}, (None, ${value}, ${contentType}))`);
+-                    }
+-                    else {
+-                        accumulateRepeatedValue(formData, param.name, param.value);
+-                    }
++                    const name = JSON.stringify(param.name);
++                    const value = JSON.stringify(param.value);
++                    // A native no-filename file tuple preserves multipart even without files.
++                    const contentType = param.contentType ? `, ${JSON.stringify(param.contentType)}` : '';
++                    files.push(`(${name}, (None, ${value}${contentType}))`);
+                 }
+             });
+             if (files.length) {
+                 options.files = files;
+-            }
+-            if (Object.keys(formData).length) {
+-                options.data = formData;
+             }
+         }
+         else if (mimeType === 'application/x-www-form-urlencoded' && params) {
+@@ -111,11 +104,15 @@
              });
              options.data = formData;
          }
@@ -137,7 +169,7 @@ diff --git a/node_modules/@scalar/snippetz/dist/plugins/python/requestsLike.js b
      if (normalizedRequest.url.length > LENGTH_CONSIDERED_AS_SHORT) {
          formattedParams.push(urlParam);
      }
-@@ -137,26 +142,30 @@
+@@ -137,26 +134,30 @@
              const jsonString = formatPythonValue(value);
              formattedParams.push(`${key}=${jsonString}`);
          }
@@ -367,3 +399,230 @@ diff --git a/node_modules/@scalar/snippetz/dist/plugins/ruby/native/native.js b/
              }
          }
          lines.push('', 'response = http.request(request)', 'puts response.read_body');
+diff --git a/node_modules/@scalar/snippetz/dist/plugins/python/python3/python3.js b/node_modules/@scalar/snippetz/dist/plugins/python/python3/python3.js
+--- a/node_modules/@scalar/snippetz/dist/plugins/python/python3/python3.js
++++ b/node_modules/@scalar/snippetz/dist/plugins/python/python3/python3.js
+@@ -30,10 +30,6 @@
+     }
+     return `${url.search}&${serializedQuery.slice(1)}`;
+ };
+-const formatBytesLiteral = (value) => {
+-    const escaped = JSON.stringify(value).slice(1, -1);
+-    return `b"${escaped}"`;
+-};
+ const buildRequestBody = (request, headers, imports) => {
+     const postData = request.postData;
+     if (!postData) {
+@@ -42,6 +38,10 @@
+         };
+     }
+     const { mimeType, text, params } = postData;
++    if (postData.fileName !== undefined) {
++        imports.add('from pathlib import Path');
++        return { payloadLines: [`payload = Path(${JSON.stringify(postData.fileName)}).read_bytes()`], payloadVariable: 'payload' };
++    }
+     if (mimeType === 'application/json' && text) {
+         try {
+             const parsed = JSON.parse(text);
+@@ -53,14 +53,14 @@
+         }
+         catch {
+             return {
+-                payloadLines: [`payload = ${JSON.stringify(text)}`],
++                payloadLines: [`payload = ${JSON.stringify(text)}.encode("utf-8")`],
+                 payloadVariable: 'payload',
+             };
+         }
+     }
+     if (mimeType === 'application/octet-stream' && text) {
+         return {
+-            payloadLines: [`payload = ${formatBytesLiteral(text)}`],
++            payloadLines: [`payload = ${JSON.stringify(text)}.encode("utf-8")`],
+             payloadVariable: 'payload',
+         };
+     }
+@@ -70,7 +70,7 @@
+         params.forEach((param) => {
+             accumulateRepeatedValue(formData, param.name, param.value ?? '');
+         });
+-        if (!headers['Content-Type']) {
++        if (!Object.keys(headers).some((name) => name.toLowerCase() === 'content-type')) {
+             headers['Content-Type'] = 'application/x-www-form-urlencoded';
+         }
+         return {
+@@ -79,50 +79,35 @@
+         };
+     }
+     if (mimeType === 'multipart/form-data' && params) {
+-        const payloadLines = ['boundary = "----ScalarSnippetzBoundary"', 'data_list = []'];
++        imports.add('from urllib3.filepost import encode_multipart_formdata');
++        const payloadLines = ['fields = []'];
+         params.forEach((param) => {
+-            payloadLines.push('data_list.append("--" + boundary)');
++            const name = JSON.stringify(param.name);
+             if (param.fileName !== undefined) {
+-                payloadLines.push(`data_list.append(${JSON.stringify(`Content-Disposition: form-data; name="${param.name}"; filename="${param.fileName}"`)})`);
++                imports.add('from pathlib import Path');
++                const fileName = JSON.stringify(param.fileName);
++                const contentType = JSON.stringify(param.contentType || 'application/octet-stream');
++                payloadLines.push(`fields.append((${name}, (${fileName}, Path(${fileName}).read_bytes(), ${contentType})))`);
++            }
++            else if (param.contentType) {
++                imports.add('from urllib3.fields import RequestField');
++                payloadLines.push(`field = RequestField(name=${name}, data=${JSON.stringify(param.value ?? '')})`);
++                payloadLines.push(`field.make_multipart(content_type=${JSON.stringify(param.contentType)})`);
++                payloadLines.push('fields.append(field)');
+             }
+             else {
+-                payloadLines.push(`data_list.append(${JSON.stringify(`Content-Disposition: form-data; name="${param.name}"`)})`);
+-            }
+-            if (param.contentType) {
+-                payloadLines.push(`data_list.append(${JSON.stringify(`Content-Type: ${param.contentType}`)})`);
+-            }
+-            payloadLines.push('data_list.append("")');
+-            if (param.fileName !== undefined) {
+-                payloadLines.push(`data_list.append(open(${JSON.stringify(param.fileName)}, "rb").read().decode("latin-1"))`);
+-            }
+-            else {
+-                payloadLines.push(`data_list.append(${JSON.stringify(param.value ?? '')})`);
++                payloadLines.push(`fields.append((${name}, ${JSON.stringify(param.value ?? '')}))`);
+             }
+         });
+-        payloadLines.push('data_list.append("--" + boundary + "--")');
+-        payloadLines.push('data_list.append("")');
+-        payloadLines.push('payload = "\\r\\n".join(data_list)');
+-        headers['Content-Type'] = 'multipart/form-data; boundary=----ScalarSnippetzBoundary';
+-        return {
+-            payloadLines,
+-            payloadVariable: 'payload',
+-        };
++        payloadLines.push('payload, content_type = encode_multipart_formdata(fields)');
++        // The native encoder owns the matching boundary, including authored header casing.
++        for (const name of Object.keys(headers)) {
++            if (name.toLowerCase() === 'content-type') delete headers[name];
++        }
++        return { payloadLines, payloadVariable: 'payload', contentTypeVariable: 'content_type' };
+     }
+-    if (text) {
+-        try {
+-            const parsed = JSON.parse(text);
+-            imports.add('import json');
+-            return {
+-                payloadLines: [`payload = json.dumps(${formatPythonValue(parsed, 0)})`],
+-                payloadVariable: 'payload',
+-            };
+-        }
+-        catch {
+-            return {
+-                payloadLines: [`payload = ${JSON.stringify(text)}`],
+-                payloadVariable: 'payload',
+-            };
+-        }
++    if (text !== undefined) {
++        return { payloadLines: [`payload = ${JSON.stringify(text)}.encode("utf-8")`], payloadVariable: 'payload' };
+     }
+     return {
+         payloadLines: [],
+@@ -151,6 +136,10 @@
+             return acc;
+         }, {});
+         const preparedHeaders = headers ?? {};
++        const mime = normalizedRequest.postData?.mimeType;
++        if (mime && mime !== 'multipart/form-data' && !Object.keys(preparedHeaders).some((name) => name.toLowerCase() === 'content-type')) {
++            preparedHeaders['Content-Type'] = mime;
++        }
+         if (normalizedRequest.cookies?.length) {
+             const cookieHeader = normalizedRequest.cookies
+                 .map((cookie) => `${encodeURIComponent(cookie.name)}=${encodeURIComponent(cookie.value)}`)
+@@ -173,11 +162,15 @@
+         if (Object.keys(preparedHeaders).length) {
+             setupLines.push(`headers = ${formatPythonValue(preparedHeaders, 0)}`);
+         }
++        if (bodyResult.contentTypeVariable) {
++            if (!Object.keys(preparedHeaders).length) setupLines.push('headers = {}');
++            setupLines.push(`headers["Content-Type"] = ${bodyResult.contentTypeVariable}`);
++        }
+         const requestArguments = [JSON.stringify(normalizedRequest.method), JSON.stringify(path)];
+         if (bodyResult.payloadVariable) {
+             requestArguments.push(`body=${bodyResult.payloadVariable}`);
+         }
+-        if (Object.keys(preparedHeaders).length) {
++        if (Object.keys(preparedHeaders).length || bodyResult.contentTypeVariable) {
+             requestArguments.push('headers=headers');
+         }
+         const requestCall = requestArguments.length <= 2
+diff --git a/node_modules/@scalar/snippetz/dist/plugins/python/aiohttp/aiohttp.js b/node_modules/@scalar/snippetz/dist/plugins/python/aiohttp/aiohttp.js
+--- a/node_modules/@scalar/snippetz/dist/plugins/python/aiohttp/aiohttp.js
++++ b/node_modules/@scalar/snippetz/dist/plugins/python/aiohttp/aiohttp.js
+@@ -35,15 +35,21 @@
+         const requestArgs = [];
+         const sessionArgs = [];
+         const setupLines = [];
+-        if (normalizedRequest.headers?.length) {
+-            const headers = normalizedRequest.headers.reduce((acc, header) => {
+-                if (!(header.name in acc)) {
+-                    acc[header.name] = header.value;
+-                }
+-                return acc;
+-            }, {});
+-            requestArgs.push(`headers=${formatPythonValue(headers)}`);
++        const headers = (normalizedRequest.headers ?? []).reduce((acc, header) => {
++            if (!(header.name in acc)) acc[header.name] = header.value;
++            return acc;
++        }, {});
++        const mime = normalizedRequest.postData?.mimeType;
++        if (mime && mime !== 'multipart/form-data' && !Object.keys(headers).some((name) => name.toLowerCase() === 'content-type')) {
++            headers['Content-Type'] = mime;
+         }
++        if (mime === 'multipart/form-data') {
++            // FormData supplies its own Content-Type with the actual boundary.
++            for (const name of Object.keys(headers)) {
++                if (name.toLowerCase() === 'content-type') delete headers[name];
++            }
++        }
++        if (Object.keys(headers).length) requestArgs.push(`headers=${formatPythonValue(headers)}`);
+         if (normalizedRequest.queryString?.length) {
+             requestArgs.push(`params=${formatPythonValue(reduceQueryParams(normalizedRequest.queryString))}`);
+         }
+@@ -56,19 +62,25 @@
+         }
+         if (normalizedRequest.postData) {
+             const { mimeType, text, params } = normalizedRequest.postData;
+-            if (mimeType === 'application/json' && text) {
++            if (normalizedRequest.postData.fileName !== undefined) {
++                setupLines.push('from pathlib import Path');
++                requestArgs.push(`data=Path(${JSON.stringify(normalizedRequest.postData.fileName)}).read_bytes()`);
++            }
++            else if (mimeType === 'application/json' && text) {
+                 try {
+-                    requestArgs.push(`json=${formatPythonValue(JSON.parse(text))}`);
++                    const parsed = JSON.parse(text);
++                    if (parsed === null) requestArgs.push(`data=${JSON.stringify(text)}.encode("utf-8")`);
++                    else requestArgs.push(`json=${formatPythonValue(parsed)}`);
+                 }
+                 catch {
+-                    requestArgs.push(`data=${JSON.stringify(text)}`);
++                    requestArgs.push(`data=${JSON.stringify(text)}.encode("utf-8")`);
+                 }
+             }
+             else if (mimeType === 'application/octet-stream' && text) {
+-                requestArgs.push(`data=b"${text}"`);
++                requestArgs.push(`data=${JSON.stringify(text)}.encode("utf-8")`);
+             }
+             else if (mimeType === 'multipart/form-data' && params) {
+-                setupLines.push('data = aiohttp.FormData()');
++                setupLines.push('data = aiohttp.FormData(quote_fields=False, default_to_multipart=True)');
+                 params.forEach((param) => {
+                     if (param.fileName !== undefined) {
+                         const addFieldArgs = [
+@@ -97,8 +109,8 @@
+                 });
+                 requestArgs.push(`data=${formatPythonValue(formData)}`);
+             }
+-            else if (text) {
+-                requestArgs.push(`data=${JSON.stringify(text)}`);
++            else if (text !== undefined) {
++                requestArgs.push(`data=${JSON.stringify(text)}.encode("utf-8")`);
+             }
+         }
+         const sessionOpen = sessionArgs.length === 0
