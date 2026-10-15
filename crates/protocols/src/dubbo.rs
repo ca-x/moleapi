@@ -165,9 +165,34 @@ pub async fn lookup_zookeeper(
             total <= MAX_INPUT,
             "ZooKeeper provider snapshot exceeds 1 MiB"
         );
-        sources.push(source);
+        if registry_candidate_matches(&source, config)? {
+            sources.push(source);
+        }
     }
     Ok(sources)
+}
+
+fn registry_candidate_matches(source: &str, config: &DubboConfig) -> Result<bool> {
+    let url = url::Url::parse(source).context("Invalid ZooKeeper provider URL")?;
+    let mut version = None;
+    let mut group = None;
+    for (index, (name, value)) in url.query_pairs().enumerate() {
+        ensure!(
+            index < 128,
+            "ZooKeeper provider metadata exceeds 128 fields"
+        );
+        let field = match name.as_ref() {
+            "version" => &mut version,
+            "group" => &mut group,
+            _ => continue,
+        };
+        ensure!(
+            field.replace(value.into_owned()).is_none(),
+            "Duplicate ZooKeeper provider group/version field"
+        );
+    }
+    Ok(version.as_deref().unwrap_or("") == config.version
+        && group.as_deref().unwrap_or("") == config.group)
 }
 
 #[derive(Clone)]
@@ -395,6 +420,26 @@ async fn exchange(child: &mut Child, input: &[u8]) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn registry_filter_rejects_ambiguous_controls_before_selection() {
+        let config = DubboConfig {
+            version: "1.0.0".into(),
+            group: "qa".into(),
+            ..Default::default()
+        };
+        let base = "dubbo://example.com:20880/fixture.Service?version=1.0.0&group=qa";
+        assert!(registry_candidate_matches(base, &config).unwrap());
+        assert!(
+            !registry_candidate_matches(
+                "dubbo://example.com:20880/fixture.Service?version=2.0.0&group=qa",
+                &config
+            )
+            .unwrap()
+        );
+        assert!(registry_candidate_matches(&format!("{base}&group=other"), &config).is_err());
+        assert!(registry_candidate_matches("not a URL", &config).is_err());
+    }
 
     #[test]
     fn only_pinned_worker_bytes_are_accepted() {

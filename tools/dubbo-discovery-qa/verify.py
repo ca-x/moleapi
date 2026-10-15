@@ -73,8 +73,10 @@ def main():
     evidence = {'format':'moleapi-dubbo-zookeeper-qa-v1',
                 'provider_source_sha256':hashlib.sha256(source.encode()).hexdigest(),
                 'worker_sha256':manifest['worker_sha256'],
-                'cases':['official_lookup','group_filter','version_filter','no_lookup_invocation',
-                         'checked_rust_provider_call','hosted_private_address_refusal','provider_removal']}
+                'cases':['official_lookup','group_filter','version_filter','mixed_group_version_snapshot',
+                         'no_lookup_invocation','sdk_raw_lookup','checked_rust_provider_call',
+                         'product_registry_rpc','selected_provider_console',
+                         'hosted_private_address_refusal','hosted_registry_refusal','provider_removal']}
     args.output.write_text(json.dumps(evidence,indent=2)+'\n')
     print('PASS ZooKeeper registry -> original provider URL -> checked Rust RPC -> removal',flush=True)
 

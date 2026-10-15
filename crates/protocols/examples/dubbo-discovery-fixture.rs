@@ -32,6 +32,51 @@ async fn main() -> Result<()> {
         Duration::from_secs(5),
     )
     .await?;
+    let mut wrong_group = config.clone();
+    wrong_group.group = "other".into();
+    ensure!(
+        lookup_zookeeper(
+            &registry,
+            &wrong_group,
+            NetworkPolicy {
+                allow_private_network: true
+            },
+            Duration::from_secs(5)
+        )
+        .await?
+        .is_empty(),
+        "ZooKeeper lookup did not filter the wrong group"
+    );
+    let mut wrong_version = config.clone();
+    wrong_version.version = "2.0.0".into();
+    ensure!(
+        lookup_zookeeper(
+            &registry,
+            &wrong_version,
+            NetworkPolicy {
+                allow_private_network: true
+            },
+            Duration::from_secs(5)
+        )
+        .await?
+        .is_empty(),
+        "ZooKeeper lookup did not filter the wrong version"
+    );
+    wrong_group.version = "2.0.0".into();
+    ensure!(
+        lookup_zookeeper(
+            &registry,
+            &wrong_group,
+            NetworkPolicy {
+                allow_private_network: true
+            },
+            Duration::from_secs(5)
+        )
+        .await?
+        .len()
+            == 1,
+        "ZooKeeper did not expose the independent group/version provider"
+    );
     ensure!(
         snapshot.len() == 1,
         "ZooKeeper returned unexpected provider count"

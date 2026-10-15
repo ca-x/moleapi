@@ -50,9 +50,20 @@ public class RegistryFixture {
             ProtocolConfig protocol = new ProtocolConfig("dubbo");
             protocol.setPort(freePort());
             service.setProtocol(protocol);
+            ServiceConfig<RegistryService> other = new ServiceConfig<>();
+            other.setApplication(app);
+            other.setInterface(RegistryService.class);
+            other.setRef(value -> "other:" + value);
+            other.setVersion("2.0.0");
+            other.setGroup("other");
+            other.setRegistry(new RegistryConfig(registryAddress));
+            ProtocolConfig otherProtocol = new ProtocolConfig("dubbo");
+            otherProtocol.setPort(freePort());
+            other.setProtocol(otherProtocol);
             Registry registry = null;
             try {
                 service.export();
+                other.export();
                 URL registryURL = URL.valueOf(registryAddress + "?check=true&timeout=5000");
                 var applicationModel = ScopeModelUtil.getApplicationModel(service.getScopeModel());
                 var factory = new ZookeeperRegistryFactory(applicationModel);
@@ -85,6 +96,7 @@ public class RegistryFixture {
                 }
                 System.out.println("PASS ZOOKEEPER lookup group version direct-call provider-removal");
             } finally {
+                other.unexport();
                 service.unexport();
                 if (registry != null) {
                     URL query = URL.valueOf("consumer://127.0.0.1/fixture.RegistryService?category=providers&version=1.0.0&group=qa");
