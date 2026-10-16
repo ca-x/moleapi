@@ -36,6 +36,10 @@ export default function WorkbenchDialogs() {
             ? t("登录你自己的服务端，按工作区选择同步。")
             : modal === "search"
               ? t("按名称、方法或 URL 查找当前工作区的请求。")
+              : modal === "import"
+                ? t("导入支持的 API 数据，确认后创建新工作区。")
+                : modal === "export"
+                  ? t("导出当前工作区，可选择是否包含敏感值。")
               : t("管理当前工作区的数据与设置。")}
         </Dialog.Description>
         {modal === "search" ? (

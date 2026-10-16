@@ -29,4 +29,4 @@
 
 ## Progress, 2026-10-17
 
-The official 2.0 schema, object-auth mapping and legacy `data` body path are implemented. The 58-case interchange suite, hosted owner/privacy and actual Bearer/API Key calls, CLI process import/export, 332 frontend tests, strict Clippy and production frontend/embedded server builds passed locally. A saved/reloaded 390px Chinese/English browser import showed auth, body and example fields without document overflow. Branch CI and current platform gates remain.
+The official 2.0 schema, object-auth mapping and legacy `data` body path are implemented. The integrated 61-case interchange suite, hosted owner/privacy and actual Bearer/API Key calls, CLI process import/export, 333 frontend tests, strict Clippy and production frontend/embedded server builds passed locally. A saved/reloaded 390px Chinese/English browser import showed auth, body and example fields without document overflow. Branch CI and current platform gates remain.
