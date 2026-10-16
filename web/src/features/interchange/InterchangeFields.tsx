@@ -30,6 +30,7 @@ export default function InterchangeFields() {
                   { value: "postman", label: "Postman Collection JSON" },
                   { value: "moleapi", label: "MoleAPI JSON" },
                   { value: "curl", label: "cURL" },
+                  { value: "har", label: "HAR 1.2 JSON" },
                 ]
               : [
                   { value: "moleapi", label: "MoleAPI JSON" },

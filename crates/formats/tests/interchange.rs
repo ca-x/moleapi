@@ -10,6 +10,141 @@ fn workspace(data: moleapi_core::WorkspaceData) -> Workspace {
         data,
     }
 }
+fn har() -> Value {
+    serde_json::from_str(include_str!("fixtures/capture.har")).unwrap()
+}
+
+#[test]
+fn har_import_preserves_recorded_requests_examples_and_private_values() {
+    let imported = import("har", &har().to_string()).unwrap();
+    let requests = &imported.data.collections[0].requests;
+    assert_eq!(requests.len(), 3);
+    assert_eq!(
+        requests[0].url,
+        "https://api.example.test/items?tag=one&tag=two"
+    );
+    assert!(requests[0].query.is_empty());
+    assert!(!requests[0].use_cookie_jar);
+    assert_eq!(
+        requests[0]
+            .headers
+            .iter()
+            .find(|h| h.key == "Cookie")
+            .unwrap()
+            .value,
+        "sid=cookie-secret"
+    );
+    assert_eq!(requests[0].examples[0].status, 200);
+    assert_eq!(requests[0].examples[0].body, "{\"ok\":true}");
+    assert!(
+        !requests[0].examples[0]
+            .headers
+            .iter()
+            .any(|header| header.key.eq_ignore_ascii_case("Content-Encoding")
+                || header.key.eq_ignore_ascii_case("Content-Length"))
+    );
+    assert_eq!(requests[1].method, "POST");
+    assert_eq!(requests[1].body_kind, "form");
+    assert_eq!(requests[1].body, "k=one&k=two");
+    assert_eq!(requests[2].body_kind, "json");
+    assert_eq!(requests[2].body, "{\"count\":0}");
+    assert!(
+        imported
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Host"))
+    );
+    assert!(
+        imported
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Proxy-Authorization"))
+    );
+    assert!(
+        imported
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Content-Encoding"))
+    );
+    assert!(
+        !requests[0]
+            .headers
+            .iter()
+            .any(|header| header.key.eq_ignore_ascii_case("Proxy-Authorization"))
+    );
+    let saved = workspace(imported.data);
+    let safe = export(&saved, "moleapi", false).unwrap();
+    assert!(!safe.content.contains("har-secret"));
+    assert!(!safe.content.contains("cookie-secret"));
+    assert!(!safe.content.contains("response-secret"));
+    let full = export(&saved, "moleapi", true).unwrap();
+    assert!(full.content.contains("har-secret"));
+    assert!(full.content.contains("cookie-secret"));
+    assert!(full.content.contains("response-secret"));
+}
+
+#[test]
+fn har_import_rejects_ambiguous_or_unrepresentable_requests_atomically() {
+    let mut source = har();
+    source["log"]["version"] = json!("1.1");
+    assert!(import("har", &source.to_string()).is_err());
+    source = har();
+    source["log"]["entries"][0]["request"]["queryString"][0]["value"] = json!("different");
+    assert!(import("har", &source.to_string()).is_err());
+    source = har();
+    source["log"]["entries"][1]["request"]["postData"]["mimeType"] = json!("multipart/form-data");
+    assert!(import("har", &source.to_string()).is_err());
+    source = har();
+    source["log"]["entries"][1]["request"]["postData"]["params"][0]["fileName"] =
+        json!("secret.bin");
+    assert!(import("har", &source.to_string()).is_err());
+    source = har();
+    source["log"]["entries"][2]["request"]["url"] = json!("file:///etc/passwd");
+    assert!(import("har", &source.to_string()).is_err());
+    source = har();
+    source["log"]["entries"][0]["request"]["headers"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"name":"Upgrade","value":"websocket"}));
+    assert!(import("har", &source.to_string()).is_err());
+    source = har();
+    source["log"]["entries"] = json!([]);
+    assert!(import("har", &source.to_string()).is_err());
+    source = har();
+    let entry = source["log"]["entries"][0].clone();
+    source["log"]["entries"] = Value::Array(vec![entry; 1001]);
+    assert!(import("har", &source.to_string()).is_err());
+}
+
+#[test]
+fn har_import_keeps_request_when_binary_response_cannot_be_an_example() {
+    let mut source = har();
+    source["log"]["entries"][0]["response"]["content"] =
+        json!({"mimeType":"image/png","encoding":"base64","text":"AA=="});
+    let imported = import("har", &source.to_string()).unwrap();
+    assert_eq!(imported.data.collections[0].requests.len(), 3);
+    assert!(imported.data.collections[0].requests[0].examples.is_empty());
+    assert!(
+        imported
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("binary response"))
+    );
+    source["log"]["entries"][0]["response"]["content"] =
+        json!({"mimeType":"text/plain","encoding":"base64","text":"not base64"});
+    let imported = import("har", &source.to_string()).unwrap();
+    assert!(imported.data.collections[0].requests[0].examples.is_empty());
+    assert!(
+        imported
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("invalid base64"))
+    );
+    source["log"]["entries"][0]["response"]["content"] =
+        json!({"mimeType":"image/png","text":"raw binary-like text"});
+    let imported = import("har", &source.to_string()).unwrap();
+    assert!(imported.data.collections[0].requests[0].examples.is_empty());
+}
 #[test]
 fn cookie_jar_override_survives_native_export_and_rejects_unmapped_formats() {
     let mut imported = import("postman", &postman().to_string()).unwrap();

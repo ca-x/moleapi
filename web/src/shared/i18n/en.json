@@ -724,6 +724,8 @@
   "登录你自己的服务端，按工作区选择同步。": "Sign in to your server and choose workspaces to sync.",
   "按名称、方法或 URL 查找当前工作区的请求。": "Find requests in this workspace by name, method, or URL.",
   "管理当前工作区的数据与设置。": "Manage this workspace’s data and settings.",
+  "导入支持的 API 数据，确认后创建新工作区。": "Import supported API data and create a new workspace when you confirm.",
+  "导出当前工作区，可选择是否包含敏感值。": "Export this workspace and choose whether to include sensitive values.",
   "导出": "Export",
   "创建": "Create",
   "收起目录": "Collapse directory",
