@@ -47,6 +47,18 @@ fn har_import_preserves_recorded_requests_examples_and_private_values() {
             .iter()
             .any(|warning| warning.contains("Host"))
     );
+    assert!(
+        imported
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Proxy-Authorization"))
+    );
+    assert!(
+        !requests[0]
+            .headers
+            .iter()
+            .any(|header| header.key.eq_ignore_ascii_case("Proxy-Authorization"))
+    );
     let saved = workspace(imported.data);
     let safe = export(&saved, "moleapi", false).unwrap();
     assert!(!safe.content.contains("har-secret"));
@@ -75,6 +87,12 @@ fn har_import_rejects_ambiguous_or_unrepresentable_requests_atomically() {
     assert!(import("har", &source.to_string()).is_err());
     source = har();
     source["log"]["entries"][2]["request"]["url"] = json!("file:///etc/passwd");
+    assert!(import("har", &source.to_string()).is_err());
+    source = har();
+    source["log"]["entries"][0]["request"]["headers"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"name":"Upgrade","value":"websocket"}));
     assert!(import("har", &source.to_string()).is_err());
     source = har();
     source["log"]["entries"] = json!([]);

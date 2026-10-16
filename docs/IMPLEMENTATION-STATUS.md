@@ -20,6 +20,8 @@ The current fix round replaces cooperative-only CPU enforcement with one worker 
 
 ## Continuing work
 
+HAR import continuation, 2026-10-17: `feat/har-import` adds `format=har` to the shared CLI/hosted importer and bilingual import dialog. Bounded HAR 1.2 HTTP(S) entries retain ordered requests, exact URL queries, supported text/JSON/form bodies, fixed cookies, Authorization headers and textual response examples. Unsupported multipart/file/binary requests reject atomically; transport headers and unrepresentable response examples produce warnings. A real hosted loopback replay preserved query/header/form bytes; owner isolation, default secret screening, CLI process import and 390px Chinese/English browser save/reload passed. The 57-case interchange and 333-case frontend suites, production build and strict all-target Clippy passed locally. Integrated branch CI, current platform packages and other interchange rows remain open; see `HAR-IMPORT-COVERAGE.md`.
+
 The full matrix remains the authority. Next work extends the versioned pm compatibility subset and richer authentication/body modes, real SSE/WebSocket protocol sessions and schema editors; then scenario/dataset/Mock/publishing, collaboration/versioning/Git/CLI/AI/enterprise modules. Vendor-marketplace/billing entries retain explicit product-boundary distinctions. No unimplemented feature is labeled complete merely because a component or route exists.
 
 ## SSE/WebSocket extension verified locally

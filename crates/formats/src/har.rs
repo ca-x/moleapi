@@ -126,9 +126,22 @@ pub(super) fn import(content: &str) -> Result<ImportResult> {
         imported.follow_redirects = false;
         for header in recorded.headers {
             let lower = header.name.to_ascii_lowercase();
+            ensure!(
+                lower != "upgrade" && !lower.starts_with("sec-websocket-"),
+                "HAR entry {number} contains a protocol upgrade that cannot be imported as HTTP"
+            );
             if matches!(
                 lower.as_str(),
-                "host" | "content-length" | "transfer-encoding" | "connection" | "accept-encoding"
+                "host"
+                    | "content-length"
+                    | "transfer-encoding"
+                    | "connection"
+                    | "accept-encoding"
+                    | "keep-alive"
+                    | "proxy-authorization"
+                    | "proxy-connection"
+                    | "te"
+                    | "trailer"
             ) {
                 warnings.insert(format!("HAR transport header {} omitted", header.name));
                 continue;
