@@ -641,6 +641,92 @@ async fn hosted_checked_remote_xls_selects_named_sheet_and_runs_sql() {
 }
 
 #[tokio::test]
+async fn hosted_checked_remote_xlsb_selects_named_sheet_and_runs_sql() {
+    let _serial = DATA_CLIENT_TESTS.lock().await;
+    let (base, server) = serve(Router::new().route(
+        "/issues.xlsb",
+        axum::routing::get(|headers: axum::http::HeaderMap| async move {
+            assert!(
+                headers["host"]
+                    .to_str()
+                    .unwrap()
+                    .starts_with("xlsb-network.test:")
+            );
+            assert_eq!(headers["accept-encoding"], "identity");
+            (
+                [(
+                    "content-type",
+                    "application/vnd.ms-excel.sheet.binary.macroEnabled.12",
+                )],
+                include_bytes!("../../data/tests/fixtures/calamine-issues.xlsb").to_vec(),
+            )
+        }),
+    ))
+    .await;
+    let port = url::Url::parse(&base).unwrap().port().unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let mut settings = config(
+        moleapi_server::sqlite_database_url(&temp.path().join("xlsb-hosted.db")).unwrap(),
+        true,
+    );
+    settings.allow_private_network = true;
+    let router = hosted(settings).await.unwrap();
+    let token = register(&router, "xlsb-owner").await;
+    let mut source = data();
+    let request = &mut source["collections"][0]["requests"][0];
+    request["url"] = json!(format!("http://xlsb-network.test:{port}/issues.xlsb"));
+    request["protocol"]["source"] = json!("remote_file");
+    request["protocol"]["file_format"] = json!("xlsb");
+    request["protocol"]["file_name"] = json!("issues.xlsb");
+    request["protocol"]["sheet_name"] = json!("issue2");
+    request["protocol"]["csv_header"] = json!(false);
+    request["protocol"]["file_base64"] = json!("");
+    request["network"] =
+        json!({"dns":[{"hostname":"xlsb-network.test","addresses":["127.0.0.1"]}]});
+    let (status, workspace) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        Some(&token),
+        Some(json!({"id":"xlsb","name":"Remote workbook","data":source})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{workspace}");
+    let (status, session) = call(&router,"POST","/api/sessions",Some(&token),
+        Some(json!({"workspace_id":"xlsb","request":workspace["data"]["collections"][0]["requests"][0]}))).await;
+    assert_eq!(status, StatusCode::OK, "{session}");
+    let id = session["id"].as_str().unwrap();
+    ready(&router, Some(&token), id).await;
+    let events = query(
+        &router,
+        Some(&token),
+        id,
+        "xlsb-query",
+        "SELECT column_1, column_2 FROM data WHERE column_1=2",
+    )
+    .await;
+    let row = events["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|event| {
+            event["message"]["kind"] == "data_rows" && event["message"]["query_id"] == "xlsb-query"
+        })
+        .expect("Hosted XLSB query result missing");
+    assert_eq!(row["message"]["rows"][0][0]["value"], "2");
+    assert_eq!(row["message"]["rows"][0][1]["value"], "b");
+    call(
+        &router,
+        "DELETE",
+        &format!("/api/sessions/{id}"),
+        Some(&token),
+        None,
+    )
+    .await;
+    server.abort();
+}
+
+#[tokio::test]
 async fn completed_file_data_query_enters_owner_history_without_rows() {
     let _serial = DATA_CLIENT_TESTS.lock().await;
     let temp = tempfile::tempdir().unwrap();

@@ -23,6 +23,7 @@ pub enum DataFileFormat {
     Json,
     Parquet,
     Xls,
+    Xlsb,
     Xlsx,
     Ods,
 }
@@ -80,7 +81,10 @@ pub fn validate_data_config(config: &DataConfig) -> Result<()> {
         config.sheet_name.is_empty()
             || matches!(
                 config.file_format,
-                DataFileFormat::Xls | DataFileFormat::Xlsx | DataFileFormat::Ods
+                DataFileFormat::Xls
+                    | DataFileFormat::Xlsb
+                    | DataFileFormat::Xlsx
+                    | DataFileFormat::Ods
             ) && matches!(
                 config.source,
                 DataSource::LocalFile | DataSource::RemoteFile
@@ -266,6 +270,8 @@ mod tests {
         worksheet.file_format = DataFileFormat::Xlsx;
         validate_data_config(&worksheet).unwrap();
         worksheet.file_format = DataFileFormat::Xls;
+        validate_data_config(&worksheet).unwrap();
+        worksheet.file_format = DataFileFormat::Xlsb;
         validate_data_config(&worksheet).unwrap();
         worksheet.file_format = DataFileFormat::Ods;
         validate_data_config(&worksheet).unwrap();
