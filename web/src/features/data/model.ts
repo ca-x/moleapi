@@ -1,7 +1,7 @@
 import { PostgreSQL, MySQL, StandardSQL } from "@codemirror/lang-sql";
 import { format } from "sql-formatter";
 import type { DataConfig, DataSource, Cell } from "./types";
-export function dataConfig():DataConfig {return {kind:"data",source:"postgresql",sql:"SELECT 1 AS value",file_name:"",file_format:"csv",sheet_name:"",file_base64:"",table_name:"data",csv_header:true,read_only:true,tls:true,ca_pem:""};}
+export function dataConfig():DataConfig {return {kind:"data",source:"postgresql",sql:"SELECT 1 AS value",query_pre_script:"",file_name:"",file_format:"csv",sheet_name:"",file_base64:"",table_name:"data",csv_header:true,read_only:true,tls:true,ca_pem:""};}
 export function dialect(source:DataSource) {return source==="postgresql"?PostgreSQL:source==="mysql"?MySQL:StandardSQL;}
 /** Lezer owns SQL comments, quotes, statement boundaries, and cursor locations. */
 export function selectedStatement(document:string,source:DataSource,from:number,to=from):string {

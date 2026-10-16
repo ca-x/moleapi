@@ -761,7 +761,7 @@ fn data_request_exports_screen_credentials_copied_sql_and_keep_explicit_original
         sql: "SELECT 'it''s-private' AS copied".into(),
         ..Default::default()
     };
-    let request:moleapi_core::RequestSpec=serde_json::from_value(json!({"id":"data","name":"Data request","protocol":{"kind":"data","source":"postgresql","sql":config.sql},"method":"GET","url":"postgresql://user:it%27s-private@db.example/main","description":"","query":[],"headers":[],"body_kind":"none","body":"","auth":{"kind":"none","token":"","username":"","password":""},"timeout_ms":1000,"verify_tls":true,"follow_redirects":false,"assertions":[],"examples":[]})).unwrap();
+    let request:moleapi_core::RequestSpec=serde_json::from_value(json!({"id":"data","name":"Data request","protocol":{"kind":"data","source":"postgresql","sql":config.sql,"query_pre_script":"pm.request.body.update(\"SELECT 'it''s-private'\")"},"method":"GET","url":"postgresql://user:it%27s-private@db.example/main","description":"","query":[],"headers":[],"body_kind":"none","body":"","auth":{"kind":"none","token":"","username":"","password":""},"timeout_ms":1000,"verify_tls":true,"follow_redirects":false,"assertions":[],"examples":[]})).unwrap();
     let mut w=workspace(serde_json::from_value(json!({"schema_version":1,"collections":[{"id":"c","name":"Data","description":"","requests":[request]}],"environments":[],"active_environment_id":null})).unwrap());
     let format = "moleapi";
     {

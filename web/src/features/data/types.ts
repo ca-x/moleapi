@@ -1,5 +1,5 @@
 export type DataSource = "postgresql" | "mysql" | "local_file" | "remote_file";
-export interface DataConfig { kind:"data"; source:DataSource; sql:string; file_name:string; file_format:"csv"|"json"|"parquet"|"xlsx"; sheet_name:string; file_base64:string; table_name:string; csv_header:boolean; read_only:boolean; tls:boolean; ca_pem:string }
+export interface DataConfig { kind:"data"; source:DataSource; sql:string; query_pre_script:string; file_name:string; file_format:"csv"|"json"|"parquet"|"xlsx"; sheet_name:string; file_base64:string; table_name:string; csv_header:boolean; read_only:boolean; tls:boolean; ca_pem:string }
 export type Cell = {kind:"null"} | {kind:"bool";value:boolean} | {kind:"text"|"integer"|"decimal";value:string} | {kind:"binary";base64:string;bytes:number} | {kind:"truncated";preview:string;bytes:number};
 export interface DataColumn {name:string;data_type:string;nullable:boolean}
 export interface SchemaColumn extends DataColumn { reference:string }
