@@ -244,6 +244,10 @@ fn postman20_rejects_unrepresentable_auth_and_legacy_body_values() {
     assert!(import("postman", &source.to_string()).is_err());
 
     source = fixture.clone();
+    source["auth"] = json!({"type":"bearer","bearer":{"token":987654321}});
+    assert!(import("postman", &source.to_string()).is_err());
+
+    source = fixture.clone();
     source["item"][0]["item"][0]["response"][0]["originalRequest"] = json!({"url":"https://example.test","auth":{"type":"bearer","bearer":{"token":{"value":"marker-secret"}}}});
     assert!(import("postman", &source.to_string()).is_err());
 
@@ -264,6 +268,48 @@ fn postman20_rejects_unrepresentable_auth_and_legacy_body_values() {
         source["item"][0]["item"][1]["request"]["data"] = data;
         assert!(import("postman", &source.to_string()).is_err());
     }
+}
+
+#[test]
+fn postman20_object_helper_credentials_are_private_in_default_backup() {
+    let fixture: Value = serde_json::from_str(include_str!("fixtures/postman20.json")).unwrap();
+    for helper in [
+        json!({"type":"hawk","hawk":{"authId":"hawk-id","authKey":"hawk-private-marker","timestamp":987654321}}),
+        json!({"type":"apikey","apikey":{"key":"X-Client","value":"apikey-private-marker","in":"header"}}),
+        json!({"type":"awsv4","awsv4":{"accessKey":"aws-access-private-marker","secretKey":"aws-secret-private-marker","sessionToken":"aws-session-private-marker","region":"us-east-1","service":"execute-api"}}),
+        json!({"type":"oauth1","oauth1":{"consumerKey":"oauth-consumer-private-marker","consumerSecret":"oauth-secret-private-marker","token":"oauth-token-private-marker","tokenSecret":"oauth-token-secret-private-marker","callback":"{{callbackBase}}/cb?token=callback-private-marker","signatureMethod":"HMAC-SHA256"}}),
+        json!({"type":"edgegrid","edgegrid":{"accessToken":"edge-access-private-marker","clientToken":"edge-client-private-marker","clientSecret":"edge-secret-private-marker","baseURL":"https://user:url-private-marker@edge.example.test/path?token=query-private-marker"}}),
+        json!({"type":"edgegrid","edgegrid":{"accessToken":"edge-access-private-marker","clientToken":"edge-client-private-marker","clientSecret":"edge-secret-private-marker","baseURL":"{{scheme}}://user:template-private-marker@edge.example.test/path?token=query-private-marker"}}),
+    ] {
+        let mut source = fixture.clone();
+        let kind = helper["type"].as_str().unwrap().to_owned();
+        source["auth"] = helper;
+        let imported = import("postman", &source.to_string()).unwrap();
+        let workspace = workspace(imported.data);
+        let safe = export(&workspace, "moleapi", false).unwrap();
+        assert!(
+            !safe.content.contains("private-marker"),
+            "{kind} source leaked a helper credential"
+        );
+        import("moleapi", &safe.content).unwrap();
+        let full = export(&workspace, "moleapi", true).unwrap();
+        assert!(full.content.contains("private-marker"));
+    }
+}
+
+#[test]
+fn postman20_source_only_original_request_auth_is_private() {
+    let mut source: Value = serde_json::from_str(include_str!("fixtures/postman20.json")).unwrap();
+    source["item"][0]["item"][0]["response"][0]["originalRequest"] = json!({
+        "url":"https://example.test",
+        "auth":{"type":"hawk","hawk":{"authId":"id","authKey":"source-only-private-marker"}}
+    });
+    let imported = import("postman", &source.to_string()).unwrap();
+    let workspace = workspace(imported.data);
+    let safe = export(&workspace, "moleapi", false).unwrap();
+    assert!(!safe.content.contains("source-only-private-marker"));
+    let full = export(&workspace, "moleapi", true).unwrap();
+    assert!(full.content.contains("source-only-private-marker"));
 }
 
 #[test]

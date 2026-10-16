@@ -28,12 +28,31 @@ fn validate_auth_helpers(value: &Value) -> Result<()> {
                 continue;
             }
             if let Some(attributes) = attributes.as_object() {
-                ensure!(
-                    attributes
-                        .values()
-                        .all(|value| !value.is_array() && !value.is_object()),
-                    "Postman {helper} authentication has an unrepresentable helper value"
-                );
+                for (key, attribute) in attributes {
+                    let supported = attribute.is_string()
+                        || attribute.is_null()
+                        || attribute.is_boolean()
+                            && matches!(
+                                (helper.as_str(), key.as_str()),
+                                (
+                                    "oauth1",
+                                    "includeBodyHash"
+                                        | "addEmptyParamsToSign"
+                                        | "addParamsToHeader"
+                                        | "disableHeaderEncoding"
+                                ) | ("hawk", "includePayloadHash")
+                                    | ("awsv4", "addAuthDataToQuery")
+                            )
+                        || attribute.is_number()
+                            && matches!(
+                                (helper.as_str(), key.as_str()),
+                                ("edgegrid", "maxBodySize") | ("hawk" | "oauth1", "timestamp")
+                            );
+                    ensure!(
+                        supported,
+                        "Postman {helper}.{key} authentication value cannot be represented"
+                    );
+                }
             }
         }
     }
