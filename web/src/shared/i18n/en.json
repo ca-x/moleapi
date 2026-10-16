@@ -1019,6 +1019,7 @@
   "工作表名称": "Worksheet name",
   "留空使用第一张工作表": "Leave blank for first worksheet",
   "XLSX 只读取缓存值，不计算公式；小数可显式 CAST 为 DECIMAL。": "XLSX reads cached values only and does not calculate formulas. Cast decimal values explicitly with CAST AS DECIMAL.",
+  "ODS 只读取缓存值，不计算公式；超出精确范围的整数请存为文本。": "ODS reads cached values only and does not calculate formulas. Store integers outside the exact range as text.",
   "文件格式": "File format",
   "SQL 表名": "SQL table name",
   "只读查询": "Read-only queries",
