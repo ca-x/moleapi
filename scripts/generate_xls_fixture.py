@@ -44,4 +44,11 @@ wide = oversized.add_sheet("Oversized Grid")
 wide.write(0, 0, "first")
 wide.write(4000, 255, "last")
 oversized.save(str(output.with_name("oversized-grid.xls")))
+
+aggregate = xlwt.Workbook()
+for index in range(5):
+    page = aggregate.add_sheet(f"Sheet {index + 1}")
+    page.write(0, 0, "first")
+    page.write(3800, 249, "last")
+aggregate.save(str(output.with_name("aggregate-grid.xls")))
 print(output)

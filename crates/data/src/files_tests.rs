@@ -91,6 +91,15 @@ fn xls_rejects_an_oversized_unselected_sheet_before_parsing() {
     assert!(error.contains("grid size"), "{error}");
 }
 
+#[test]
+fn xls_rejects_aggregate_unselected_sheet_expansion() {
+    let bytes = include_bytes!("../tests/fixtures/aggregate-grid.xls");
+    let mut config = config(DataFileFormat::Xls);
+    config.csv_header = false;
+    let error = FileSource::open(&config, bytes).err().unwrap().to_string();
+    assert!(error.contains("workbook grid size"), "{error}");
+}
+
 #[tokio::test]
 async fn ods_selected_sheet_runs_sql_with_cached_values_and_safe_types() {
     let mut config = config(DataFileFormat::Ods);

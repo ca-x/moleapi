@@ -17,6 +17,7 @@ use std::{
 const MAX_EXPANDED: u64 = 64 * 1024 * 1024;
 const MAX_ZIP_ENTRIES: usize = 2048;
 const MAX_GRID_CELLS: usize = 1_000_000;
+const MAX_XLS_WORKBOOK_CELLS: usize = 4_000_000;
 
 fn preflight_archive(bytes: &[u8]) -> Result<()> {
     let mut archive =
@@ -95,6 +96,7 @@ fn preflight_xls(bytes: &[u8]) -> Result<()> {
         sheet_offsets.windows(2).all(|pair| pair[0] < pair[1]),
         "Duplicate XLS sheet offset"
     );
+    let mut workbook_cells = 0usize;
     for (index, &start) in sheet_offsets.iter().enumerate() {
         let end = sheet_offsets
             .get(index + 1)
@@ -114,10 +116,18 @@ fn preflight_xls(bytes: &[u8]) -> Result<()> {
             "Only BIFF8 XLS worksheets are supported"
         );
         let mut extent: Option<(u32, u32, u32, u32)> = None;
+        let mut sheet_cells = 0usize;
+        let mut has_formula = false;
         loop {
             let (kind, data) = biff_record(&workbook, &mut position, end)?;
             if kind == 0x000A {
                 break;
+            }
+            if kind == 0x0207 {
+                // Calamine inserts STRING at the most recent FORMULA position,
+                // or at A1 when no formula has appeared. Reject the latter.
+                ensure!(has_formula, "Orphan XLS formula string record");
+                has_formula = false;
             }
             if kind == 0x0200 {
                 ensure!(data.len() >= 12, "Invalid XLS worksheet dimensions");
@@ -132,7 +142,8 @@ fn preflight_xls(bytes: &[u8]) -> Result<()> {
                         && last_col <= 256,
                     "Invalid XLS worksheet dimensions"
                 );
-                check_xls_grid(last_row - first_row, last_col - first_col)?;
+                sheet_cells =
+                    sheet_cells.max(check_xls_grid(last_row - first_row, last_col - first_col)?);
             }
             if matches!(
                 kind,
@@ -154,9 +165,22 @@ fn preflight_xls(bytes: &[u8]) -> Result<()> {
                 *max_row = (*max_row).max(row);
                 *min_col = (*min_col).min(col);
                 *max_col = (*max_col).max(last_col);
-                check_xls_grid(*max_row - *min_row + 1, *max_col - *min_col + 1)?;
+                sheet_cells = sheet_cells.max(check_xls_grid(
+                    *max_row - *min_row + 1,
+                    *max_col - *min_col + 1,
+                )?);
+                if kind == 0x0006 {
+                    has_formula = true;
+                }
             }
         }
+        workbook_cells = workbook_cells
+            .checked_add(sheet_cells)
+            .context("XLS workbook grid size overflow")?;
+        ensure!(
+            workbook_cells <= MAX_XLS_WORKBOOK_CELLS,
+            "XLS workbook grid size exceeds limit"
+        );
     }
     Ok(())
 }
@@ -175,12 +199,13 @@ fn biff_record<'a>(stream: &'a [u8], position: &mut usize, end: usize) -> Result
     Ok((kind, data))
 }
 
-fn check_xls_grid(rows: u32, columns: u32) -> Result<()> {
+fn check_xls_grid(rows: u32, columns: u32) -> Result<usize> {
+    let cells = (rows as usize).saturating_mul(columns as usize);
     ensure!(
-        (rows as usize).saturating_mul(columns as usize) <= MAX_GRID_CELLS,
+        cells <= MAX_GRID_CELLS,
         "XLS worksheet grid size exceeds limit"
     );
-    Ok(())
+    Ok(cells)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -413,5 +438,43 @@ fn selected_sheet<'a>(names: &'a [String], selected: &'a str) -> Result<&'a str>
             "Spreadsheet worksheet not found"
         );
         Ok(selected)
+    }
+}
+
+#[cfg(test)]
+mod xls_preflight_tests {
+    use super::preflight_xls;
+    use std::io::{Cursor, Write};
+
+    fn record(kind: u16, data: &[u8]) -> Vec<u8> {
+        let mut result = Vec::from(kind.to_le_bytes());
+        result.extend_from_slice(&(data.len() as u16).to_le_bytes());
+        result.extend_from_slice(data);
+        result
+    }
+
+    #[test]
+    fn orphan_string_cannot_hide_a_sparse_cell_extent() {
+        let global_bof = record(0x0809, &[0x00, 0x06, 0x05, 0x00]);
+        let offset = (global_bof.len() + 10 + 4) as u32;
+        let mut workbook = global_bof;
+        let mut bound_sheet = offset.to_le_bytes().to_vec();
+        bound_sheet.extend_from_slice(&[0, 0]);
+        workbook.extend(record(0x0085, &bound_sheet));
+        workbook.extend(record(0x000A, &[]));
+        workbook.extend(record(0x0809, &[0x00, 0x06, 0x10, 0x00]));
+        workbook.extend(record(0x0200, &[0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0]));
+        workbook.extend(record(0x0207, &[]));
+        workbook.extend(record(0x0203, &[0xA0, 0x0F, 0xFF, 0]));
+        workbook.extend(record(0x000A, &[]));
+        let mut compound = cfb::CompoundFile::create(Cursor::new(Vec::new())).unwrap();
+        compound
+            .create_stream("/Workbook")
+            .unwrap()
+            .write_all(&workbook)
+            .unwrap();
+        let bytes = compound.into_inner().into_inner();
+        let error = preflight_xls(&bytes).err().unwrap().to_string();
+        assert!(error.contains("Orphan XLS formula string"), "{error}");
     }
 }
