@@ -18,19 +18,18 @@ def one_package(directory: Path, suffix: str) -> Path:
 
 
 def extract_rpm(package: Path, destination: Path) -> None:
-    producer = subprocess.Popen(["rpm2cpio", str(package)], stdout=subprocess.PIPE,
-                                stderr=subprocess.DEVNULL)
-    try:
-        subprocess.run(["cpio", "-idmu", "--quiet"], stdin=producer.stdout,
+    # cpio stops at TRAILER!!! and may close a pipeline while rpm2cpio is still
+    # writing padding. Keep the finite archive in a temporary file so both exit
+    # codes describe real decode failures, and retain the producer's error text.
+    with tempfile.TemporaryFile() as archive:
+        producer = subprocess.run(["rpm2cpio", str(package)], stdout=archive,
+                                  stderr=subprocess.PIPE, timeout=180, check=False)
+        if producer.returncode:
+            detail = producer.stderr.decode("utf-8", errors="replace")[-1024:].strip()
+            raise RuntimeError(f"rpm2cpio failed ({producer.returncode}): {detail}")
+        archive.seek(0)
+        subprocess.run(["cpio", "-idmu", "--quiet"], stdin=archive,
                        cwd=destination, check=True, timeout=180)
-        if producer.stdout:
-            producer.stdout.close()
-        if producer.wait(timeout=20):
-            raise RuntimeError("rpm2cpio failed")
-    finally:
-        if producer.poll() is None:
-            producer.kill()
-            producer.wait(timeout=5)
 
 
 def verify_extracted(name: str, root: Path, executable: Path) -> None:
