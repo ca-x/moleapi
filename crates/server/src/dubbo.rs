@@ -127,19 +127,60 @@ fn signature(method: &moleapi_protocols::dubbo::DubboMetadataMethod) -> String {
 fn argument_draft(
     type_name: &str,
     types: &[moleapi_protocols::dubbo::DubboMetadataType],
-) -> String {
-    let Some(definition) = types
+) -> Result<String, ApiError> {
+    let definitions = types
         .iter()
-        .find(|definition| definition.type_name == type_name && !definition.properties.is_empty())
-    else {
-        return "null".into();
-    };
-    let fields = definition
-        .properties
-        .iter()
-        .map(|property| (property.name.clone(), serde_json::Value::Null))
-        .collect::<serde_json::Map<_, _>>();
-    json!({"$class":type_name,"$":fields}).to_string()
+        .map(|definition| (definition.type_name.as_str(), definition))
+        .collect::<HashMap<_, _>>();
+    fn value(
+        type_name: &str,
+        definitions: &HashMap<&str, &moleapi_protocols::dubbo::DubboMetadataType>,
+        active: &mut HashSet<String>,
+        depth: usize,
+        nodes: &mut usize,
+    ) -> Result<serde_json::Value, ApiError> {
+        if depth >= 16 || *nodes >= 256 {
+            return Err(ApiError::bad("Metadata DTO draft exceeds nesting limit"));
+        }
+        let base = type_name.split('<').next().unwrap_or(type_name);
+        if type_name.ends_with("[]")
+            || matches!(
+                base,
+                "java.util.List" | "java.util.Set" | "java.util.Collection" | "java.lang.Iterable"
+            )
+        {
+            return Ok(json!([]));
+        }
+        if matches!(base, "java.util.Map" | "java.util.SortedMap") {
+            return Ok(json!({}));
+        }
+        let Some(definition) = definitions.get(type_name) else {
+            return Ok(serde_json::Value::Null);
+        };
+        if definition.properties.is_empty() || !active.insert(type_name.to_owned()) {
+            return Ok(serde_json::Value::Null);
+        }
+        *nodes += 1;
+        let mut fields = serde_json::Map::new();
+        for property in &definition.properties {
+            fields.insert(
+                property.name.clone(),
+                value(&property.type_name, definitions, active, depth + 1, nodes)?,
+            );
+        }
+        active.remove(type_name);
+        Ok(json!({"$class":type_name,"$":fields}))
+    }
+    let mut active = HashSet::new();
+    let mut nodes = 0;
+    let draft = value(type_name, &definitions, &mut active, 0, &mut nodes)?;
+    let source = draft.to_string();
+    if source.len() > 64 * 1024 {
+        return Err(ApiError::bad(
+            "Metadata DTO draft exceeds argument size limit",
+        ));
+    }
+    Ok(source)
 }
 
 fn matching_request(
@@ -291,13 +332,15 @@ pub(crate) async fn import_metadata(
             config.arguments = method
                 .parameter_types
                 .iter()
-                .map(|name| DubboArgument {
-                    id: Uuid::new_v4().to_string(),
-                    type_name: name.clone(),
-                    value_source: argument_draft(name, &preview.types),
-                    secret: false,
+                .map(|name| -> Result<DubboArgument, ApiError> {
+                    Ok(DubboArgument {
+                        id: Uuid::new_v4().to_string(),
+                        type_name: name.clone(),
+                        value_source: argument_draft(name, &preview.types)?,
+                        secret: false,
+                    })
                 })
-                .collect();
+                .collect::<Result<Vec<_>, _>>()?;
             config.attachments.clear();
             if target_id != source.id {
                 config.metadata_auth = None;
@@ -378,12 +421,64 @@ mod tests {
                     type_name: "int".into(),
                 },
             ],
+            items: vec![],
+            enums: vec![],
         }];
         let draft: serde_json::Value =
-            serde_json::from_str(&argument_draft("fixture.Profile", &types)).unwrap();
+            serde_json::from_str(&argument_draft("fixture.Profile", &types).unwrap()).unwrap();
         assert_eq!(draft["$class"], "fixture.Profile");
         assert!(draft["$"]["name"].is_null());
         assert!(draft["$"]["age"].is_null());
-        assert_eq!(argument_draft("java.lang.String", &types), "null");
+        assert_eq!(argument_draft("java.lang.String", &types).unwrap(), "null");
+    }
+
+    #[test]
+    fn metadata_nested_dto_collection_enum_and_cycle_have_editable_drafts() {
+        let types = vec![
+            DubboMetadataType {
+                type_name: "fixture.Profile".into(),
+                properties: [
+                    ("address", "fixture.Address"),
+                    ("tier", "fixture.Tier"),
+                    ("tags", "java.util.List<java.lang.String>"),
+                    (
+                        "addresses",
+                        "java.util.Map<java.lang.String,fixture.Address>",
+                    ),
+                    ("parent", "fixture.Profile"),
+                ]
+                .into_iter()
+                .map(|(name, type_name)| DubboMetadataProperty {
+                    name: name.into(),
+                    type_name: type_name.into(),
+                })
+                .collect(),
+                items: vec![],
+                enums: vec![],
+            },
+            DubboMetadataType {
+                type_name: "fixture.Address".into(),
+                properties: vec![DubboMetadataProperty {
+                    name: "street".into(),
+                    type_name: "java.lang.String".into(),
+                }],
+                items: vec![],
+                enums: vec![],
+            },
+            DubboMetadataType {
+                type_name: "fixture.Tier".into(),
+                properties: vec![],
+                items: vec![],
+                enums: vec!["FREE".into(), "PAID".into()],
+            },
+        ];
+        let draft: serde_json::Value =
+            serde_json::from_str(&argument_draft("fixture.Profile", &types).unwrap()).unwrap();
+        assert_eq!(draft["$"]["address"]["$class"], "fixture.Address");
+        assert!(draft["$"]["address"]["$"]["street"].is_null());
+        assert!(draft["$"]["tier"].is_null());
+        assert_eq!(draft["$"]["tags"], serde_json::json!([]));
+        assert_eq!(draft["$"]["addresses"], serde_json::json!({}));
+        assert!(draft["$"]["parent"].is_null());
     }
 }

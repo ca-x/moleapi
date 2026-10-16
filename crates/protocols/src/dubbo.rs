@@ -186,6 +186,8 @@ pub struct DubboMetadataProperty {
 pub struct DubboMetadataType {
     pub type_name: String,
     pub properties: Vec<DubboMetadataProperty>,
+    pub items: Vec<String>,
+    pub enums: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -404,9 +406,34 @@ fn parse_metadata_definition(
                 type_name: property_type.to_owned(),
             });
         }
+        let parse_entries = |field: &str, limit: usize| -> Result<Vec<String>> {
+            let entries = entry
+                .get(field)
+                .and_then(Value::as_array)
+                .with_context(|| format!("Metadata type {field} missing"))?;
+            ensure!(
+                entries.len() <= limit,
+                "Metadata type {field} count exceeds limit"
+            );
+            entries
+                .iter()
+                .map(|value| {
+                    let value = value.as_str().context("Invalid metadata type entry")?;
+                    ensure!(
+                        !value.is_empty()
+                            && value.len() <= 256
+                            && !value.chars().any(char::is_control),
+                        "Invalid metadata type entry"
+                    );
+                    Ok(value.to_owned())
+                })
+                .collect()
+        };
         types.push(DubboMetadataType {
             type_name: type_name.to_owned(),
             properties,
+            items: parse_entries("items", 32)?,
+            enums: parse_entries("enums", 128)?,
         });
     }
     Ok(DubboMetadataPreview {

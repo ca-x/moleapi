@@ -106,6 +106,35 @@ async fn main() -> Result<()> {
         "Metadata DTO field mapping differs from provider definition"
     );
     ensure!(
+        profile
+            .properties
+            .iter()
+            .any(|field| field.name == "address" && field.type_name == "fixture.Address")
+            && profile
+                .properties
+                .iter()
+                .any(|field| field.name == "tier" && field.type_name == "fixture.Tier")
+            && profile.properties.iter().any(|field| field.name == "tags"
+                && field.type_name == "java.util.List<java.lang.String>")
+            && profile
+                .properties
+                .iter()
+                .any(|field| field.name == "addresses"
+                    && field.type_name == "java.util.Map<java.lang.String,fixture.Address>"),
+        "Metadata nested DTO, enum or collection property mapping differs from provider"
+    );
+    let definition = |name: &str| preview.types.iter().find(|row| row.type_name == name);
+    ensure!(
+        definition("fixture.Address")
+            .is_some_and(|row| row.properties.iter().any(|field| field.name == "street"))
+            && definition("fixture.Tier").is_some_and(|row| row.enums == ["FREE", "PAID"])
+            && definition("java.util.List<java.lang.String>")
+                .is_some_and(|row| row.items == ["java.lang.String"])
+            && definition("java.util.Map<java.lang.String,fixture.Address>")
+                .is_some_and(|row| row.items == ["java.lang.String", "fixture.Address"]),
+        "Metadata nested type definitions differ from provider"
+    );
+    ensure!(
         preview_zookeeper_metadata(
             &endpoint,
             &config,

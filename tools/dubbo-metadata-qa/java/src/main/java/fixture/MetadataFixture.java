@@ -42,6 +42,7 @@ public class MetadataFixture {
         if(definition==null || !definition.contains("echo")) throw new IllegalStateException("Missing service definition: "+definition);
         if(calls.get()!=0) throw new IllegalStateException("Metadata lookup invoked provider");
         System.out.println("METADATA_REGISTRY="+endpoint);
+        System.out.println("METADATA_PROVIDER_PORT="+protocol.getPort());
         System.out.println("METADATA_PATH=/dubbo/"+id.getUniqueKey(KeyTypeEnum.PATH));
         System.out.println("METADATA_JSON="+definition);
         System.out.flush();

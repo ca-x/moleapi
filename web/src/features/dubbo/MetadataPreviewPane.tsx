@@ -9,7 +9,7 @@ type Preview = {
   service:string; version:string; group:string; application:string;
   metadata_path:string; document_sha256:string; raw_document:string;
   methods:{name:string;parameter_types:string[];return_type:string}[];
-  types:{type_name:string;properties:{name:string;type_name:string}[]}[];
+  types:{type_name:string;properties:{name:string;type_name:string}[];items:string[];enums:string[]}[];
 };
 const signature = (method:Preview["methods"][number]) => `${method.name}(${method.parameter_types.join(",")})`;
 
@@ -64,6 +64,22 @@ export default function MetadataPreviewPane({request, update, workspaceId, works
   }) ?? [];
   const selected = (method:Preview["methods"][number]) =>
     decisions[signature(method)] ?? (conflicts(method).length ? "skip" : "add");
+  const relatedTypes = (method:Preview["methods"][number]) => {
+    const definitions = new Map(preview?.types.map(type=>[type.type_name,type]));
+    const queue = [...method.parameter_types,method.return_type];
+    const seen = new Set<string>();
+    const linked:Preview["types"] = [];
+    while(queue.length && seen.size<64) {
+      const name = queue.shift()!;
+      if(seen.has(name)) continue;
+      seen.add(name);
+      const definition = definitions.get(name);
+      if(!definition) continue;
+      if(definition.properties.length || definition.items.length || definition.enums.length) linked.push(definition);
+      queue.push(...definition.properties.map(property=>property.type_name),...definition.items);
+    }
+    return {linked,truncated:queue.length>0};
+  };
   const hasSelected = preview?.methods.some(method=>selected(method)!=="skip") ?? false;
   const apply = () => {
     if (!preview || !workspaceId || !collection || workspaceRevision===undefined || !onImported || pending || dirty) return;
@@ -98,18 +114,28 @@ export default function MetadataPreviewPane({request, update, workspaceId, works
     {success && <Text size="2" color="green" role="status">{success}</Text>}
     {preview && <div>
       <Text size="2">{preview.service} · {preview.version} · {preview.group} · {preview.application}</Text>
-      {preview.methods.map((method,index)=><div key={`${method.name}-${index}`} style={{marginTop:12}}>
+      {preview.methods.map((method,index)=>{
+        const {linked,truncated} = relatedTypes(method);
+        return <div key={`${method.name}-${index}`} style={{marginTop:12}}>
         <Text as="p" size="2">{method.name}({method.parameter_types.join(", ")}) → {method.return_type}</Text>
-        {preview.types.filter(type=>type.properties.length>0 && [...method.parameter_types,method.return_type].includes(type.type_name)).map(type=><Text key={type.type_name} as="p" size="2" color="gray">
-          {type.type_name}: {type.properties.map(property=>`${property.name}: ${property.type_name}`).join(", ")}
-        </Text>)}
+        {!!linked.length && <details>
+          <summary>{t("类型映射")} ({linked.length})</summary>
+          {linked.map(type=><Text key={type.type_name} as="p" size="2" color="gray" style={{overflowWrap:"anywhere"}}>
+            {type.type_name}: {[
+              ...type.properties.map(property=>`${property.name}: ${property.type_name}`),
+              ...(type.items.length?[`${t("元素类型")}: ${type.items.join(", ")}`]:[]),
+              ...(type.enums.length?[`${t("枚举值")}: ${type.enums.join(", ")}`]:[]),
+            ].join("; ")}
+          </Text>)}
+          {truncated && <Text as="p" size="2" color="gray">{t("更多类型见原始元数据")}</Text>}
+        </details>}
         <Choice value={selected(method)} disabled={disabled||pending} label={`${t("导入决策")}: ${method.name}`}
           options={[
             {value:"skip",label:t("跳过")},
             {value:"add",label:conflicts(method).length?t("另建接口"):t("添加接口")},
             ...conflicts(method).map(row=>({value:`replace:${row.id}`,label:`${t("替换")} ${row.name}`})),
           ]} onChange={value=>setDecisions(current=>({...current,[signature(method)]:value}))}/>
-      </div>)}
+      </div>})}
       {dirty && <Text as="p" size="2" color="gray">{t("先保存当前请求，再导入元数据。")}</Text>}
       <Button size="2" style={{marginTop:12}} loading={pending} disabled={disabled||dirty||!hasSelected||!workspaceId||!collection||workspaceRevision===undefined||!onImported||pending} onClick={apply}>{t("导入所选方法")}</Button>
       <details><summary>{t("原始元数据")}</summary><pre className="mono" style={{maxHeight:240,overflow:"auto",whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{preview.raw_document}</pre></details>

@@ -206,16 +206,21 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-          cache-dependency-path: tools/dubbo-metadata-qa/java/pom.xml
+          cache-dependency-path: |
+            tools/dubbo-metadata-qa/java/pom.xml
+            tools/dubbo-worker/pom.xml
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
       - name: Build official Apache metadata center fixture
         run: mvn -B --strict-checksums -f tools/dubbo-metadata-qa/java/pom.xml package dependency:copy-dependencies -DincludeScope=runtime
+      - name: Prepare pinned official Dubbo worker
+        run: python3 scripts/prepare_dubbo_worker.py --maven "$(command -v mvn)"
       - name: Compare provider report with checked Rust preview
         run: |
           python3 tools/dubbo-metadata-qa/verify.py --java "$(readlink -f "$(command -v java)")" \
+            --jar "$PWD/vendor/dubbo-worker/current/engine.jar" \
             --output "$RUNNER_TEMP/metadata-evidence.json"
       - uses: actions/upload-artifact@v4
         if: always()
