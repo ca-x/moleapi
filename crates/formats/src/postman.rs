@@ -21,6 +21,45 @@ pub(super) fn has_runtime_asap(value: &Value) -> bool {
                     .any(|item| item.get("originalRequest").is_some_and(has_runtime_asap))
             })
 }
+fn validate_auth_helpers(value: &Value) -> Result<()> {
+    if let Some(auth) = value.get("auth").and_then(Value::as_object) {
+        for (helper, attributes) in auth {
+            if helper == "type" {
+                continue;
+            }
+            if let Some(attributes) = attributes.as_object() {
+                ensure!(
+                    attributes
+                        .values()
+                        .all(|value| !value.is_array() && !value.is_object()),
+                    "Postman {helper} authentication has an unrepresentable helper value"
+                );
+            }
+        }
+    }
+    if let Some(request) = value.get("request") {
+        validate_auth_helpers(request)?;
+    }
+    for item in value
+        .get("item")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        validate_auth_helpers(item)?;
+    }
+    for response in value
+        .get("response")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        if let Some(original) = response.get("originalRequest") {
+            validate_auth_helpers(original)?;
+        }
+    }
+    Ok(())
+}
 fn collection_schema(dialect: &str, runtime_asap: bool) -> Result<Value> {
     let mut schema: Value = serde_json::from_str(if dialect == "2.0.0" {
         include_str!("../schemas/postman20.json")
@@ -59,6 +98,7 @@ pub(super) fn import(content: &str) -> Result<ImportResult> {
     if let Err(error) = validator.validate(&source) {
         bail!("Postman Collection 结构无效: {error}");
     }
+    validate_auth_helpers(&source)?;
     let name = source["info"]["name"]
         .as_str()
         .unwrap_or("Postman 导入")
@@ -173,6 +213,9 @@ fn walk(
             .get("body")
             .or_else(|| raw.get("data"))
             .unwrap_or(&missing_body);
+        if raw.get("data").is_some() {
+            validate_legacy_data(body, name)?;
+        }
         let mode = body["mode"].as_str().unwrap_or("");
         match mode {
             "graphql" => {
@@ -294,7 +337,7 @@ fn walk(
                 "{name}: {other} Body 已保留在原始集合，需要对应协议编辑器"
             )),
         }
-        result.auth = import_auth(raw.get("auth"), warnings, name).unwrap_or_else(inherit_auth);
+        result.auth = import_auth(raw.get("auth"), warnings, name)?.unwrap_or_else(inherit_auth);
         result.pre_request_script = event_script(item, "prerequest");
         result.post_response_script = event_script(item, "test");
         for response in item["response"].as_array().into_iter().flatten() {
@@ -336,7 +379,7 @@ fn walk(
     collections.push(Collection {
         variables_enabled: if depth > 0 { Some(false) } else { None },
         parent_id: parent_id.map(str::to_owned),
-        auth: import_auth(container.get("auth"), warnings, path),
+        auth: import_auth(container.get("auth"), warnings, path)?,
         variables,
         pre_request_script: event_script(container, "prerequest"),
         post_response_script: event_script(container, "test"),
@@ -380,8 +423,10 @@ fn import_auth(
     value: Option<&Value>,
     warnings: &mut Vec<String>,
     name: &str,
-) -> Option<moleapi_core::Auth> {
-    let value = value.filter(|v| !v.is_null())?;
+) -> Result<Option<moleapi_core::Auth>> {
+    let Some(value) = value.filter(|v| !v.is_null()) else {
+        return Ok(None);
+    };
     let mut auth = inherit_auth();
     match value["type"].as_str().unwrap_or("") {
         "bearer" => {
@@ -395,14 +440,15 @@ fn import_auth(
         }
         "apikey" => {
             auth.kind = "apikey".into();
+            let location = match auth_value(value, "apikey", "in").as_str() {
+                "query" => moleapi_core::AuthLocation::Query,
+                "" | "header" => moleapi_core::AuthLocation::Header,
+                other => bail!("{name}: unsupported Postman API key location {other}"),
+            };
             auth.api_key = Some(Box::new(moleapi_core::ApiKeyAuth {
                 name: auth_value(value, "apikey", "key"),
                 value: auth_value(value, "apikey", "value"),
-                location: if auth_value(value, "apikey", "in") == "query" {
-                    moleapi_core::AuthLocation::Query
-                } else {
-                    moleapi_core::AuthLocation::Header
-                },
+                location,
             }));
         }
         "asap" => {
@@ -573,7 +619,7 @@ fn import_auth(
             auth.aws = Some(Box::new(aws));
         }
         "noauth" => auth.kind = "none".into(),
-        "" => return None,
+        "" => return Ok(None),
         other => {
             auth.kind = "none".into();
             warnings.push(format!(
@@ -600,7 +646,78 @@ fn import_auth(
         }
         _ => {}
     }
-    Some(auth)
+    Ok(Some(auth))
+}
+
+fn validate_legacy_data(data: &Value, name: &str) -> Result<()> {
+    let object = data
+        .as_object()
+        .context("Postman legacy data must be an object")?;
+    let mode = object
+        .get("mode")
+        .and_then(Value::as_str)
+        .context("Postman legacy data mode is missing")?;
+    match mode {
+        "raw" => ensure!(
+            data["raw"].is_string(),
+            "{name}: legacy raw body must be a string"
+        ),
+        "urlencoded" | "formdata" => {
+            let rows = data[mode]
+                .as_array()
+                .context("Postman legacy body rows must be an array")?;
+            for row in rows {
+                ensure!(
+                    row["key"].is_string(),
+                    "{name}: legacy body row key must be a string"
+                );
+                if mode == "formdata" {
+                    ensure!(
+                        matches!(row["type"].as_str(), None | Some("text" | "file")),
+                        "{name}: unsupported legacy form-data row type"
+                    );
+                }
+                ensure!(
+                    row.get("disabled").is_none_or(Value::is_boolean),
+                    "{name}: legacy body row disabled flag must be boolean"
+                );
+                if mode == "urlencoded" || row["type"] != "file" {
+                    ensure!(
+                        row.get("value").is_none_or(Value::is_string),
+                        "{name}: legacy body row value must be a string"
+                    );
+                } else {
+                    ensure!(
+                        matches!(&row["src"], Value::String(_) | Value::Null)
+                            || row["src"]
+                                .as_array()
+                                .is_some_and(|items| items.iter().all(Value::is_string)),
+                        "{name}: legacy file references must be strings"
+                    );
+                }
+            }
+        }
+        "file" => {
+            ensure!(
+                data["file"].is_object(),
+                "{name}: legacy file body must be an object"
+            );
+            ensure!(
+                matches!(&data["file"]["src"], Value::String(_) | Value::Null),
+                "{name}: legacy file source must be a path or null"
+            );
+            ensure!(
+                data["file"].get("content").is_none_or(Value::is_null),
+                "{name}: embedded legacy file content cannot be mapped"
+            );
+        }
+        "graphql" => ensure!(
+            data["graphql"]["query"].is_string(),
+            "{name}: legacy GraphQL query must be a string"
+        ),
+        _ => bail!("{name}: unsupported Postman legacy data mode {mode}"),
+    }
+    Ok(())
 }
 fn export_auth(auth: &moleapi_core::Auth) -> Result<Value> {
     Ok(match auth.kind.as_str() {

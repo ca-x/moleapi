@@ -30,3 +30,5 @@
 ## Progress, 2026-10-17
 
 The official 2.0 schema, object-auth mapping and legacy `data` body path are implemented. The integrated 61-case interchange suite, hosted owner/privacy and actual Bearer/API Key calls, CLI process import/export, 333 frontend tests, strict Clippy and production frontend/embedded server builds passed locally. A saved/reloaded 390px Chinese/English browser import showed auth, body and example fields without document overflow. Branch CI and current platform gates remain.
+
+Independent pre-merge review reproduced an object-valued Bearer token leaking in default backup, malformed legacy `data` silently stringifying a number, and unsupported API Key `cookie` placement becoming a header. The converter now rejects unsupported object helper values across active and source-only original requests, validates legacy mode/payload shape, and rejects unsupported API Key placement. The red/green regression joins a 62-case interchange suite; four hosted format tests, the standalone CLI fixture, strict scoped Clippy and server/CLI builds passed locally. Current-head CI and final merge remain open.

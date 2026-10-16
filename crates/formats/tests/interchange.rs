@@ -237,6 +237,36 @@ fn postman20_and_21_validate_their_distinct_auth_shapes() {
 }
 
 #[test]
+fn postman20_rejects_unrepresentable_auth_and_legacy_body_values() {
+    let fixture: Value = serde_json::from_str(include_str!("fixtures/postman20.json")).unwrap();
+    let mut source = fixture.clone();
+    source["auth"] = json!({"type":"bearer","bearer":{"token":{"value":"marker-secret"}}});
+    assert!(import("postman", &source.to_string()).is_err());
+
+    source = fixture.clone();
+    source["item"][0]["item"][0]["response"][0]["originalRequest"] = json!({"url":"https://example.test","auth":{"type":"bearer","bearer":{"token":{"value":"marker-secret"}}}});
+    assert!(import("postman", &source.to_string()).is_err());
+
+    source = fixture.clone();
+    source["auth"] =
+        json!({"type":"apikey","apikey":{"key":"X-Key","value":"secret","in":"cookie"}});
+    assert!(import("postman", &source.to_string()).is_err());
+
+    for data in [
+        json!({"mode":"raw","raw":42}),
+        json!({"raw":"unmapped"}),
+        json!({"mode":"raw"}),
+        json!({"mode":"urlencoded","urlencoded":[{"key":"x","value":42}]}),
+        json!({"mode":"formdata","formdata":[{"key":"x","type":"other","value":"v"}]}),
+        json!({"mode":"formdata","formdata":[{"key":"x","type":"file","src":[42]}]}),
+    ] {
+        source = fixture.clone();
+        source["item"][0]["item"][1]["request"]["data"] = data;
+        assert!(import("postman", &source.to_string()).is_err());
+    }
+}
+
+#[test]
 fn postman20_legacy_data_uses_the_shared_form_and_multipart_mapper() {
     let mut source: Value = serde_json::from_str(include_str!("fixtures/postman20.json")).unwrap();
     let request = &mut source["item"][0]["item"][1]["request"];
