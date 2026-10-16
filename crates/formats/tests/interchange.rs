@@ -11,6 +11,138 @@ fn workspace(data: moleapi_core::WorkspaceData) -> Workspace {
     }
 }
 #[test]
+fn postman20_object_auth_and_original_source_are_imported_without_dropping_values() {
+    let source = include_str!("fixtures/postman20.json");
+    let imported = import("postman", source).unwrap();
+    let root = imported
+        .data
+        .collections
+        .iter()
+        .find(|item| item.name == "Postman 2.0 fixture")
+        .unwrap();
+    assert_eq!(root.auth.as_ref().unwrap().kind, "basic");
+    assert_eq!(root.auth.as_ref().unwrap().username, "collection-user");
+    assert_eq!(root.auth.as_ref().unwrap().password, "collection-secret");
+    let requests = imported
+        .data
+        .collections
+        .iter()
+        .flat_map(|collection| collection.requests.iter())
+        .collect::<Vec<_>>();
+    assert_eq!(requests.len(), 2);
+    let read = requests
+        .iter()
+        .find(|request| request.name == "Read account")
+        .unwrap();
+    assert_eq!(read.auth.kind, "bearer");
+    assert_eq!(read.auth.token, "bearer-secret");
+    assert_eq!(read.examples[0].status, 200);
+    let create = requests
+        .iter()
+        .find(|request| request.name == "Create account")
+        .unwrap();
+    assert_eq!(create.auth.kind, "apikey");
+    assert_eq!(
+        create.auth.api_key.as_ref().unwrap().value,
+        "api-key-secret"
+    );
+    assert_eq!(create.body_kind, "json");
+    assert!(create.post_response_script.contains("created"));
+    assert_eq!(imported.data.specifications[0].source, source);
+    assert_eq!(imported.data.specifications[0].dialect, "2.0.0");
+    let saved = workspace(imported.data);
+    let safe = export(&saved, "moleapi", false).unwrap();
+    assert!(!safe.content.contains("collection-secret"));
+    assert!(!safe.content.contains("bearer-secret"));
+    assert!(!safe.content.contains("api-key-secret"));
+    let full = export(&saved, "moleapi", true).unwrap();
+    assert!(full.content.contains("collection-secret"));
+    assert!(full.content.contains("bearer-secret"));
+    assert!(full.content.contains("api-key-secret"));
+    let restored = import("moleapi", &full.content).unwrap();
+    assert_eq!(restored.data.specifications[0].source, source);
+}
+
+#[test]
+fn postman20_and_21_validate_their_distinct_auth_shapes() {
+    let mut old: Value = serde_json::from_str(include_str!("fixtures/postman20.json")).unwrap();
+    old["auth"]["basic"] = json!([{"key":"username","value":"wrong shape"}]);
+    assert!(import("postman", &old.to_string()).is_err());
+    old = serde_json::from_str(include_str!("fixtures/postman20.json")).unwrap();
+    old["info"]["schema"] =
+        json!("https://schema.getpostman.com/json/collection/v9.0.0/collection.json");
+    assert!(import("postman", &old.to_string()).is_err());
+    old = serde_json::from_str(include_str!("fixtures/postman20.json")).unwrap();
+    old["auth"]["basic"] = json!({});
+    let imported = import("postman", &old.to_string()).unwrap();
+    assert!(
+        imported
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Basic"))
+    );
+    let mut current = postman();
+    current["auth"] = json!({"type":"basic","basic":{"username":"wrong shape"}});
+    assert!(import("postman", &current.to_string()).is_err());
+}
+
+#[test]
+fn postman20_legacy_data_uses_the_shared_form_and_multipart_mapper() {
+    let mut source: Value = serde_json::from_str(include_str!("fixtures/postman20.json")).unwrap();
+    let request = &mut source["item"][0]["item"][1]["request"];
+    request["data"] = json!({"mode":"urlencoded","urlencoded":[{"key":"same","value":"first"},{"key":"same","value":"second"}]});
+    let imported = import("postman", &source.to_string()).unwrap();
+    let create = imported
+        .data
+        .collections
+        .iter()
+        .flat_map(|collection| &collection.requests)
+        .find(|request| request.name == "Create account")
+        .unwrap();
+    assert_eq!(create.body_kind, "form");
+    assert_eq!(create.body, "same=first&same=second");
+    let request = &mut source["item"][0]["item"][1]["request"];
+    request["data"] =
+        json!({"mode":"formdata","formdata":[{"key":"label","value":"two words","type":"text"}]});
+    let imported = import("postman", &source.to_string()).unwrap();
+    let create = imported
+        .data
+        .collections
+        .iter()
+        .flat_map(|collection| &collection.requests)
+        .find(|request| request.name == "Create account")
+        .unwrap();
+    assert_eq!(create.body_kind, "multipart");
+    assert!(create.body.contains("two words"));
+    source["item"][0]["item"][1]["request"]["body"] =
+        source["item"][0]["item"][1]["request"]["data"].clone();
+    assert!(import("postman", &source.to_string()).is_err());
+}
+
+#[test]
+fn postman20_unmapped_proxy_and_certificate_are_warned_and_default_source_is_private() {
+    let mut source: Value = serde_json::from_str(include_str!("fixtures/postman20.json")).unwrap();
+    let request = &mut source["item"][0]["item"][1]["request"];
+    request["proxy"] = json!({"host":"proxy.example.test","port":8080});
+    request["certificate"] = json!({"key":{"src":"postman20-private-key-location"},"cert":{"src":"public-cert-location"}});
+    let imported = import("postman", &source.to_string()).unwrap();
+    assert!(
+        imported
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("proxy settings"))
+    );
+    assert!(
+        imported
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("client certificate"))
+    );
+    let safe = export(&workspace(imported.data), "moleapi", false).unwrap();
+    assert!(!safe.content.contains("postman20-private-key-location"));
+    assert!(!safe.content.contains("proxy.example.test"));
+}
+#[test]
 fn cookie_jar_override_survives_native_export_and_rejects_unmapped_formats() {
     let mut imported = import("postman", &postman().to_string()).unwrap();
     let request = &mut imported.data.collections[0].requests[0];

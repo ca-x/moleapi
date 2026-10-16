@@ -21,9 +21,17 @@ pub(super) fn has_runtime_asap(value: &Value) -> bool {
                     .any(|item| item.get("originalRequest").is_some_and(has_runtime_asap))
             })
 }
-fn collection_schema(runtime_asap: bool) -> Result<Value> {
-    let mut schema: Value = serde_json::from_str(include_str!("../schemas/postman21.json"))?;
+fn collection_schema(dialect: &str, runtime_asap: bool) -> Result<Value> {
+    let mut schema: Value = serde_json::from_str(if dialect == "2.0.0" {
+        include_str!("../schemas/postman20.json")
+    } else {
+        include_str!("../schemas/postman21.json")
+    })?;
     if runtime_asap {
+        ensure!(
+            dialect == "2.1.0",
+            "Postman 2.0 ASAP requires an explicit migration to 2.1"
+        );
         schema["definitions"]["auth"]["properties"]["type"]["enum"]
             .as_array_mut()
             .context("Postman auth enum missing")?
@@ -35,14 +43,18 @@ fn collection_schema(runtime_asap: bool) -> Result<Value> {
 }
 pub(super) fn import(content: &str) -> Result<ImportResult> {
     let source: Value = serde_json::from_str(content).context("Postman Collection JSON 无效")?;
-    let schema = source["info"]["schema"]
+    let schema_url = source["info"]["schema"]
         .as_str()
         .context("缺少 Postman info.schema")?;
-    if !schema.contains("v2.1.0") {
-        bail!("此入口接受 Postman 2.1 JSON；其他版本请使用对应格式入口");
-    }
+    let dialect = if schema_url.ends_with("/v2.0.0/collection.json") {
+        "2.0.0"
+    } else if schema_url.ends_with("/v2.1.0/collection.json") {
+        "2.1.0"
+    } else {
+        bail!("此入口接受 Postman Collection 2.0/2.1 JSON；其他版本请使用对应格式入口");
+    };
     let runtime_asap = has_runtime_asap(&source);
-    let schema = collection_schema(runtime_asap)?;
+    let schema = collection_schema(dialect, runtime_asap)?;
     let validator = jsonschema::validator_for(&schema).context("无法加载 Postman schema")?;
     if let Err(error) = validator.validate(&source) {
         bail!("Postman Collection 结构无效: {error}");
@@ -73,7 +85,7 @@ pub(super) fn import(content: &str) -> Result<ImportResult> {
         name: name.clone(),
         kind: "postman".into(),
         source: content.into(),
-        dialect: "2.1.0".into(),
+        dialect: dialect.into(),
     });
     Ok(ImportResult {
         name,
@@ -135,6 +147,16 @@ fn walk(
         result.specification_id = Some(spec_id.into());
         result.operation_id = Some(format!("{path}/{index}"));
         result.description = text(&raw["description"]);
+        if raw.get("proxy").is_some_and(|value| !value.is_null()) {
+            warnings.push(format!(
+                "{name}: source proxy settings were retained but not activated; configure native network settings before sending"
+            ));
+        }
+        if raw.get("certificate").is_some_and(|value| !value.is_null()) {
+            warnings.push(format!(
+                "{name}: source client certificate was retained but not activated; configure native network settings before sending"
+            ));
+        }
         if let Some(headers) = raw["header"].as_array() {
             for header in headers {
                 let mut h = pair(header["key"].as_str().unwrap_or(""), text(&header["value"]));
@@ -142,10 +164,19 @@ fn walk(
                 result.headers.push(h);
             }
         }
-        let mode = raw["body"]["mode"].as_str().unwrap_or("");
+        ensure!(
+            raw.get("body").is_none() || raw.get("data").is_none(),
+            "{name}: both body and legacy data are present; choose one before import"
+        );
+        let missing_body = Value::Null;
+        let body = raw
+            .get("body")
+            .or_else(|| raw.get("data"))
+            .unwrap_or(&missing_body);
+        let mode = body["mode"].as_str().unwrap_or("");
         match mode {
             "graphql" => {
-                let gql = &raw["body"]["graphql"];
+                let gql = &body["graphql"];
                 let raw_variables = gql.get("variables").cloned().unwrap_or_else(|| json!({}));
                 let source = if let Some(value) = raw_variables.as_str() {
                     value.to_owned()
@@ -161,8 +192,8 @@ fn walk(
                 )?;
             }
             "raw" => {
-                result.body = text(&raw["body"]["raw"]);
-                result.body_kind = if raw["body"]["options"]["raw"]["language"] == "json"
+                result.body = text(&body["raw"]);
+                result.body_kind = if body["options"]["raw"]["language"] == "json"
                     || result.headers.iter().any(|h| {
                         h.key.eq_ignore_ascii_case("content-type") && h.value.contains("json")
                     }) {
@@ -174,7 +205,7 @@ fn walk(
             }
             "urlencoded" => {
                 let mut serializer = url::form_urlencoded::Serializer::new(String::new());
-                for p in raw["body"]["urlencoded"].as_array().into_iter().flatten() {
+                for p in body["urlencoded"].as_array().into_iter().flatten() {
                     if !p["disabled"].as_bool().unwrap_or(false) {
                         serializer.append_pair(p["key"].as_str().unwrap_or(""), &text(&p["value"]));
                     }
@@ -183,7 +214,7 @@ fn walk(
                 result.body = serializer.finish();
             }
             "file" => {
-                let src = raw["body"]["file"]["src"].as_str().unwrap_or("");
+                let src = body["file"]["src"].as_str().unwrap_or("");
                 result.body_kind = "binary".into();
                 result.body = serde_json::to_string(&moleapi_core::BinaryBody {
                     file_name: src.rsplit(['/', '\\']).next().unwrap_or("").into(),
@@ -201,7 +232,7 @@ fn walk(
             }
             "formdata" => {
                 let mut parts = Vec::new();
-                for entry in raw["body"]["formdata"].as_array().into_iter().flatten() {
+                for entry in body["formdata"].as_array().into_iter().flatten() {
                     let value = if entry["type"] == "file" {
                         let mut paths: Vec<String> = match &entry["src"] {
                             Value::Array(values) => values
@@ -550,6 +581,25 @@ fn import_auth(
             ));
         }
     }
+    match auth.kind.as_str() {
+        "basic" if auth.username.is_empty() || auth.password.is_empty() => warnings.push(format!(
+            "{name}: Basic username/password is incomplete; configure authentication before sending"
+        )),
+        "bearer" if auth.token.is_empty() => warnings.push(format!(
+            "{name}: Bearer token is empty; configure authentication before sending"
+        )),
+        "apikey"
+            if auth
+                .api_key
+                .as_ref()
+                .is_none_or(|key| key.name.is_empty() || key.value.is_empty()) =>
+        {
+            warnings.push(format!(
+                "{name}: API key name/value is incomplete; configure authentication before sending"
+            ));
+        }
+        _ => {}
+    }
     Some(auth)
 }
 fn export_auth(auth: &moleapi_core::Auth) -> Result<Value> {
@@ -693,6 +743,9 @@ fn text(value: &Value) -> String {
     })
 }
 fn auth_value(auth: &Value, kind: &str, key: &str) -> String {
+    if let Some(object) = auth[kind].as_object() {
+        return object.get(key).map(text).unwrap_or_default();
+    }
     auth[kind]
         .as_array()
         .into_iter()
@@ -915,7 +968,7 @@ pub(super) fn export(workspace: &Workspace) -> Result<String> {
     if runtime_asap {
         result["info"]["_moleapi_runtime_auth_extensions"] = json!(["asap"]);
     }
-    let schema = collection_schema(runtime_asap)?;
+    let schema = collection_schema("2.1.0", runtime_asap)?;
     jsonschema::validator_for(&schema)?
         .validate(&result)
         .map_err(|e| anyhow::anyhow!("导出结果不符合 Postman schema 或声明的 Runtime 扩展: {e}"))?;

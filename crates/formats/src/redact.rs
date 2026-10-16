@@ -705,6 +705,9 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
     }
     for specification in &mut result.data.specifications {
         if let Ok(mut value) = serde_yaml_ng::from_str::<Value>(&specification.source) {
+            if specification.kind == "postman" {
+                redact_postman_unmapped_transport(&mut value);
+            }
             if specification.kind == "openapi" && value["format"] == "moleapi-openapi-source-v1" {
                 // File content is opaque YAML/JSON text here; safe projection runs in the
                 // capped project worker. Exact source export requires include_secrets.
@@ -740,6 +743,25 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
         }
     }
     result
+}
+fn redact_postman_unmapped_transport(value: &mut Value) {
+    match value {
+        Value::Object(object) => {
+            // Imported proxy/certificate settings are retained as source only.
+            // Default backups must not expose local key paths or passphrases.
+            object.remove("proxy");
+            object.remove("certificate");
+            for child in object.values_mut() {
+                redact_postman_unmapped_transport(child);
+            }
+        }
+        Value::Array(values) => {
+            for child in values {
+                redact_postman_unmapped_transport(child);
+            }
+        }
+        _ => {}
+    }
 }
 fn mqtt_properties(values: &mut [moleapi_core::MqttProperty]) {
     for value in values {

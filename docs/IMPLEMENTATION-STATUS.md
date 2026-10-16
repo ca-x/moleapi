@@ -20,6 +20,8 @@ The current fix round replaces cooperative-only CPU enforcement with one worker 
 
 ## Continuing work
 
+Postman Collection2.0 import continuation, 2026-10-17: `feat/postman20-import` validates version2.0 JSON against a pinned official bundled schema, then uses the existing2.1 item/body/script/response mapper. It handles object-form Basic/Bearer/API Key helpers and legacy request `data`, keeps the exact original source with dialect2.0.0, and rejects ambiguous `body` plus `data`. Unmapped proxy/client certificate settings warn; default backup removes their private key paths while full backup restores source. Hosted owner isolation and actual Bearer/API Key loopback calls, standalone CLI import/export, and a saved/reloaded 390px bilingual browser flow passed. The 58-case interchange and 332-case frontend suites, strict all-target Clippy and production frontend/embedded server builds passed locally. Branch CI and broader interchange/platform gates remain open; see `POSTMAN-IMPORT-COVERAGE.md`.
+
 The full matrix remains the authority. Next work extends the versioned pm compatibility subset and richer authentication/body modes, real SSE/WebSocket protocol sessions and schema editors; then scenario/dataset/Mock/publishing, collaboration/versioning/Git/CLI/AI/enterprise modules. Vendor-marketplace/billing entries retain explicit product-boundary distinctions. No unimplemented feature is labeled complete merely because a component or route exists.
 
 ## SSE/WebSocket extension verified locally
