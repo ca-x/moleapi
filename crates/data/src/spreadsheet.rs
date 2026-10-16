@@ -1,7 +1,7 @@
 //! Bounded spreadsheet to Arrow conversion for the isolated Data file worker.
 use crate::{MAX_CELL, MAX_COLUMNS, MAX_FILE_ROWS};
 use anyhow::{Context, Result, ensure};
-use calamine::{Data, HeaderRow, Ods, Range, Reader, Xls, Xlsx, open_workbook_from_rs};
+use calamine::{Data, HeaderRow, Ods, Range, Reader, Xls, Xlsb, Xlsx, open_workbook_from_rs};
 use datafusion::arrow::{
     array::{ArrayRef, BooleanArray, Int64Array, StringBuilder},
     datatypes::{DataType, Field, Schema},
@@ -273,6 +273,13 @@ pub(crate) fn read_spreadsheet_batches(
             let name = selected_sheet(&names, &config.sheet_name)?;
             workbook.worksheet_range(name)?
         }
+        DataFileFormat::Xlsb => {
+            let mut workbook: Xlsb<_> = open_workbook_from_rs(Cursor::new(bytes))?;
+            workbook.with_header_row(HeaderRow::Row(0));
+            let names = workbook.sheet_names();
+            let name = selected_sheet(&names, &config.sheet_name)?;
+            workbook.worksheet_range(name)?
+        }
         DataFileFormat::Xlsx => {
             let mut workbook: Xlsx<_> = open_workbook_from_rs(Cursor::new(bytes))?;
             workbook.with_header_row(HeaderRow::Row(0));
@@ -291,7 +298,7 @@ pub(crate) fn read_spreadsheet_batches(
     };
     if matches!(
         config.file_format,
-        DataFileFormat::Ods | DataFileFormat::Xls
+        DataFileFormat::Ods | DataFileFormat::Xls | DataFileFormat::Xlsb
     ) {
         for row in range.rows() {
             for cell in row {

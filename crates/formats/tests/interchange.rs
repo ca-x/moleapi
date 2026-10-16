@@ -1061,6 +1061,42 @@ fn xls_sheet_scope_survives_private_and_default_native_backups() {
 }
 
 #[test]
+fn xlsb_sheet_scope_survives_private_and_default_native_backups() {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    let bytes = include_bytes!("../../data/tests/fixtures/calamine-issues.xlsb");
+    let request: moleapi_core::RequestSpec = serde_json::from_value(json!({
+        "id":"xlsb","name":"Workbook","method":"GET","url":"","description":"",
+        "query":[],"headers":[],"body_kind":"none","body":"",
+        "auth":{"kind":"none","token":"","username":"","password":""},
+        "timeout_ms":5000,"verify_tls":true,"follow_redirects":false,"assertions":[],"examples":[],
+        "protocol":{"kind":"data","source":"local_file","file_format":"xlsb",
+            "file_name":"issues.xlsb","sheet_name":"issue2",
+            "file_base64":STANDARD.encode(bytes),"table_name":"data","csv_header":false,
+            "sql":"SELECT column_1 FROM data"}
+    }))
+    .unwrap();
+    let w = workspace(
+        serde_json::from_value(json!({"schema_version":1,
+        "collections":[{"id":"c","name":"Data","description":"","requests":[request]}],
+        "environments":[],"active_environment_id":null}))
+        .unwrap(),
+    );
+    let safe = export(&w, "moleapi", false).unwrap();
+    let restored = import("moleapi", &safe.content).unwrap();
+    let moleapi_core::Protocol::Data { config } =
+        &restored.data.collections[0].requests[0].protocol
+    else {
+        panic!("lost XLSB Data request")
+    };
+    assert_eq!(config.file_format, moleapi_core::DataFileFormat::Xlsb);
+    assert_eq!(config.sheet_name, "issue2");
+    assert!(config.file_base64.is_empty());
+    let full = export(&w, "moleapi", true).unwrap();
+    assert_eq!(import("moleapi", &full.content).unwrap().data, w.data);
+    assert!(export(&w, "postman", true).is_err());
+}
+
+#[test]
 fn structured_file_bodies_private_roundtrip_default_withholding_and_dynamic_modes() {
     let original=import("postman",r#"{"info":{"name":"files","schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},"item":[{"name":"file","request":{"method":"POST","url":"https://example.com","header":[],"body":{"mode":"formdata","formdata":[{"key":"upload","type":"file","src":[]},{"key":"same","type":"text","value":"first"},{"key":"same","type":"text","value":"second"}]}}}]}"#).unwrap();
     let mut w = workspace(original.data);

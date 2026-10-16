@@ -11,6 +11,70 @@ fn config(format: DataFileFormat) -> DataConfig {
 const XLSX: &[u8] = include_bytes!("../tests/fixtures/workbook.xlsx");
 const ODS: &[u8] = include_bytes!("../tests/fixtures/workbook.ods");
 const XLS: &[u8] = include_bytes!("../tests/fixtures/workbook.xls");
+const XLSB_ANY: &[u8] = include_bytes!("../tests/fixtures/calamine-any-sheets.xlsb");
+const XLSB_ISSUES: &[u8] = include_bytes!("../tests/fixtures/calamine-issues.xlsb");
+
+#[tokio::test]
+async fn xlsb_first_and_named_sheets_run_sql_with_typed_and_mixed_values() {
+    let mut config = config(DataFileFormat::Xlsb);
+    config.csv_header = false;
+    let first = FileSource::open(&config, XLSB_ANY).unwrap();
+    let rows = first
+        .query("SELECT column_1, column_2 FROM data WHERE column_1 = '3'")
+        .await
+        .unwrap();
+    assert_eq!(rows.rows[0][0], Cell::Text { value: "3".into() });
+    assert_eq!(rows.rows[0][1], Cell::Integer { value: "4".into() });
+
+    config.sheet_name = "issue2".into();
+    let named = FileSource::open(&config, XLSB_ISSUES).unwrap();
+    let rows = named
+        .query("SELECT column_1, column_2 FROM data WHERE column_1 = 2")
+        .await
+        .unwrap();
+    assert_eq!(rows.rows[0][0], Cell::Integer { value: "2".into() });
+    assert_eq!(rows.rows[0][1], Cell::Text { value: "b".into() });
+
+    config.sheet_name = "datatypes".into();
+    let mixed = FileSource::open(&config, XLSB_ISSUES).unwrap();
+    let rows = mixed
+        .query("SELECT column_1 FROM data LIMIT 4")
+        .await
+        .unwrap();
+    assert_eq!(rows.rows[0][0], Cell::Text { value: "1".into() });
+    assert_eq!(
+        rows.rows[1][0],
+        Cell::Text {
+            value: "1.5".into()
+        }
+    );
+    assert_eq!(rows.rows[2][0], Cell::Text { value: "ab".into() });
+    assert_eq!(
+        rows.rows[3][0],
+        Cell::Text {
+            value: "false".into()
+        }
+    );
+}
+
+#[test]
+fn xlsb_rejects_missing_empty_and_malformed_sheets_or_zip() {
+    let mut config = config(DataFileFormat::Xlsb);
+    let headers = FileSource::open(&config, XLSB_ANY).unwrap();
+    assert_eq!(headers.schema().columns[0].name, "1");
+    config.sheet_name = "Missing".into();
+    assert!(FileSource::open(&config, XLSB_ANY).is_err());
+    config.sheet_name = "Hidden".into();
+    assert!(FileSource::open(&config, XLSB_ANY).is_err());
+    config.sheet_name = "Visible".into();
+    assert!(FileSource::open(&config, b"not an XLSB workbook").is_err());
+    let oversized = include_bytes!("../tests/fixtures/oversized-entry.xlsx");
+    let error = FileSource::open(&config, oversized)
+        .err()
+        .unwrap()
+        .to_string();
+    assert!(error.contains("expanded size"), "{error}");
+}
 
 #[tokio::test]
 async fn xls_selected_sheet_runs_real_sql_with_safe_types() {
