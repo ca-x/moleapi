@@ -100,6 +100,24 @@ fn signature(method: &moleapi_protocols::dubbo::DubboMetadataMethod) -> String {
     format!("{}({})", method.name, method.parameter_types.join(","))
 }
 
+fn argument_draft(
+    type_name: &str,
+    types: &[moleapi_protocols::dubbo::DubboMetadataType],
+) -> String {
+    let Some(definition) = types
+        .iter()
+        .find(|definition| definition.type_name == type_name && !definition.properties.is_empty())
+    else {
+        return "null".into();
+    };
+    let fields = definition
+        .properties
+        .iter()
+        .map(|property| (property.name.clone(), serde_json::Value::Null))
+        .collect::<serde_json::Map<_, _>>();
+    json!({"$class":type_name,"$":fields}).to_string()
+}
+
 fn matching_request(
     request: &RequestSpec,
     source: &DubboConfig,
@@ -255,7 +273,7 @@ pub(crate) async fn import_metadata(
                 .map(|name| DubboArgument {
                     id: Uuid::new_v4().to_string(),
                     type_name: name.clone(),
-                    value_source: "null".into(),
+                    value_source: argument_draft(name, &preview.types),
                     secret: false,
                 })
                 .collect();
@@ -306,4 +324,33 @@ pub(crate) async fn import_metadata(
         .ok_or_else(|| ApiError::conflict("Workspace revision changed"))?;
     reconcile_sessions(&state, &owner.0, &w).await;
     Ok(Json(w))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::argument_draft;
+    use moleapi_protocols::dubbo::{DubboMetadataProperty, DubboMetadataType};
+
+    #[test]
+    fn metadata_dto_fields_become_editable_typed_argument() {
+        let types = vec![DubboMetadataType {
+            type_name: "fixture.Profile".into(),
+            properties: vec![
+                DubboMetadataProperty {
+                    name: "name".into(),
+                    type_name: "java.lang.String".into(),
+                },
+                DubboMetadataProperty {
+                    name: "age".into(),
+                    type_name: "int".into(),
+                },
+            ],
+        }];
+        let draft: serde_json::Value =
+            serde_json::from_str(&argument_draft("fixture.Profile", &types)).unwrap();
+        assert_eq!(draft["$class"], "fixture.Profile");
+        assert!(draft["$"]["name"].is_null());
+        assert!(draft["$"]["age"].is_null());
+        assert_eq!(argument_draft("java.lang.String", &types), "null");
+    }
 }

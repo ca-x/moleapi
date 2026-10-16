@@ -80,11 +80,30 @@ async fn main() -> Result<()> {
         "Rust metadata differs from Apache MetadataReport"
     );
     ensure!(
-        preview.methods.len() == 1
+        preview.methods.len() == 2
             && preview.methods[0].name == "echo"
             && preview.methods[0].parameter_types == ["java.lang.String"]
-            && preview.methods[0].return_type == "java.lang.String",
+            && preview.methods[0].return_type == "java.lang.String"
+            && preview.methods[1].name == "exchange"
+            && preview.methods[1].parameter_types == ["fixture.Profile"]
+            && preview.methods[1].return_type == "fixture.Profile",
         "Metadata method mapping differs from provider definition"
+    );
+    let profile = preview
+        .types
+        .iter()
+        .find(|definition| definition.type_name == "fixture.Profile")
+        .expect("Official provider DTO definition");
+    ensure!(
+        profile
+            .properties
+            .iter()
+            .any(|field| field.name == "name" && field.type_name == "java.lang.String")
+            && profile
+                .properties
+                .iter()
+                .any(|field| field.name == "age" && field.type_name == "int"),
+        "Metadata DTO field mapping differs from provider definition"
     );
     ensure!(
         preview_zookeeper_metadata(

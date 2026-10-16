@@ -24,7 +24,10 @@ public class MetadataFixture {
       ApplicationConfig app=new ApplicationConfig("moleapi-metadata-qa");
       app.setQosEnable(false); app.setEnableFileCache(false);
       ServiceConfig<RegistryService> service=new ServiceConfig<>();
-      service.setInterface(RegistryService.class); service.setRef(value -> {calls.incrementAndGet(); return "metadata:"+value;});
+      service.setInterface(RegistryService.class); service.setRef(new RegistryService() {
+        public String echo(String value) {calls.incrementAndGet(); return "metadata:"+value;}
+        public Profile exchange(Profile value) {calls.incrementAndGet(); return value;}
+      });
       service.setVersion("1.0.0"); service.setGroup("qa");
       ProtocolConfig protocol=new ProtocolConfig("dubbo"); protocol.setPort(freePort());
       DubboBootstrap bootstrap=DubboBootstrap.getInstance();

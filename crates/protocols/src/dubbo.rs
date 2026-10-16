@@ -177,6 +177,18 @@ pub struct DubboMetadataMethod {
 }
 
 #[derive(Clone, Debug, Serialize)]
+pub struct DubboMetadataProperty {
+    pub name: String,
+    pub type_name: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct DubboMetadataType {
+    pub type_name: String,
+    pub properties: Vec<DubboMetadataProperty>,
+}
+
+#[derive(Clone, Debug, Serialize)]
 pub struct DubboMetadataPreview {
     pub service: String,
     pub version: String,
@@ -186,6 +198,7 @@ pub struct DubboMetadataPreview {
     pub document_sha256: String,
     pub raw_document: String,
     pub methods: Vec<DubboMetadataMethod>,
+    pub types: Vec<DubboMetadataType>,
 }
 
 /// Read a provider-published service definition from an explicit metadata center.
@@ -339,6 +352,54 @@ pub async fn preview_zookeeper_metadata(
             return_type: return_type.to_owned(),
         });
     }
+    let source_types = definition
+        .get("types")
+        .and_then(Value::as_array)
+        .context("Metadata definition omitted types")?;
+    ensure!(
+        source_types.len() <= 512,
+        "Metadata type count exceeds limit"
+    );
+    let mut types = Vec::with_capacity(source_types.len());
+    let mut seen_types = std::collections::HashSet::new();
+    for entry in source_types {
+        let type_name = entry
+            .get("type")
+            .and_then(Value::as_str)
+            .context("Metadata type name missing")?;
+        ensure!(
+            !type_name.is_empty() && type_name.len() <= 256 && seen_types.insert(type_name),
+            "Invalid or duplicate metadata type"
+        );
+        let source_properties = entry
+            .get("properties")
+            .and_then(Value::as_object)
+            .context("Metadata type properties missing")?;
+        ensure!(
+            source_properties.len() <= 128,
+            "Metadata property count exceeds limit"
+        );
+        let mut properties = Vec::with_capacity(source_properties.len());
+        for (name, value) in source_properties {
+            let property_type = value.as_str().context("Invalid metadata property type")?;
+            ensure!(
+                !name.is_empty()
+                    && name.len() <= 128
+                    && !name.chars().any(char::is_control)
+                    && !property_type.is_empty()
+                    && property_type.len() <= 256,
+                "Invalid metadata property"
+            );
+            properties.push(DubboMetadataProperty {
+                name: name.clone(),
+                type_name: property_type.to_owned(),
+            });
+        }
+        types.push(DubboMetadataType {
+            type_name: type_name.to_owned(),
+            properties,
+        });
+    }
     Ok(DubboMetadataPreview {
         service: config.service.clone(),
         version: config.version.clone(),
@@ -348,6 +409,7 @@ pub async fn preview_zookeeper_metadata(
         document_sha256,
         raw_document,
         methods,
+        types,
     })
 }
 

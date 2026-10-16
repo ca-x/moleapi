@@ -9,6 +9,7 @@ type Preview = {
   service:string; version:string; group:string; application:string;
   metadata_path:string; document_sha256:string; raw_document:string;
   methods:{name:string;parameter_types:string[];return_type:string}[];
+  types:{type_name:string;properties:{name:string;type_name:string}[]}[];
 };
 const signature = (method:Preview["methods"][number]) => `${method.name}(${method.parameter_types.join(",")})`;
 
@@ -79,6 +80,9 @@ export default function MetadataPreviewPane({request, update, workspaceId, works
       <Text size="2">{preview.service} · {preview.version} · {preview.group} · {preview.application}</Text>
       {preview.methods.map((method,index)=><div key={`${method.name}-${index}`} style={{marginTop:12}}>
         <Text as="p" size="2">{method.name}({method.parameter_types.join(", ")}) → {method.return_type}</Text>
+        {preview.types.filter(type=>type.properties.length>0 && [...method.parameter_types,method.return_type].includes(type.type_name)).map(type=><Text key={type.type_name} as="p" size="2" color="gray">
+          {type.type_name}: {type.properties.map(property=>`${property.name}: ${property.type_name}`).join(", ")}
+        </Text>)}
         <Choice value={selected(method)} disabled={disabled||pending} label={`${t("导入决策")}: ${method.name}`}
           options={[
             {value:"skip",label:t("跳过")},

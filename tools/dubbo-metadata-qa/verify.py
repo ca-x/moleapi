@@ -76,6 +76,7 @@ def main():
                 'definition_sha256':hashlib.sha256(original.encode()).hexdigest(),
                 'secured_definition_sha256':hashlib.sha256(secured.encode()).hexdigest(),
                 'cases':['official_metadata_report','method_parameter_response_types',
+                         'dto_property_mapping',
                          'checked_rust_metadata_read','hosted_private_refusal',
                          'no_lookup_invocation','digest_auth','anonymous_auth_refusal',
                          'wrong_digest_refusal']}
