@@ -53,3 +53,9 @@ it("shows saved history after a terminal query closes its connection",()=>{
   events=[...events,event(4,{kind:"data_processed",query_id:"query",history_id:"saved",notice:null,tests:[],logs:[],variable_updates:[]})];rerender();
   expect(result.current.processing?.history_id).toBe("saved");
 });
+it("marks partial rows as failed after a terminal query error",()=>{
+  const events=[event(1,{kind:"data_started",query_id:"query"}),event(2,{kind:"data_columns",query_id:"query",columns:[{name:"value",data_type:"TEXT",nullable:false}]}),event(3,{kind:"data_rows",query_id:"query",rows:[[{kind:"text",value:"partial"}]]}),event(4,{kind:"data_error",query_id:"query",message:"failed"})];
+  const {result}=renderHook(()=>useDataEvents("session",events,0));
+  expect(result.current.result?.rows).toHaveLength(1);
+  expect(result.current.result).toMatchObject({done:true,failed:true});
+});

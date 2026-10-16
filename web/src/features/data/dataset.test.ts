@@ -14,6 +14,7 @@ it("snapshots exact typed rows as runner JSON without rounding integers or decim
 });
 it("rejects incomplete, truncated, empty and ambiguous results",()=>{
   expect(code({...result(),done:false})).toBe("incomplete");
+  expect(code({...result(),failed:true})).toBe("failed");
   expect(code({...result(),truncated:true})).toBe("truncated");
   expect(code({...result(),rows:[]})).toBe("empty");
   expect(code(result(["id","id"],[[{kind:"integer",value:"1"},{kind:"integer",value:"2"}]]))).toBe("duplicate_columns");

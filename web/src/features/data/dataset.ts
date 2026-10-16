@@ -1,7 +1,7 @@
 import type {SavedDataset} from "../../shared/types";
 import type {Cell,Result} from "./types";
 
-export type ResultDatasetErrorCode = "incomplete"|"truncated"|"empty"|"rows"|"columns"|"duplicate_columns"|"unsupported_cell"|"source_size";
+export type ResultDatasetErrorCode = "incomplete"|"failed"|"truncated"|"empty"|"rows"|"columns"|"duplicate_columns"|"unsupported_cell"|"source_size";
 export class ResultDatasetError extends Error {
   constructor(readonly code:ResultDatasetErrorCode){super(code);}
 }
@@ -17,6 +17,7 @@ function value(cell:Cell):string|boolean|null {
 
 export function resultDatasetSource(result:Result):NonNullable<SavedDataset["source"]> {
   if(!result.done)throw new ResultDatasetError("incomplete");
+  if(result.failed)throw new ResultDatasetError("failed");
   if(result.truncated)throw new ResultDatasetError("truncated");
   if(result.rows.length===0)throw new ResultDatasetError("empty");
   if(result.rows.length>100)throw new ResultDatasetError("rows");

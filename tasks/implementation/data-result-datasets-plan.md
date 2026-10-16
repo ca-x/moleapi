@@ -39,3 +39,9 @@
 - [ ] Use the real Data file worker and 390px browser in Chinese/English: query CSV, save dataset, reload, inspect private source and select its ID for a runner.
 - [ ] Run `npm --prefix web test`, `npm --prefix web run build`, `cargo fmt -- --check`, `cargo test --locked` and strict all-target Clippy. Use existing database CI for storage/runner parity and record any generator-asset/environment gap.
 - [ ] Update `docs/IMPLEMENTATION-STATUS.md`, `docs/SAVED-DATASETS-COVERAGE.md` and the remaining-work plan with exact local/CI/platform evidence. Complete one independent review before merge.
+
+## Progress, 2026-10-16
+
+- Pure typed-result snapshot and explicit private save flow are implemented. Source/draft are unchanged on invalid data, old result scope switches are fenced, and retry uses a stable dataset ID.
+- A 390px remote CSV query was saved as private JSON with exact decimal text; reload restored it and the testing page selected it. Chinese and English dialogs were inspected.
+- Focused conversion/dialog/UI cases and all 325 frontend tests passed; production frontend and embedded server builds passed. Independent review's concurrent-save and target-switch findings were fixed. Branch CI and current platform gates remain.
