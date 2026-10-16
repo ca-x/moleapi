@@ -54,3 +54,14 @@ it("repeated dispatch before React renders admits only one query",()=>{
   act(()=>{value.dataRun.current?.();value.dataRun.current?.();});
   expect(value.protocolSession.send).toHaveBeenCalledTimes(1);
 });
+it("keeps query cancellation available while preparation send is pending",()=>{
+  const value=state();value.protocolSession.send.mockReturnValue(new Promise(()=>{}));
+  vi.mocked(useWorkbench).mockReturnValue(value as unknown as ReturnType<typeof useWorkbench>);
+  const view=render(<DataWorkbench/>);
+  fireEvent.click(screen.getByRole("button",{name:"运行当前查询"}));
+  value.protocolSession.sending=true;view.rerender(<DataWorkbench/>);
+  const cancel=screen.getByRole("button",{name:"取消查询"});
+  expect((cancel as HTMLButtonElement).disabled).toBe(false);
+  fireEvent.click(cancel);
+  expect(value.protocolSession.send).toHaveBeenCalledWith(expect.objectContaining({kind:"data_cancel"}));
+});

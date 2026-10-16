@@ -59,6 +59,13 @@
 - [ ] Verify hosted PostgreSQL/MySQL SQL mutation and read-only enforcement in Application CI, then track the current platform build and perform one independent whole-branch review.
 - [ ] Update `docs/FEATURE-MATRIX.md`, `docs/IMPLEMENTATION-STATUS.md` and the remaining-work plan with exact supported combinations and still-open saved dataset/source/EDAS gates.
 
+## Progress, 2026-10-16
+
+- Saved `query_pre_script` has an empty legacy default, 256 KiB cap, bilingual editor and safe export screening. A real 390px remote CSV query changed selected SQL from `id=1` to `id=2`; English/Chinese status, tests, history link and saved/reloaded script were inspected.
+- Protocol reservation prevents concurrent admission and repeated dispatch of a query ID. The server runs the isolated script once per accepted query, uses the previous query's postprocessed variables, validates mutated SQL, and handles skip/error/cancel without running SQL. The worker enforces the saved read-only setting even if a client sends `read_only=false`.
+- Real file-worker regressions cover mutation, sequential variable updates, cancellation, skip, illegal request changes, read-only writes, private logs/update keys/database diagnostics and oversized preparation-event rollback. Data client tests passed (21); the full frontend suite passed (320), strict full-workspace Clippy, formatting and production frontend build passed. Independent review found four privacy/state issues and an event-limit rollback issue; each was fixed and rechecked.
+- Hosted PostgreSQL/MySQL query-pre mutation, full CI and current platform package gates remain pending. The pinned generator JAR is unavailable in this local checkout, so `cargo test --locked` awaits CI's pinned-asset preparation step. Other Data sources, saved datasets and EDAS are separate remaining capabilities.
+
 ## Review focus
 
 - A script changes the Data source, URL/auth, headers or read-only flag: fail before SQL and mask private diagnostics.

@@ -1,8 +1,9 @@
 use crate::{Command, EventMessage, SendMessage, Session, SessionState};
 use anyhow::{Context, Result, ensure};
-use moleapi_core::{Environment, NetworkPolicy, Protocol, RequestSpec};
+use moleapi_core::{DataSource, Environment, NetworkPolicy, Protocol, RequestSpec};
 use moleapi_data::{Connection, QueryResult};
 use std::{
+    collections::HashSet,
     path::PathBuf,
     sync::{Arc, OnceLock},
     time::{Duration, Instant},
@@ -15,6 +16,7 @@ pub(crate) struct Control {
     pub worker: Option<PathBuf>,
     active: Option<(String, CancellationToken)>,
     commands: usize,
+    used_query_ids: HashSet<String>,
     pub completions: Option<mpsc::Sender<DataCompletion>>,
 }
 pub struct DataCompletion {
@@ -36,6 +38,9 @@ pub struct DataReservation {
     dispatched: bool,
 }
 impl DataReservation {
+    pub fn cancelled_now(&self) -> bool {
+        self.stop.is_cancelled() || self.session.cancel.is_cancelled()
+    }
     pub async fn cancelled(&self) {
         tokio::select! { _ = self.stop.cancelled() => {}, _ = self.session.cancel.cancelled() => {} }
     }
@@ -61,6 +66,10 @@ impl DataReservation {
         );
         ensure!(control.commands < 512, "Data command budget exceeded");
         ensure!(
+            !control.used_query_ids.contains(&self.query_id),
+            "Data query ID was already dispatched"
+        );
+        ensure!(
             record.input.saturating_add(sql.len()) <= 20 * 1024 * 1024,
             "Data command input budget exceeded"
         );
@@ -76,6 +85,7 @@ impl DataReservation {
             .context("Data command queue is full")?;
         record.input += size;
         control.commands += 1;
+        control.used_query_ids.insert(self.query_id.clone());
         self.dispatched = true;
         Ok(())
     }
@@ -116,6 +126,10 @@ pub(crate) fn reserve(
     );
     let mut control = session.data.lock().unwrap();
     ensure!(control.active.is_none(), "A Data query is already running");
+    ensure!(
+        !control.used_query_ids.contains(&query_id),
+        "Data query ID was already dispatched"
+    );
     ensure!(control.commands < 512, "Data command budget exceeded");
     ensure!(
         record.input.saturating_add(sql.len()) <= 20 * 1024 * 1024,
@@ -369,6 +383,12 @@ pub(crate) async fn run(
                 read_only,
                 stop,
             } => {
+                let read_only = read_only
+                    || config.read_only
+                    || matches!(
+                        config.source,
+                        DataSource::LocalFile | DataSource::RemoteFile
+                    );
                 let started = Instant::now();
                 let permit = match slots().try_acquire_owned() {
                     Ok(value) => value,

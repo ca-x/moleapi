@@ -86,6 +86,10 @@ impl Session {
             EventMessage::DataReady { .. }
             | EventMessage::DataSchema { .. }
             | EventMessage::DataStarted { .. }
+            | EventMessage::DataPreparing { .. }
+            | EventMessage::DataPrepared { .. }
+            | EventMessage::DataPreprocessError { .. }
+            | EventMessage::DataSkipped { .. }
             | EventMessage::DataColumns { .. }
             | EventMessage::DataRows { .. }
             | EventMessage::DataFinished { .. }
