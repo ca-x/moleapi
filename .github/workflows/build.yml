@@ -164,7 +164,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev rpm
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev rpm rpm2cpio cpio
           echo 'APPIMAGE_EXTRACT_AND_RUN=1' >> "$GITHUB_ENV"
       - run: npm --prefix web ci
       - name: Generate platform icons from provided transparent logo
@@ -188,6 +188,9 @@ jobs:
         run: python scripts/check-script-worker.py target/${{ matrix.target }}/release/moleapi
       - name: Verify actual bundled desktop JVM and original runtime files
         run: python scripts/check-bundled-java.py target/${{ matrix.target }}/release/moleapi --runtime-only
+      - name: Smoke extracted Linux deb, rpm and AppImage packages
+        if: runner.os == 'Linux'
+        run: python scripts/check-linux-desktop-packages.py target/${{ matrix.target }}/release/bundle
       - uses: actions/upload-artifact@v4
         if: ${{ success() || (failure() && runner.os == 'Linux') }}
         with:
