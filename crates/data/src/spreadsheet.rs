@@ -1,7 +1,9 @@
 //! Bounded spreadsheet to Arrow conversion for the isolated Data file worker.
 use crate::{MAX_CELL, MAX_COLUMNS, MAX_FILE_ROWS};
 use anyhow::{Context, Result, ensure};
-use calamine::{Data, HeaderRow, Ods, Range, Reader, Xls, Xlsb, Xlsx, open_workbook_from_rs};
+use calamine::{
+    Data, HeaderRow, Ods, Range, Reader, Sheet, SheetType, Xls, Xlsb, Xlsx, open_workbook_from_rs,
+};
 use datafusion::arrow::{
     array::{ArrayRef, BooleanArray, Int64Array, StringBuilder},
     datatypes::{DataType, Field, Schema},
@@ -269,28 +271,28 @@ pub(crate) fn read_spreadsheet_batches(
         DataFileFormat::Xls => {
             let mut workbook: Xls<_> = open_workbook_from_rs(Cursor::new(bytes))?;
             workbook.with_header_row(HeaderRow::Row(0));
-            let names = workbook.sheet_names();
+            let names = worksheet_names(workbook.sheets_metadata());
             let name = selected_sheet(&names, &config.sheet_name)?;
             workbook.worksheet_range(name)?
         }
         DataFileFormat::Xlsb => {
             let mut workbook: Xlsb<_> = open_workbook_from_rs(Cursor::new(bytes))?;
             workbook.with_header_row(HeaderRow::Row(0));
-            let names = workbook.sheet_names();
+            let names = worksheet_names(workbook.sheets_metadata());
             let name = selected_sheet(&names, &config.sheet_name)?;
             workbook.worksheet_range(name)?
         }
         DataFileFormat::Xlsx => {
             let mut workbook: Xlsx<_> = open_workbook_from_rs(Cursor::new(bytes))?;
             workbook.with_header_row(HeaderRow::Row(0));
-            let names = workbook.sheet_names();
+            let names = worksheet_names(workbook.sheets_metadata());
             let name = selected_sheet(&names, &config.sheet_name)?;
             workbook.worksheet_range(name)?
         }
         DataFileFormat::Ods => {
             let mut workbook: Ods<_> = open_workbook_from_rs(Cursor::new(bytes))?;
             workbook.with_header_row(HeaderRow::Row(0));
-            let names = workbook.sheet_names();
+            let names = worksheet_names(workbook.sheets_metadata());
             let name = selected_sheet(&names, &config.sheet_name)?;
             workbook.worksheet_range(name)?
         }
@@ -435,6 +437,14 @@ pub(crate) fn read_spreadsheet_batches(
     Ok(batches)
 }
 
+fn worksheet_names(sheets: &[Sheet]) -> Vec<String> {
+    sheets
+        .iter()
+        .filter(|sheet| sheet.typ == SheetType::WorkSheet)
+        .map(|sheet| sheet.name.clone())
+        .collect()
+}
+
 fn selected_sheet<'a>(names: &'a [String], selected: &'a str) -> Result<&'a str> {
     ensure!(!names.is_empty(), "Spreadsheet has no worksheets");
     if selected.is_empty() {
@@ -449,8 +459,9 @@ fn selected_sheet<'a>(names: &'a [String], selected: &'a str) -> Result<&'a str>
 }
 
 #[cfg(test)]
-mod xls_preflight_tests {
-    use super::preflight_xls;
+mod spreadsheet_tests {
+    use super::{preflight_xls, selected_sheet, worksheet_names};
+    use calamine::{Sheet, SheetType, SheetVisible};
     use std::io::{Cursor, Write};
 
     fn record(kind: u16, data: &[u8]) -> Vec<u8> {
@@ -483,5 +494,24 @@ mod xls_preflight_tests {
         let bytes = compound.into_inner().into_inner();
         let error = preflight_xls(&bytes).err().unwrap().to_string();
         assert!(error.contains("Orphan XLS formula string"), "{error}");
+    }
+
+    #[test]
+    fn chart_before_first_worksheet_does_not_become_the_default_data_source() {
+        let sheets = [
+            Sheet {
+                name: "Chart".into(),
+                typ: SheetType::ChartSheet,
+                visible: SheetVisible::Visible,
+            },
+            Sheet {
+                name: "Data".into(),
+                typ: SheetType::WorkSheet,
+                visible: SheetVisible::Visible,
+            },
+        ];
+        let names = worksheet_names(&sheets);
+        assert_eq!(selected_sheet(&names, "").unwrap(), "Data");
+        assert!(selected_sheet(&names, "Chart").is_err());
     }
 }

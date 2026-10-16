@@ -5,7 +5,7 @@ Authority: `data-004` in `docs/FEATURE-MATRIX.md`, `docs/specs/data-client.md`, 
 ## User behavior
 
 - `file_format=xlsb` is additive. Selecting a `.xlsb` file infers it, and a remote source may choose it explicitly. Existing saved Data requests retain their current format.
-- An exact `sheet_name` selects one worksheet; empty selects the first in document order. Header mode uses physical worksheet row 1. SQL, typed results, scripts, history, privacy and cancellation use the existing Data path.
+- An exact `sheet_name` selects one worksheet; empty selects the first worksheet in document order, skipping chart/dialog/macro sheets. Header mode uses physical worksheet row 1. SQL, typed results, scripts, history, privacy and cancellation use the existing Data path.
 - The editor explains that formula results come from the workbook cache and are not recalculated. Macros, external links and workbook instructions are never executed.
 
 ## Parsing and limits
