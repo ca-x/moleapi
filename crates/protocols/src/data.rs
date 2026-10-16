@@ -35,13 +35,14 @@ fn complete(
     sql: String,
     outcome: DataOutcome,
     started: Instant,
+    completed_at: Instant,
 ) -> Result<()> {
     let completion = DataCompletion {
         query_id: query_id.clone(),
         sql,
         outcome,
-        elapsed_ms: started.elapsed().as_millis() as u64,
-        completed_at: Instant::now(),
+        elapsed_ms: completed_at.duration_since(started).as_millis() as u64,
+        completed_at,
     };
     let sender = session.data.lock().unwrap().completions.clone();
     if sender.is_none_or(|sender| sender.try_send(completion).is_err()) {
@@ -301,6 +302,7 @@ pub(crate) async fn run(
                     Ok(value) => value,
                     Err(_) => {
                         active_done(&session);
+                        let finished = Instant::now();
                         let message = "Data execution capacity reached".to_owned();
                         session.event(
                             "received",
@@ -315,6 +317,7 @@ pub(crate) async fn run(
                             sql,
                             DataOutcome::Error(message),
                             started,
+                            finished,
                         )?;
                         continue;
                     }
@@ -323,6 +326,7 @@ pub(crate) async fn run(
                     Ok(value) => value,
                     Err(error) => {
                         active_done(&session);
+                        let finished = Instant::now();
                         let message = mask(&error.to_string());
                         session.event(
                             "received",
@@ -337,6 +341,7 @@ pub(crate) async fn run(
                             sql,
                             DataOutcome::Error(message),
                             started,
+                            finished,
                         )?;
                         continue;
                     }
@@ -350,6 +355,7 @@ pub(crate) async fn run(
                 let cancel = connection.cancellation();
                 let result = tokio::select! {biased;_=session.cancel.cancelled()=>None,_=stop.cancelled()=>None,result=tokio::time::timeout(duration,connection.query(&sql,read_only,duration))=>Some(result)};
                 active_done(&session);
+                let finished = Instant::now();
                 match result {
                     None => {
                         let _ =
@@ -370,6 +376,7 @@ pub(crate) async fn run(
                                     write_outcome_unknown: !read_only,
                                 },
                                 started,
+                                finished,
                             )?;
                         }
                         drop(connection);
@@ -395,6 +402,7 @@ pub(crate) async fn run(
                             sql,
                             DataOutcome::Error(message),
                             started,
+                            finished,
                         )?;
                         drop(connection);
                         drop(permit);
@@ -415,6 +423,7 @@ pub(crate) async fn run(
                             sql,
                             DataOutcome::Error(message),
                             started,
+                            finished,
                         )?;
                     }
                     Some(Ok(Ok(result))) => {
@@ -425,6 +434,7 @@ pub(crate) async fn run(
                             sql,
                             DataOutcome::Success(result),
                             started,
+                            finished,
                         )?;
                     }
                 }
