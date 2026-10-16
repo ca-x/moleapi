@@ -62,8 +62,10 @@ def repair(bundle_directory: Path, source_java: Path, plugin: Path | None) -> No
     image = images[0]
     if image.with_suffix(image.suffix + ".sig").exists():
         raise ValueError("Refusing to alter an already signed AppImage")
+    runtime_env = {key: value for key, value in os.environ.items()
+                   if key != "APPIMAGE_EXTRACT_AND_RUN"}
     signature = subprocess.run([str(image), "--appimage-signature"],
-                               capture_output=True, check=True, timeout=15)
+                               capture_output=True, check=True, timeout=15, env=runtime_env)
     if signature.stdout.strip():
         raise ValueError("Refusing to alter an AppImage with an embedded signature")
     source_java = source_java.resolve(strict=True)
@@ -81,7 +83,8 @@ def repair(bundle_directory: Path, source_java: Path, plugin: Path | None) -> No
             shutil.copytree(source_java, installed_java, symlinks=True)
         verify_java(resources)
 
-        offset = int(subprocess.check_output([str(image), "--appimage-offset"], text=True, timeout=15).strip())
+        offset = int(subprocess.check_output([str(image), "--appimage-offset"],
+                                             text=True, timeout=15, env=runtime_env).strip())
         if not 0 < offset <= MAX_RUNTIME:
             raise ValueError("AppImage runtime offset exceeds limit")
         runtime = base / "runtime-x86_64"

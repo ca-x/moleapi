@@ -49,6 +49,8 @@ MOLEAPI_CODEGEN_JAVA 与已有桌面用户选择可覆盖默认自带 JRE。
 
 Linux AppImage 的 `linuxdeploy` 会改写 JRE 内 ELF 文件，导致固定原始清单哈希失效。桌面构建在 Tauri 打包后调用 `scripts/repair-linux-appimage-java.py`：从固定源恢复完整 JRE，使用 SHA256 固定的 `linuxdeploy-plugin-appimage` 内 `appimagetool` 和原 AppImage runtime 重新封装，解包复核 JRE、worker 与 Dubbo。脚本拒绝修改已签名的 AppImage；启用签名时必须在重新封装后签名。旧构建 `38946817315` 的真实包已在本机按同一流程重新封装并通过这三项检查，当前分支的原生 CI 仍待结果。
 
+CI 为无 FUSE 环境全局设置 `APPIMAGE_EXTRACT_AND_RUN=1`。修复脚本读取 AppImage runtime 的签名和偏移时临时移除该变量，避免把 runtime 查询误当成应用启动；实际解包步骤仍显式启用它。run `38963507351` 首次执行修复脚本时在签名查询处返回101，本地用相同环境复现并验证修复；该次打包结果不算通过。
+
 经典 Dubbo 使用同一份固定 Temurin JRE 和独立固定哈希的 Apache Dubbo worker JAR。构建前运行 `python scripts/prepare_dubbo_worker.py`（首次需要显式 Maven/JDK 或提供已构建且哈希匹配的 JAR）；独立服务端压缩包和桌面资源均放在 `runtime/dubbo/engine.jar`，Docker 固定路径为 `/opt/moleapi/runtime/dubbo/engine.jar`。`scripts/check-bundled-dubbo.py` 检查 JAR/JRE 原始字节并实际启动 worker；真实业务调用、原生安装与容器 smoke 仍以对应平台流水线为准。开发者可显式设置绝对路径 `MOLEAPI_DUBBO_WORKER_JAR`，运行时不会下载或接受工作区提供的可执行文件路径。
 
 发行验证用 scripts/check-bundled-java.py：在清空外部 Java 配置、使 PATH 不可用后，
