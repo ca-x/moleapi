@@ -1,18 +1,23 @@
 //! Bounded spreadsheet to Arrow conversion for the isolated Data file worker.
 use crate::{MAX_CELL, MAX_COLUMNS, MAX_FILE_ROWS};
 use anyhow::{Context, Result, ensure};
-use calamine::{Data, HeaderRow, Ods, Range, Reader, Xlsx, open_workbook_from_rs};
+use calamine::{Data, HeaderRow, Ods, Range, Reader, Xls, Xlsx, open_workbook_from_rs};
 use datafusion::arrow::{
     array::{ArrayRef, BooleanArray, Int64Array, StringBuilder},
     datatypes::{DataType, Field, Schema},
     record_batch::RecordBatch,
 };
-use moleapi_core::{DataConfig, DataFileFormat};
-use std::{collections::HashSet, io::Cursor, sync::Arc};
+use moleapi_core::{DataConfig, DataFileFormat, MAX_DATA_FILE};
+use std::{
+    collections::HashSet,
+    io::{Cursor, Read},
+    sync::Arc,
+};
 
 const MAX_EXPANDED: u64 = 64 * 1024 * 1024;
 const MAX_ZIP_ENTRIES: usize = 2048;
 const MAX_GRID_CELLS: usize = 1_000_000;
+const MAX_XLS_WORKBOOK_CELLS: usize = 4_000_000;
 
 fn preflight_archive(bytes: &[u8]) -> Result<()> {
     let mut archive =
@@ -38,6 +43,169 @@ fn preflight_archive(bytes: &[u8]) -> Result<()> {
         );
     }
     Ok(())
+}
+
+// BIFF8 stores the workbook in a CFB stream. Calamine eagerly expands every XLS
+// worksheet at construction, so check all declared and actual grid extents first.
+fn preflight_xls(bytes: &[u8]) -> Result<()> {
+    ensure!(bytes.len() <= MAX_DATA_FILE, "XLS file exceeds 5 MiB");
+    let mut compound =
+        cfb::CompoundFile::open(Cursor::new(bytes)).context("Invalid XLS compound file")?;
+    let path = ["/Workbook", "/Book", "/WORKBOOK", "/BOOK"]
+        .into_iter()
+        .find(|path| compound.is_stream(path))
+        .context("XLS workbook stream missing")?;
+    let mut workbook = Vec::new();
+    compound
+        .open_stream(path)?
+        .take((MAX_DATA_FILE + 1) as u64)
+        .read_to_end(&mut workbook)?;
+    ensure!(
+        workbook.len() <= MAX_DATA_FILE,
+        "XLS workbook stream exceeds 5 MiB"
+    );
+    let mut position = 0;
+    let (kind, bof) = biff_record(&workbook, &mut position, workbook.len())?;
+    ensure!(
+        kind == 0x0809
+            && bof.len() >= 4
+            && u16::from_le_bytes([bof[0], bof[1]]) == 0x0600
+            && u16::from_le_bytes([bof[2], bof[3]]) == 0x0005,
+        "Only BIFF8 XLS workbooks are supported"
+    );
+    let mut sheet_offsets = Vec::new();
+    loop {
+        let (kind, data) = biff_record(&workbook, &mut position, workbook.len())?;
+        if kind == 0x000A {
+            break;
+        }
+        if kind == 0x0085 {
+            ensure!(
+                data.len() >= 6 && data[5] == 0,
+                "Unsupported XLS sheet type"
+            );
+            let offset = u32::from_le_bytes(data[..4].try_into()?) as usize;
+            sheet_offsets.push(offset);
+            ensure!(sheet_offsets.len() <= 2048, "XLS sheet count exceeds limit");
+        }
+    }
+    ensure!(!sheet_offsets.is_empty(), "XLS workbook has no worksheets");
+    sheet_offsets.sort_unstable();
+    ensure!(sheet_offsets[0] >= position, "Invalid XLS sheet offset");
+    ensure!(
+        sheet_offsets.windows(2).all(|pair| pair[0] < pair[1]),
+        "Duplicate XLS sheet offset"
+    );
+    let mut workbook_cells = 0usize;
+    for (index, &start) in sheet_offsets.iter().enumerate() {
+        let end = sheet_offsets
+            .get(index + 1)
+            .copied()
+            .unwrap_or(workbook.len());
+        ensure!(
+            start < end && end <= workbook.len(),
+            "Invalid XLS sheet offset"
+        );
+        let mut position = start;
+        let (kind, bof) = biff_record(&workbook, &mut position, end)?;
+        ensure!(
+            kind == 0x0809
+                && bof.len() >= 4
+                && u16::from_le_bytes([bof[0], bof[1]]) == 0x0600
+                && u16::from_le_bytes([bof[2], bof[3]]) == 0x0010,
+            "Only BIFF8 XLS worksheets are supported"
+        );
+        let mut extent: Option<(u32, u32, u32, u32)> = None;
+        let mut sheet_cells = 0usize;
+        let mut has_formula = false;
+        loop {
+            let (kind, data) = biff_record(&workbook, &mut position, end)?;
+            if kind == 0x000A {
+                break;
+            }
+            if kind == 0x0207 {
+                // Calamine inserts STRING at the most recent FORMULA position,
+                // or at A1 when no formula has appeared. Reject the latter.
+                ensure!(has_formula, "Orphan XLS formula string record");
+                has_formula = false;
+            }
+            if kind == 0x0200 {
+                ensure!(data.len() >= 12, "Invalid XLS worksheet dimensions");
+                let first_row = u32::from_le_bytes(data[0..4].try_into()?);
+                let last_row = u32::from_le_bytes(data[4..8].try_into()?);
+                let first_col = u16::from_le_bytes(data[8..10].try_into()?) as u32;
+                let last_col = u16::from_le_bytes(data[10..12].try_into()?) as u32;
+                ensure!(
+                    first_row < last_row
+                        && last_row <= 65_536
+                        && first_col < last_col
+                        && last_col <= 256,
+                    "Invalid XLS worksheet dimensions"
+                );
+                sheet_cells =
+                    sheet_cells.max(check_xls_grid(last_row - first_row, last_col - first_col)?);
+            }
+            if matches!(
+                kind,
+                0x0203 | 0x0204 | 0x00D6 | 0x0205 | 0x027E | 0x00FD | 0x0006 | 0x00BD
+            ) {
+                ensure!(data.len() >= 4, "Invalid XLS cell record");
+                let row = u16::from_le_bytes(data[0..2].try_into()?) as u32;
+                let col = u16::from_le_bytes(data[2..4].try_into()?) as u32;
+                let last_col = if kind == 0x00BD {
+                    ensure!(data.len() >= 6, "Invalid XLS multi-cell record");
+                    u16::from_le_bytes(data[data.len() - 2..].try_into()?) as u32
+                } else {
+                    col
+                };
+                ensure!(col <= last_col && last_col < 256, "Invalid XLS cell column");
+                let (min_row, max_row, min_col, max_col) =
+                    extent.get_or_insert((row, row, col, last_col));
+                *min_row = (*min_row).min(row);
+                *max_row = (*max_row).max(row);
+                *min_col = (*min_col).min(col);
+                *max_col = (*max_col).max(last_col);
+                sheet_cells = sheet_cells.max(check_xls_grid(
+                    *max_row - *min_row + 1,
+                    *max_col - *min_col + 1,
+                )?);
+                if kind == 0x0006 {
+                    has_formula = true;
+                }
+            }
+        }
+        workbook_cells = workbook_cells
+            .checked_add(sheet_cells)
+            .context("XLS workbook grid size overflow")?;
+        ensure!(
+            workbook_cells <= MAX_XLS_WORKBOOK_CELLS,
+            "XLS workbook grid size exceeds limit"
+        );
+    }
+    Ok(())
+}
+
+fn biff_record<'a>(stream: &'a [u8], position: &mut usize, end: usize) -> Result<(u16, &'a [u8])> {
+    ensure!(
+        *position <= end && end - *position >= 4,
+        "Truncated XLS record"
+    );
+    let kind = u16::from_le_bytes(stream[*position..*position + 2].try_into()?);
+    let length = u16::from_le_bytes(stream[*position + 2..*position + 4].try_into()?) as usize;
+    *position += 4;
+    ensure!(end - *position >= length, "Truncated XLS record");
+    let data = &stream[*position..*position + length];
+    *position += length;
+    Ok((kind, data))
+}
+
+fn check_xls_grid(rows: u32, columns: u32) -> Result<usize> {
+    let cells = (rows as usize).saturating_mul(columns as usize);
+    ensure!(
+        cells <= MAX_GRID_CELLS,
+        "XLS worksheet grid size exceeds limit"
+    );
+    Ok(cells)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -92,8 +260,19 @@ pub(crate) fn read_spreadsheet_batches(
     config: &DataConfig,
     bytes: &[u8],
 ) -> Result<Vec<RecordBatch>> {
-    preflight_archive(bytes)?;
+    if config.file_format == DataFileFormat::Xls {
+        preflight_xls(bytes)?;
+    } else {
+        preflight_archive(bytes)?;
+    }
     let range: Range<Data> = match config.file_format {
+        DataFileFormat::Xls => {
+            let mut workbook: Xls<_> = open_workbook_from_rs(Cursor::new(bytes))?;
+            workbook.with_header_row(HeaderRow::Row(0));
+            let names = workbook.sheet_names();
+            let name = selected_sheet(&names, &config.sheet_name)?;
+            workbook.worksheet_range(name)?
+        }
         DataFileFormat::Xlsx => {
             let mut workbook: Xlsx<_> = open_workbook_from_rs(Cursor::new(bytes))?;
             workbook.with_header_row(HeaderRow::Row(0));
@@ -110,13 +289,23 @@ pub(crate) fn read_spreadsheet_batches(
         }
         _ => anyhow::bail!("Unsupported spreadsheet format"),
     };
-    if config.file_format == DataFileFormat::Ods {
+    if matches!(
+        config.file_format,
+        DataFileFormat::Ods | DataFileFormat::Xls
+    ) {
         for row in range.rows() {
             for cell in row {
                 if let Data::Float(value) = cell {
                     ensure!(
                         value.fract() != 0.0 || value.abs() <= 9_007_199_254_740_991.0,
-                        "ODS numeric integer exceeds exact range; store it as text"
+                        "Spreadsheet numeric integer exceeds exact range; store it as text"
+                    );
+                } else if let Data::DateTime(value) = cell {
+                    let number = value.as_f64();
+                    ensure!(
+                        number.is_finite()
+                            && (number.fract() != 0.0 || number.abs() <= 9_007_199_254_740_991.0),
+                        "Spreadsheet numeric date exceeds exact range or is nonfinite"
                     );
                 }
             }
@@ -249,5 +438,43 @@ fn selected_sheet<'a>(names: &'a [String], selected: &'a str) -> Result<&'a str>
             "Spreadsheet worksheet not found"
         );
         Ok(selected)
+    }
+}
+
+#[cfg(test)]
+mod xls_preflight_tests {
+    use super::preflight_xls;
+    use std::io::{Cursor, Write};
+
+    fn record(kind: u16, data: &[u8]) -> Vec<u8> {
+        let mut result = Vec::from(kind.to_le_bytes());
+        result.extend_from_slice(&(data.len() as u16).to_le_bytes());
+        result.extend_from_slice(data);
+        result
+    }
+
+    #[test]
+    fn orphan_string_cannot_hide_a_sparse_cell_extent() {
+        let global_bof = record(0x0809, &[0x00, 0x06, 0x05, 0x00]);
+        let offset = (global_bof.len() + 10 + 4) as u32;
+        let mut workbook = global_bof;
+        let mut bound_sheet = offset.to_le_bytes().to_vec();
+        bound_sheet.extend_from_slice(&[0, 0]);
+        workbook.extend(record(0x0085, &bound_sheet));
+        workbook.extend(record(0x000A, &[]));
+        workbook.extend(record(0x0809, &[0x00, 0x06, 0x10, 0x00]));
+        workbook.extend(record(0x0200, &[0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0]));
+        workbook.extend(record(0x0207, &[]));
+        workbook.extend(record(0x0203, &[0xA0, 0x0F, 0xFF, 0]));
+        workbook.extend(record(0x000A, &[]));
+        let mut compound = cfb::CompoundFile::create(Cursor::new(Vec::new())).unwrap();
+        compound
+            .create_stream("/Workbook")
+            .unwrap()
+            .write_all(&workbook)
+            .unwrap();
+        let bytes = compound.into_inner().into_inner();
+        let error = preflight_xls(&bytes).err().unwrap().to_string();
+        assert!(error.contains("Orphan XLS formula string"), "{error}");
     }
 }

@@ -6680,6 +6680,7 @@ dependencies = [
  "bytes",
  "calamine",
  "cap",
+ "cfb",
  "chrono",
  "datafusion",
  "futures-util",

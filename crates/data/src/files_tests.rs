@@ -10,6 +10,95 @@ fn config(format: DataFileFormat) -> DataConfig {
 
 const XLSX: &[u8] = include_bytes!("../tests/fixtures/workbook.xlsx");
 const ODS: &[u8] = include_bytes!("../tests/fixtures/workbook.ods");
+const XLS: &[u8] = include_bytes!("../tests/fixtures/workbook.xls");
+
+#[tokio::test]
+async fn xls_selected_sheet_runs_real_sql_with_safe_types() {
+    let mut config = config(DataFileFormat::Xls);
+    let first = FileSource::open(&config, XLS).unwrap();
+    assert_eq!(first.schema().columns[0].name, "marker");
+    config.sheet_name = "Transactions".into();
+    let source = FileSource::open(&config, XLS).unwrap();
+    let result = source
+        .query("SELECT id, amount, active, note, exact_text, formula FROM data ORDER BY id")
+        .await
+        .unwrap();
+    assert_eq!(result.rows[0][0], Cell::Integer { value: "2".into() });
+    assert_eq!(
+        result.rows[0][1],
+        Cell::Text {
+            value: "2.3".into()
+        }
+    );
+    assert_eq!(result.rows[0][2], Cell::Bool { value: true });
+    assert_eq!(
+        result.rows[0][3],
+        Cell::Text {
+            value: "café".into()
+        }
+    );
+    assert_eq!(
+        result.rows[0][4],
+        Cell::Text {
+            value: "9007199254740993".into()
+        }
+    );
+    assert_eq!(result.rows[0][5], Cell::Text { value: "".into() }); // xlwt leaves the formula cache empty.
+    assert_eq!(result.rows[1][1], Cell::Null);
+    assert_eq!(result.rows[1][2], Cell::Bool { value: false });
+    let cast = source
+        .query("SELECT CAST(amount AS DECIMAL(10,2)) FROM data WHERE id = 2")
+        .await
+        .unwrap();
+    assert_eq!(
+        cast.rows[0][0],
+        Cell::Decimal {
+            value: "2.30".into()
+        }
+    );
+}
+
+#[test]
+fn xls_rejects_bad_sheets_headers_and_unsafe_numbers() {
+    let mut config = config(DataFileFormat::Xls);
+    config.sheet_name = "Missing".into();
+    assert!(FileSource::open(&config, XLS).is_err());
+    config.sheet_name = "Duplicate Headers".into();
+    assert!(FileSource::open(&config, XLS).is_err());
+    config.sheet_name = "Blank Headers".into();
+    assert!(FileSource::open(&config, XLS).is_err());
+    config.sheet_name = "Unsafe Number".into();
+    let error = FileSource::open(&config, XLS).err().unwrap().to_string();
+    assert!(error.contains("exact range"), "{error}");
+    config.sheet_name = "Unsafe Date".into();
+    let error = FileSource::open(&config, XLS).err().unwrap().to_string();
+    assert!(error.contains("exact range"), "{error}");
+    config.sheet_name = "Leading Blank".into();
+    let error = FileSource::open(&config, XLS).err().unwrap().to_string();
+    assert!(error.contains("header is empty"), "{error}");
+    config.sheet_name = "Transactions".into();
+    assert!(FileSource::open(&config, b"not an XLS workbook").is_err());
+    config.csv_header = false;
+    let no_header = FileSource::open(&config, XLS).unwrap();
+    assert_eq!(no_header.schema().columns[0].name, "column_1");
+}
+
+#[test]
+fn xls_rejects_an_oversized_unselected_sheet_before_parsing() {
+    let bytes = include_bytes!("../tests/fixtures/oversized-grid.xls");
+    let config = config(DataFileFormat::Xls);
+    let error = FileSource::open(&config, bytes).err().unwrap().to_string();
+    assert!(error.contains("grid size"), "{error}");
+}
+
+#[test]
+fn xls_rejects_aggregate_unselected_sheet_expansion() {
+    let bytes = include_bytes!("../tests/fixtures/aggregate-grid.xls");
+    let mut config = config(DataFileFormat::Xls);
+    config.csv_header = false;
+    let error = FileSource::open(&config, bytes).err().unwrap().to_string();
+    assert!(error.contains("workbook grid size"), "{error}");
+}
 
 #[tokio::test]
 async fn ods_selected_sheet_runs_sql_with_cached_values_and_safe_types() {
