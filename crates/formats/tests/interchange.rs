@@ -61,6 +61,21 @@ fn postman20_object_auth_and_original_source_are_imported_without_dropping_value
     assert!(full.content.contains("api-key-secret"));
     let restored = import("moleapi", &full.content).unwrap();
     assert_eq!(restored.data.specifications[0].source, source);
+    let migrated = export(&saved, "postman", true).unwrap();
+    assert!(migrated.content.contains("v2.1.0/collection.json"));
+    let migrated = import("postman", &migrated.content).unwrap();
+    let create = migrated
+        .data
+        .collections
+        .iter()
+        .flat_map(|collection| &collection.requests)
+        .find(|request| request.name == "Create account")
+        .unwrap();
+    assert_eq!(
+        create.auth.api_key.as_ref().unwrap().value,
+        "api-key-secret"
+    );
+    assert_eq!(create.body, "{\"enabled\":false}");
 }
 
 #[test]
