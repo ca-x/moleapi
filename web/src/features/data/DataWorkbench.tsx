@@ -8,6 +8,7 @@ import {useWorkbench} from "../workbench/context";
 import {DataSourceFields} from "./DataSourceFields";
 import {DataSqlEditor} from "./DataSqlEditor";
 import {DataResults} from "./DataResults";
+import DataResultDatasetDialog from "./DataResultDatasetDialog";
 import {useDataEvents} from "./useDataEvents";
 import {selectedStatement,formatSql} from "./model";
 import type {DataConfig} from "./types";
@@ -15,11 +16,12 @@ export default function DataWorkbench(){
   useLanguage();const state=useWorkbench(),channel=state.protocolSession;
   const config=state.request?.protocol?.kind==="data"?state.request.protocol:null;
   const model=useDataEvents(channel.session?.id,channel.events,channel.dropped);
-  const [tab,setTab]=useState("query"),[search,setSearch]=useState(""),[error,setError]=useState<ErrorCopy>("");
+  const [tab,setTab]=useState("query"),[search,setSearch]=useState(""),[error,setError]=useState<ErrorCopy>(""),[datasetOpen,setDatasetOpen]=useState(false);
   const selection=useRef({from:0,to:0});
   const identity=JSON.stringify([state.authenticated,state.accountId,state.draft?.id,state.request?.id,state.draft?.data.active_environment_id,channel.session?.id]);
   const scope=useRef(identity);scope.current=identity;
   const mounted=useRef(true);useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
+  useEffect(()=>setDatasetOpen(false),[identity,model.result?.id]);
   const dispatch=useRef<()=>void>(()=>{});dispatch.current=()=>{if(open)void run();else void channel.connect();};
   useEffect(()=>{const invoke=()=>dispatch.current();state.dataRun.current=invoke;return()=>{if(state.dataRun.current===invoke)state.dataRun.current=null;};},[state.dataRun]);
   const open=channel.session?.state==="open",connected=channel.busy||open||channel.session?.state==="connecting";
@@ -42,7 +44,7 @@ export default function DataWorkbench(){
       <Tabs.Content value="pre"><Flex direction="column" gap="2"><Text size="2" color="gray">{t("每条查询前运行此脚本；可用 pm.request.body.update() 修改本次 SQL。修改脚本后重连生效。")}</Text><Editor label={t("查询前 JavaScript 脚本")} value={config.query_pre_script} onChange={query_pre_script=>change({query_pre_script})} dark={state.dark} language="javascript" height="220px"/></Flex></Tabs.Content>
       <Tabs.Content value="view"><Flex gap="3" align="center" wrap="wrap"><Button size="1" variant="soft" disabled={!model.active} onClick={()=>model.active&&void channel.send({kind:"data_cancel",query_id:model.active})}>{t("取消查询")}</Button></Flex>
         {model.preparation&&<Flex direction="column" gap="1"><Text size="2">{t("查询前脚本已完成")}{model.preparation.sql_changed?` · ${t("本次 SQL 已由脚本修改")}`:""}</Text>{model.preparation.tests.map(test=><Text key={test.id} size="2" color={test.passed?"green":"red"}>{test.passed?"✓":"✕"} {test.name}: {test.actual}</Text>)}{model.preparation.logs.map((log,index)=><Text key={index} size="2" color={log.level==="error"?"red":"gray"}>{log.level}: {log.message}</Text>)}{model.preparation.variable_updates.length>0&&<Text size="2">{t("变量更新")}: {model.preparation.variable_updates.map(update=>`${update.scope}.${update.key}`).join(", ")}</Text>}</Flex>}
-        <DataResults result={model.result}/>
+        <DataResults result={model.result} onSaveDataset={()=>setDatasetOpen(true)}/><DataResultDatasetDialog open={datasetOpen} onOpenChange={setDatasetOpen} result={model.result} scope={`${identity}/${model.result?.id??""}`}/>
         {model.result?.done&&!model.processing&&!model.processingError&&<Text size="2" color="gray">{t("正在保存查询历史…")}</Text>}
         {model.processingError&&<Callout.Root color="red" role="alert"><Callout.Text>{model.processingError}</Callout.Text></Callout.Root>}
         {model.processing&&<Flex direction="column" gap="2"><Text size="2">{t("查询后处理已完成")}</Text>{model.processing.notice&&<Text size="2" color="amber">{model.processing.notice==="history_cleared"?t("历史已清空，本次查询未保存；后处理结果仍可查看。") : t("结果超过 5 MiB，已隐藏历史行数据并跳过后处理。")}</Text>}{model.processing.tests.map(test=><Text key={test.id} size="2" color={test.passed?"green":"red"}>{test.passed?"✓":"✕"} {test.name}: {test.actual}</Text>)}{model.processing.logs.map((log,index)=><Text key={index} size="2" color={log.level==="error"?"red":"gray"}>{log.level}: {log.message}</Text>)}{model.processing.variable_updates.length>0&&<Text size="2">{t("变量更新")}: {model.processing.variable_updates.map(update=>`${update.scope}.${update.key}`).join(", ")}</Text>}{model.processing.history_id&&<Button size="1" variant="soft" onClick={()=>void openHistory(model.processing!.history_id!)}>{t("查看查询历史")}</Button>}</Flex>}

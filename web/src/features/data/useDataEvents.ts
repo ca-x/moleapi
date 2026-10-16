@@ -23,7 +23,7 @@ export function useDataEvents(sessionId:string|undefined,events:ProtocolEvent[],
         case "data_columns":setResult(old=>old?.id===m.query_id?{...old,columns:m.columns}:old);break;
         case "data_rows":setResult(old=>old?.id===m.query_id?{...old,rows:[...old.rows,...m.rows]}:old);break;
         case "data_finished":if(query.current===m.query_id)inFlight.current=false;setActive(old=>old===m.query_id?null:old);setResult(old=>old?.id===m.query_id?{...old,elapsed_ms:m.elapsed_ms,rows_affected:m.rows_affected,truncated:m.truncated,limit_reason:m.limit_reason,done:true}:old);break;
-        case "data_error":if(m.query_id&&query.current!==m.query_id)break;if(m.query_id)inFlight.current=false;setActive(old=>old===m.query_id?null:old);setError(m.message);setResult(old=>old?.id===m.query_id?{...old,done:true}:old);break;
+        case "data_error":if(m.query_id&&query.current!==m.query_id)break;if(m.query_id)inFlight.current=false;setActive(old=>old===m.query_id?null:old);setError(m.message);setResult(old=>old?.id===m.query_id?{...old,done:true,failed:true}:old);break;
         case "data_cancelled":if(query.current!==m.query_id)break;inFlight.current=false;setActive(old=>old===m.query_id?null:old);setPreparing(false);setError(m.write_outcome_unknown?message("已请求取消并关闭连接，写入结果可能未知。"):message("已请求取消并关闭连接。"));setResult(null);break;
         case "data_processed":if(query.current===m.query_id)setProcessing(m);break;
         case "data_postprocess_error":if(query.current===m.query_id)setProcessingError(m.message);break;
