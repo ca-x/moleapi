@@ -3,8 +3,10 @@ use axum::{
     Extension, Json,
     extract::{Path, Query, State},
 };
-use moleapi_core::{Protocol, RequestSpec, VariableUpdate};
-use moleapi_protocols::{EventBatch, SendMessage, SessionSummary};
+use moleapi_core::{DataSource, Pair, Protocol, RequestSpec, Response, VariableUpdate};
+use moleapi_protocols::{
+    DataCompletion, DataOutcome, EventBatch, EventMessage, SendMessage, SessionSummary,
+};
 use serde::Deserialize;
 use std::sync::Arc;
 #[derive(Deserialize)]
@@ -32,6 +34,17 @@ fn error(e: anyhow::Error) -> ApiError {
     } else {
         ApiError::bad(text)
     }
+}
+struct DataCompletionContext {
+    state: AppState,
+    owner: String,
+    session_id: String,
+    workspace_id: String,
+    workspace: moleapi_core::Workspace,
+    request: RequestSpec,
+    prepared_request: RequestSpec,
+    admission: Arc<tokio::sync::Mutex<u64>>,
+    generation: u64,
 }
 async fn check(s: &AppState, owner: &str, id: &str) -> Result<SessionSummary, ApiError> {
     let summary = s.protocol_sessions.summary(owner, id).map_err(error)?;
@@ -261,17 +274,22 @@ pub async fn create(
             return Err(e);
         }
     }
-    if request.protocol.is_data()
-        && let Err(e) = s.protocol_sessions.configure_data(
+    let data_completions = if request.protocol.is_data() {
+        match s.protocol_sessions.configure_data(
             &owner.0,
             &summary.id,
             scopes.effective(),
             &s.script_worker,
-        )
-    {
-        let _ = s.protocol_sessions.remove(&owner.0, &summary.id).await;
-        return Err(error(e));
-    }
+        ) {
+            Ok(receiver) => Some(receiver),
+            Err(e) => {
+                let _ = s.protocol_sessions.remove(&owner.0, &summary.id).await;
+                return Err(error(e));
+            }
+        }
+    } else {
+        None
+    };
     if request.protocol.is_tcp()
         && let Err(e) = s.protocol_sessions.configure_tcp(
             &owner.0,
@@ -339,6 +357,7 @@ pub async fn create(
             .summary(&owner.0, &summary.id)
             .map_err(error)?;
     }
+    let prepared_data_request = request.clone();
     if let Err(e) = s.protocol_sessions.start(
         &owner.0,
         &summary.id,
@@ -351,9 +370,215 @@ pub async fn create(
         let _ = s.protocol_sessions.remove(&owner.0, &summary.id).await;
         return Err(error(e));
     }
+    if let Some(mut completions) = data_completions {
+        let context = DataCompletionContext {
+            state: s.clone(),
+            owner: owner.0.clone(),
+            session_id: summary.id.clone(),
+            workspace_id: w.id.clone(),
+            workspace: w.clone(),
+            request: c.request.clone(),
+            prepared_request: prepared_data_request,
+            admission: admission.clone(),
+            generation,
+        };
+        let mut scopes = scopes;
+        tokio::spawn(async move {
+            while let Some(completion) = completions.recv().await {
+                // Workspace deletion uses this gate for its tombstone and history cascade.
+                let _workspace_gate = context
+                    .state
+                    .webhooks
+                    .gates
+                    .lock(&context.owner, &context.workspace_id)
+                    .await;
+                let query_id = completion.query_id.clone();
+                let result = save_data_completion(&context, &mut scopes, completion).await;
+                let message = match result {
+                    Ok(Some((history_id, response, notice))) => EventMessage::DataProcessed {
+                        query_id: query_id.clone(),
+                        history_id,
+                        notice,
+                        tests: response.tests,
+                        logs: response.logs,
+                        variable_updates: response.variable_updates,
+                    },
+                    Ok(None) => break,
+                    Err(e) => EventMessage::DataPostprocessError {
+                        query_id: query_id.clone(),
+                        message: e.message,
+                    },
+                };
+                if context
+                    .state
+                    .protocol_sessions
+                    .data_event(&context.owner, &context.session_id, message)
+                    .is_err()
+                {
+                    let _ = context.state.protocol_sessions.data_event(
+                        &context.owner,
+                        &context.session_id,
+                        EventMessage::DataPostprocessError {
+                            query_id,
+                            message: "Data postprocessing result exceeds session event limits"
+                                .into(),
+                        },
+                    );
+                }
+            }
+        });
+    }
     summary.variable_updates = updates;
     summary.request_updates = request_updates;
     Ok(Json(summary))
+}
+async fn save_data_completion(
+    context: &DataCompletionContext,
+    scopes: &mut moleapi_core::VariableScopes,
+    completion: DataCompletion,
+) -> Result<Option<(Option<String>, Response, Option<String>)>, ApiError> {
+    let guard = context.admission.lock().await;
+    if *guard != context.generation
+        || check(&context.state, &context.owner, &context.session_id)
+            .await
+            .is_err()
+    {
+        return Ok(None);
+    }
+    let w = owned(&context.state, &context.owner, &context.workspace_id).await?;
+    let history_cleared = crate::history::cleared_since(
+        &context.state,
+        &context.owner,
+        &context.workspace_id,
+        completion.completed_at,
+    );
+    let collection = context
+        .workspace
+        .data
+        .collections
+        .iter()
+        .find(|c| c.requests.iter().any(|r| r.id == context.request.id))
+        .ok_or_else(ApiError::not_found)?;
+    let source = match &context.prepared_request.protocol {
+        Protocol::Data { config } => config.source,
+        _ => return Err(ApiError::bad("Expected Data request")),
+    };
+    let terminal_elapsed_ms = completion.elapsed_ms;
+    let (status, status_text, elapsed_ms, truncated, body, oversized) = match completion.outcome {
+        DataOutcome::Success(result) => {
+            let elapsed = result.elapsed_ms;
+            let truncated = result.truncated;
+            let metadata = serde_json::json!({
+                "format":"moleapi-data-result-v1", "query_id":completion.query_id,
+                "sql":completion.sql, "columns":result.columns,
+                "rows_affected":result.rows_affected, "elapsed_ms":elapsed,
+                "truncated":truncated, "limit_reason":result.limit_reason,
+            });
+            let mut body = metadata.clone();
+            body["rows"] = serde_json::to_value(result.rows).map_err(|_| ApiError::internal())?;
+            let mut serialized = serde_json::to_string(&body).map_err(|_| ApiError::internal())?;
+            let oversized = serialized.len() > 5 * 1024 * 1024;
+            if oversized {
+                let mut metadata = metadata;
+                metadata["rows_withheld"] = "result exceeds the 5 MiB script/history body limit".into();
+                serialized = serde_json::to_string(&metadata).map_err(|_| ApiError::internal())?;
+            }
+            (200, "Data query".to_owned(), elapsed, truncated, serialized, oversized)
+        }
+        DataOutcome::Error(message) => (500, "Data query error".to_owned(), terminal_elapsed_ms, false,
+            serde_json::json!({"format":"moleapi-data-result-v1","query_id":completion.query_id,"sql":completion.sql,"error":message,"elapsed_ms":terminal_elapsed_ms}).to_string(), false),
+        DataOutcome::Cancelled { write_outcome_unknown } => (499, "Data query cancelled".to_owned(), terminal_elapsed_ms, false,
+            serde_json::json!({"format":"moleapi-data-result-v1","query_id":completion.query_id,"sql":completion.sql,"cancelled":true,"write_outcome_unknown":write_outcome_unknown,"elapsed_ms":terminal_elapsed_ms}).to_string(), false),
+    };
+    let mut response = Response {
+        skipped: false,
+        private_auth_values: vec![],
+        soap_fault: None,
+        request_updates: vec![],
+        logs: vec![],
+        variable_updates: vec![],
+        status,
+        status_text,
+        headers: vec![Pair {
+            id: String::new(),
+            key: "content-type".into(),
+            value: "application/vnd.moleapi.data+json".into(),
+            enabled: true,
+            secret: None,
+            local_value: None,
+        }],
+        size_bytes: body.len(),
+        body,
+        body_base64: None,
+        elapsed_ms,
+        truncated,
+        url: context.prepared_request.url.clone(),
+        tests: vec![],
+    };
+    let notice = if oversized {
+        Some("body_limit".to_owned())
+    } else if history_cleared {
+        Some("history_cleared".to_owned())
+    } else {
+        None
+    };
+    let redact_failed_response = if oversized || status != 200 {
+        false
+    } else {
+        execution::postprocess_data(
+            &context.state,
+            &context.workspace,
+            collection,
+            &context.prepared_request,
+            &mut response,
+            scopes,
+        )
+        .await?
+    };
+    let mut stored = response.clone();
+    if matches!(source, DataSource::LocalFile | DataSource::RemoteFile) {
+        let mut body: serde_json::Value =
+            serde_json::from_str(&stored.body).map_err(|_| ApiError::internal())?;
+        if let Some(object) = body.as_object_mut() {
+            if status == 200 && !oversized {
+                object.remove("rows");
+                object.insert(
+                    "rows_withheld".into(),
+                    "file-backed rows are live-only".into(),
+                );
+            } else if status != 200 && object.contains_key("error") {
+                object.insert(
+                    "error".into(),
+                    "[WITHHELD: file query diagnostics are live-only]".into(),
+                );
+            }
+        }
+        stored.body = body.to_string();
+        stored.size_bytes = stored.body.len();
+        stored.tests.clear();
+    }
+    let history_id = if history_cleared {
+        None
+    } else {
+        crate::history::record(
+            &context.state,
+            &context.owner,
+            &w,
+            &context.request,
+            Some(&scopes.effective()),
+            &stored,
+            crate::privacy::HistoryPrivacy {
+                values: &scopes.private_values,
+                redact_failed_response,
+            },
+        )
+        .await?
+    };
+    drop(guard);
+    if history_id.is_none() && !history_cleared {
+        return Ok(None);
+    }
+    Ok(Some((history_id, response, notice)))
 }
 pub async fn get(
     State(s): State<AppState>,

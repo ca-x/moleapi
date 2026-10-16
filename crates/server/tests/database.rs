@@ -2,9 +2,11 @@ mod common;
 #[path = "data_database.rs"]
 mod data_database;
 use common::*;
+use std::time::Duration;
 #[tokio::test]
 async fn identical_storage_auth_cas_tests_on_every_configured_database() {
     data_database::verify_configured_data_clients().await;
+    verify_data_completion_history().await;
     let directory = tempfile::tempdir().unwrap();
     let mut urls = vec![format!(
         "sqlite://{}?mode=rwc",
@@ -430,4 +432,120 @@ async fn recreation_keeps_monotonic_revisions_so_stale_updates_cannot_overwrite_
             .1["name"],
         "New incarnation"
     );
+}
+
+pub async fn verify_data_completion_history() {
+    for (key, source) in [
+        ("MOLEAPI_TEST_POSTGRES_URL", "postgresql"),
+        ("MOLEAPI_TEST_MYSQL_URL", "mysql"),
+    ] {
+        let Ok(url) = std::env::var(key) else {
+            continue;
+        };
+        let temp = tempfile::tempdir().unwrap();
+        let router = moleapi_server::local_with_worker(
+            &temp.path().join("data-history.db"),
+            &std::path::PathBuf::from(env!("CARGO_BIN_EXE_moleapi-server")),
+        )
+        .await
+        .unwrap();
+        let mut data = example_data();
+        let request = &mut data["collections"][0]["requests"][0];
+        request["method"] = json!("GET");
+        request["url"] = json!(url);
+        request["body_kind"] = json!("none");
+        request["body"] = json!("");
+        request["assertions"] = json!([]);
+        request["protocol"] = json!({"kind":"data","source":source,"tls":false,"sql":"SELECT 1"});
+        let (status, workspace) = call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            None,
+            Some(json!({"id":"hosted-data","name":"Hosted Data","data":data})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{workspace}");
+        let (status, session) = call(&router, "POST", "/api/sessions", None,
+            Some(json!({"workspace_id":"hosted-data","request":workspace["data"]["collections"][0]["requests"][0]}))).await;
+        assert_eq!(status, StatusCode::OK, "{session}");
+        let id = session["id"].as_str().unwrap();
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                let (_, summary) =
+                    call(&router, "GET", &format!("/api/sessions/{id}"), None, None).await;
+                if summary["state"] == "open" {
+                    break;
+                }
+                assert_ne!(summary["state"], "error", "{summary}");
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .unwrap();
+        let integer_type = if source == "mysql" {
+            "SIGNED"
+        } else {
+            "BIGINT"
+        };
+        let sql = format!(
+            "SELECT CAST(9007199254740993 AS {integer_type}) AS exact, CAST(1.23 AS DECIMAL(10,2)) AS amount"
+        );
+        let (status, sent) = call(
+            &router,
+            "POST",
+            &format!("/api/sessions/{id}/send"),
+            None,
+            Some(json!({"kind":"data_query","query_id":"typed-db","sql":sql,"read_only":true})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{sent}");
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                let (_, events) = call(
+                    &router,
+                    "GET",
+                    &format!("/api/sessions/{id}/events"),
+                    None,
+                    None,
+                )
+                .await;
+                if events["events"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|event| event["message"]["kind"] == "data_processed")
+                {
+                    assert!(
+                        events["events"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .any(|event| event["message"]["kind"] == "data_finished"),
+                        "{source}: {events}"
+                    );
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .unwrap();
+        let (_, entries) = call(
+            &router,
+            "GET",
+            "/api/workspaces/hosted-data/history",
+            None,
+            None,
+        )
+        .await;
+        let body: serde_json::Value =
+            serde_json::from_str(entries[0]["response"]["body"].as_str().unwrap()).unwrap();
+        assert_eq!(body["query_id"], "typed-db");
+        assert_eq!(
+            body["rows"][0][0]["value"], "9007199254740993",
+            "{source}: {body}"
+        );
+        assert_eq!(body["rows"][0][1]["value"], "1.23", "{source}: {body}");
+    }
 }

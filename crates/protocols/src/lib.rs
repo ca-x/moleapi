@@ -7,6 +7,7 @@ mod mqtt;
 mod tcp;
 pub use grpc::{ReflectionResult, ReflectionStatus, reflect};
 mod data;
+pub use data::{DataCompletion, DataOutcome};
 mod engine;
 mod graphql;
 mod models;
@@ -90,6 +91,9 @@ impl Session {
             | EventMessage::DataFinished { .. }
             | EventMessage::DataError { .. }
             | EventMessage::DataCancelled { .. } => serde_json::to_vec(&message)?.len(),
+            EventMessage::DataProcessed { .. } | EventMessage::DataPostprocessError { .. } => {
+                serde_json::to_vec(&message)?.len()
+            }
             EventMessage::A2aReady { .. }
             | EventMessage::A2aResult { .. }
             | EventMessage::A2aStream { .. }
@@ -498,7 +502,7 @@ impl SessionManager {
         id: &str,
         environment: moleapi_core::Environment,
         worker: &std::path::Path,
-    ) -> Result<()> {
+    ) -> Result<mpsc::Receiver<DataCompletion>> {
         let session = self.owned(owner, id)?;
         ensure!(
             session.record.lock().unwrap().summary.protocol == "data",
@@ -508,7 +512,17 @@ impl SessionManager {
         let mut data = session.data.lock().unwrap();
         data.environment = Some(environment);
         data.worker = Some(worker.to_owned());
-        Ok(())
+        let (sender, receiver) = mpsc::channel(4);
+        data.completions = Some(sender);
+        Ok(receiver)
+    }
+    pub fn data_event(&self, owner: &str, id: &str, message: EventMessage) -> Result<()> {
+        let session = self.owned(owner, id)?;
+        ensure!(
+            session.record.lock().unwrap().summary.protocol == "data",
+            "Expected Data session"
+        );
+        session.event("system", message)
     }
     pub fn configure_tcp(
         &self,

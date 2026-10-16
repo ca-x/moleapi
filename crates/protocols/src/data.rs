@@ -5,7 +5,7 @@ use moleapi_data::{Connection, QueryResult};
 use std::{
     path::PathBuf,
     sync::{Arc, OnceLock},
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tokio::sync::{Semaphore, mpsc};
 use tokio_util::sync::CancellationToken;
@@ -15,6 +15,46 @@ pub(crate) struct Control {
     pub worker: Option<PathBuf>,
     active: Option<(String, CancellationToken)>,
     commands: usize,
+    pub completions: Option<mpsc::Sender<DataCompletion>>,
+}
+pub struct DataCompletion {
+    pub query_id: String,
+    pub sql: String,
+    pub outcome: DataOutcome,
+    pub elapsed_ms: u64,
+    pub completed_at: Instant,
+}
+pub enum DataOutcome {
+    Success(QueryResult),
+    Error(String),
+    Cancelled { write_outcome_unknown: bool },
+}
+fn complete(
+    session: &Session,
+    query_id: String,
+    sql: String,
+    outcome: DataOutcome,
+    started: Instant,
+    completed_at: Instant,
+) -> Result<()> {
+    let completion = DataCompletion {
+        query_id: query_id.clone(),
+        sql,
+        outcome,
+        elapsed_ms: completed_at.duration_since(started).as_millis() as u64,
+        completed_at,
+    };
+    let sender = session.data.lock().unwrap().completions.clone();
+    if sender.is_none_or(|sender| sender.try_send(completion).is_err()) {
+        session.event(
+            "system",
+            EventMessage::DataPostprocessError {
+                query_id,
+                message: "Data postprocessing capacity unavailable; SQL was not retried".into(),
+            },
+        )?;
+    }
+    Ok(())
 }
 fn slots() -> Arc<Semaphore> {
     static SLOTS: OnceLock<Arc<Semaphore>> = OnceLock::new();
@@ -257,16 +297,27 @@ pub(crate) async fn run(
                 read_only,
                 stop,
             } => {
+                let started = Instant::now();
                 let permit = match slots().try_acquire_owned() {
                     Ok(value) => value,
                     Err(_) => {
                         active_done(&session);
+                        let finished = Instant::now();
+                        let message = "Data execution capacity reached".to_owned();
                         session.event(
                             "received",
                             EventMessage::DataError {
-                                query_id,
-                                message: "Data execution capacity reached".into(),
+                                query_id: query_id.clone(),
+                                message: message.clone(),
                             },
+                        )?;
+                        complete(
+                            &session,
+                            query_id,
+                            sql,
+                            DataOutcome::Error(message),
+                            started,
+                            finished,
                         )?;
                         continue;
                     }
@@ -275,12 +326,22 @@ pub(crate) async fn run(
                     Ok(value) => value,
                     Err(error) => {
                         active_done(&session);
+                        let finished = Instant::now();
+                        let message = mask(&error.to_string());
                         session.event(
                             "received",
                             EventMessage::DataError {
-                                query_id,
-                                message: mask(&error.to_string()),
+                                query_id: query_id.clone(),
+                                message: message.clone(),
                             },
+                        )?;
+                        complete(
+                            &session,
+                            query_id,
+                            sql,
+                            DataOutcome::Error(message),
+                            started,
+                            finished,
                         )?;
                         continue;
                     }
@@ -294,6 +355,7 @@ pub(crate) async fn run(
                 let cancel = connection.cancellation();
                 let result = tokio::select! {biased;_=session.cancel.cancelled()=>None,_=stop.cancelled()=>None,result=tokio::time::timeout(duration,connection.query(&sql,read_only,duration))=>Some(result)};
                 active_done(&session);
+                let finished = Instant::now();
                 match result {
                     None => {
                         let _ =
@@ -302,9 +364,19 @@ pub(crate) async fn run(
                             session.event(
                                 "received",
                                 EventMessage::DataCancelled {
-                                    query_id,
+                                    query_id: query_id.clone(),
                                     write_outcome_unknown: !read_only,
                                 },
+                            )?;
+                            complete(
+                                &session,
+                                query_id,
+                                sql,
+                                DataOutcome::Cancelled {
+                                    write_outcome_unknown: !read_only,
+                                },
+                                started,
+                                finished,
                             )?;
                         }
                         drop(connection);
@@ -314,19 +386,57 @@ pub(crate) async fn run(
                     Some(Err(_)) => {
                         let _ =
                             tokio::time::timeout(Duration::from_secs(1), cancel.request()).await;
-                        session.event("received",EventMessage::DataError {query_id,message:"Data query timed out; connection closed; write outcome may be unknown".into()})?;
+                        let message =
+                            "Data query timed out; connection closed; write outcome may be unknown"
+                                .to_owned();
+                        session.event(
+                            "received",
+                            EventMessage::DataError {
+                                query_id: query_id.clone(),
+                                message: message.clone(),
+                            },
+                        )?;
+                        complete(
+                            &session,
+                            query_id,
+                            sql,
+                            DataOutcome::Error(message),
+                            started,
+                            finished,
+                        )?;
                         drop(connection);
                         drop(permit);
                         return Ok("Data query timed out".into());
                     }
-                    Some(Ok(Err(error))) => session.event(
-                        "received",
-                        EventMessage::DataError {
+                    Some(Ok(Err(error))) => {
+                        let message = mask(&error.to_string());
+                        session.event(
+                            "received",
+                            EventMessage::DataError {
+                                query_id: query_id.clone(),
+                                message: message.clone(),
+                            },
+                        )?;
+                        complete(
+                            &session,
                             query_id,
-                            message: mask(&error.to_string()),
-                        },
-                    )?,
-                    Some(Ok(Ok(result))) => result_events(&session, &query_id, result)?,
+                            sql,
+                            DataOutcome::Error(message),
+                            started,
+                            finished,
+                        )?;
+                    }
+                    Some(Ok(Ok(result))) => {
+                        result_events(&session, &query_id, result.clone())?;
+                        complete(
+                            &session,
+                            query_id,
+                            sql,
+                            DataOutcome::Success(result),
+                            started,
+                            finished,
+                        )?;
+                    }
                 }
                 if connection.is_closed() {
                     drop(connection);

@@ -39,3 +39,17 @@ it("clears an unfinished query when a disconnect emits only a terminal state",()
   expect(result.current.active).toBe(null);expect(result.current.result).toBe(null);
   expect(result.current.error).not.toBe("");
 });
+it("keeps postprocessing attached to the query that produced it",()=>{
+  let events=[event(1,{kind:"data_started",query_id:"first"}),event(2,{kind:"data_finished",query_id:"first",rows_affected:0,elapsed_ms:1,truncated:false,limit_reason:null})];
+  const {result,rerender}=renderHook(()=>useDataEvents("session",events,0));
+  act(()=>{result.current.reserve("second");});
+  events=[...events,event(3,{kind:"data_started",query_id:"second"}),event(4,{kind:"data_processed",query_id:"first",history_id:"old",notice:null,tests:[],logs:[],variable_updates:[]}),event(5,{kind:"data_processed",query_id:"second",history_id:"new",notice:null,tests:[],logs:[],variable_updates:[]})];
+  rerender();
+  expect(result.current.processing?.history_id).toBe("new");
+});
+it("shows saved history after a terminal query closes its connection",()=>{
+  let events=[event(1,{kind:"data_started",query_id:"query"}),event(2,{kind:"data_error",query_id:"query",message:"failed"}),event(3,{kind:"state",state:"closed",reason:"closed"})];
+  const {result,rerender}=renderHook(()=>useDataEvents("session",events,0));
+  events=[...events,event(4,{kind:"data_processed",query_id:"query",history_id:"saved",notice:null,tests:[],logs:[],variable_updates:[]})];rerender();
+  expect(result.current.processing?.history_id).toBe("saved");
+});

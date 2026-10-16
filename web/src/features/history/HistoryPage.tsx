@@ -53,6 +53,7 @@ export default function HistoryPage() {
           <Callout.Text>{safeMessage(history.error)}</Callout.Text>
         </Callout.Root>
       )}
+      <div className="history-table-scroll" role="region" aria-label={t("请求历史")} tabIndex={0}>
       <Table.Root>
         <Table.Header>
           <Table.Row>
@@ -99,6 +100,7 @@ export default function HistoryPage() {
           ))}
         </Table.Body>
       </Table.Root>
+      </div>
       {history.data?.length === 0 && (
         <Text color="gray">{t("还没有请求记录。发送一个请求后即可查看。")}</Text>
       )}

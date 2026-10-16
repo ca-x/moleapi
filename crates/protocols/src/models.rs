@@ -79,6 +79,18 @@ pub enum EventMessage {
         query_id: String,
         write_outcome_unknown: bool,
     },
+    DataProcessed {
+        query_id: String,
+        history_id: Option<String>,
+        notice: Option<String>,
+        tests: Vec<TestResult>,
+        logs: Vec<ScriptLog>,
+        variable_updates: Vec<VariableUpdate>,
+    },
+    DataPostprocessError {
+        query_id: String,
+        message: String,
+    },
 
     TcpData {
         base64: String,

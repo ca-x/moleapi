@@ -21,14 +21,31 @@ pub async fn clear_history(
     Extension(owner): Extension<Identity>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let _workspace_gate = s.webhooks.gates.lock(&owner.0, &id).await;
     owned(&s, &owner.0, &id).await?;
     document::Entity::delete_many()
-        .filter(document::Column::Owner.eq(owner.0))
+        .filter(document::Column::Owner.eq(&owner.0))
         .filter(document::Column::Kind.eq("history"))
-        .filter(document::Column::RefId.eq(id))
+        .filter(document::Column::RefId.eq(&id))
         .exec(&s.db)
         .await?;
+    let mut clears = s.history_clears.lock().unwrap();
+    clears.retain(|_, at| at.elapsed() < std::time::Duration::from_secs(60 * 60));
+    clears.insert((owner.0, id), std::time::Instant::now());
     Ok(Json(serde_json::json!({"ok":true})))
+}
+
+pub(crate) fn cleared_since(
+    s: &AppState,
+    owner: &str,
+    workspace: &str,
+    completed_at: std::time::Instant,
+) -> bool {
+    s.history_clears
+        .lock()
+        .unwrap()
+        .get(&(owner.to_owned(), workspace.to_owned()))
+        .is_some_and(|cleared_at| *cleared_at >= completed_at)
 }
 
 pub(crate) async fn record(
@@ -193,7 +210,11 @@ pub(crate) fn project(
         } else {
             r.name.clone()
         },
-        method: r.method.clone(),
+        method: if r.protocol.is_data() {
+            "SQL".into()
+        } else {
+            r.method.clone()
+        },
         url: stored.url.clone(),
         status: stored.status,
         elapsed_ms: stored.elapsed_ms,
