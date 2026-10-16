@@ -5,6 +5,9 @@ fn definition(enabled: bool) -> Value {
     json!({"name":"Scheduled","cron":"* * * * * *","timezone":"UTC","enabled":enabled,"collection_id":"c","scenario_id":null,"environment_id":null,"dataset_id":null,"iterations":null})
 }
 async fn completed(router: &Router, id: &str) -> Value {
+    completed_run(router, id, None).await
+}
+async fn completed_run(router: &Router, id: &str, expected_run_id: Option<&str>) -> Value {
     let observed = Arc::new(Mutex::new(json!(null)));
     let capture = observed.clone();
     tokio::time::timeout(std::time::Duration::from_secs(8), async {
@@ -18,7 +21,9 @@ async fn completed(router: &Router, id: &str) -> Value {
                 .unwrap()
                 .clone();
             *capture.lock().unwrap() = schedule.clone();
-            if schedule["last_run"].is_object() {
+            if schedule["last_run"].is_object()
+                && expected_run_id.is_none_or(|run_id| schedule["last_run"]["id"] == run_id)
+            {
                 return schedule;
             }
             tokio::time::sleep(std::time::Duration::from_millis(40)).await;
@@ -444,7 +449,7 @@ async fn queued_runs_survive_restart_and_expired_leases_are_recorded_without_rep
     .await
     .unwrap();
     let restarted = local(&path).await.unwrap();
-    let done = completed(&restarted, &id).await;
+    let done = completed_run(&restarted, &id, Some(&resumed)).await;
     assert_eq!(done["last_run"]["id"], resumed, "{done}");
     assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 2);
     let (_, history) = call(
