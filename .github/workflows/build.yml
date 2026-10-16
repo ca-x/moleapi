@@ -173,6 +173,12 @@ jobs:
       - run: python scripts/prepare_openapi_generator.py
       - run: python scripts/prepare_dubbo_worker.py
       - run: python scripts/prepare_java_runtime.py --target ${{ matrix.target }}
+      - name: Expose bundled JVM libraries to Linux AppImage dependency scan
+        if: runner.os == 'Linux'
+        run: |
+          java_lib="$GITHUB_WORKSPACE/vendor/java-runtime/current/payload/lib"
+          test -f "$java_lib/server/libjvm.so"
+          echo "LD_LIBRARY_PATH=$java_lib/server:$java_lib" >> "$GITHUB_ENV"
       - uses: tauri-apps/tauri-action@v0
         with:
           projectPath: desktop
