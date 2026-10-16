@@ -48,6 +48,10 @@ pub struct DubboConfig {
     pub metadata_center_url: String,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub metadata_application: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub metadata_namespace: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub metadata_group: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata_auth: Option<DubboRegistryAuth>,
     pub transport: String,
@@ -73,6 +77,8 @@ impl Default for DubboConfig {
             registry_namespace: String::new(),
             metadata_center_url: String::new(),
             metadata_application: String::new(),
+            metadata_namespace: String::new(),
+            metadata_group: String::new(),
             metadata_auth: None,
             transport: "classic".into(),
             serialization: "hessian2".into(),
@@ -267,6 +273,18 @@ pub fn validate_dubbo(request: &RequestSpec, templates: bool) -> Result<()> {
                 .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')),
         "Invalid metadata application"
     );
+    let nacos_metadata = dubbo_registry_url(&config.metadata_center_url, "nacos").is_ok();
+    for value in [&config.metadata_namespace, &config.metadata_group] {
+        ensure!(
+            value.is_empty()
+                || nacos_metadata
+                    && value.len() <= 128
+                    && value
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.')),
+            "Invalid Nacos metadata namespace or config group"
+        );
+    }
     if let Some(auth) = &config.metadata_auth {
         ensure!(
             !config.metadata_center_url.is_empty()

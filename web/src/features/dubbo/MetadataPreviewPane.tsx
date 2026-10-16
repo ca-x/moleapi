@@ -26,6 +26,7 @@ export default function MetadataPreviewPane({request, update, workspaceId, works
   const [success,setSuccess] = useState("");
   if (request.protocol?.kind !== "dubbo") return null;
   const config = request.protocol;
+  const nacosMetadata = config.metadata_center_url?.toLowerCase().startsWith("nacos://") ?? false;
   const change = (patch:Partial<DubboConfig>) => {
     setPreview(null); setError(""); setSuccess("");
     update({protocol:{...config,...patch}});
@@ -66,9 +67,13 @@ export default function MetadataPreviewPane({request, update, workspaceId, works
   };
   return <div className="form-panel">
     <Text weight="medium">{t("Dubbo 元数据中心")}</Text>
-    <Text size="2" color="gray">{t("填写提供方使用的 ZooKeeper 或 Nacos 元数据中心及 application 名称。Nacos 元数据目前仅支持 public 命名空间且不支持认证。")}</Text>
+    <Text size="2" color="gray">{t("填写提供方使用的元数据中心及 application。Nacos 命名空间留空表示 public，配置分组留空表示 dubbo。")}</Text>
     <Field label={t("元数据中心地址")}><TextField.Root className="mono" style={{width:"100%"}} aria-label={t("元数据中心地址")} value={config.metadata_center_url ?? ""} maxLength={2048} disabled={disabled} placeholder="zookeeper://host:2181 or nacos://host:8848" onChange={event=>change({metadata_center_url:event.target.value})}/></Field>
     <Field label={t("提供方 application")}><TextField.Root style={{width:"100%"}} aria-label={t("提供方 application")} value={config.metadata_application ?? ""} maxLength={128} disabled={disabled} placeholder="provider-app" onChange={event=>change({metadata_application:event.target.value})}/></Field>
+    {nacosMetadata && <Flex gap="3" wrap="wrap">
+      <Field label={t("元数据命名空间 ID")}><TextField.Root aria-label={t("元数据命名空间 ID")} value={config.metadata_namespace ?? ""} maxLength={128} disabled={disabled} placeholder="public" onChange={event=>change({metadata_namespace:event.target.value})}/></Field>
+      <Field label={t("元数据配置分组")}><TextField.Root aria-label={t("元数据配置分组")} value={config.metadata_group ?? ""} maxLength={128} disabled={disabled} placeholder="dubbo" onChange={event=>change({metadata_group:event.target.value})}/></Field>
+    </Flex>}
     <Flex gap="3" wrap="wrap">
       <Field label={t("元数据用户名")}><TextField.Root aria-label={t("元数据用户名")} value={config.metadata_auth?.username ?? ""} maxLength={128} disabled={disabled} onChange={event=>changeAuth(event.target.value,config.metadata_auth?.password ?? "")}/></Field>
       <Field label={t("元数据密码")}><TextField.Root type="password" aria-label={t("元数据密码")} value={config.metadata_auth?.password ?? ""} maxLength={4096} disabled={disabled} onChange={event=>changeAuth(config.metadata_auth?.username ?? "",event.target.value)}/></Field>

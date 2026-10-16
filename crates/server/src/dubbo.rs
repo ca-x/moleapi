@@ -323,6 +323,16 @@ pub(crate) async fn import_metadata(
     if !changed {
         return Ok(Json(w));
     }
+    let metadata_config_group =
+        if url::Url::parse(&config.metadata_center_url).is_ok_and(|url| url.scheme() == "nacos") {
+            if config.metadata_group.is_empty() {
+                "dubbo"
+            } else {
+                &config.metadata_group
+            }
+        } else {
+            ""
+        };
     w.data.specifications.push(Specification {
         id: specification_id,
         name: format!("Dubbo {} ({})", preview.service, preview.application),
@@ -330,6 +340,8 @@ pub(crate) async fn import_metadata(
         dialect: "dubbo-3.3.6".into(),
         source: json!({"format":"moleapi-dubbo-metadata-source-v1",
             "url":config.metadata_center_url,"application":preview.application,
+            "namespace":config.metadata_namespace,
+            "config_group":metadata_config_group,
             "path":preview.metadata_path,"raw":preview.raw_document,
             "document_sha256":preview.document_sha256,
             "source_request_id":source.id,

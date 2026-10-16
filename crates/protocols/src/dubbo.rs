@@ -422,7 +422,7 @@ fn parse_metadata_definition(
     })
 }
 
-/// Read the Apache 3.3.6 provider definition from Nacos ConfigService's public namespace.
+/// Read the Apache 3.3.6 provider definition from a checked Nacos ConfigService.
 pub async fn preview_nacos_metadata(
     endpoint: &str,
     config: &DubboConfig,
@@ -431,10 +431,6 @@ pub async fn preview_nacos_metadata(
     timeout: Duration,
 ) -> Result<DubboMetadataPreview> {
     ensure!(
-        config.metadata_auth.is_none(),
-        "Authenticated Nacos metadata centers are not supported yet"
-    );
-    ensure!(
         !application.is_empty()
             && application.len() <= 128
             && application
@@ -442,6 +438,27 @@ pub async fn preview_nacos_metadata(
                 .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')),
         "Invalid metadata application"
     );
+    for value in [&config.metadata_namespace, &config.metadata_group] {
+        ensure!(
+            value.len() <= 128
+                && value
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.')),
+            "Invalid Nacos metadata namespace or config group"
+        );
+    }
+    if let Some(auth) = &config.metadata_auth {
+        ensure!(
+            !auth.username.is_empty()
+                && auth.username.len() <= 128
+                && !auth.username.contains(':')
+                && !auth.username.chars().any(char::is_control)
+                && !auth.password.is_empty()
+                && auth.password.len() <= 4096
+                && !auth.password.chars().any(char::is_control),
+            "Invalid Nacos metadata credentials"
+        );
+    }
     let deadline = Instant::now() + timeout;
     let registry_url = dubbo_registry_url(endpoint, "nacos")?;
     let addresses = tokio::time::timeout(
@@ -453,6 +470,10 @@ pub async fn preview_nacos_metadata(
     let address = reachable_address(&addresses, deadline)
         .await
         .context("Nacos metadata center connection failed")?;
+    ensure!(
+        config.metadata_auth.is_none() || !public_ip(address.ip()),
+        "Nacos HTTP metadata credentials require a private center address"
+    );
     let host = registry_url
         .host_str()
         .context("Nacos metadata host missing")?
@@ -472,7 +493,19 @@ pub async fn preview_nacos_metadata(
     request_url
         .query_pairs_mut()
         .append_pair("dataId", &data_id)
-        .append_pair("group", "dubbo");
+        .append_pair(
+            "group",
+            if config.metadata_group.is_empty() {
+                "dubbo"
+            } else {
+                &config.metadata_group
+            },
+        );
+    if !config.metadata_namespace.is_empty() {
+        request_url
+            .query_pairs_mut()
+            .append_pair("tenant", &config.metadata_namespace);
+    }
     let client = reqwest::Client::builder()
         .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
@@ -483,9 +516,50 @@ pub async fn preview_nacos_metadata(
         .resolve(host, address)
         .timeout(deadline.saturating_duration_since(Instant::now()))
         .build()?;
+    let mut listing = client.get(request_url.clone());
+    if let Some(auth) = &config.metadata_auth {
+        let mut login_endpoint = request_url.clone();
+        login_endpoint.set_path("/nacos/v1/auth/users/login");
+        login_endpoint.set_query(None);
+        let form = url::form_urlencoded::Serializer::new(String::new())
+            .append_pair("username", &auth.username)
+            .append_pair("password", &auth.password)
+            .finish();
+        let login = tokio::time::timeout(
+            deadline.saturating_duration_since(Instant::now()),
+            client
+                .post(login_endpoint)
+                .header(
+                    reqwest::header::CONTENT_TYPE,
+                    "application/x-www-form-urlencoded",
+                )
+                .body(form)
+                .send(),
+        )
+        .await
+        .context("Nacos metadata login timed out")?
+        .context("Nacos metadata login failed")?;
+        ensure!(
+            login.status().is_success(),
+            "Nacos metadata login returned {}",
+            login.status()
+        );
+        let login_body = bounded_nacos_body(login, 16 * 1024, deadline).await?;
+        let login_data: Value =
+            serde_json::from_slice(&login_body).context("Invalid Nacos metadata login response")?;
+        let token = login_data
+            .get("accessToken")
+            .and_then(Value::as_str)
+            .context("Nacos metadata login did not return an access token")?;
+        ensure!(
+            !token.is_empty() && token.len() <= 4096 && token.is_ascii(),
+            "Invalid Nacos metadata access token"
+        );
+        listing = listing.bearer_auth(token);
+    }
     let response = tokio::time::timeout(
         deadline.saturating_duration_since(Instant::now()),
-        client.get(request_url).send(),
+        listing.send(),
     )
     .await
     .context("Nacos metadata lookup timed out")?

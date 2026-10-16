@@ -31,6 +31,8 @@ export interface DubboConfig {
   registry_namespace?: string;
   metadata_center_url?: string;
   metadata_application?: string;
+  metadata_namespace?: string;
+  metadata_group?: string;
   metadata_auth?: {username:string;password:string} | null;
   transport: "classic";
   serialization: "hessian2";

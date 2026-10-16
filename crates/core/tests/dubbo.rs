@@ -127,6 +127,8 @@ fn metadata_center_reference_is_separate_and_credential_free_in_url() {
         unreachable!()
     };
     config.metadata_center_url = "nacos://metadata.example:8848".into();
+    config.metadata_namespace = "moleapi-qa".into();
+    config.metadata_group = "moleapi-metadata-qa".into();
     validate_request(&r, false).unwrap();
     let Protocol::Dubbo { config } = &mut r.protocol else {
         unreachable!()
@@ -137,6 +139,12 @@ fn metadata_center_reference_is_separate_and_credential_free_in_url() {
         unreachable!()
     };
     config.metadata_center_url = "zookeeper://metadata.example:2181".into();
+    assert!(validate_request(&r, false).is_err());
+    let Protocol::Dubbo { config } = &mut r.protocol else {
+        unreachable!()
+    };
+    config.metadata_namespace.clear();
+    config.metadata_group.clear();
     config.metadata_application = "bad/application".into();
     assert!(validate_request(&r, false).is_err());
 }
