@@ -52,6 +52,18 @@ it("invalidates a late preview when the workspace changes but retains the file i
   expect((screen.getByRole("textbox",{name:"Postman 变量文件内容"}) as HTMLTextAreaElement).value).toBe("fixture");
   expect(screen.getByRole("alert").textContent).toContain("工作区已切换");
 });
+it("does not revive a preview after switching away and back",async()=>{
+  const value=state();let resolve!:(result:unknown)=>void;
+  vi.mocked(api).mockReturnValue(new Promise(done=>{resolve=done;}));
+  const {view}=show(value);
+  const original=value.draft;
+  value.draft={id:"other",revision:1,data:initialData()};
+  view.rerender(<Theme><VariableFileImportDialog open onOpenChange={vi.fn()}/></Theme>);
+  value.draft=original;
+  view.rerender(<Theme><VariableFileImportDialog open onOpenChange={vi.fn()}/></Theme>);
+  await act(async()=>resolve({scope:"environment",name:"Stale",variables:[],warnings:[]}));
+  expect(screen.queryByRole("textbox",{name:"导入环境名称"})).toBeNull();
+});
 it("clears the pasted file when the account changes",async()=>{
   const value=state();vi.mocked(api).mockResolvedValue({scope:"environment",name:"Imported",variables:[],warnings:[]});
   const {view}=show(value);

@@ -97,6 +97,38 @@ fn postman_variable_export_defaults_private_and_full_export_restores_exact_value
 }
 
 #[test]
+fn postman_variable_export_screens_private_names_and_filenames() {
+    let mut data: WorkspaceData = serde_json::from_value(
+        json!({"schema_version":1,"collections":[],"environments":[],"active_environment_id":null}),
+    )
+    .unwrap();
+    data.global_variables.push(Pair {
+        id: "token".into(),
+        key: "api_token".into(),
+        value: "known-secret".into(),
+        enabled: true,
+        secret: Some(true),
+        local_value: None,
+    });
+    data.environments.push(Environment {
+        id: "dev".into(),
+        name: "known-secret".into(),
+        variables: vec![],
+    });
+    let mut workspace = workspace(data);
+    workspace.name = "team-known-secret".into();
+    for (scope, environment_id) in [("environment", Some("dev")), ("globals", None)] {
+        let safe = export_postman_variables(&workspace, scope, environment_id, false).unwrap();
+        assert!(!safe.content.contains("known-secret"));
+        assert!(!safe.filename.contains("known-secret"));
+        let safe_source: Value = serde_json::from_str(&safe.content).unwrap();
+        assert!(!safe_source["name"].as_str().unwrap().is_empty());
+        let full = export_postman_variables(&workspace, scope, environment_id, true).unwrap();
+        assert!(full.content.contains("known-secret"));
+    }
+}
+
+#[test]
 fn postman_variable_files_reject_ambiguous_or_oversized_input() {
     let mut source: Value =
         serde_json::from_str(include_str!("fixtures/postman_environment.json")).unwrap();

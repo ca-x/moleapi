@@ -12,29 +12,29 @@ export default function VariableFileImportDialog({open,onOpenChange}:{open:boole
   const state=useWorkbench();
   const [content,setContent]=useState(""),[name,setName]=useState(""),[preview,setPreview]=useState<VariableFileImport|null>(null);
   const [pending,setPending]=useState(false),[problem,setProblem]=useState<ErrorCopy>("");
-  const mounted=useRef(true),latest=useRef(""),previewOrigin=useRef(""),attemptedId=useRef<string|null>(null);
+  const mounted=useRef(true),latest=useRef(""),scopeEpoch=useRef(0),previewOrigin=useRef(""),attemptedId=useRef<string|null>(null);
   const identity=JSON.stringify([state.accountId,state.draft?.id,state.draft?.revision]);latest.current=identity;
   const previous=useRef({account:state.accountId,workspace:state.draft?.id});
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
   useLayoutEffect(()=>{
     const prior=previous.current;previous.current={account:state.accountId,workspace:state.draft?.id};
-    if(prior.account!==state.accountId){setContent("");setName("");setPreview(null);setProblem("");attemptedId.current=null;previewOrigin.current="";}
-    else if(prior.workspace!==state.draft?.id){setPreview(null);setProblem(t("工作区已切换，请重新预览变量文件。"));attemptedId.current=null;previewOrigin.current="";}
+    if(prior.account!==state.accountId){scopeEpoch.current++;setContent("");setName("");setPreview(null);setProblem("");attemptedId.current=null;previewOrigin.current="";}
+    else if(prior.workspace!==state.draft?.id){scopeEpoch.current++;setPreview(null);setProblem(t("工作区已切换，请重新预览变量文件。"));attemptedId.current=null;previewOrigin.current="";}
   },[state.accountId,state.draft?.id]);
-  function change(next:boolean){onOpenChange(next);if(!next){setContent("");setName("");setPreview(null);setProblem("");attemptedId.current=null;previewOrigin.current="";}}
-  async function choose(){if(pending)return;const origin=identity;setPending(true);setProblem("");try{
+  function change(next:boolean){onOpenChange(next);if(!next){scopeEpoch.current++;setContent("");setName("");setPreview(null);setProblem("");attemptedId.current=null;previewOrigin.current="";}}
+  async function choose(){if(pending)return;const origin=identity,epoch=scopeEpoch.current;setPending(true);setProblem("");try{
     const text=await pickFile({extensions:["json"],maximum:1024*1024,label:t("Postman 变量文件")});
-    if(text!==null&&mounted.current&&latest.current===origin){setContent(text);setPreview(null);attemptedId.current=null;previewOrigin.current="";}
-  }catch(error){if(mounted.current&&latest.current===origin)setProblem(errorCopy(error));}
+    if(text!==null&&mounted.current&&latest.current===origin&&scopeEpoch.current===epoch){setContent(text);setPreview(null);attemptedId.current=null;previewOrigin.current="";}
+  }catch(error){if(mounted.current&&latest.current===origin&&scopeEpoch.current===epoch)setProblem(errorCopy(error));}
   finally{if(mounted.current)setPending(false);}}
-  async function inspect(){if(pending||!state.draft||!content)return;const origin=identity;setPending(true);setProblem("");try{
+  async function inspect(){if(pending||!state.draft||!content)return;const origin=identity,epoch=scopeEpoch.current;setPending(true);setProblem("");try{
     const result=await api<VariableFileImport>(`/api/workspaces/${state.draft.id}/variables/import-preview`,"POST",{content,expected_revision:state.draft.revision});
-    if(mounted.current&&latest.current===origin){setPreview(result);setName(result.name);previewOrigin.current=origin;}
-  }catch(error){if(mounted.current&&latest.current===origin)setProblem(errorCopy(error));}
+    if(mounted.current&&latest.current===origin&&scopeEpoch.current===epoch){setPreview(result);setName(result.name);previewOrigin.current=origin;}
+  }catch(error){if(mounted.current&&latest.current===origin&&scopeEpoch.current===epoch)setProblem(errorCopy(error));}
   finally{if(mounted.current)setPending(false);}}
   async function confirm(){if(pending||state.saving||!state.draft||!preview)return;
     if(previewOrigin.current!==identity){setProblem(t("工作区已变化，请重新预览变量文件。"));setPreview(null);return;}
-    const origin=identity,current=()=>mounted.current&&latest.current===origin;
+    const origin=identity,epoch=scopeEpoch.current,current=()=>mounted.current&&latest.current===origin&&scopeEpoch.current===epoch;
     const title=name.trim();let identifier="";
     if(preview.scope==="environment"){
       if(!title||new TextEncoder().encode(title).length>128){setProblem(t("请输入 1–128 字节的环境名称。"));return;}

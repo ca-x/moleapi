@@ -147,6 +147,17 @@ pub fn export_postman_variables(
         _ => anyhow::bail!("Unsupported Postman variable scope"),
     };
     validate_variables(variables)?;
+    let safe_name = if include_secrets {
+        name.to_owned()
+    } else {
+        let screened =
+            redact::ExportPrivacy::from_workspace(workspace, false).screen_bounded(name, 128);
+        if screened.trim().is_empty() {
+            "[REDACTED]".into()
+        } else {
+            screened
+        }
+    };
     let values = variables
         .iter()
         .map(|item| {
@@ -157,13 +168,13 @@ pub fn export_postman_variables(
         })
         .collect::<Vec<_>>();
     let content = serde_json::to_string_pretty(&json!({
-        "id":id,"name":name,"values":values,"_postman_variable_scope":scope
+        "id":id,"name":safe_name,"values":values,"_postman_variable_scope":scope
     }))?;
     ensure!(
         content.len() <= MAX_FILE,
         "Postman variable export exceeds 1 MiB"
     );
-    let stem = name
+    let stem = safe_name
         .chars()
         .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
         .take(64)

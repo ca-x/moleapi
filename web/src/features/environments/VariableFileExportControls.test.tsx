@@ -31,6 +31,21 @@ it("does not download a late export after an account switch",async()=>{
   await act(async()=>resolve({filename:"late.json",content:"secret",mime:"application/json"}));
   expect(saveFile).not.toHaveBeenCalled();
 });
+it("does not download a late full export after switching away and back",async()=>{
+  const value=state();vi.mocked(useWorkbench).mockReturnValue(value as unknown as ReturnType<typeof useWorkbench>);
+  let resolve!:(result:unknown)=>void;vi.mocked(api).mockReturnValue(new Promise(done=>{resolve=done;}));
+  const view=render(<Theme><VariableFileExportControls/></Theme>);
+  fireEvent.click(screen.getByRole("checkbox",{name:"包含私密变量值"}));
+  fireEvent.click(screen.getByRole("button",{name:"导出当前环境"}));
+  const original=value.draft;
+  value.draft={id:"other",revision:3,data:initialData()};
+  view.rerender(<Theme><VariableFileExportControls/></Theme>);
+  value.draft=original;
+  view.rerender(<Theme><VariableFileExportControls/></Theme>);
+  await act(async()=>resolve({filename:"private.json",content:"secret",mime:"application/json"}));
+  expect(saveFile).not.toHaveBeenCalled();
+  expect(screen.getByRole("checkbox",{name:"包含私密变量值"}).getAttribute("aria-checked")).toBe("false");
+});
 it("resets full export when switching workspaces",()=>{
   const value=state();vi.mocked(useWorkbench).mockReturnValue(value as unknown as ReturnType<typeof useWorkbench>);
   const view=render(<Theme><VariableFileExportControls/></Theme>);

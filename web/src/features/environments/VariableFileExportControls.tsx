@@ -10,12 +10,12 @@ import {hasChanges} from "../workspaces/draft";
 export default function VariableFileExportControls(){
   useLanguage();const state=useWorkbench();
   const [includeSecrets,setIncludeSecrets]=useState(false),[pending,setPending]=useState(false),[problem,setProblem]=useState<ErrorCopy>("");
-  const identity=JSON.stringify([state.accountId,state.draft?.id]);const latest=useRef(identity);latest.current=identity;
+  const identity=JSON.stringify([state.accountId,state.draft?.id]);const latest=useRef(identity),scopeEpoch=useRef(0);latest.current=identity;
   const previous=useRef(identity);
-  useLayoutEffect(()=>{if(previous.current!==identity){previous.current=identity;setIncludeSecrets(false);setProblem("");}},[identity]);
+  useLayoutEffect(()=>{if(previous.current!==identity){previous.current=identity;scopeEpoch.current++;setIncludeSecrets(false);setProblem("");}},[identity]);
   async function download(scope:"environment"|"globals"){
     if(!state.draft||pending||state.saving)return;
-    const origin=identity,current=()=>latest.current===origin;
+    const origin=identity,epoch=scopeEpoch.current,current=()=>latest.current===origin&&scopeEpoch.current===epoch;
     const workspace=state.draft.id,environmentId=scope==="environment"?state.environment?.id:null;
     if(scope==="environment"&&!environmentId)return;
     setPending(true);setProblem("");
