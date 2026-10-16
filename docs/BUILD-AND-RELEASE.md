@@ -51,6 +51,8 @@ Linux AppImage 的 `linuxdeploy` 会改写 JRE 内 ELF 文件，导致固定原�
 
 CI 为无 FUSE 环境全局设置 `APPIMAGE_EXTRACT_AND_RUN=1`。修复脚本读取 AppImage runtime 的签名和偏移时临时移除该变量，避免把 runtime 查询误当成应用启动；实际解包步骤仍显式启用它。run `38963507351` 首次执行修复脚本时在签名查询处返回101，本地用相同环境复现并验证修复；该次打包结果不算通过。
 
+分支构建 `38972262886` 已产出真实 Linux deb/rpm/AppImage，独立 deb 解包、JRE 原始清单与 Dubbo worker 自检通过，但 Ubuntu 22.04 上的 `rpm2cpio` 对该 RPM 返回1且没有错误正文，导致 RPM 与 AppImage 后续自检未执行。下载该次构建的原始 RPM 后，本地 `bsdtar` 可完整列出并解包；解包的 JRE 清单与 Dubbo worker 校验通过。本地 Arch 缺少 Ubuntu 打包程序所需的 WebKitGTK4.1 动态库，不能替代原生桌面 worker 检查。自检脚本已改为使用 `libarchive-tools` 的 `bsdtar` 提取真实 RPM；仅在 GitHub Linux runner 缺少该命令时，利用工作流先前更新的 apt 索引安装此工具。本地缺少工具会明确报错。新的原生 CI 结果仍待验证。
+
 经典 Dubbo 使用同一份固定 Temurin JRE 和独立固定哈希的 Apache Dubbo worker JAR。构建前运行 `python scripts/prepare_dubbo_worker.py`（首次需要显式 Maven/JDK 或提供已构建且哈希匹配的 JAR）；独立服务端压缩包和桌面资源均放在 `runtime/dubbo/engine.jar`，Docker 固定路径为 `/opt/moleapi/runtime/dubbo/engine.jar`。`scripts/check-bundled-dubbo.py` 检查 JAR/JRE 原始字节并实际启动 worker；真实业务调用、原生安装与容器 smoke 仍以对应平台流水线为准。开发者可显式设置绝对路径 `MOLEAPI_DUBBO_WORKER_JAR`，运行时不会下载或接受工作区提供的可执行文件路径。
 
 发行验证用 scripts/check-bundled-java.py：在清空外部 Java 配置、使 PATH 不可用后，
