@@ -33,6 +33,21 @@ export default function MetadataPreviewPane({request, update, workspaceId, works
   };
   const changeAuth = (username:string,password:string) =>
     change({metadata_auth:username || password ? {username,password} : undefined});
+  const changeEndpoint = (value:string) => {
+    const patch:Partial<DubboConfig> = {metadata_center_url:value};
+    try {
+      const next = new URL(value);
+      if (next.protocol === "zookeeper:" && next.host) {
+        patch.metadata_namespace = "";
+        patch.metadata_group = "";
+      }
+      try {
+        const current = new URL(config.metadata_center_url ?? "");
+        if (next.protocol !== current.protocol || next.host !== current.host) patch.metadata_auth = undefined;
+      } catch { /* The previous endpoint is incomplete. */ }
+    } catch { /* Keep the current source while the endpoint is being edited. */ }
+    change(patch);
+  };
   const open = () => {
     if (!workspaceId || pending) return;
     setPending(true); setError(""); setPreview(null); setDecisions({}); setSuccess("");
@@ -68,7 +83,7 @@ export default function MetadataPreviewPane({request, update, workspaceId, works
   return <div className="form-panel">
     <Text weight="medium">{t("Dubbo 元数据中心")}</Text>
     <Text size="2" color="gray">{t("填写提供方使用的元数据中心及 application。Nacos 命名空间留空表示 public，配置分组留空表示 dubbo。")}</Text>
-    <Field label={t("元数据中心地址")}><TextField.Root className="mono" style={{width:"100%"}} aria-label={t("元数据中心地址")} value={config.metadata_center_url ?? ""} maxLength={2048} disabled={disabled} placeholder="zookeeper://host:2181 or nacos://host:8848" onChange={event=>change({metadata_center_url:event.target.value})}/></Field>
+    <Field label={t("元数据中心地址")}><TextField.Root className="mono" style={{width:"100%"}} aria-label={t("元数据中心地址")} value={config.metadata_center_url ?? ""} maxLength={2048} disabled={disabled} placeholder="zookeeper://host:2181 or nacos://host:8848" onChange={event=>changeEndpoint(event.target.value)}/></Field>
     <Field label={t("提供方 application")}><TextField.Root style={{width:"100%"}} aria-label={t("提供方 application")} value={config.metadata_application ?? ""} maxLength={128} disabled={disabled} placeholder="provider-app" onChange={event=>change({metadata_application:event.target.value})}/></Field>
     {nacosMetadata && <Flex gap="3" wrap="wrap">
       <Field label={t("元数据命名空间 ID")}><TextField.Root aria-label={t("元数据命名空间 ID")} value={config.metadata_namespace ?? ""} maxLength={128} disabled={disabled} placeholder="public" onChange={event=>change({metadata_namespace:event.target.value})}/></Field>
