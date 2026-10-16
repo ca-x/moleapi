@@ -126,7 +126,12 @@ fn metadata_center_reference_is_separate_and_credential_free_in_url() {
     let Protocol::Dubbo { config } = &mut r.protocol else {
         unreachable!()
     };
-    config.metadata_center_url = "zookeeper://reader:secret@metadata.example:2181".into();
+    config.metadata_center_url = "nacos://metadata.example:8848".into();
+    validate_request(&r, false).unwrap();
+    let Protocol::Dubbo { config } = &mut r.protocol else {
+        unreachable!()
+    };
+    config.metadata_center_url = "nacos://reader:secret@metadata.example:8848".into();
     assert!(validate_request(&r, false).is_err());
     let Protocol::Dubbo { config } = &mut r.protocol else {
         unreachable!()

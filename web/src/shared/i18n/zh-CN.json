@@ -443,7 +443,7 @@
   "在上方 URL 栏填写 Nacos 地址。命名空间 ID 留空表示 public。": "在上方 URL 栏填写 Nacos 地址。命名空间 ID 留空表示 public。",
   "Nacos 命名空间 ID": "Nacos 命名空间 ID",
   "Dubbo 元数据中心": "Dubbo 元数据中心",
-  "填写提供方使用的 ZooKeeper 元数据中心及 application 名称。预览不会修改工作区。": "填写提供方使用的 ZooKeeper 元数据中心及 application 名称。预览不会修改工作区。",
+  "填写提供方使用的 ZooKeeper 或 Nacos 元数据中心及 application 名称。Nacos 元数据目前仅支持 public 命名空间且不支持认证。": "填写提供方使用的 ZooKeeper 或 Nacos 元数据中心及 application 名称。Nacos 元数据目前仅支持 public 命名空间且不支持认证。",
   "元数据中心地址": "元数据中心地址",
   "提供方 application": "提供方 application",
   "元数据用户名": "元数据用户名",

@@ -296,6 +296,15 @@ pub async fn preview_zookeeper_metadata(
         "Metadata definition exceeds 1 MiB"
     );
     let raw_document = String::from_utf8(bytes).context("Metadata definition is not UTF-8")?;
+    parse_metadata_definition(raw_document, config, application, path)
+}
+
+fn parse_metadata_definition(
+    raw_document: String,
+    config: &DubboConfig,
+    application: &str,
+    path: String,
+) -> Result<DubboMetadataPreview> {
     let document_sha256 = format!("{:x}", Sha256::digest(raw_document.as_bytes()));
     let definition: Value =
         serde_json::from_str(&raw_document).context("Invalid Dubbo metadata definition")?;
@@ -411,6 +420,84 @@ pub async fn preview_zookeeper_metadata(
         methods,
         types,
     })
+}
+
+/// Read the Apache 3.3.6 provider definition from Nacos ConfigService's public namespace.
+pub async fn preview_nacos_metadata(
+    endpoint: &str,
+    config: &DubboConfig,
+    application: &str,
+    policy: NetworkPolicy,
+    timeout: Duration,
+) -> Result<DubboMetadataPreview> {
+    ensure!(
+        config.metadata_auth.is_none(),
+        "Authenticated Nacos metadata centers are not supported yet"
+    );
+    ensure!(
+        !application.is_empty()
+            && application.len() <= 128
+            && application
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')),
+        "Invalid metadata application"
+    );
+    let deadline = Instant::now() + timeout;
+    let registry_url = dubbo_registry_url(endpoint, "nacos")?;
+    let addresses = tokio::time::timeout(
+        deadline.saturating_duration_since(Instant::now()),
+        checked_destination(&registry_url, policy),
+    )
+    .await
+    .context("Nacos metadata address lookup timed out")??;
+    let address = reachable_address(&addresses, deadline)
+        .await
+        .context("Nacos metadata center connection failed")?;
+    let host = registry_url
+        .host_str()
+        .context("Nacos metadata host missing")?
+        .trim_matches(['[', ']']);
+    let mut request_url = url::Url::parse("http://127.0.0.1")?;
+    request_url
+        .set_host(Some(host))
+        .map_err(|_| anyhow::anyhow!("Invalid Nacos metadata host"))?;
+    request_url
+        .set_port(registry_url.port())
+        .map_err(|_| anyhow::anyhow!("Invalid Nacos metadata port"))?;
+    request_url.set_path("/nacos/v1/cs/configs");
+    let data_id = format!(
+        "{}:{}:{}:provider:{application}",
+        config.service, config.version, config.group
+    );
+    request_url
+        .query_pairs_mut()
+        .append_pair("dataId", &data_id)
+        .append_pair("group", "dubbo");
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .no_gzip()
+        .no_brotli()
+        .no_deflate()
+        .no_zstd()
+        .resolve(host, address)
+        .timeout(deadline.saturating_duration_since(Instant::now()))
+        .build()?;
+    let response = tokio::time::timeout(
+        deadline.saturating_duration_since(Instant::now()),
+        client.get(request_url).send(),
+    )
+    .await
+    .context("Nacos metadata lookup timed out")?
+    .context("Nacos metadata lookup failed")?;
+    ensure!(
+        response.status().is_success(),
+        "Nacos metadata lookup returned {}",
+        response.status()
+    );
+    let body = bounded_nacos_body(response, MAX_INPUT, deadline).await?;
+    let raw_document = String::from_utf8(body).context("Metadata definition is not UTF-8")?;
+    parse_metadata_definition(raw_document, config, application, data_id)
 }
 
 fn registry_candidate_matches(source: &str, config: &DubboConfig) -> Result<bool> {

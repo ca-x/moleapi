@@ -443,7 +443,7 @@
   "在上方 URL 栏填写 Nacos 地址。命名空间 ID 留空表示 public。": "Enter the Nacos address in the URL field above. Leave the namespace ID blank for public.",
   "Nacos 命名空间 ID": "Nacos namespace ID",
   "Dubbo 元数据中心": "Dubbo metadata center",
-  "填写提供方使用的 ZooKeeper 元数据中心及 application 名称。预览不会修改工作区。": "Enter the provider's ZooKeeper metadata center and application name. Previewing does not change the workspace.",
+  "填写提供方使用的 ZooKeeper 或 Nacos 元数据中心及 application 名称。Nacos 元数据目前仅支持 public 命名空间且不支持认证。": "Enter the provider's ZooKeeper or Nacos metadata center and application name. Nacos metadata currently supports only the public namespace without authentication.",
   "元数据中心地址": "Metadata center address",
   "提供方 application": "Provider application",
   "元数据用户名": "Metadata username",

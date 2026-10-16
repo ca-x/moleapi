@@ -59,6 +59,12 @@ def main():
                            capture_output=True,text=True,timeout=600)
     assert build.returncode == 0, build.stderr[-4000:]
     example = ROOT / 'target/debug/examples/dubbo-nacos-fixture'
+    if not args.auth:
+        metadata_build = subprocess.run(['cargo','build','--locked','-p','moleapi-protocols',
+                            '--example','dubbo-nacos-metadata-fixture'], cwd=ROOT,
+                           capture_output=True,text=True,timeout=600)
+        assert metadata_build.returncode == 0, metadata_build.stderr[-4000:]
+        metadata_example = ROOT / 'target/debug/examples/dubbo-nacos-metadata-fixture'
     classpath = os.pathsep.join((str(args.classes), str(args.dependencies / '*')))
     command = [str(args.java), '-cp', classpath, 'fixture.NacosFixture']
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -121,6 +127,39 @@ def main():
             with urllib.request.urlopen(request, timeout=5) as reply:
                 assert reply.read(32) in (b'true', b'false')
 
+            if not args.auth:
+                with args.output.with_suffix('.metadata.log').open('w') as diagnostics:
+                    metadata_command = [str(args.java), '-cp', classpath,
+                                        'fixture.NacosMetadataFixture', '--hold']
+                    metadata_provider = subprocess.Popen(metadata_command, cwd=JAVA_PROJECT,
+                        stdout=subprocess.PIPE, stderr=diagnostics, text=True)
+                    metadata_results = queue.Queue(maxsize=3)
+                    def watch_metadata():
+                        for line in metadata_provider.stdout:
+                            if line.startswith(('METADATA_REGISTRY=', 'METADATA_DATA_ID=', 'METADATA_JSON=')):
+                                try: metadata_results.put_nowait(line.strip())
+                                except queue.Full: pass
+                        try: metadata_results.put_nowait(None)
+                        except queue.Full: pass
+                    threading.Thread(target=watch_metadata, daemon=True).start()
+                    try:
+                        details = dict(metadata_results.get(timeout=55).split('=',1) for _ in range(3))
+                        assert details['METADATA_REGISTRY'] == 'nacos://127.0.0.1:18848'
+                        assert details['METADATA_DATA_ID'] == 'fixture.MetadataService:1.0.0:qa:provider:moleapi-nacos-metadata-qa'
+                        query = urllib.parse.urlencode({'dataId':details['METADATA_DATA_ID'],'group':'dubbo'})
+                        with urllib.request.urlopen(f'http://127.0.0.1:18848/nacos/v1/cs/configs?{query}', timeout=5) as reply:
+                            assert reply.read().decode() == details['METADATA_JSON']
+                        result = subprocess.run([str(metadata_example),details['METADATA_REGISTRY'],
+                            details['METADATA_JSON']], cwd=ROOT,capture_output=True,text=True,timeout=30)
+                        assert result.returncode == 0, result.stderr[-4000:]
+                        assert 'PASS official Nacos metadata -> checked Rust preview' in result.stdout
+                        metadata_hash = hashlib.sha256(details['METADATA_JSON'].encode()).hexdigest()
+                    finally:
+                        metadata_provider.terminate()
+                        try: metadata_provider.wait(timeout=15)
+                        except subprocess.TimeoutExpired:
+                            metadata_provider.kill(); metadata_provider.wait(timeout=5)
+
             def held(mode, namespace, label):
                 with args.output.with_suffix(f'.{label}.log').open('w') as diagnostics:
                     provider = subprocess.Popen(command + [mode], cwd=JAVA_PROJECT,
@@ -180,12 +219,15 @@ def main():
                 'server_sha256':SERVER_SHA256 if args.archive else 'external',
                 'provider_source_sha256':hashlib.sha256(original.encode()).hexdigest(),
                 'namespace_source_sha256':hashlib.sha256(namespaced.encode()).hexdigest(),
+                'metadata_definition_sha256':metadata_hash if not args.auth else None,
                 'worker_sha256':manifest['worker_sha256'],
                 'cases':['official_lookup','group_filter','version_filter','registered_instance_metadata',
                          'exact_provider_url_mapping','checked_http_snapshot','product_registry_rpc',
                          'hosted_registry_refusal','namespace_isolation','namespace_provider_rpc',
                          'provider_removal'] + (['anonymous_auth_refusal','wrong_password_refusal',
                          'bearer_auth_lookup','authenticated_namespace'] if args.auth else [])}
+    if not args.auth: evidence['cases'] += ['nacos_metadata_report','config_data_id_group',
+        'checked_metadata_preview','metadata_hosted_private_refusal','metadata_dto_mapping']
     args.output.write_text(json.dumps(evidence,indent=2)+'\n')
     print('PASS Nacos HTTP snapshot -> official provider URL -> checked Dubbo RPC -> removal',flush=True)
 

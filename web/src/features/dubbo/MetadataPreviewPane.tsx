@@ -66,8 +66,8 @@ export default function MetadataPreviewPane({request, update, workspaceId, works
   };
   return <div className="form-panel">
     <Text weight="medium">{t("Dubbo 元数据中心")}</Text>
-    <Text size="2" color="gray">{t("填写提供方使用的 ZooKeeper 元数据中心及 application 名称。预览不会修改工作区。")}</Text>
-    <Field label={t("元数据中心地址")}><TextField.Root className="mono" style={{width:"100%"}} aria-label={t("元数据中心地址")} value={config.metadata_center_url ?? ""} maxLength={2048} disabled={disabled} placeholder="zookeeper://host:2181" onChange={event=>change({metadata_center_url:event.target.value})}/></Field>
+    <Text size="2" color="gray">{t("填写提供方使用的 ZooKeeper 或 Nacos 元数据中心及 application 名称。Nacos 元数据目前仅支持 public 命名空间且不支持认证。")}</Text>
+    <Field label={t("元数据中心地址")}><TextField.Root className="mono" style={{width:"100%"}} aria-label={t("元数据中心地址")} value={config.metadata_center_url ?? ""} maxLength={2048} disabled={disabled} placeholder="zookeeper://host:2181 or nacos://host:8848" onChange={event=>change({metadata_center_url:event.target.value})}/></Field>
     <Field label={t("提供方 application")}><TextField.Root style={{width:"100%"}} aria-label={t("提供方 application")} value={config.metadata_application ?? ""} maxLength={128} disabled={disabled} placeholder="provider-app" onChange={event=>change({metadata_application:event.target.value})}/></Field>
     <Flex gap="3" wrap="wrap">
       <Field label={t("元数据用户名")}><TextField.Root aria-label={t("元数据用户名")} value={config.metadata_auth?.username ?? ""} maxLength={128} disabled={disabled} onChange={event=>changeAuth(event.target.value,config.metadata_auth?.password ?? "")}/></Field>

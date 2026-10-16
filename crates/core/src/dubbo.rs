@@ -255,8 +255,9 @@ pub fn validate_dubbo(request: &RequestSpec, templates: bool) -> Result<()> {
         config.metadata_center_url.len() <= 2048
             && (config.metadata_center_url.is_empty()
                 || templates && config.metadata_center_url.contains("{{")
-                || dubbo_registry_url(&config.metadata_center_url, "zookeeper").is_ok()),
-        "Invalid ZooKeeper metadata center endpoint"
+                || dubbo_registry_url(&config.metadata_center_url, "zookeeper").is_ok()
+                || dubbo_registry_url(&config.metadata_center_url, "nacos").is_ok()),
+        "Invalid Dubbo metadata center endpoint"
     );
     ensure!(
         config.metadata_application.len() <= 128

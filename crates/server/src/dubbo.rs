@@ -35,6 +35,33 @@ pub(crate) async fn capability(State(state): State<AppState>) -> Json<Capability
     })
 }
 
+async fn read_metadata(
+    config: &DubboConfig,
+    policy: NetworkPolicy,
+    timeout: Duration,
+) -> anyhow::Result<moleapi_protocols::dubbo::DubboMetadataPreview> {
+    if url::Url::parse(&config.metadata_center_url)?.scheme() == "nacos" {
+        moleapi_protocols::dubbo::preview_nacos_metadata(
+            &config.metadata_center_url,
+            config,
+            &config.metadata_application,
+            policy,
+            timeout,
+        )
+        .await
+    } else {
+        moleapi_protocols::dubbo::preview_zookeeper_metadata(
+            &config.metadata_center_url,
+            config,
+            &config.metadata_application,
+            config.metadata_auth.as_ref(),
+            policy,
+            timeout,
+        )
+        .await
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct MetadataPreviewInput {
@@ -56,11 +83,8 @@ pub(crate) async fn preview_metadata(
     let policy = NetworkPolicy {
         allow_private_network: state.local || state.config.allow_private_network,
     };
-    let preview = moleapi_protocols::dubbo::preview_zookeeper_metadata(
-        &config.metadata_center_url,
+    let preview = read_metadata(
         config,
-        &config.metadata_application,
-        config.metadata_auth.as_ref(),
         policy,
         Duration::from_millis(input.request.timeout_ms.min(15_000)),
     )
@@ -181,11 +205,8 @@ pub(crate) async fn import_metadata(
     let policy = NetworkPolicy {
         allow_private_network: state.local || state.config.allow_private_network,
     };
-    let preview = moleapi_protocols::dubbo::preview_zookeeper_metadata(
-        &config.metadata_center_url,
+    let preview = read_metadata(
         &config,
-        &config.metadata_application,
-        config.metadata_auth.as_ref(),
         policy,
         Duration::from_millis(source.timeout_ms.min(15_000)),
     )
