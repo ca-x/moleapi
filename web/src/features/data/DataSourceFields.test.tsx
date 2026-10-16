@@ -50,3 +50,14 @@ it("infers ODS from a selected file and exposes worksheet and cached-value contr
   await act(async()=>{fireEvent.click(screen.getByRole("button",{name:"选择数据文件"}));});
   expect(change).toHaveBeenCalledWith(expect.objectContaining({file_name:"transactions.ods",file_format:"ods",sheet_name:""}));
 });
+it("infers XLS from a selected file and exposes worksheet and cached-value controls",async()=>{
+  vi.mocked(pickDataFile).mockResolvedValue({name:"transactions.xls",base64:"0M8="});
+  const config={...dataConfig(),source:"local_file" as const,file_format:"xls" as const,sheet_name:"Transactions"};
+  const change=vi.fn();
+  render(<DataSourceFields config={config} change={change} connected={false}/>);
+  expect(screen.getByText("XLS 只读取缓存值，不计算公式；超出精确范围的整数请存为文本。")).toBeTruthy();
+  expect(screen.getByRole("textbox",{name:"工作表名称"})).toBeTruthy();
+  expect(screen.getByText("首行为列名")).toBeTruthy();
+  await act(async()=>{fireEvent.click(screen.getByRole("button",{name:"选择数据文件"}));});
+  expect(change).toHaveBeenCalledWith(expect.objectContaining({file_name:"transactions.xls",file_format:"xls",sheet_name:""}));
+});

@@ -1,7 +1,7 @@
 //! Bounded spreadsheet to Arrow conversion for the isolated Data file worker.
 use crate::{MAX_CELL, MAX_COLUMNS, MAX_FILE_ROWS};
 use anyhow::{Context, Result, ensure};
-use calamine::{Data, HeaderRow, Ods, Range, Reader, Xlsx, open_workbook_from_rs};
+use calamine::{Data, HeaderRow, Ods, Range, Reader, Xls, Xlsx, open_workbook_from_rs};
 use datafusion::arrow::{
     array::{ArrayRef, BooleanArray, Int64Array, StringBuilder},
     datatypes::{DataType, Field, Schema},
@@ -92,8 +92,17 @@ pub(crate) fn read_spreadsheet_batches(
     config: &DataConfig,
     bytes: &[u8],
 ) -> Result<Vec<RecordBatch>> {
-    preflight_archive(bytes)?;
+    if config.file_format != DataFileFormat::Xls {
+        preflight_archive(bytes)?;
+    }
     let range: Range<Data> = match config.file_format {
+        DataFileFormat::Xls => {
+            let mut workbook: Xls<_> = open_workbook_from_rs(Cursor::new(bytes))?;
+            workbook.with_header_row(HeaderRow::Row(0));
+            let names = workbook.sheet_names();
+            let name = selected_sheet(&names, &config.sheet_name)?;
+            workbook.worksheet_range(name)?
+        }
         DataFileFormat::Xlsx => {
             let mut workbook: Xlsx<_> = open_workbook_from_rs(Cursor::new(bytes))?;
             workbook.with_header_row(HeaderRow::Row(0));
@@ -110,13 +119,16 @@ pub(crate) fn read_spreadsheet_batches(
         }
         _ => anyhow::bail!("Unsupported spreadsheet format"),
     };
-    if config.file_format == DataFileFormat::Ods {
+    if matches!(
+        config.file_format,
+        DataFileFormat::Ods | DataFileFormat::Xls
+    ) {
         for row in range.rows() {
             for cell in row {
                 if let Data::Float(value) = cell {
                     ensure!(
                         value.fract() != 0.0 || value.abs() <= 9_007_199_254_740_991.0,
-                        "ODS numeric integer exceeds exact range; store it as text"
+                        "Spreadsheet numeric integer exceeds exact range; store it as text"
                     );
                 }
             }
