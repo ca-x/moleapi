@@ -448,6 +448,17 @@ pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
             }
         }
     }
+    for dataset in &data.datasets {
+        if let Some(query) = &dataset.query {
+            ensure!(
+                data.collections.iter().flat_map(|collection| &collection.requests).any(|request| {
+                    request.id == query.request_id
+                        && matches!(&request.protocol, crate::Protocol::Data { config } if config.read_only && !config.sql.trim().is_empty())
+                }),
+                "Dataset query must reference a saved read-only Data request"
+            );
+        }
+    }
     crate::validate_scenarios(data)?;
     for e in &data.environments {
         validate_variables(&e.variables)?;

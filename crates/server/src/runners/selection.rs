@@ -46,17 +46,26 @@ pub(super) fn validate(workspace: &Workspace, selection: &RunnerSelection) -> Re
         .dataset_id
         .as_ref()
         .map(|id| {
-            workspace
+            let saved = workspace
                 .data
                 .datasets
                 .iter()
                 .find(|d| d.id == *id)
-                .and_then(|d| d.source.as_ref())
-                .ok_or_else(ApiError::not_found)?
-                .parse()
-                .map_err(|e| ApiError::bad(e.to_string()))
+                .ok_or_else(ApiError::not_found)?;
+            if saved.query.is_some() {
+                Ok(None)
+            } else {
+                saved
+                    .source
+                    .as_ref()
+                    .ok_or_else(ApiError::not_found)?
+                    .parse()
+                    .map(Some)
+                    .map_err(|e| ApiError::bad(e.to_string()))
+            }
         })
-        .transpose()?;
+        .transpose()?
+        .flatten();
     let iterations = selection
         .iterations
         .unwrap_or_else(|| dataset.as_ref().map_or(1, |d| d.rows.len()));
