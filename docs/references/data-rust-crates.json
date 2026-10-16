@@ -331,5 +331,21 @@
     "features": {},
     "repository": "https://github.com/apache/arrow-rs",
     "license": "Apache-2.0"
+  },
+  {
+    "crate": "calamine",
+    "version": "0.36.1",
+    "rust_version": "1.88",
+    "features": {"dates": ["chrono"]},
+    "repository": "https://github.com/tafia/calamine",
+    "license": "MIT"
+  },
+  {
+    "crate": "zip",
+    "version": "4.6.1",
+    "rust_version": "1.82.0",
+    "features": {"deflate": ["deflate-zopfli", "deflate-flate2-zlib-rs"]},
+    "repository": "https://github.com/zip-rs/zip2.git",
+    "license": "MIT"
   }
 ]
