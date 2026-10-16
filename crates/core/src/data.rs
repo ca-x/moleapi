@@ -23,6 +23,7 @@ pub enum DataFileFormat {
     Json,
     Parquet,
     Xlsx,
+    Ods,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -76,14 +77,15 @@ pub fn validate_data_config(config: &DataConfig) -> Result<()> {
     );
     ensure!(
         config.sheet_name.is_empty()
-            || config.file_format == DataFileFormat::Xlsx
-                && matches!(
-                    config.source,
-                    DataSource::LocalFile | DataSource::RemoteFile
-                )
-                && config.sheet_name.len() <= 128
+            || matches!(
+                config.file_format,
+                DataFileFormat::Xlsx | DataFileFormat::Ods
+            ) && matches!(
+                config.source,
+                DataSource::LocalFile | DataSource::RemoteFile
+            ) && config.sheet_name.len() <= 128
                 && !config.sheet_name.chars().any(char::is_control),
-        "Invalid XLSX worksheet name"
+        "Invalid spreadsheet worksheet name"
     );
     ensure!(
         config.ca_pem.len() <= 65536,
@@ -261,6 +263,8 @@ mod tests {
         worksheet.sheet_name = "Transactions".into();
         assert!(validate_data_config(&worksheet).is_err());
         worksheet.file_format = DataFileFormat::Xlsx;
+        validate_data_config(&worksheet).unwrap();
+        worksheet.file_format = DataFileFormat::Ods;
         validate_data_config(&worksheet).unwrap();
         worksheet.source = DataSource::Postgresql;
         assert!(validate_data_config(&worksheet).is_err());

@@ -39,3 +39,14 @@ it("selecting a new XLSX workbook resets a previous worksheet name",async()=>{
     file_name:"transactions.xlsx",file_format:"xlsx",sheet_name:""
   }));
 });
+it("infers ODS from a selected file and exposes worksheet and cached-value controls",async()=>{
+  vi.mocked(pickDataFile).mockResolvedValue({name:"transactions.ods",base64:"UEs="});
+  const config={...dataConfig(),source:"local_file" as const,file_format:"ods" as const,sheet_name:"Transactions"};
+  const change=vi.fn();
+  render(<DataSourceFields config={config} change={change} connected={false}/>);
+  expect(screen.getByText("ODS 只读取缓存值，不计算公式；超出精确范围的整数请存为文本。")).toBeTruthy();
+  expect(screen.getByRole("textbox",{name:"工作表名称"})).toBeTruthy();
+  expect(screen.getByText("首行为列名")).toBeTruthy();
+  await act(async()=>{fireEvent.click(screen.getByRole("button",{name:"选择数据文件"}));});
+  expect(change).toHaveBeenCalledWith(expect.objectContaining({file_name:"transactions.ods",file_format:"ods",sheet_name:""}));
+});
