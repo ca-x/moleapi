@@ -1,13 +1,13 @@
-//! Bounded XLSX to Arrow conversion for the isolated Data file worker.
+//! Bounded spreadsheet to Arrow conversion for the isolated Data file worker.
 use crate::{MAX_CELL, MAX_COLUMNS, MAX_FILE_ROWS};
 use anyhow::{Context, Result, ensure};
-use calamine::{Data, HeaderRow, Reader, Xlsx, open_workbook_from_rs};
+use calamine::{Data, HeaderRow, Ods, Range, Reader, Xlsx, open_workbook_from_rs};
 use datafusion::arrow::{
     array::{ArrayRef, BooleanArray, Int64Array, StringBuilder},
     datatypes::{DataType, Field, Schema},
     record_batch::RecordBatch,
 };
-use moleapi_core::DataConfig;
+use moleapi_core::{DataConfig, DataFileFormat};
 use std::{collections::HashSet, io::Cursor, sync::Arc};
 
 const MAX_EXPANDED: u64 = 64 * 1024 * 1024;
@@ -16,10 +16,10 @@ const MAX_GRID_CELLS: usize = 1_000_000;
 
 fn preflight_archive(bytes: &[u8]) -> Result<()> {
     let mut archive =
-        zip::ZipArchive::new(Cursor::new(bytes)).context("Invalid XLSX ZIP archive")?;
+        zip::ZipArchive::new(Cursor::new(bytes)).context("Invalid Spreadsheet ZIP archive")?;
     ensure!(
         archive.len() <= MAX_ZIP_ENTRIES,
-        "XLSX ZIP entry count exceeds limit"
+        "Spreadsheet ZIP entry count exceeds limit"
     );
     let mut names = HashSet::new();
     let mut expanded = 0u64;
@@ -27,14 +27,14 @@ fn preflight_archive(bytes: &[u8]) -> Result<()> {
         let entry = archive.by_index(index)?;
         ensure!(
             entry.name().len() <= 1024 && names.insert(entry.name().to_owned()),
-            "XLSX ZIP has duplicate or oversized entry names"
+            "Spreadsheet ZIP has duplicate or oversized entry names"
         );
         expanded = expanded
             .checked_add(entry.size())
-            .context("XLSX ZIP expanded size overflow")?;
+            .context("Spreadsheet ZIP expanded size overflow")?;
         ensure!(
             expanded <= MAX_EXPANDED,
-            "XLSX ZIP declared expanded size exceeds limit"
+            "Spreadsheet ZIP declared expanded size exceeds limit"
         );
     }
     Ok(())
@@ -59,7 +59,9 @@ fn cell_kind(cell: &Data) -> Result<Option<ColumnKind>> {
             }
         }
         Data::Bool(_) => Some(ColumnKind::Bool),
-        Data::Float(_) | Data::Error(_) => anyhow::bail!("XLSX contains an invalid or error cell"),
+        Data::Float(_) | Data::Error(_) => {
+            anyhow::bail!("Spreadsheet contains an invalid or error cell")
+        }
         _ => Some(ColumnKind::Text),
     })
 }
@@ -69,7 +71,9 @@ fn cell_text(cell: &Data) -> Result<Option<String>> {
         Data::Empty => return Ok(None),
         Data::Int(value) => value.to_string(),
         Data::Float(value) if value.is_finite() => value.to_string(),
-        Data::Float(_) | Data::Error(_) => anyhow::bail!("XLSX contains an invalid or error cell"),
+        Data::Float(_) | Data::Error(_) => {
+            anyhow::bail!("Spreadsheet contains an invalid or error cell")
+        }
         Data::Bool(value) => value.to_string(),
         Data::String(value) | Data::DateTimeIso(value) | Data::DurationIso(value) => value.clone(),
         Data::DateTime(value) => value
@@ -77,55 +81,76 @@ fn cell_text(cell: &Data) -> Result<Option<String>> {
             .map(|date| date.to_string())
             .unwrap_or_else(|| value.to_string()),
     };
-    ensure!(text.len() <= MAX_CELL, "XLSX cell exceeds size limit");
+    ensure!(
+        text.len() <= MAX_CELL,
+        "Spreadsheet cell exceeds size limit"
+    );
     Ok(Some(text))
 }
 
-pub(crate) fn read_xlsx_batches(config: &DataConfig, bytes: &[u8]) -> Result<Vec<RecordBatch>> {
+pub(crate) fn read_spreadsheet_batches(
+    config: &DataConfig,
+    bytes: &[u8],
+) -> Result<Vec<RecordBatch>> {
     preflight_archive(bytes)?;
-    let mut workbook: Xlsx<_> = open_workbook_from_rs(Cursor::new(bytes))?;
-    workbook.with_header_row(HeaderRow::Row(0));
-    let names = workbook.sheet_names();
-    ensure!(!names.is_empty(), "XLSX has no worksheets");
-    let name = if config.sheet_name.is_empty() {
-        &names[0]
-    } else {
-        ensure!(
-            names.contains(&config.sheet_name),
-            "XLSX worksheet not found"
-        );
-        &config.sheet_name
+    let range: Range<Data> = match config.file_format {
+        DataFileFormat::Xlsx => {
+            let mut workbook: Xlsx<_> = open_workbook_from_rs(Cursor::new(bytes))?;
+            workbook.with_header_row(HeaderRow::Row(0));
+            let names = workbook.sheet_names();
+            let name = selected_sheet(&names, &config.sheet_name)?;
+            workbook.worksheet_range(name)?
+        }
+        DataFileFormat::Ods => {
+            let mut workbook: Ods<_> = open_workbook_from_rs(Cursor::new(bytes))?;
+            workbook.with_header_row(HeaderRow::Row(0));
+            let names = workbook.sheet_names();
+            let name = selected_sheet(&names, &config.sheet_name)?;
+            workbook.worksheet_range(name)?
+        }
+        _ => anyhow::bail!("Unsupported spreadsheet format"),
     };
-    let range = workbook.worksheet_range(name)?;
+    if config.file_format == DataFileFormat::Ods {
+        for row in range.rows() {
+            for cell in row {
+                if let Data::Float(value) = cell {
+                    ensure!(
+                        value.fract() != 0.0 || value.abs() <= 9_007_199_254_740_991.0,
+                        "ODS numeric integer exceeds exact range; store it as text"
+                    );
+                }
+            }
+        }
+    }
     let (height, width) = range.get_size();
     ensure!(
         width > 0 && width <= MAX_COLUMNS,
-        "XLSX column count exceeds limit"
+        "Spreadsheet column count exceeds limit"
     );
     let header_rows = usize::from(config.csv_header);
     ensure!(
         height >= header_rows && height - header_rows <= MAX_FILE_ROWS,
-        "XLSX row count exceeds limit"
+        "Spreadsheet row count exceeds limit"
     );
     ensure!(
         height
             .checked_mul(width)
             .is_some_and(|cells| cells <= MAX_GRID_CELLS),
-        "XLSX grid size exceeds limit"
+        "Spreadsheet grid size exceeds limit"
     );
     let mut rows = range.rows();
     let headings = if config.csv_header {
-        let header = rows.next().context("XLSX header row missing")?;
+        let header = rows.next().context("Spreadsheet header row missing")?;
         let mut seen = HashSet::new();
         header
             .iter()
             .map(|cell| {
-                let value = cell_text(cell)?.context("XLSX header is empty")?;
+                let value = cell_text(cell)?.context("Spreadsheet header is empty")?;
                 ensure!(
                     !value.trim().is_empty()
                         && value.len() <= 512
                         && seen.insert(value.to_lowercase()),
-                    "XLSX header is empty, duplicate or oversized"
+                    "Spreadsheet header is empty, duplicate or oversized"
                 );
                 Ok(value)
             })
@@ -179,7 +204,7 @@ pub(crate) fn read_xlsx_batches(config: &DataConfig, bytes: &[u8]) -> Result<Vec
                                 Ok(Some(*value as i64))
                             }
                             Some(Data::Empty) | None => Ok(None),
-                            _ => anyhow::bail!("XLSX integer column contains another type"),
+                            _ => anyhow::bail!("Spreadsheet integer column contains another type"),
                         })
                         .collect::<Result<Vec<_>>>()?,
                 )),
@@ -189,7 +214,7 @@ pub(crate) fn read_xlsx_batches(config: &DataConfig, bytes: &[u8]) -> Result<Vec
                         .map(|row| match row.get(index) {
                             Some(Data::Bool(value)) => Ok(Some(*value)),
                             Some(Data::Empty) | None => Ok(None),
-                            _ => anyhow::bail!("XLSX boolean column contains another type"),
+                            _ => anyhow::bail!("Spreadsheet boolean column contains another type"),
                         })
                         .collect::<Result<Vec<_>>>()?,
                 )),
@@ -212,4 +237,17 @@ pub(crate) fn read_xlsx_batches(config: &DataConfig, bytes: &[u8]) -> Result<Vec
         batches.push(RecordBatch::new_empty(schema));
     }
     Ok(batches)
+}
+
+fn selected_sheet<'a>(names: &'a [String], selected: &'a str) -> Result<&'a str> {
+    ensure!(!names.is_empty(), "Spreadsheet has no worksheets");
+    if selected.is_empty() {
+        Ok(&names[0])
+    } else {
+        ensure!(
+            names.iter().any(|name| name == selected),
+            "Spreadsheet worksheet not found"
+        );
+        Ok(selected)
+    }
 }

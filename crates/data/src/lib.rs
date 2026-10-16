@@ -6,7 +6,7 @@ pub use query::{quoted, statement};
 
 mod files;
 pub use files::FileSource;
-mod xlsx;
+mod spreadsheet;
 
 mod file_worker;
 pub use file_worker::{

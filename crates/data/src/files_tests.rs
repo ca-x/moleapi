@@ -9,6 +9,88 @@ fn config(format: DataFileFormat) -> DataConfig {
 }
 
 const XLSX: &[u8] = include_bytes!("../tests/fixtures/workbook.xlsx");
+const ODS: &[u8] = include_bytes!("../tests/fixtures/workbook.ods");
+
+#[tokio::test]
+async fn ods_selected_sheet_runs_sql_with_cached_values_and_safe_types() {
+    let mut config = config(DataFileFormat::Ods);
+    let first = FileSource::open(&config, ODS).unwrap();
+    assert_eq!(first.schema().columns[0].name, "marker");
+    config.sheet_name = "Transactions".into();
+    let source = FileSource::open(&config, ODS).unwrap();
+    let result = source
+        .query("SELECT id, amount, active, note, formula FROM data ORDER BY id")
+        .await
+        .unwrap();
+    assert_eq!(result.rows[0][0], Cell::Integer { value: "2".into() });
+    assert_eq!(
+        result.rows[0][1],
+        Cell::Text {
+            value: "2.3".into()
+        }
+    );
+    assert_eq!(result.rows[0][2], Cell::Bool { value: true });
+    assert_eq!(
+        result.rows[0][3],
+        Cell::Text {
+            value: "café".into()
+        }
+    );
+    assert_eq!(
+        result.rows[0][4],
+        Cell::Text {
+            value: "4.6".into()
+        }
+    );
+    assert_eq!(result.rows[1][1], Cell::Null);
+    assert_eq!(result.rows[1][2], Cell::Bool { value: false });
+    config.sheet_name = "Exact Text".into();
+    let exact = FileSource::open(&config, ODS).unwrap();
+    let value = exact.query("SELECT value FROM data").await.unwrap();
+    assert_eq!(
+        value.rows[0][0],
+        Cell::Text {
+            value: "9007199254740993".into()
+        }
+    );
+}
+
+#[test]
+fn ods_rejects_missing_sheet_bad_headers_unsafe_number_and_invalid_zip() {
+    let mut config = config(DataFileFormat::Ods);
+    config.sheet_name = "Missing".into();
+    assert!(FileSource::open(&config, ODS).is_err());
+    config.sheet_name = "Duplicate Headers".into();
+    assert!(FileSource::open(&config, ODS).is_err());
+    config.sheet_name = "Blank Headers".into();
+    assert!(FileSource::open(&config, ODS).is_err());
+    config.sheet_name = "Unsafe Number".into();
+    let error = FileSource::open(&config, ODS).err().unwrap().to_string();
+    assert!(error.contains("exact range"), "{error}");
+    config.sheet_name = "Transactions".into();
+    assert!(FileSource::open(&config, b"not an ODS workbook").is_err());
+    let invalid_mimetype = include_bytes!("../tests/fixtures/invalid-mimetype.ods");
+    assert!(FileSource::open(&config, invalid_mimetype).is_err());
+    let oversized = include_bytes!("../tests/fixtures/oversized-entry.xlsx");
+    let error = FileSource::open(&config, oversized)
+        .err()
+        .unwrap()
+        .to_string();
+    assert!(error.contains("expanded size"), "{error}");
+}
+
+#[tokio::test]
+async fn ods_header_uses_physical_first_row_and_can_be_disabled() {
+    let mut config = config(DataFileFormat::Ods);
+    config.sheet_name = "Leading Blank".into();
+    let error = FileSource::open(&config, ODS).err().unwrap().to_string();
+    assert!(error.contains("header is empty"), "{error}");
+    config.csv_header = false;
+    let source = FileSource::open(&config, ODS).unwrap();
+    assert_eq!(source.schema().columns[0].name, "column_1");
+    let result = source.query("SELECT COUNT(*) FROM data").await.unwrap();
+    assert_eq!(result.rows[0][0], Cell::Integer { value: "3".into() });
+}
 
 #[tokio::test]
 async fn xlsx_selected_sheet_preserves_types_nulls_and_cached_formula() {
