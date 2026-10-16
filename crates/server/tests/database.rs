@@ -483,8 +483,22 @@ pub async fn verify_data_completion_history() {
         })
         .await
         .unwrap();
-        let (status, sent) = call(&router, "POST", &format!("/api/sessions/{id}/send"), None,
-            Some(json!({"kind":"data_query","query_id":"typed-db","sql":"SELECT CAST(9007199254740993 AS BIGINT) AS exact, CAST(1.23 AS DECIMAL(10,2)) AS amount","read_only":true}))).await;
+        let integer_type = if source == "mysql" {
+            "SIGNED"
+        } else {
+            "BIGINT"
+        };
+        let sql = format!(
+            "SELECT CAST(9007199254740993 AS {integer_type}) AS exact, CAST(1.23 AS DECIMAL(10,2)) AS amount"
+        );
+        let (status, sent) = call(
+            &router,
+            "POST",
+            &format!("/api/sessions/{id}/send"),
+            None,
+            Some(json!({"kind":"data_query","query_id":"typed-db","sql":sql,"read_only":true})),
+        )
+        .await;
         assert_eq!(status, StatusCode::OK, "{sent}");
         tokio::time::timeout(Duration::from_secs(10), async {
             loop {
