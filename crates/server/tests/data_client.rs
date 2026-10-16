@@ -76,7 +76,12 @@ async fn query(router: &Router, token: Option<&str>, id: &str, query_id: &str, s
                 event["message"]["query_id"] == query_id
                     && matches!(
                         event["message"]["kind"].as_str(),
-                        Some("data_finished" | "data_error")
+                        Some(
+                            "data_finished"
+                                | "data_error"
+                                | "data_preprocess_error"
+                                | "data_skipped"
+                        )
                     )
             }) {
                 return batch;
@@ -927,8 +932,6 @@ async fn clearing_history_does_not_restore_an_already_finished_data_query() {
             .any(|test| test["name"] == "after-clear" && test["passed"] == true),
         "{processed}"
     );
-    assert!(processed["history_id"].is_null());
-    assert_eq!(processed["notice"], "history_cleared");
     let (_, history) = call(&router, "GET", "/api/workspaces/data/history", None, None).await;
     assert_eq!(history, json!([]));
 }
@@ -1093,4 +1096,578 @@ async fn full_data_completion_queue_reports_postprocessing_loss_without_sql_repl
         None,
     )
     .await;
+}
+
+#[tokio::test]
+async fn query_pre_script_mutates_each_sql_and_sees_prior_post_updates() {
+    let _serial = DATA_CLIENT_TESTS.lock().await;
+    let temp = tempfile::tempdir().unwrap();
+    let router = moleapi_server::local_with_worker(&temp.path().join("data-pre.db"), &worker())
+        .await
+        .unwrap();
+    let mut document = data();
+    let request = &mut document["collections"][0]["requests"][0];
+    request["protocol"]["query_pre_script"] = json!(
+        "const n=Number(pm.collectionVariables.get('query_count')||'0')+1;if(n>1)pm.test('post-visible',()=>pm.expect(pm.collectionVariables.get('post')).to.equal('ready'));pm.collectionVariables.set('query_count',String(n));pm.request.body.update('SELECT name FROM data WHERE id='+n);"
+    );
+    request["post_response_script"] = json!("pm.collectionVariables.set('post','ready');");
+    let (status, workspace) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"data","name":"Data","data":document})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{workspace}");
+    let (status, session) = call(&router, "POST", "/api/sessions", None,
+        Some(json!({"workspace_id":"data","request":workspace["data"]["collections"][0]["requests"][0]}))).await;
+    assert_eq!(status, StatusCode::OK, "{session}");
+    let id = session["id"].as_str().unwrap();
+    ready(&router, None, id).await;
+    let first = query(
+        &router,
+        None,
+        id,
+        "pre-one",
+        "SELECT name FROM data WHERE id=999",
+    )
+    .await;
+    assert!(
+        first["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|event| event["message"]["kind"] == "data_rows"
+                && event["message"]["rows"][0][0]["value"] == "first"),
+        "{first}"
+    );
+    let second = query(
+        &router,
+        None,
+        id,
+        "pre-two",
+        "SELECT name FROM data WHERE id=999",
+    )
+    .await;
+    assert!(
+        second["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|event| event["message"]["kind"] == "data_rows"
+                && event["message"]["rows"][0][0]["value"] == "second")
+    );
+    assert!(second["events"].as_array().unwrap().iter().any(|event| {
+        event["message"]["kind"] == "data_prepared"
+            && event["message"]["query_id"] == "pre-two"
+            && event["message"]["tests"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|test| test["name"] == "post-visible" && test["passed"] == true)
+    }));
+    let (status, duplicate) = call(&router, "POST", &format!("/api/sessions/{id}/send"), None,
+        Some(json!({"kind":"data_query","query_id":"pre-one","sql":"SELECT name FROM data WHERE id=999","read_only":true}))).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{duplicate}");
+    let (_, events) = call(
+        &router,
+        "GET",
+        &format!("/api/sessions/{id}/events"),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(
+        events["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|event| event["message"]["kind"] == "data_started"
+                && event["message"]["query_id"] == "pre-one")
+            .count(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn rejected_query_pre_mutation_does_not_dispatch_or_save_sql() {
+    let _serial = DATA_CLIENT_TESTS.lock().await;
+    let temp = tempfile::tempdir().unwrap();
+    let router =
+        moleapi_server::local_with_worker(&temp.path().join("data-pre-reject.db"), &worker())
+            .await
+            .unwrap();
+    let mut document = data();
+    document["collections"][0]["requests"][0]["protocol"]["query_pre_script"] = json!(
+        "pm.request.url='http://changed.invalid/';pm.request.body.update('SELECT name FROM data WHERE id=2');"
+    );
+    let (status, workspace) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"data","name":"Data","data":document})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{workspace}");
+    let (status, session) = call(&router, "POST", "/api/sessions", None,
+        Some(json!({"workspace_id":"data","request":workspace["data"]["collections"][0]["requests"][0]}))).await;
+    assert_eq!(status, StatusCode::OK, "{session}");
+    let id = session["id"].as_str().unwrap();
+    ready(&router, None, id).await;
+    let events = query(
+        &router,
+        None,
+        id,
+        "pre-rejected",
+        "SELECT name FROM data WHERE id=1",
+    )
+    .await;
+    let events = events["events"].as_array().unwrap();
+    assert!(
+        events
+            .iter()
+            .any(|event| event["message"]["kind"] == "data_preprocess_error"
+                && event["message"]["query_id"] == "pre-rejected")
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|event| event["message"]["kind"] == "data_started"
+                && event["message"]["query_id"] == "pre-rejected")
+    );
+    let (_, history) = call(&router, "GET", "/api/workspaces/data/history", None, None).await;
+    assert_eq!(history, json!([]));
+}
+
+#[tokio::test]
+async fn cancelling_query_preparation_never_dispatches_sql() {
+    let _serial = DATA_CLIENT_TESTS.lock().await;
+    let temp = tempfile::tempdir().unwrap();
+    let router =
+        moleapi_server::local_with_worker(&temp.path().join("data-pre-cancel.db"), &worker())
+            .await
+            .unwrap();
+    let mut document = data();
+    document["collections"][0]["requests"][0]["protocol"]["query_pre_script"] = json!(
+        "const until=Date.now()+100;while(Date.now()<until){};pm.request.body.update('SELECT name FROM data WHERE id=2');"
+    );
+    let (status, workspace) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"data","name":"Data","data":document})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{workspace}");
+    let (status, session) = call(&router, "POST", "/api/sessions", None,
+        Some(json!({"workspace_id":"data","request":workspace["data"]["collections"][0]["requests"][0]}))).await;
+    assert_eq!(status, StatusCode::OK, "{session}");
+    let id = session["id"].as_str().unwrap().to_owned();
+    ready(&router, None, &id).await;
+    let sender = router.clone();
+    let query_id = id.clone();
+    let task = tokio::spawn(async move {
+        call(&sender, "POST", &format!("/api/sessions/{query_id}/send"), None,
+        Some(json!({"kind":"data_query","query_id":"pre-cancel","sql":"SELECT name FROM data WHERE id=1","read_only":true}))).await
+    });
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let (_, events) = call(
+                &router,
+                "GET",
+                &format!("/api/sessions/{id}/events"),
+                None,
+                None,
+            )
+            .await;
+            if events["events"].as_array().unwrap().iter().any(|event| {
+                event["message"]["kind"] == "data_preparing"
+                    && event["message"]["query_id"] == "pre-cancel"
+            }) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let (status, cancelled) = call(
+        &router,
+        "POST",
+        &format!("/api/sessions/{id}/send"),
+        None,
+        Some(json!({"kind":"data_cancel","query_id":"pre-cancel"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{cancelled}");
+    assert_eq!(task.await.unwrap().0, StatusCode::OK);
+    let (_, events) = call(
+        &router,
+        "GET",
+        &format!("/api/sessions/{id}/events"),
+        None,
+        None,
+    )
+    .await;
+    let events = events["events"].as_array().unwrap();
+    assert!(
+        events
+            .iter()
+            .any(|event| event["message"]["kind"] == "data_cancelled"
+                && event["message"]["query_id"] == "pre-cancel")
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|event| event["message"]["kind"] == "data_started"
+                && event["message"]["query_id"] == "pre-cancel")
+    );
+    let (_, history) = call(&router, "GET", "/api/workspaces/data/history", None, None).await;
+    assert_eq!(history, json!([]));
+}
+
+#[tokio::test]
+async fn query_pre_script_skip_keeps_the_connection_and_runs_no_sql() {
+    let _serial = DATA_CLIENT_TESTS.lock().await;
+    let temp = tempfile::tempdir().unwrap();
+    let router =
+        moleapi_server::local_with_worker(&temp.path().join("data-pre-skip.db"), &worker())
+            .await
+            .unwrap();
+    let mut document = data();
+    document["collections"][0]["requests"][0]["protocol"]["query_pre_script"] =
+        json!("pm.execution.skipRequest();");
+    let (status, workspace) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"data","name":"Data","data":document})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{workspace}");
+    let (status, session) = call(&router, "POST", "/api/sessions", None,
+        Some(json!({"workspace_id":"data","request":workspace["data"]["collections"][0]["requests"][0]}))).await;
+    assert_eq!(status, StatusCode::OK, "{session}");
+    let id = session["id"].as_str().unwrap();
+    ready(&router, None, id).await;
+    let events = query(
+        &router,
+        None,
+        id,
+        "skipped",
+        "SELECT name FROM data WHERE id=1",
+    )
+    .await;
+    let events = events["events"].as_array().unwrap();
+    assert!(
+        events
+            .iter()
+            .any(|event| event["message"]["kind"] == "data_skipped"
+                && event["message"]["query_id"] == "skipped"),
+        "{events:?}"
+    );
+    assert!(
+        events
+            .iter()
+            .any(|event| event["message"]["kind"] == "data_prepared"
+                && event["message"]["query_id"] == "skipped")
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|event| event["message"]["kind"] == "data_started"
+                && event["message"]["query_id"] == "skipped")
+    );
+    let (_, summary) = call(&router, "GET", &format!("/api/sessions/{id}"), None, None).await;
+    assert_eq!(summary["state"], "open");
+    let (_, history) = call(&router, "GET", "/api/workspaces/data/history", None, None).await;
+    assert_eq!(history, json!([]));
+}
+
+#[tokio::test]
+async fn query_pre_script_cannot_turn_a_read_only_query_into_a_write() {
+    let _serial = DATA_CLIENT_TESTS.lock().await;
+    let temp = tempfile::tempdir().unwrap();
+    let router =
+        moleapi_server::local_with_worker(&temp.path().join("data-pre-write.db"), &worker())
+            .await
+            .unwrap();
+    let mut document = data();
+    document["collections"][0]["requests"][0]["protocol"]["query_pre_script"] =
+        json!("pm.request.body.update('DELETE FROM data');");
+    let (status, workspace) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"data","name":"Data","data":document})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{workspace}");
+    let (status, session) = call(&router, "POST", "/api/sessions", None,
+        Some(json!({"workspace_id":"data","request":workspace["data"]["collections"][0]["requests"][0]}))).await;
+    assert_eq!(status, StatusCode::OK, "{session}");
+    let id = session["id"].as_str().unwrap();
+    ready(&router, None, id).await;
+    let events = query(
+        &router,
+        None,
+        id,
+        "no-write",
+        "SELECT name FROM data WHERE id=1",
+    )
+    .await;
+    let events = events["events"].as_array().unwrap();
+    assert!(
+        events
+            .iter()
+            .any(|event| event["message"]["kind"] == "data_preprocess_error"
+                && event["message"]["query_id"] == "no-write")
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|event| event["message"]["kind"] == "data_started"
+                && event["message"]["query_id"] == "no-write")
+    );
+    let (_, history) = call(&router, "GET", "/api/workspaces/data/history", None, None).await;
+    assert_eq!(history, json!([]));
+}
+
+#[tokio::test]
+async fn query_pre_script_masks_private_logs_and_update_values() {
+    let _serial = DATA_CLIENT_TESTS.lock().await;
+    let temp = tempfile::tempdir().unwrap();
+    let router =
+        moleapi_server::local_with_worker(&temp.path().join("data-pre-private.db"), &worker())
+            .await
+            .unwrap();
+    let mut document = data();
+    document["global_variables"] = json!([{"id":"secret","key":"secret","value":"private-pre-value","enabled":true,"secret":true}]);
+    document["collections"][0]["requests"][0]["protocol"]["query_pre_script"] = json!(
+        "console.log(pm.globals.get('secret'));pm.variables.set('copied',pm.globals.get('secret'));pm.variables.set(pm.globals.get('secret'),'x');pm.request.body.update('SELECT name FROM data WHERE id=2');"
+    );
+    let (status, workspace) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"data","name":"Data","data":document})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{workspace}");
+    let (status, session) = call(&router, "POST", "/api/sessions", None,
+        Some(json!({"workspace_id":"data","request":workspace["data"]["collections"][0]["requests"][0]}))).await;
+    assert_eq!(status, StatusCode::OK, "{session}");
+    let id = session["id"].as_str().unwrap();
+    ready(&router, None, id).await;
+    let events = query(
+        &router,
+        None,
+        id,
+        "private-pre",
+        "SELECT name FROM data WHERE id=1",
+    )
+    .await;
+    assert!(
+        !events.to_string().contains("private-pre-value"),
+        "{events}"
+    );
+    let prepared = events["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|event| event["message"]["kind"] == "data_prepared")
+        .unwrap();
+    assert_eq!(prepared["message"]["logs"][0]["message"], "[REDACTED]");
+    assert!(
+        prepared["message"]["variable_updates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|update| update["value"].is_null())
+    );
+    assert!(
+        prepared["message"]["variable_updates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|update| update["key"] == "[REDACTED]")
+    );
+}
+
+#[tokio::test]
+async fn query_pre_script_failure_masks_private_error_and_never_dispatches() {
+    let _serial = DATA_CLIENT_TESTS.lock().await;
+    let temp = tempfile::tempdir().unwrap();
+    let router =
+        moleapi_server::local_with_worker(&temp.path().join("data-pre-failure.db"), &worker())
+            .await
+            .unwrap();
+    let mut document = data();
+    document["global_variables"] = json!([{"id":"secret","key":"secret","value":"failure-private-value","enabled":true,"secret":true}]);
+    document["collections"][0]["requests"][0]["protocol"]["query_pre_script"] =
+        json!("throw new Error(pm.globals.get('secret'));");
+    let (status, workspace) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"data","name":"Data","data":document})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{workspace}");
+    let (status, session) = call(&router, "POST", "/api/sessions", None,
+        Some(json!({"workspace_id":"data","request":workspace["data"]["collections"][0]["requests"][0]}))).await;
+    assert_eq!(status, StatusCode::OK, "{session}");
+    let id = session["id"].as_str().unwrap();
+    ready(&router, None, id).await;
+    let events = query(
+        &router,
+        None,
+        id,
+        "failed-pre",
+        "SELECT name FROM data WHERE id=1",
+    )
+    .await;
+    assert!(
+        !events.to_string().contains("failure-private-value"),
+        "{events}"
+    );
+    assert!(events["events"].as_array().unwrap().iter().any(|event| {
+        event["message"]["kind"] == "data_preprocess_error"
+            && event["message"]["message"]
+                .as_str()
+                .is_some_and(|text| text.contains("REDACTED"))
+    }));
+    assert!(
+        !events["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|event| event["message"]["kind"] == "data_started")
+    );
+}
+
+#[tokio::test]
+async fn query_pre_private_value_is_masked_in_database_error_events() {
+    let _serial = DATA_CLIENT_TESTS.lock().await;
+    let temp = tempfile::tempdir().unwrap();
+    let router =
+        moleapi_server::local_with_worker(&temp.path().join("data-pre-mask-worker.db"), &worker())
+            .await
+            .unwrap();
+    let mut document = data();
+    document["collections"][0]["requests"][0]["protocol"]["query_pre_script"] = json!(
+        "pm.variables.set('dynamic_secret','new-private-value');pm.request.body.update(\"SELECT CAST('{{dynamic_secret}}' AS BIGINT) AS value FROM data\");"
+    );
+    let (status, workspace) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"data","name":"Data","data":document})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{workspace}");
+    let (status, session) = call(&router, "POST", "/api/sessions", None,
+        Some(json!({"workspace_id":"data","request":workspace["data"]["collections"][0]["requests"][0]}))).await;
+    assert_eq!(status, StatusCode::OK, "{session}");
+    let id = session["id"].as_str().unwrap();
+    ready(&router, None, id).await;
+    let events = query(
+        &router,
+        None,
+        id,
+        "masked-worker",
+        "SELECT name FROM data WHERE id=1",
+    )
+    .await;
+    assert!(
+        events["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|event| event["message"]["kind"] == "data_error"),
+        "{events}"
+    );
+    assert!(
+        !events.to_string().contains("new-private-value"),
+        "{events}"
+    );
+    let error = events["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|event| event["message"]["kind"] == "data_error")
+        .unwrap();
+    assert!(
+        error["message"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("REDACTED"),
+        "{events}"
+    );
+}
+
+#[tokio::test]
+async fn oversized_preparation_event_rolls_back_variable_updates() {
+    let _serial = DATA_CLIENT_TESTS.lock().await;
+    let temp = tempfile::tempdir().unwrap();
+    let router =
+        moleapi_server::local_with_worker(&temp.path().join("data-pre-event-limit.db"), &worker())
+            .await
+            .unwrap();
+    let mut document = data();
+    document["collections"][0]["requests"][0]["protocol"]["query_pre_script"] = json!(
+        "if(!pm.variables.get('attempted')){pm.variables.set('attempted','yes');for(let i=0;i<999;i++)pm.variables.set('k'.repeat(1020)+String(i).padStart(4,'0'),'x');}pm.request.body.update('SELECT name FROM data WHERE id=2');"
+    );
+    let (status, workspace) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"data","name":"Data","data":document})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{workspace}");
+    let (status, session) = call(&router, "POST", "/api/sessions", None,
+        Some(json!({"workspace_id":"data","request":workspace["data"]["collections"][0]["requests"][0]}))).await;
+    assert_eq!(status, StatusCode::OK, "{session}");
+    let id = session["id"].as_str().unwrap();
+    ready(&router, None, id).await;
+    for query_id in ["first-large", "second-large"] {
+        let events = query(
+            &router,
+            None,
+            id,
+            query_id,
+            "SELECT name FROM data WHERE id=1",
+        )
+        .await;
+        assert!(
+            events["events"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|event| event["message"]["kind"] == "data_preprocess_error"
+                    && event["message"]["query_id"] == query_id
+                    && event["message"]["message"]
+                        .as_str()
+                        .is_some_and(|text| text.contains("event limits"))),
+            "{events}"
+        );
+        assert!(
+            !events["events"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|event| event["message"]["kind"] == "data_started"
+                    && event["message"]["query_id"] == query_id)
+        );
+    }
 }

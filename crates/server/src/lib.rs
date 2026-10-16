@@ -86,6 +86,11 @@ struct AppState {
     script_worker: PathBuf,
     protocol_sessions: Arc<moleapi_protocols::SessionManager>,
     protocol_admission: Arc<protocol_admission::AdmissionGates>,
+    data_sessions: Arc<
+        std::sync::Mutex<
+            std::collections::HashMap<String, std::sync::Weak<protocols::DataCompletionContext>>,
+        >,
+    >,
     history_clears:
         Arc<std::sync::Mutex<std::collections::HashMap<(String, String), std::time::Instant>>>,
     credential_revisions: Arc<tokio::sync::Mutex<std::collections::HashMap<String, i64>>>,
@@ -279,6 +284,7 @@ async fn build(
         script_worker,
         protocol_sessions: moleapi_protocols::SessionManager::new(),
         protocol_admission: Arc::new(protocol_admission::AdmissionGates::default()),
+        data_sessions: Arc::default(),
         a2a_sources: Arc::new(a2a::Sources::default()),
         webhooks: Arc::new(webhooks::Hub::default()),
     };

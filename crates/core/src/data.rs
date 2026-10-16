@@ -29,6 +29,7 @@ pub enum DataFileFormat {
 pub struct DataConfig {
     pub source: DataSource,
     pub sql: String,
+    pub query_pre_script: String,
     pub file_name: String,
     pub file_format: DataFileFormat,
     pub sheet_name: String,
@@ -44,6 +45,7 @@ impl Default for DataConfig {
         Self {
             source: DataSource::Postgresql,
             sql: "SELECT 1 AS value".into(),
+            query_pre_script: String::new(),
             file_name: String::new(),
             file_format: DataFileFormat::Csv,
             sheet_name: String::new(),
@@ -57,6 +59,7 @@ impl Default for DataConfig {
     }
 }
 pub fn validate_data_config(config: &DataConfig) -> Result<()> {
+    crate::validate_script(&config.query_pre_script)?;
     ensure!(
         config.sql.len() <= MAX_SQL_SOURCE && !config.sql.contains('\0'),
         "Data SQL source exceeds limits"
@@ -220,6 +223,20 @@ pub fn data_url(raw: &str, source: DataSource) -> Result<Url> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn query_pre_script_defaults_and_obeys_shared_script_limit() {
+        let legacy: DataConfig =
+            serde_json::from_value(serde_json::json!({"sql":"SELECT 1"})).unwrap();
+        assert!(legacy.query_pre_script.is_empty());
+        let mut configured = legacy;
+        configured.query_pre_script = "x".repeat(crate::MAX_SCRIPT_BYTES);
+        validate_data_config(&configured).unwrap();
+        let copied: DataConfig =
+            serde_json::from_value(serde_json::to_value(&configured).unwrap()).unwrap();
+        assert_eq!(copied.query_pre_script, configured.query_pre_script);
+        configured.query_pre_script.push('x');
+        assert!(validate_data_config(&configured).is_err());
+    }
     #[test]
     fn retains_selected_file_and_sql_but_rejects_hidden_network_options() {
         let config = DataConfig {

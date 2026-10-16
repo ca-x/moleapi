@@ -8,7 +8,16 @@ vi.mock("../workbench/context",()=>({useWorkbench:vi.fn()}));
 vi.mock("./DataSourceFields",()=>({DataSourceFields:()=>null}));
 vi.mock("./DataResults",()=>({DataResults:()=>null}));
 vi.mock("./DataSqlEditor",()=>({DataSqlEditor:()=>null}));
+vi.mock("../../shared/ui",()=>({Editor:({label,value,onChange}:{label:string;value:string;onChange:(value:string)=>void})=><textarea aria-label={label} value={value} onChange={event=>onChange(event.target.value)}/> }));
 afterEach(cleanup);
+it("saves a dedicated query pre script while a Data session is connected",()=>{
+  const value=state();
+  vi.mocked(useWorkbench).mockReturnValue(value as unknown as ReturnType<typeof useWorkbench>);
+  render(<DataWorkbench/>);
+  fireEvent.mouseDown(screen.getByRole("tab",{name:/查询前脚本/}),{button:0,ctrlKey:false});
+  fireEvent.change(screen.getByRole("textbox",{name:"查询前 JavaScript 脚本"}),{target:{value:"pm.request.body.update('SELECT 2')"}});
+  expect(value.updateRequest).toHaveBeenCalledWith({protocol:expect.objectContaining({query_pre_script:"pm.request.body.update('SELECT 2')"})});
+});
 function state() {return {authenticated:true,accountId:"first",selectedId:"workspace",draft:{id:"workspace",data:{active_environment_id:"dev"}},request:{id:"request",protocol:dataConfig()},dark:false,updateRequest:vi.fn(),dataRun:{current:null as (()=>void)|null},protocolSession:{session:{id:"session",state:"open"},events:[],send:vi.fn<(_message:unknown)=>Promise<boolean>>().mockResolvedValue(true),connect:vi.fn(),close:vi.fn(),busy:false,sending:false,error:"",dropped:0}};}
 it("a late rejected admission cannot clear the new scope's active query",async()=>{
   const value=state();const pending:((ok:boolean)=>void)[]=[];
@@ -44,4 +53,15 @@ it("repeated dispatch before React renders admits only one query",()=>{
   render(<DataWorkbench/>);
   act(()=>{value.dataRun.current?.();value.dataRun.current?.();});
   expect(value.protocolSession.send).toHaveBeenCalledTimes(1);
+});
+it("keeps query cancellation available while preparation send is pending",()=>{
+  const value=state();value.protocolSession.send.mockReturnValue(new Promise(()=>{}));
+  vi.mocked(useWorkbench).mockReturnValue(value as unknown as ReturnType<typeof useWorkbench>);
+  const view=render(<DataWorkbench/>);
+  fireEvent.click(screen.getByRole("button",{name:"运行当前查询"}));
+  value.protocolSession.sending=true;view.rerender(<DataWorkbench/>);
+  const cancel=screen.getByRole("button",{name:"取消查询"});
+  expect((cancel as HTMLButtonElement).disabled).toBe(false);
+  fireEvent.click(cancel);
+  expect(value.protocolSession.send).toHaveBeenCalledWith(expect.objectContaining({kind:"data_cancel"}));
 });
