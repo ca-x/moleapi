@@ -1,0 +1,16 @@
+# HAR 1.2 request import
+
+Authority: `interchange-006` in `docs/FEATURE-MATRIX.md`, the shared formats API, and the CLI import contract in `docs/specs/cli-runner.md`. Import a recorded HTTP(S) request collection from one HAR 1.2 JSON document. This is an import path through existing workspace ownership and validation, not a network replay or a HAR export mode.
+
+## Contract
+
+- `format=har` accepts one UTF-8 HAR 1.2 JSON object with a `log.entries` array of 1–1,000 entries. The shared 20 MiB input cap and workspace validator remain authoritative. Reject malformed or unsupported requests atomically; never create a workspace containing only the entries that happened to convert.
+- Preserve entry order in one collection. Each entry becomes a normal HTTP request with its recorded method and absolute HTTP(S) URL, including the exact URL query. Preserve enabled request headers in order except transport-owned `Host`, `Content-Length`, `Transfer-Encoding`, `Connection`, and `Accept-Encoding`; report each omitted kind in import warnings. Use the literal URL as the wire authority because HAR `queryString` is redundant metadata. Reject a contradictory nonempty `queryString` rather than silently sending a different URL.
+- Preserve text request bodies from `postData.text`. Recognize JSON, URL-encoded form and other textual MIME types using existing `json`, `form` and `text` body modes. For URL-encoded data without `text`, reconstruct ordered text parameters from `postData.params` only when every parameter has a literal value. Reject multipart, file references, binary or encoded request bodies that cannot be represented exactly. A method without a body remains `none`; do not invent POST or authentication settings.
+- Preserve an explicit `Cookie` header. When HAR has only structured request cookies, add one fixed `Cookie` header in listed order, and disable the live Cookie Jar for imported requests so replay cannot add unrelated cookies. Preserve `Authorization` as a request header; do not infer a renewable OAuth/session credential from a recorded value. Default MoleAPI export must still screen recorded credentials and cookies; explicit full export restores them.
+- A textual response with status 100–599 can become one saved response example with its status, safe headers and text body. A base64 encoded text response may be decoded if valid UTF-8. Omit missing, nontext or unrepresentable response bodies with a warning while retaining the request. No live history, timing, redirects, TLS trust or browser cache state is invented.
+
+## Evidence
+
+- Pure format tests cover two ordered requests, duplicate query keys, JSON/form/raw text bodies, cookies/authorization, textual response examples, default/full privacy, transport header warnings, malformed version/URL/body/entry caps and all-or-nothing rejection.
+- The existing hosted import endpoint and standalone CLI import command create owner-scoped workspaces through the shared converter; a 390px Chinese/English import dialog exposes HAR and saves/reloads the result. Run frontend/Rust checks, strict Clippy, production build and branch CI. Preserve unsupported-case warnings in the coverage file.
