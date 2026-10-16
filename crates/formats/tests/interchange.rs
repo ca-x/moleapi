@@ -36,6 +36,13 @@ fn har_import_preserves_recorded_requests_examples_and_private_values() {
     );
     assert_eq!(requests[0].examples[0].status, 200);
     assert_eq!(requests[0].examples[0].body, "{\"ok\":true}");
+    assert!(
+        !requests[0].examples[0]
+            .headers
+            .iter()
+            .any(|header| header.key.eq_ignore_ascii_case("Content-Encoding")
+                || header.key.eq_ignore_ascii_case("Content-Length"))
+    );
     assert_eq!(requests[1].method, "POST");
     assert_eq!(requests[1].body_kind, "form");
     assert_eq!(requests[1].body, "k=one&k=two");
@@ -52,6 +59,12 @@ fn har_import_preserves_recorded_requests_examples_and_private_values() {
             .warnings
             .iter()
             .any(|warning| warning.contains("Proxy-Authorization"))
+    );
+    assert!(
+        imported
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Content-Encoding"))
     );
     assert!(
         !requests[0]

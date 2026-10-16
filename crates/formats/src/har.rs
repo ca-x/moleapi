@@ -376,7 +376,20 @@ fn import_example(
         headers: response
             .headers
             .into_iter()
-            .map(|header| pair(&header.name, &header.value))
+            .filter_map(|header| {
+                if matches!(
+                    header.name.to_ascii_lowercase().as_str(),
+                    "content-encoding" | "content-length" | "transfer-encoding" | "connection"
+                ) {
+                    warnings.insert(format!(
+                        "HAR response transport header {} omitted",
+                        header.name
+                    ));
+                    None
+                } else {
+                    Some(pair(&header.name, &header.value))
+                }
+            })
             .collect(),
         body,
     });
