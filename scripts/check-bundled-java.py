@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run a packaged JVM and real project API with external Java configuration cleared."""
 import argparse
+from contextlib import ExitStack, contextmanager
 import json
 import os
 from pathlib import Path
@@ -49,9 +50,27 @@ def generate(base, setup):
     return {'engine': artifact['engine'], 'files': len(artifact['files']), 'source_sha256': artifact['source_sha256']}
 
 
+@contextmanager
+def mounted_macos_resources(binary, temporary):
+    images = list(binary.parent.glob('bundle/dmg/*.dmg'))
+    if len(images) != 1:
+        raise ValueError('Expected exactly one packaged macOS DMG')
+    mount = Path(temporary) / 'mounted-dmg'
+    mount.mkdir()
+    subprocess.run(['hdiutil', 'attach', '-readonly', '-nobrowse', '-mountpoint', str(mount), str(images[0])],
+                   timeout=90, check=True)
+    try:
+        applications = list(mount.glob('*.app/Contents/Resources'))
+        if len(applications) != 1:
+            raise ValueError('Expected exactly one application resource directory in the packaged DMG')
+        yield applications[0]
+    finally:
+        subprocess.run(['hdiutil', 'detach', str(mount), '-force'], timeout=90, check=True)
+
+
 def main(args):
     process = None
-    with tempfile.TemporaryDirectory(prefix='moleapi-bundled-java-') as temporary:
+    with tempfile.TemporaryDirectory(prefix='moleapi-bundled-java-') as temporary, ExitStack() as stack:
         if args.container:
             assert os.environ.get('GITHUB_ACTIONS') == 'true', 'Container verification requires the explicit CI fixture'
             version = subprocess.run(['docker', 'exec', args.container, 'env', '-i',
@@ -69,10 +88,7 @@ def main(args):
             target = host_target()
             resource_root = args.resources.resolve() if args.resources else binary.parent
             if args.runtime_only and sys.platform == 'darwin' and not args.resources:
-                applications = list(binary.parent.glob('bundle/macos/*.app/Contents/Resources'))
-                if len(applications) != 1:
-                    raise ValueError('Expected exactly one packaged macOS application resource directory')
-                resource_root = applications[0]
+                resource_root = stack.enter_context(mounted_macos_resources(binary, temporary))
             resources = resource_root / 'runtime/java'
             verify_payload(resources, manifest, target)
             jvm = resources / manifest['assets'][target]['java']
