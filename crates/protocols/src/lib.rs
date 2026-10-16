@@ -7,7 +7,7 @@ mod mqtt;
 mod tcp;
 pub use grpc::{ReflectionResult, ReflectionStatus, reflect};
 mod data;
-pub use data::{DataCompletion, DataOutcome};
+pub use data::{DataCompletion, DataOutcome, DataReservation};
 mod engine;
 mod graphql;
 mod models;
@@ -523,6 +523,15 @@ impl SessionManager {
             "Expected Data session"
         );
         session.event("system", message)
+    }
+    pub fn reserve_data_query(
+        &self,
+        owner: &str,
+        id: &str,
+        query_id: String,
+        sql: &str,
+    ) -> Result<DataReservation> {
+        data::reserve(&self.owned(owner, id)?, query_id, sql)
     }
     pub fn configure_tcp(
         &self,
