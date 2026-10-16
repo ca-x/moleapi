@@ -62,6 +62,10 @@ def repair(bundle_directory: Path, source_java: Path, plugin: Path | None) -> No
     image = images[0]
     if image.with_suffix(image.suffix + ".sig").exists():
         raise ValueError("Refusing to alter an already signed AppImage")
+    signature = subprocess.run([str(image), "--appimage-signature"],
+                               capture_output=True, check=True, timeout=15)
+    if signature.stdout.strip():
+        raise ValueError("Refusing to alter an AppImage with an embedded signature")
     source_java = source_java.resolve(strict=True)
     manifest = json.loads((ROOT / "vendor/java-runtime/manifest.json").read_text())
     verify_payload(source_java, manifest, TARGET)
