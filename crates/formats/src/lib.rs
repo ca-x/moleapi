@@ -6,6 +6,8 @@ mod har;
 mod openapi;
 mod postman;
 mod redact;
+mod variables;
+pub use variables::{VariableImport, export_postman_variables, import_postman_variables};
 
 use anyhow::{Context, Result, bail};
 use moleapi_core::{Workspace, WorkspaceData, validate_workspace};

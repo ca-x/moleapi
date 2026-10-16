@@ -1,0 +1,14 @@
+# Postman environment and globals files
+
+Scope: `interchange-004`, `variables-012` and `docs/specs/postman-variable-files.md`. The shared Rust converter accepts Postman environment/globals JSON with an explicit `_postman_variable_scope`. It applies to an existing owned workspace; it does not create team-wide variables or infer Postman's local-only current values.
+
+| Capability | Verified behavior |
+| --- | --- |
+| Import preview | UTF-8 file at most 1 MiB, scope `environment` or `globals`, name and ordered string values. Missing/invalid scope/type/value, duplicate keys, more than 1,000 rows or variable-scope overflow reject before any draft change. Enabled and secret flags map to existing `Pair` fields; new IDs are assigned, `local_value` is absent. Unmapped row metadata returns a warning code. |
+| Apply | Environment import explicitly creates a new named environment, rejects a duplicate name and activates it. Globals import explicitly replaces only project global variables after showing old/new counts. Both use the owned workspace expected-revision save; a late preview cannot write to a new owner/workspace. Account changes clear pasted secrets. |
+| Export | Owned environment/globals export checks workspace revision. Default output clears secret rows and screens copied secret values even when the workspace has no auth configuration. Explicit full output preserves saved values. Files retain row order, enabled flags and secret markers. |
+| CLI | `variables import --workspace --input` uses the same preview/CAS flow; globals replacement requires `--replace-globals`. `variables export --workspace --scope --output` accepts an environment ID or unique name and defaults to screened output. |
+
+Evidence at the feature branch: three pure converter tests plus the 57-case interchange suite passed; four hosted format tests covered owner isolation, stale revision, save/reload and private/full export; standalone CLI environment/globals process tests and the prior HAR CLI fixture passed. The 341-case frontend suite passed focused late-owner, globals-replacement, concurrent-save retry and export-fence cases. Strict all-target Clippy, rustfmt and production frontend/embedded server builds passed locally. A saved/reloaded 390px Chinese/English browser journey created an environment, replaced globals, and downloaded actual default/full environment and default globals files; default files omitted the fixture secret while full export retained it, and document width matched the viewport. Branch CI and current platform packages remain separate gates.
+
+Open: older Postman files lacking a scope marker, active team-wide variables, cross-workspace merge/overwrite rules, Postman's per-user current values, and other interchange formats. Do not count this as complete collaboration or team variable support.

@@ -307,6 +307,12 @@ export interface ImportResult {
   data: WorkspaceData;
   warnings: string[];
 }
+export interface VariableFileImport {
+  scope: "environment" | "globals";
+  name: string;
+  variables: Pair[];
+  warnings: string[];
+}
 export interface ExportResult {
   warnings?:string[];
   filename: string;
