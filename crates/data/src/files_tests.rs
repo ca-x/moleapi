@@ -70,9 +70,9 @@ fn xls_rejects_bad_sheets_headers_and_unsafe_numbers() {
     config.sheet_name = "Unsafe Number".into();
     let error = FileSource::open(&config, XLS).err().unwrap().to_string();
     assert!(error.contains("exact range"), "{error}");
-    config.sheet_name = "Oversized Grid".into();
+    config.sheet_name = "Unsafe Date".into();
     let error = FileSource::open(&config, XLS).err().unwrap().to_string();
-    assert!(error.contains("grid size"), "{error}");
+    assert!(error.contains("exact range"), "{error}");
     config.sheet_name = "Leading Blank".into();
     let error = FileSource::open(&config, XLS).err().unwrap().to_string();
     assert!(error.contains("header is empty"), "{error}");
@@ -81,6 +81,14 @@ fn xls_rejects_bad_sheets_headers_and_unsafe_numbers() {
     config.csv_header = false;
     let no_header = FileSource::open(&config, XLS).unwrap();
     assert_eq!(no_header.schema().columns[0].name, "column_1");
+}
+
+#[test]
+fn xls_rejects_an_oversized_unselected_sheet_before_parsing() {
+    let bytes = include_bytes!("../tests/fixtures/oversized-grid.xls");
+    let config = config(DataFileFormat::Xls);
+    let error = FileSource::open(&config, bytes).err().unwrap().to_string();
+    assert!(error.contains("grid size"), "{error}");
 }
 
 #[tokio::test]

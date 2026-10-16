@@ -31,4 +31,5 @@ tokio-util = { version = "0.7", features = ["rt"] }
 chrono = "0.4"
 uuid.workspace = true
 calamine = { version = "=0.36.1", features = ["dates"] }
+cfb = "=0.14.0"
 zip = { version = "4", default-features = false, features = ["deflate"] }
