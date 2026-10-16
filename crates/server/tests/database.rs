@@ -502,6 +502,14 @@ pub async fn verify_data_completion_history() {
                     .iter()
                     .any(|event| event["message"]["kind"] == "data_processed")
                 {
+                    assert!(
+                        events["events"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .any(|event| event["message"]["kind"] == "data_finished"),
+                        "{source}: {events}"
+                    );
                     break;
                 }
                 tokio::time::sleep(Duration::from_millis(20)).await;
@@ -520,7 +528,10 @@ pub async fn verify_data_completion_history() {
         let body: serde_json::Value =
             serde_json::from_str(entries[0]["response"]["body"].as_str().unwrap()).unwrap();
         assert_eq!(body["query_id"], "typed-db");
-        assert_eq!(body["rows"][0][0]["value"], "9007199254740993");
-        assert_eq!(body["rows"][0][1]["value"], "1.23");
+        assert_eq!(
+            body["rows"][0][0]["value"], "9007199254740993",
+            "{source}: {body}"
+        );
+        assert_eq!(body["rows"][0][1]["value"], "1.23", "{source}: {body}");
     }
 }
