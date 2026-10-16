@@ -146,6 +146,229 @@ fn har_import_keeps_request_when_binary_response_cannot_be_an_example() {
     assert!(imported.data.collections[0].requests[0].examples.is_empty());
 }
 #[test]
+fn postman20_object_auth_and_original_source_are_imported_without_dropping_values() {
+    let source = include_str!("fixtures/postman20.json");
+    let imported = import("postman", source).unwrap();
+    let root = imported
+        .data
+        .collections
+        .iter()
+        .find(|item| item.name == "Postman 2.0 fixture")
+        .unwrap();
+    assert_eq!(root.auth.as_ref().unwrap().kind, "basic");
+    assert_eq!(root.auth.as_ref().unwrap().username, "collection-user");
+    assert_eq!(root.auth.as_ref().unwrap().password, "collection-secret");
+    let requests = imported
+        .data
+        .collections
+        .iter()
+        .flat_map(|collection| collection.requests.iter())
+        .collect::<Vec<_>>();
+    assert_eq!(requests.len(), 2);
+    let read = requests
+        .iter()
+        .find(|request| request.name == "Read account")
+        .unwrap();
+    assert_eq!(read.auth.kind, "bearer");
+    assert_eq!(read.auth.token, "bearer-secret");
+    assert_eq!(read.examples[0].status, 200);
+    let create = requests
+        .iter()
+        .find(|request| request.name == "Create account")
+        .unwrap();
+    assert_eq!(create.auth.kind, "apikey");
+    assert_eq!(
+        create.auth.api_key.as_ref().unwrap().value,
+        "api-key-secret"
+    );
+    assert_eq!(create.body_kind, "json");
+    assert!(create.post_response_script.contains("created"));
+    assert_eq!(imported.data.specifications[0].source, source);
+    assert_eq!(imported.data.specifications[0].dialect, "2.0.0");
+    let saved = workspace(imported.data);
+    let safe = export(&saved, "moleapi", false).unwrap();
+    assert!(!safe.content.contains("collection-secret"));
+    assert!(!safe.content.contains("bearer-secret"));
+    assert!(!safe.content.contains("api-key-secret"));
+    let full = export(&saved, "moleapi", true).unwrap();
+    assert!(full.content.contains("collection-secret"));
+    assert!(full.content.contains("bearer-secret"));
+    assert!(full.content.contains("api-key-secret"));
+    let restored = import("moleapi", &full.content).unwrap();
+    assert_eq!(restored.data.specifications[0].source, source);
+    let migrated = export(&saved, "postman", true).unwrap();
+    assert!(migrated.content.contains("v2.1.0/collection.json"));
+    let migrated = import("postman", &migrated.content).unwrap();
+    let create = migrated
+        .data
+        .collections
+        .iter()
+        .flat_map(|collection| &collection.requests)
+        .find(|request| request.name == "Create account")
+        .unwrap();
+    assert_eq!(
+        create.auth.api_key.as_ref().unwrap().value,
+        "api-key-secret"
+    );
+    assert_eq!(create.body, "{\"enabled\":false}");
+}
+
+#[test]
+fn postman20_and_21_validate_their_distinct_auth_shapes() {
+    let mut old: Value = serde_json::from_str(include_str!("fixtures/postman20.json")).unwrap();
+    old["auth"]["basic"] = json!([{"key":"username","value":"wrong shape"}]);
+    assert!(import("postman", &old.to_string()).is_err());
+    old = serde_json::from_str(include_str!("fixtures/postman20.json")).unwrap();
+    old["info"]["schema"] =
+        json!("https://schema.getpostman.com/json/collection/v9.0.0/collection.json");
+    assert!(import("postman", &old.to_string()).is_err());
+    old = serde_json::from_str(include_str!("fixtures/postman20.json")).unwrap();
+    old["auth"]["basic"] = json!({});
+    let imported = import("postman", &old.to_string()).unwrap();
+    assert!(
+        imported
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Basic"))
+    );
+    let mut current = postman();
+    current["auth"] = json!({"type":"basic","basic":{"username":"wrong shape"}});
+    assert!(import("postman", &current.to_string()).is_err());
+}
+
+#[test]
+fn postman20_rejects_unrepresentable_auth_and_legacy_body_values() {
+    let fixture: Value = serde_json::from_str(include_str!("fixtures/postman20.json")).unwrap();
+    let mut source = fixture.clone();
+    source["auth"] = json!({"type":"bearer","bearer":{"token":{"value":"marker-secret"}}});
+    assert!(import("postman", &source.to_string()).is_err());
+
+    source = fixture.clone();
+    source["auth"] = json!({"type":"bearer","bearer":{"token":987654321}});
+    assert!(import("postman", &source.to_string()).is_err());
+
+    source = fixture.clone();
+    source["item"][0]["item"][0]["response"][0]["originalRequest"] = json!({"url":"https://example.test","auth":{"type":"bearer","bearer":{"token":{"value":"marker-secret"}}}});
+    assert!(import("postman", &source.to_string()).is_err());
+
+    source = fixture.clone();
+    source["auth"] =
+        json!({"type":"apikey","apikey":{"key":"X-Key","value":"secret","in":"cookie"}});
+    assert!(import("postman", &source.to_string()).is_err());
+
+    for data in [
+        json!({"mode":"raw","raw":42}),
+        json!({"raw":"unmapped"}),
+        json!({"mode":"raw"}),
+        json!({"mode":"urlencoded","urlencoded":[{"key":"x","value":42}]}),
+        json!({"mode":"formdata","formdata":[{"key":"x","type":"other","value":"v"}]}),
+        json!({"mode":"formdata","formdata":[{"key":"x","type":"file","src":[42]}]}),
+    ] {
+        source = fixture.clone();
+        source["item"][0]["item"][1]["request"]["data"] = data;
+        assert!(import("postman", &source.to_string()).is_err());
+    }
+}
+
+#[test]
+fn postman20_object_helper_credentials_are_private_in_default_backup() {
+    let fixture: Value = serde_json::from_str(include_str!("fixtures/postman20.json")).unwrap();
+    for helper in [
+        json!({"type":"hawk","hawk":{"authId":"hawk-id","authKey":"hawk-private-marker","timestamp":987654321}}),
+        json!({"type":"apikey","apikey":{"key":"X-Client","value":"apikey-private-marker","in":"header"}}),
+        json!({"type":"awsv4","awsv4":{"accessKey":"aws-access-private-marker","secretKey":"aws-secret-private-marker","sessionToken":"aws-session-private-marker","region":"us-east-1","service":"execute-api"}}),
+        json!({"type":"oauth1","oauth1":{"consumerKey":"oauth-consumer-private-marker","consumerSecret":"oauth-secret-private-marker","token":"oauth-token-private-marker","tokenSecret":"oauth-token-secret-private-marker","callback":"{{callbackBase}}/cb?token=callback-private-marker","signatureMethod":"HMAC-SHA256"}}),
+        json!({"type":"edgegrid","edgegrid":{"accessToken":"edge-access-private-marker","clientToken":"edge-client-private-marker","clientSecret":"edge-secret-private-marker","baseURL":"https://user:url-private-marker@edge.example.test/path?token=query-private-marker"}}),
+        json!({"type":"edgegrid","edgegrid":{"accessToken":"edge-access-private-marker","clientToken":"edge-client-private-marker","clientSecret":"edge-secret-private-marker","baseURL":"{{scheme}}://user:template-private-marker@edge.example.test/path?token=query-private-marker"}}),
+    ] {
+        let mut source = fixture.clone();
+        let kind = helper["type"].as_str().unwrap().to_owned();
+        source["auth"] = helper;
+        let imported = import("postman", &source.to_string()).unwrap();
+        let workspace = workspace(imported.data);
+        let safe = export(&workspace, "moleapi", false).unwrap();
+        assert!(
+            !safe.content.contains("private-marker"),
+            "{kind} source leaked a helper credential"
+        );
+        import("moleapi", &safe.content).unwrap();
+        let full = export(&workspace, "moleapi", true).unwrap();
+        assert!(full.content.contains("private-marker"));
+    }
+}
+
+#[test]
+fn postman20_source_only_original_request_auth_is_private() {
+    let mut source: Value = serde_json::from_str(include_str!("fixtures/postman20.json")).unwrap();
+    source["item"][0]["item"][0]["response"][0]["originalRequest"] = json!({
+        "url":"https://example.test",
+        "auth":{"type":"hawk","hawk":{"authId":"id","authKey":"source-only-private-marker"}}
+    });
+    let imported = import("postman", &source.to_string()).unwrap();
+    let workspace = workspace(imported.data);
+    let safe = export(&workspace, "moleapi", false).unwrap();
+    assert!(!safe.content.contains("source-only-private-marker"));
+    let full = export(&workspace, "moleapi", true).unwrap();
+    assert!(full.content.contains("source-only-private-marker"));
+}
+
+#[test]
+fn postman20_legacy_data_uses_the_shared_form_and_multipart_mapper() {
+    let mut source: Value = serde_json::from_str(include_str!("fixtures/postman20.json")).unwrap();
+    let request = &mut source["item"][0]["item"][1]["request"];
+    request["data"] = json!({"mode":"urlencoded","urlencoded":[{"key":"same","value":"first"},{"key":"same","value":"second"}]});
+    let imported = import("postman", &source.to_string()).unwrap();
+    let create = imported
+        .data
+        .collections
+        .iter()
+        .flat_map(|collection| &collection.requests)
+        .find(|request| request.name == "Create account")
+        .unwrap();
+    assert_eq!(create.body_kind, "form");
+    assert_eq!(create.body, "same=first&same=second");
+    let request = &mut source["item"][0]["item"][1]["request"];
+    request["data"] =
+        json!({"mode":"formdata","formdata":[{"key":"label","value":"two words","type":"text"}]});
+    let imported = import("postman", &source.to_string()).unwrap();
+    let create = imported
+        .data
+        .collections
+        .iter()
+        .flat_map(|collection| &collection.requests)
+        .find(|request| request.name == "Create account")
+        .unwrap();
+    assert_eq!(create.body_kind, "multipart");
+    assert!(create.body.contains("two words"));
+    source["item"][0]["item"][1]["request"]["body"] =
+        source["item"][0]["item"][1]["request"]["data"].clone();
+    assert!(import("postman", &source.to_string()).is_err());
+}
+
+#[test]
+fn postman20_unmapped_proxy_and_certificate_are_warned_and_default_source_is_private() {
+    let mut source: Value = serde_json::from_str(include_str!("fixtures/postman20.json")).unwrap();
+    let request = &mut source["item"][0]["item"][1]["request"];
+    request["proxy"] = json!({"host":"proxy.example.test","port":8080});
+    request["certificate"] = json!({"key":{"src":"postman20-private-key-location"},"cert":{"src":"public-cert-location"}});
+    let imported = import("postman", &source.to_string()).unwrap();
+    assert!(
+        imported
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("proxy settings"))
+    );
+    assert!(
+        imported
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("client certificate"))
+    );
+    let safe = export(&workspace(imported.data), "moleapi", false).unwrap();
+    assert!(!safe.content.contains("postman20-private-key-location"));
+    assert!(!safe.content.contains("proxy.example.test"));
+}
+#[test]
 fn cookie_jar_override_survives_native_export_and_rejects_unmapped_formats() {
     let mut imported = import("postman", &postman().to_string()).unwrap();
     let request = &mut imported.data.collections[0].requests[0];

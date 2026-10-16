@@ -237,3 +237,111 @@ async fn imported_har_requests_replay_the_recorded_query_headers_and_form_body()
     }
     fixture.abort();
 }
+
+#[tokio::test]
+async fn hosted_postman20_import_preserves_object_auth_and_owner_private_source() {
+    let (url, fixture) = serve(
+        Router::new()
+            .route(
+                "/accounts/1",
+                axum::routing::get(|headers: axum::http::HeaderMap| async move {
+                    assert_eq!(headers["authorization"], "Bearer bearer-secret");
+                    axum::Json(json!({"ok":"bearer"}))
+                }),
+            )
+            .route(
+                "/accounts",
+                axum::routing::post(
+                    |headers: axum::http::HeaderMap, body: axum::body::Bytes| async move {
+                        assert_eq!(headers["x-api-key"], "api-key-secret");
+                        assert_eq!(body.as_ref(), br#"{"enabled":false}"#);
+                        axum::Json(json!({"ok":"apikey"}))
+                    },
+                ),
+            ),
+    )
+    .await;
+    let dir = tempfile::tempdir().unwrap();
+    let mut settings = config(
+        moleapi_server::sqlite_database_url(&dir.path().join("postman20.db")).unwrap(),
+        true,
+    );
+    settings.allow_private_network = true;
+    let router = hosted(settings).await.unwrap();
+    let owner = register(&router, "postman20-owner").await;
+    let other = register(&router, "postman20-other").await;
+    let mut source: Value =
+        serde_json::from_str(include_str!("../../formats/tests/fixtures/postman20.json")).unwrap();
+    source["item"][0]["item"][0]["request"]["url"] = json!(format!("{url}/accounts/1"));
+    source["item"][0]["item"][1]["request"]["url"] = json!(format!("{url}/accounts"));
+    let source = source.to_string();
+    let (status, imported) = call(
+        &router,
+        "POST",
+        "/api/import",
+        Some(&owner),
+        Some(json!({"format":"postman","content":source})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{imported}");
+    assert_eq!(imported["data"]["specifications"][0]["dialect"], "2.0.0");
+    assert_eq!(imported["data"]["specifications"][0]["source"], source);
+    let (status, saved) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        Some(&owner),
+        Some(json!({"id":"postman20","name":"Postman 2.0","data":imported["data"]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    let requests = &saved["data"]["collections"];
+    let nested = requests
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|collection| collection["name"] == "Accounts")
+        .unwrap();
+    for (index, expected) in [(0, "bearer"), (1, "apikey")] {
+        let (status, result) = call(
+            &router,
+            "POST",
+            "/api/execute",
+            Some(&owner),
+            Some(json!({"workspace_id":"postman20","request":nested["requests"][index]})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{result}");
+        assert!(result["body"].as_str().unwrap().contains(expected));
+    }
+    let (status, safe) = call(
+        &router,
+        "POST",
+        "/api/workspaces/postman20/export",
+        Some(&owner),
+        Some(json!({"format":"moleapi","include_secrets":false})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{safe}");
+    assert!(
+        !safe["content"]
+            .as_str()
+            .unwrap()
+            .contains("collection-secret")
+    );
+    assert!(!safe["content"].as_str().unwrap().contains("bearer-secret"));
+    assert!(!safe["content"].as_str().unwrap().contains("api-key-secret"));
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces/postman20/export",
+            Some(&other),
+            Some(json!({"format":"moleapi","include_secrets":true}))
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    fixture.abort();
+}
