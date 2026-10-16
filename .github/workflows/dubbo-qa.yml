@@ -195,3 +195,35 @@ jobs:
             ${{ runner.temp }}/nacos-auth-evidence.auth-complete.log
             ${{ runner.temp }}/nacos-auth-evidence.auth-namespace-complete.log
           if-no-files-found: warn
+  metadata-wire:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: tools/dubbo-metadata-qa/java/pom.xml
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Build official Apache metadata center fixture
+        run: mvn -B --strict-checksums -f tools/dubbo-metadata-qa/java/pom.xml package dependency:copy-dependencies -DincludeScope=runtime
+      - name: Compare provider report with checked Rust preview
+        run: |
+          python3 tools/dubbo-metadata-qa/verify.py --java "$(readlink -f "$(command -v java)")" \
+            --output "$RUNNER_TEMP/metadata-evidence.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dubbo-metadata-wire
+          path: |
+            ${{ runner.temp }}/metadata-evidence.json
+            ${{ runner.temp }}/metadata-evidence.held.log
+            ${{ runner.temp }}/metadata-evidence.auth.log
+            ${{ runner.temp }}/metadata-evidence.complete.log
+            ${{ runner.temp }}/metadata-evidence.auth-complete.log
+          if-no-files-found: warn

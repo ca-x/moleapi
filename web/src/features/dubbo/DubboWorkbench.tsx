@@ -1,10 +1,11 @@
 import {Button, Checkbox, Flex, Separator, Text, TextArea, TextField} from "@radix-ui/themes";
 import {t, useLanguage} from "../../shared/i18n";
 import {id} from "../../shared/model";
-import type {DubboConfig, RequestSpec} from "../../shared/types";
+import type {DubboConfig, RequestSpec, Workspace, WorkspaceData} from "../../shared/types";
 import {Choice, Field, PairEditor} from "../../shared/ui";
+import MetadataPreviewPane from "./MetadataPreviewPane";
 
-export default function DubboWorkbench({request, update, disabled}:{request:RequestSpec;update:(patch:Partial<RequestSpec>)=>void;disabled:boolean}) {
+export default function DubboWorkbench({request, update, disabled, workspaceId, workspaceData, workspaceRevision, onImported, dirty}:{request:RequestSpec;update:(patch:Partial<RequestSpec>)=>void;disabled:boolean;workspaceId?:string;workspaceData?:WorkspaceData;workspaceRevision?:number;onImported?:(workspace:Workspace)=>void;dirty?:boolean}) {
   useLanguage();
   if (request.protocol?.kind !== "dubbo") return null;
   const config = request.protocol;
@@ -67,5 +68,7 @@ export default function DubboWorkbench({request, update, disabled}:{request:Requ
     <Text size="2" color="gray">{t("64 位整数请写为 JSON 字符串；复杂 DTO 可使用 $class/$ 类型包装。")}</Text>
     <Text weight="medium">{t("Dubbo 附件")}</Text>
     <PairEditor rows={config.attachments} onChange={attachments=>change({attachments})} disabled={disabled} secrets keyLabel={t("附件名")} valueLabel={t("附件值")}/>
+    <Separator size="4"/>
+    <MetadataPreviewPane request={request} update={update} workspaceId={workspaceId} workspaceData={workspaceData} workspaceRevision={workspaceRevision} onImported={onImported} dirty={dirty} disabled={disabled}/>
   </div>;
 }

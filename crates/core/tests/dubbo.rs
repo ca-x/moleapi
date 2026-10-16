@@ -115,6 +115,28 @@ fn nacos_source_requires_a_plain_registry_endpoint() {
 }
 
 #[test]
+fn metadata_center_reference_is_separate_and_credential_free_in_url() {
+    let mut r = request();
+    let Protocol::Dubbo { config } = &mut r.protocol else {
+        unreachable!()
+    };
+    config.metadata_center_url = "zookeeper://metadata.example:2181".into();
+    config.metadata_application = "provider-app".into();
+    validate_request(&r, false).unwrap();
+    let Protocol::Dubbo { config } = &mut r.protocol else {
+        unreachable!()
+    };
+    config.metadata_center_url = "zookeeper://reader:secret@metadata.example:2181".into();
+    assert!(validate_request(&r, false).is_err());
+    let Protocol::Dubbo { config } = &mut r.protocol else {
+        unreachable!()
+    };
+    config.metadata_center_url = "zookeeper://metadata.example:2181".into();
+    config.metadata_application = "bad/application".into();
+    assert!(validate_request(&r, false).is_err());
+}
+
+#[test]
 fn classic_draft_roundtrips_order_and_original_json_without_becoming_http() {
     let r = request();
     validate_request(&r, true).unwrap();

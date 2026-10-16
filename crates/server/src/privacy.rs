@@ -277,6 +277,10 @@ pub(crate) fn request_values(
             capture(&auth.username);
             capture(&auth.password);
         }
+        if let Some(auth) = &config.metadata_auth {
+            capture(&auth.username);
+            capture(&auth.password);
+        }
         for attachment in config.attachments.iter().filter(|row| row.enabled) {
             if attachment.secret == Some(true) || moleapi_core::sensitive_query_key(&attachment.key)
             {
@@ -495,12 +499,17 @@ mod tests {
           "timeout_ms":5000,"follow_redirects":false,"verify_tls":true,"assertions":[],"examples":[],
           "protocol":{"kind":"dubbo","source_version":2,"source":"zookeeper",
             "service":"fixture.EchoService","method":"echo", "arguments":[], "attachments":[],
-            "registry_auth":{"username":"digest-user-private","password":"digest-pass-private"}}
+            "registry_auth":{"username":"digest-user-private","password":"digest-pass-private"},
+            "metadata_center_url":"zookeeper://metadata.example.test:2181",
+            "metadata_application":"provider-app",
+            "metadata_auth":{"username":"metadata-user-private","password":"metadata-pass-private"}}
         })).unwrap();
         let mut scopes = moleapi_core::VariableScopes::default();
         request_values(&request, &mut scopes).unwrap();
         assert!(scopes.private_values.contains("digest-user-private"));
         assert!(scopes.private_values.contains("digest-pass-private"));
+        assert!(scopes.private_values.contains("metadata-user-private"));
+        assert!(scopes.private_values.contains("metadata-pass-private"));
     }
     #[test]
     fn encoded_jwt_signing_secret_and_resolved_source_are_private() {

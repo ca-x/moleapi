@@ -30,7 +30,7 @@ import { toast } from "sonner";
 import { api } from "../../shared/api";
 import { Choice, Editor, Field, PairEditor, ToolButton } from "../../shared/ui";
 import { curlTemplate, id } from "../../shared/model";
-import type { ApiResponse, RequestSpec } from "../../shared/types";
+import type { ApiResponse, RequestSpec, Workspace, WorkspaceData } from "../../shared/types";
 
 import RequestBodyEditor from "../request-body/RequestBodyEditor";
 import {bodyModePatch} from "../request-body/model";
@@ -64,6 +64,8 @@ const requestTabs = [
 export default function RequestEditor({
   request,
   workspaceData,
+  workspaceRevision,
+  onWorkspaceImported,
   cookieWorkspace,
   protocolConnected = false,
   bodyScope = "",
@@ -80,7 +82,9 @@ export default function RequestEditor({
 }: {
   request: RequestSpec;
   cookieWorkspace?: string;
-  workspaceData?: import("../../shared/types").WorkspaceData;
+  workspaceData?: WorkspaceData;
+  workspaceRevision?: number;
+  onWorkspaceImported?: (workspace:Workspace)=>void;
   protocolConnected?: boolean;
   bodyScope?: string;
   update: (patch: Partial<RequestSpec>) => void;
@@ -430,7 +434,7 @@ export default function RequestEditor({
               <RequestScripts request={request} update={update} dark={dark} />
             </Tabs.Content>
             <Tabs.Content value="query">
-              {dubbo ? <DubboWorkbench request={request} update={update} disabled={busy||sending}/> : <PairEditor
+              {dubbo ? <DubboWorkbench request={request} update={update} workspaceId={cookieWorkspace} workspaceData={workspaceData} workspaceRevision={workspaceRevision} onImported={onWorkspaceImported} dirty={dirty} disabled={busy||sending}/> : <PairEditor
                 rows={request.query}
                 onChange={(query) => update({ query })}
                 keyLabel={t("参数名")}

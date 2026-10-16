@@ -29,6 +29,9 @@ export interface DubboConfig {
   source?: "direct" | "zookeeper" | "nacos";
   registry_auth?: {username:string;password:string} | null;
   registry_namespace?: string;
+  metadata_center_url?: string;
+  metadata_application?: string;
+  metadata_auth?: {username:string;password:string} | null;
   transport: "classic";
   serialization: "hessian2";
   service: string;

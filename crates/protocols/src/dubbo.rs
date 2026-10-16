@@ -2,10 +2,11 @@
 use anyhow::{Context, Result, bail, ensure};
 use futures_util::StreamExt;
 use moleapi_core::{
-    DubboConfig, NetworkPolicy, Protocol, RequestSpec, Response, ScriptLog, checked_destination,
-    dubbo_provider_url, dubbo_registry_url, dubbo_url, public_ip,
+    DubboConfig, DubboRegistryAuth, NetworkPolicy, Protocol, RequestSpec, Response, ScriptLog,
+    checked_destination, dubbo_provider_url, dubbo_registry_url, dubbo_url, public_ip,
 };
 use percent_encoding::percent_decode_str;
+use serde::Serialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
@@ -166,6 +167,188 @@ pub async fn lookup_zookeeper(
         }
     }
     Ok(sources)
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct DubboMetadataMethod {
+    pub name: String,
+    pub parameter_types: Vec<String>,
+    pub return_type: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct DubboMetadataPreview {
+    pub service: String,
+    pub version: String,
+    pub group: String,
+    pub application: String,
+    pub metadata_path: String,
+    pub document_sha256: String,
+    pub raw_document: String,
+    pub methods: Vec<DubboMetadataMethod>,
+}
+
+/// Read a provider-published service definition from an explicit metadata center.
+pub async fn preview_zookeeper_metadata(
+    endpoint: &str,
+    config: &DubboConfig,
+    application: &str,
+    auth: Option<&DubboRegistryAuth>,
+    policy: NetworkPolicy,
+    timeout: Duration,
+) -> Result<DubboMetadataPreview> {
+    ensure!(
+        !config.service.is_empty()
+            && config.service.len() <= 256
+            && config
+                .service
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '$')),
+        "Invalid metadata service interface"
+    );
+    for label in [&config.version, &config.group, application] {
+        ensure!(
+            !label.is_empty()
+                && label.len() <= 128
+                && label
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')),
+            "Metadata version, group and application must be explicit path-safe values"
+        );
+    }
+    let deadline = Instant::now() + timeout;
+    let registry = dubbo_registry_url(endpoint, "zookeeper")?;
+    let addresses = tokio::time::timeout(
+        deadline.saturating_duration_since(Instant::now()),
+        checked_destination(&registry, policy),
+    )
+    .await
+    .context("Metadata center address lookup timed out")??;
+    let address = reachable_address(&addresses, deadline)
+        .await
+        .context("Metadata center connection failed")?;
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    ensure!(!remaining.is_zero(), "Metadata center lookup timed out");
+    let client = tokio::time::timeout(
+        remaining,
+        zookeeper_async::ZooKeeper::connect(&address.to_string(), remaining, |_| {}),
+    )
+    .await
+    .context("Metadata center connection timed out")
+    .and_then(|result| result.map_err(anyhow::Error::from))?;
+    if let Some(auth) = auth {
+        ensure!(
+            !auth.username.is_empty()
+                && auth.username.len() <= 128
+                && !auth.username.contains(':')
+                && !auth.username.chars().any(char::is_control)
+                && !auth.password.is_empty()
+                && auth.password.len() <= 4096
+                && !auth.password.chars().any(char::is_control),
+            "Invalid metadata center credentials"
+        );
+        tokio::time::timeout(
+            deadline.saturating_duration_since(Instant::now()),
+            client.add_auth(
+                "digest",
+                format!("{}:{}", auth.username, auth.password).into_bytes(),
+            ),
+        )
+        .await
+        .context("Metadata center authentication timed out")?
+        .context("Metadata center authentication failed")?;
+    }
+    let encoded_service: String =
+        url::form_urlencoded::byte_serialize(config.service.as_bytes()).collect();
+    let path = format!(
+        "/dubbo/metadata/{encoded_service}/{}/{}/provider/{application}",
+        config.version, config.group
+    );
+    let result = tokio::time::timeout(
+        deadline.saturating_duration_since(Instant::now()),
+        client.get_data(&path, false),
+    )
+    .await
+    .context("Metadata definition lookup timed out")?;
+    let _ = tokio::time::timeout(
+        deadline
+            .saturating_duration_since(Instant::now())
+            .min(Duration::from_millis(300)),
+        client.close(),
+    )
+    .await;
+    let (bytes, _) = result.context("Metadata definition not found or unreadable")?;
+    ensure!(
+        bytes.len() <= MAX_INPUT,
+        "Metadata definition exceeds 1 MiB"
+    );
+    let raw_document = String::from_utf8(bytes).context("Metadata definition is not UTF-8")?;
+    let document_sha256 = format!("{:x}", Sha256::digest(raw_document.as_bytes()));
+    let definition: Value =
+        serde_json::from_str(&raw_document).context("Invalid Dubbo metadata definition")?;
+    ensure!(
+        definition.get("canonicalName").and_then(Value::as_str) == Some(config.service.as_str()),
+        "Metadata definition service mismatch"
+    );
+    let source_methods = definition
+        .get("methods")
+        .and_then(Value::as_array)
+        .context("Metadata definition omitted methods")?;
+    ensure!(
+        source_methods.len() <= 256,
+        "Metadata method count exceeds limit"
+    );
+    let mut methods = Vec::with_capacity(source_methods.len());
+    for method in source_methods {
+        let name = method
+            .get("name")
+            .and_then(Value::as_str)
+            .context("Metadata method name missing")?;
+        ensure!(
+            !name.is_empty() && name.len() <= 128,
+            "Invalid metadata method name"
+        );
+        let source_types = method
+            .get("parameterTypes")
+            .and_then(Value::as_array)
+            .context("Metadata method parameters missing")?;
+        ensure!(
+            source_types.len() <= 32,
+            "Metadata parameter count exceeds limit"
+        );
+        let mut parameter_types = Vec::with_capacity(source_types.len());
+        for value in source_types {
+            let name = value.as_str().context("Invalid metadata parameter type")?;
+            ensure!(
+                !name.is_empty() && name.len() <= 256,
+                "Invalid metadata parameter type"
+            );
+            parameter_types.push(name.to_owned());
+        }
+        let return_type = method
+            .get("returnType")
+            .and_then(Value::as_str)
+            .context("Metadata method return type missing")?;
+        ensure!(
+            !return_type.is_empty() && return_type.len() <= 256,
+            "Invalid metadata return type"
+        );
+        methods.push(DubboMetadataMethod {
+            name: name.to_owned(),
+            parameter_types,
+            return_type: return_type.to_owned(),
+        });
+    }
+    Ok(DubboMetadataPreview {
+        service: config.service.clone(),
+        version: config.version.clone(),
+        group: config.group.clone(),
+        application: application.to_owned(),
+        metadata_path: path,
+        document_sha256,
+        raw_document,
+        methods,
+    })
 }
 
 fn registry_candidate_matches(source: &str, config: &DubboConfig) -> Result<bool> {

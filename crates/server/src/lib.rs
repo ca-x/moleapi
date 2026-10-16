@@ -308,6 +308,14 @@ async fn build(
         )
         .route("/dubbo/capability", get(dubbo::capability))
         .route(
+            "/workspaces/{workspace}/dubbo/metadata/preview",
+            post(dubbo::preview_metadata),
+        )
+        .route(
+            "/workspaces/{workspace}/dubbo/metadata/import",
+            post(dubbo::import_metadata),
+        )
+        .route(
             "/workspaces/{id}/webhooks",
             get(webhooks::list).post(webhooks::create),
         )

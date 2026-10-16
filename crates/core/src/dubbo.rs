@@ -44,6 +44,12 @@ pub struct DubboConfig {
     pub registry_auth: Option<DubboRegistryAuth>,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub registry_namespace: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub metadata_center_url: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub metadata_application: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata_auth: Option<DubboRegistryAuth>,
     pub transport: String,
     pub serialization: String,
     pub service: String,
@@ -65,6 +71,9 @@ impl Default for DubboConfig {
             source: "direct".into(),
             registry_auth: None,
             registry_namespace: String::new(),
+            metadata_center_url: String::new(),
+            metadata_application: String::new(),
+            metadata_auth: None,
             transport: "classic".into(),
             serialization: "hessian2".into(),
             service: String::new(),
@@ -242,6 +251,34 @@ pub fn validate_dubbo(request: &RequestSpec, templates: bool) -> Result<()> {
                     .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.')),
         "Invalid Nacos namespace ID"
     );
+    ensure!(
+        config.metadata_center_url.len() <= 2048
+            && (config.metadata_center_url.is_empty()
+                || templates && config.metadata_center_url.contains("{{")
+                || dubbo_registry_url(&config.metadata_center_url, "zookeeper").is_ok()),
+        "Invalid ZooKeeper metadata center endpoint"
+    );
+    ensure!(
+        config.metadata_application.len() <= 128
+            && config
+                .metadata_application
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')),
+        "Invalid metadata application"
+    );
+    if let Some(auth) = &config.metadata_auth {
+        ensure!(
+            !config.metadata_center_url.is_empty()
+                && !auth.username.is_empty()
+                && auth.username.len() <= 128
+                && !auth.username.contains(':')
+                && !auth.username.chars().any(char::is_control)
+                && !auth.password.is_empty()
+                && auth.password.len() <= 4096
+                && !auth.password.chars().any(char::is_control),
+            "Invalid metadata center credentials"
+        );
+    }
     ensure!(
         config.transport == "classic" && config.serialization == "hessian2",
         "Only classic Dubbo/Hessian2 is currently selected"
