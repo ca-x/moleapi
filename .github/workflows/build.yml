@@ -177,12 +177,13 @@ jobs:
         with:
           projectPath: desktop
           tauriScript: ../web/node_modules/.bin/tauri
-          args: --config tauri.java.json --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+          args: --verbose --config tauri.java.json --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
       - name: Verify desktop worker without opening a GUI
         run: python scripts/check-script-worker.py target/${{ matrix.target }}/release/moleapi
       - name: Verify actual bundled desktop JVM and original runtime files
         run: python scripts/check-bundled-java.py target/${{ matrix.target }}/release/moleapi --runtime-only
       - uses: actions/upload-artifact@v4
+        if: ${{ success() || (failure() && runner.os == 'Linux') }}
         with:
           name: desktop-${{ matrix.target }}
           path: |
@@ -192,7 +193,7 @@ jobs:
             target/${{ matrix.target }}/release/bundle/**/*.dmg
             target/${{ matrix.target }}/release/bundle/**/*.exe
             target/${{ matrix.target }}/release/bundle/**/*.msi
-          if-no-files-found: error
+          if-no-files-found: warn
   objc-qa:
     if: github.event_name == 'workflow_dispatch' && inputs.objc_qa == true
     timeout-minutes: 180
