@@ -82,6 +82,149 @@ async fn import_export_routes_validate_formats_and_default_to_secret_redaction()
 }
 
 #[tokio::test]
+async fn owned_postman_variable_preview_and_export_preserve_cas_and_privacy() {
+    let temporary = tempfile::tempdir().unwrap();
+    let router = hosted(config(
+        moleapi_server::sqlite_database_url(&temporary.path().join("variables.db")).unwrap(),
+        true,
+    ))
+    .await
+    .unwrap();
+    let owner = register(&router, "variable-owner").await;
+    let other = register(&router, "variable-other").await;
+    let (status, workspace) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        Some(&owner),
+        Some(json!({"id":"variable-workspace","name":"Variable workspace","data":data()})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{workspace}");
+    let environment = include_str!("../../formats/tests/fixtures/postman_environment.json");
+    let preview_path = "/api/workspaces/variable-workspace/variables/import-preview";
+    let (status, preview) = call(
+        &router,
+        "POST",
+        preview_path,
+        Some(&owner),
+        Some(json!({"content":environment,"expected_revision":workspace["revision"]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{preview}");
+    assert_eq!(preview["scope"], "environment");
+    assert_eq!(preview["variables"].as_array().unwrap().len(), 3);
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            preview_path,
+            Some(&other),
+            Some(json!({"content":environment,"expected_revision":workspace["revision"]}))
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    let mut source = workspace["data"].clone();
+    source["environments"] =
+        json!([{"id":"dev","name":preview["name"],"variables":preview["variables"]}]);
+    source["active_environment_id"] = json!("dev");
+    let (status, saved) = call(&router,"PUT","/api/workspaces/variable-workspace",Some(&owner),
+        Some(json!({"name":"Variable workspace","data":source,"expected_revision":workspace["revision"]}))).await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            preview_path,
+            Some(&owner),
+            Some(json!({"content":environment,"expected_revision":workspace["revision"]}))
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    let export_path = "/api/workspaces/variable-workspace/variables/export";
+    let request = |include_secrets| json!({"scope":"environment","environment_id":"dev","include_secrets":include_secrets,"expected_revision":saved["revision"]});
+    let (status, safe) = call(
+        &router,
+        "POST",
+        export_path,
+        Some(&owner),
+        Some(request(false)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{safe}");
+    assert!(
+        !safe["content"]
+            .as_str()
+            .unwrap()
+            .contains("environment-secret")
+    );
+    let (status, full) = call(
+        &router,
+        "POST",
+        export_path,
+        Some(&owner),
+        Some(request(true)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{full}");
+    assert!(
+        full["content"]
+            .as_str()
+            .unwrap()
+            .contains("environment-secret")
+    );
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            export_path,
+            Some(&other),
+            Some(request(true))
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(call(&router,"POST",export_path,Some(&owner),
+        Some(json!({"scope":"environment","environment_id":"dev","include_secrets":false,"expected_revision":workspace["revision"]}))).await.0,StatusCode::CONFLICT);
+    let globals = include_str!("../../formats/tests/fixtures/postman_globals.json");
+    let (status, globals_preview) = call(
+        &router,
+        "POST",
+        preview_path,
+        Some(&owner),
+        Some(json!({"content":globals,"expected_revision":saved["revision"]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{globals_preview}");
+    assert_eq!(globals_preview["scope"], "globals");
+    let mut next = saved["data"].clone();
+    next["global_variables"] = globals_preview["variables"].clone();
+    let (status, saved) = call(
+        &router,
+        "PUT",
+        "/api/workspaces/variable-workspace",
+        Some(&owner),
+        Some(
+            json!({"name":"Variable workspace","data":next,"expected_revision":saved["revision"]}),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    let (status, exported)=call(&router,"POST",export_path,Some(&owner),
+        Some(json!({"scope":"globals","environment_id":null,"include_secrets":false,"expected_revision":saved["revision"]}))).await;
+    assert_eq!(status, StatusCode::OK, "{exported}");
+    assert_eq!(
+        serde_json::from_str::<Value>(exported["content"].as_str().unwrap()).unwrap()["_postman_variable_scope"],
+        "globals"
+    );
+}
+
+#[tokio::test]
 async fn hosted_har_import_creates_owned_workspace_and_screens_recorded_secrets() {
     let dir = tempfile::tempdir().unwrap();
     let router = hosted(config(

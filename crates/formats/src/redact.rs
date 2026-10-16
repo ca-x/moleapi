@@ -300,10 +300,10 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
 
     for environment in &mut result.data.environments {
         for variable in &mut environment.variables {
-            if auth_private {
-                variable.value = privacy.screen_bounded(&variable.value, 65536);
-                variable.local_value = None;
-            }
+            // A secret variable can be copied into a public-looking row even without auth.
+            variable.value =
+                privacy.screen_bounded(&variable.value, moleapi_core::MAX_VARIABLE_BYTES);
+            variable.local_value = None;
             if variable.secret == Some(true) || sensitive(&variable.key) {
                 variable.value.clear();
                 variable.local_value = None;
@@ -311,9 +311,7 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
         }
     }
     for variable in &mut result.data.global_variables {
-        if auth_private {
-            variable.value = privacy.screen_bounded(&variable.value, 65536);
-        }
+        variable.value = privacy.screen_bounded(&variable.value, moleapi_core::MAX_VARIABLE_BYTES);
         if variable.secret == Some(true) || sensitive(&variable.key) {
             variable.value.clear();
         }
@@ -341,9 +339,8 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
         }
 
         for variable in &mut collection.variables {
-            if auth_private {
-                variable.value = privacy.screen_bounded(&variable.value, 65536);
-            }
+            variable.value =
+                privacy.screen_bounded(&variable.value, moleapi_core::MAX_VARIABLE_BYTES);
             if variable.secret == Some(true) || sensitive(&variable.key) {
                 variable.value.clear();
             }

@@ -1,5 +1,5 @@
 use crate::{
-    args::{Cli, Command, Resource, Run},
+    args::{Cli, Command, Resource, Run, VariableFileCommand, VariableFileScope},
     backend::Backend,
     io,
 };
@@ -179,6 +179,119 @@ pub async fn execute(cli: &Cli, backend: &Backend) -> Result<u8> {
                 *overwrite,
             )?;
         }
+        Command::Variables { command } => match command {
+            VariableFileCommand::Import {
+                workspace: name,
+                input,
+                name: override_name,
+                replace_globals,
+            } => {
+                let current = workspace(backend, name).await?;
+                let content = io::read(input, 1024 * 1024)?;
+                let preview: moleapi_formats::VariableImport = serde_json::from_value(
+                    backend
+                        .request(
+                            "POST",
+                            &["workspaces", &current.id, "variables", "import-preview"],
+                            &[],
+                            Some(json!({"content":content,"expected_revision":current.revision})),
+                        )
+                        .await?,
+                )?;
+                let mut data = current.data;
+                let scope = preview.scope.as_str();
+                match scope {
+                    "environment" => {
+                        ensure!(
+                            !replace_globals,
+                            "--replace-globals is only for globals files"
+                        );
+                        let title = override_name.as_deref().unwrap_or(&preview.name);
+                        ensure!(
+                            !title.trim().is_empty()
+                                && title.len() <= 128
+                                && !title.chars().any(char::is_control),
+                            "Environment name must be 1–128 bytes without control characters"
+                        );
+                        ensure!(
+                            !data.environments.iter().any(|item| item.name == title),
+                            "Environment name already exists; choose --name explicitly"
+                        );
+                        let id = uuid::Uuid::new_v4().to_string();
+                        data.environments.push(moleapi_core::Environment {
+                            id: id.clone(),
+                            name: title.into(),
+                            variables: preview.variables,
+                        });
+                        data.active_environment_id = Some(id);
+                    }
+                    "globals" => {
+                        ensure!(
+                            override_name.is_none(),
+                            "--name is only for environment files"
+                        );
+                        ensure!(
+                            *replace_globals,
+                            "Globals import replaces project globals; pass --replace-globals explicitly"
+                        );
+                        data.global_variables = preview.variables;
+                    }
+                    _ => anyhow::bail!("Unsupported Postman variable scope"),
+                }
+                let saved = backend
+                    .request(
+                        "PUT",
+                        &["workspaces", &current.id],
+                        &[],
+                        Some(json!({"name":current.name,"data":data,"expected_revision":current.revision})),
+                    )
+                    .await?;
+                output(
+                    &json!({"workspace_id":saved["id"],"revision":saved["revision"],
+                    "scope":scope,"warnings":preview.warnings}),
+                )?;
+            }
+            VariableFileCommand::Export {
+                workspace: name,
+                scope,
+                environment,
+                output: path,
+                overwrite,
+                include_secrets,
+            } => {
+                let current = workspace(backend, name).await?;
+                let (scope, environment_id) = match scope {
+                    VariableFileScope::Environment => {
+                        let selected = environment.as_deref().context("Select --environment")?;
+                        (
+                            "environment",
+                            Some(resource(&current.data.environments, selected)?),
+                        )
+                    }
+                    VariableFileScope::Globals => {
+                        ensure!(environment.is_none(), "Globals export has no --environment");
+                        ("globals", None)
+                    }
+                };
+                let file = backend
+                    .request(
+                        "POST",
+                        &["workspaces", &current.id, "variables", "export"],
+                        &[],
+                        Some(json!({"scope":scope,"environment_id":environment_id,
+                            "include_secrets":include_secrets,"expected_revision":current.revision})),
+                    )
+                    .await?;
+                io::save(
+                    path,
+                    file["content"]
+                        .as_str()
+                        .context("Variable export is invalid")?
+                        .as_bytes(),
+                    *overwrite,
+                )?;
+            }
+        },
         Command::Run(options) => return run(cli, backend, options).await,
         Command::Report {
             workspace: name,

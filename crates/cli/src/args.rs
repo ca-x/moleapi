@@ -94,6 +94,11 @@ pub enum Command {
         #[arg(long)]
         include_secrets: bool,
     },
+    /// Import or export Postman environment/global variable files in an existing workspace.
+    Variables {
+        #[command(subcommand)]
+        command: VariableFileCommand,
+    },
     /// Execute an owned collection or scenario with the shared runtime.
     Run(Box<Run>),
     /// Read/export a previously saved redacted report.
@@ -128,6 +133,38 @@ pub enum Command {
         #[arg(long)]
         include_secrets: bool,
     },
+}
+#[derive(Subcommand)]
+pub enum VariableFileCommand {
+    Import {
+        #[arg(long)]
+        workspace: String,
+        #[arg(long)]
+        input: PathBuf,
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long)]
+        replace_globals: bool,
+    },
+    Export {
+        #[arg(long)]
+        workspace: String,
+        #[arg(long, value_enum)]
+        scope: VariableFileScope,
+        #[arg(long)]
+        environment: Option<String>,
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long)]
+        overwrite: bool,
+        #[arg(long)]
+        include_secrets: bool,
+    },
+}
+#[derive(Clone, ValueEnum)]
+pub enum VariableFileScope {
+    Environment,
+    Globals,
 }
 #[derive(Clone, ValueEnum)]
 pub enum Resource {

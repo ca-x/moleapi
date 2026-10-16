@@ -460,6 +460,14 @@ async fn build(
             post(runners::cancel),
         )
         .route("/workspaces/{id}/export", post(formats::export))
+        .route(
+            "/workspaces/{id}/variables/import-preview",
+            post(formats::import_variables_preview),
+        )
+        .route(
+            "/workspaces/{id}/variables/export",
+            post(formats::export_variables),
+        )
         .route("/oauth2/flows", post(oauth2::flows::begin))
         .route("/oauth2/flows/{id}", get(oauth2::flows::status))
         .route("/oauth2/flows/{id}/cancel", post(oauth2::flows::cancel))

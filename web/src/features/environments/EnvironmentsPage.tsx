@@ -1,4 +1,5 @@
 import { t, useLanguage, message } from "../../shared/i18n";
+import {useState} from "react";
 import { Button, Card, Flex, Heading, Text, TextField } from "@radix-ui/themes";
 import { Plus, Save, Trash2 } from "lucide-react";
 import ProjectVariables from "../variables/ProjectVariables";
@@ -6,9 +7,12 @@ import VariableScopeEditor from "../variables/VariableScopeEditor";
 import { Field, ToolButton } from "../../shared/ui";
 import { id } from "../../shared/model";
 import { useWorkbench } from "../workbench/context";
+import VariableFileImportDialog from "./VariableFileImportDialog";
+import VariableFileExportControls from "./VariableFileExportControls";
 
 export default function EnvironmentsPage() {
   useLanguage();
+  const [importOpen,setImportOpen]=useState(false);
   const state = useWorkbench();
   const { draft, saving, setGuard, dirty, updateData, save, environment } =
     state;
@@ -20,7 +24,7 @@ export default function EnvironmentsPage() {
           <Heading size="5">{t("环境变量")}</Heading>
           <Text size="2" color="gray"> {t("切换开发、测试与生产环境，使用 {{variable}} 引用值。", { variable: "{{variable}}" })} </Text>
         </div>
-        <Button
+        <Flex gap="2" wrap="wrap"><Button
           onClick={() => {
             const next = { id: id(), name: t("新建环境"), variables: [] };
             updateData((data) => ({
@@ -31,6 +35,7 @@ export default function EnvironmentsPage() {
           }}
         >
           <Plus size={16} /> {t("新建环境")} </Button>
+        <Button variant="soft" onClick={()=>setImportOpen(true)}>{t("导入 Postman 变量文件")}</Button></Flex>
       </div>
       <Flex gap="3" wrap="wrap">
         {draft.data.environments.map((e) => (
@@ -107,6 +112,8 @@ export default function EnvironmentsPage() {
         <Text color="gray">{t("选择或新建一个环境。")}</Text>
       )}
       <ProjectVariables />
+      <VariableFileExportControls />
+      <VariableFileImportDialog open={importOpen} onOpenChange={setImportOpen}/>
       <Button loading={saving} disabled={!dirty} onClick={() => void save()}>
         <Save size={16} /> {t("保存工作区")} </Button>
     </div>

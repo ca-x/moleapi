@@ -1,0 +1,9 @@
+{
+  "id": "postman-globals",
+  "name": "Project globals",
+  "values": [
+    {"key": "region", "value": "东京", "enabled": true, "type": "default"},
+    {"key": "shared_token", "value": "environment-secret", "enabled": false, "type": "secret"}
+  ],
+  "_postman_variable_scope": "globals"
+}
