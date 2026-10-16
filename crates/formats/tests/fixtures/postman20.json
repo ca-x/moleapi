@@ -1,0 +1,48 @@
+{
+  "info": {
+    "name": "Postman 2.0 fixture",
+    "schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json"
+  },
+  "auth": {
+    "type": "basic",
+    "basic": {"username": "collection-user", "password": "collection-secret"}
+  },
+  "variable": [{"key": "region", "value": "west"}],
+  "item": [{
+    "name": "Accounts",
+    "item": [
+      {
+        "name": "Read account",
+        "request": {
+          "method": "GET",
+          "url": "https://api.example.test/accounts/1",
+          "header": [{"key": "X-Trace", "value": "old-value"}],
+          "auth": {"type": "bearer", "bearer": {"token": "bearer-secret"}}
+        },
+        "response": [{
+          "name": "Found",
+          "code": 200,
+          "header": [{"key": "Content-Type", "value": "application/json"}],
+          "body": "{\"id\":1}"
+        }]
+      },
+      {
+        "name": "Create account",
+        "request": {
+          "method": "POST",
+          "url": "https://api.example.test/accounts",
+          "header": [{"key": "Content-Type", "value": "application/json"}],
+          "auth": {
+            "type": "apikey",
+            "apikey": {"key": "X-Api-Key", "value": "api-key-secret", "in": "header"}
+          },
+          "data": {"mode": "raw", "raw": "{\"enabled\":false}", "options": {"raw": {"language": "json"}}}
+        },
+        "event": [{
+          "listen": "test",
+          "script": {"type": "text/javascript", "exec": "pm.test('created', () => pm.response.to.have.status(201));"}
+        }]
+      }
+    ]
+  }]
+}

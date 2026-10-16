@@ -37,7 +37,7 @@ fn redact_auth(auth: &mut moleapi_core::Auth, privacy: &ExportPrivacy) {
         c.access_token.clear();
         c.client_token.clear();
         c.client_secret.clear();
-        c.base_url = privacy.screen_bounded(&c.base_url, 8192);
+        c.base_url = redact_auth_url(&c.base_url, privacy, 8192);
         c.nonce = privacy.screen_bounded(&c.nonce, 1024);
         c.timestamp = privacy.screen_bounded(&c.timestamp, 128);
         for name in &mut c.headers_to_sign {
@@ -105,9 +105,10 @@ fn redact_auth(auth: &mut moleapi_core::Auth, privacy: &ExportPrivacy) {
             }
         }
 
-        for value in [&mut c.realm, &mut c.nonce, &mut c.callback] {
+        for value in [&mut c.realm, &mut c.nonce] {
             *value = privacy.screen_bounded(value, 4096);
         }
+        c.callback = redact_auth_url(&c.callback, privacy, 4096);
         c.timestamp = privacy.screen_bounded(&c.timestamp, 128);
         if privacy.screen_bounded(&c.algorithm, 128) != c.algorithm {
             c.algorithm = "{{redacted_oauth1_algorithm}}".into();
@@ -702,6 +703,9 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
     }
     for specification in &mut result.data.specifications {
         if let Ok(mut value) = serde_yaml_ng::from_str::<Value>(&specification.source) {
+            if specification.kind == "postman" {
+                redact_postman_unmapped_transport(&mut value, &privacy);
+            }
             if specification.kind == "openapi" && value["format"] == "moleapi-openapi-source-v1" {
                 // File content is opaque YAML/JSON text here; safe projection runs in the
                 // capped project worker. Exact source export requires include_secrets.
@@ -738,6 +742,96 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
     }
     result
 }
+fn redact_postman_unmapped_transport(value: &mut Value, privacy: &ExportPrivacy) {
+    match value {
+        Value::Object(object) => {
+            // Imported proxy/certificate settings are retained as source only.
+            // Default backups must not expose local key paths or passphrases.
+            object.remove("proxy");
+            object.remove("certificate");
+            if let Some(auth) = object.get_mut("auth") {
+                redact_postman_auth(auth, privacy);
+            }
+            for child in object.values_mut() {
+                redact_postman_unmapped_transport(child, privacy);
+            }
+        }
+        Value::Array(values) => {
+            for child in values {
+                redact_postman_unmapped_transport(child, privacy);
+            }
+        }
+        _ => {}
+    }
+}
+fn redact_postman_auth(auth: &mut Value, privacy: &ExportPrivacy) {
+    let Some(auth) = auth.as_object_mut() else {
+        return;
+    };
+    for (helper, attributes) in auth {
+        let private: &[&str] = match helper.as_str() {
+            "basic" | "digest" | "ntlm" => &["username", "password"],
+            "bearer" => &["token"],
+            "apikey" => &["value"],
+            "awsv4" => &["accessKey", "secretKey", "sessionToken"],
+            "hawk" => &["authId", "authKey"],
+            "edgegrid" => &["accessToken", "clientToken", "clientSecret"],
+            "oauth1" => &[
+                "consumerKey",
+                "consumerSecret",
+                "token",
+                "tokenSecret",
+                "privateKey",
+                "verifier",
+            ],
+            "oauth2" => &[
+                "accessToken",
+                "refreshToken",
+                "clientSecret",
+                "clientId",
+                "password",
+                "username",
+            ],
+            "asap" => &["privateKey"],
+            _ => &[],
+        };
+        let urls: &[&str] = match helper.as_str() {
+            "edgegrid" => &["baseURL"],
+            "oauth1" => &["callback"],
+            "oauth2" => &[
+                "authUrl",
+                "accessTokenUrl",
+                "callbackUrl",
+                "refreshTokenUrl",
+                "tokenUrl",
+            ],
+            _ => &[],
+        };
+        if let Some(values) = attributes.as_object_mut() {
+            for key in private {
+                if let Some(value) = values.get_mut(*key) {
+                    *value = Value::String(String::new());
+                }
+            }
+            for key in urls {
+                if let Some(Value::String(value)) = values.get_mut(*key) {
+                    *value = redact_auth_url(value, privacy, 8192);
+                }
+            }
+        } else if let Some(values) = attributes.as_array_mut() {
+            for row in values {
+                let key = row["key"].as_str().unwrap_or_default();
+                if private.contains(&key) {
+                    row["value"] = Value::String(String::new());
+                } else if urls.contains(&key)
+                    && let Some(value) = row["value"].as_str()
+                {
+                    row["value"] = Value::String(redact_auth_url(value, privacy, 8192));
+                }
+            }
+        }
+    }
+}
 fn mqtt_properties(values: &mut [moleapi_core::MqttProperty]) {
     for value in values {
         if value.secret || sensitive(&value.key) {
@@ -755,6 +849,26 @@ fn mqtt_message(value: &mut moleapi_core::MqttMessage) {
         value.payload_source = redact_embedded_json(&value.payload_source);
     }
     mqtt_properties(&mut value.properties.user_properties);
+}
+fn redact_auth_url(raw: &str, privacy: &ExportPrivacy, maximum: usize) -> String {
+    if raw.is_empty() {
+        return String::new();
+    }
+    let Ok(url) = url::Url::parse(raw) else {
+        // Postman can template the scheme or host. Its embedded credentials
+        // cannot be parsed safely until execution, so withhold the URL.
+        return "{{redacted_auth_url}}".into();
+    };
+    if !matches!(url.scheme(), "http" | "https") {
+        return "{{redacted_auth_url}}".into();
+    }
+    let cleaned = redact_url(raw);
+    let screened = privacy.screen_bounded(&cleaned, maximum);
+    if screened.is_empty() || screened != cleaned {
+        "{{redacted_auth_url}}".into()
+    } else {
+        cleaned
+    }
 }
 fn redact_url(raw: &str) -> String {
     let Ok(mut url) = url::Url::parse(raw) else {
