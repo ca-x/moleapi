@@ -9,6 +9,7 @@ use moleapi_protocols::{
 };
 use serde::Deserialize;
 use std::sync::Arc;
+type SharedMask = Arc<std::sync::RwLock<Arc<Redactor>>>;
 #[derive(Deserialize)]
 pub struct Create {
     workspace_id: String,
@@ -35,7 +36,7 @@ fn error(e: anyhow::Error) -> ApiError {
         ApiError::bad(text)
     }
 }
-struct DataCompletionContext {
+pub(crate) struct DataCompletionContext {
     state: AppState,
     owner: String,
     session_id: String,
@@ -45,6 +46,16 @@ struct DataCompletionContext {
     prepared_request: RequestSpec,
     admission: Arc<tokio::sync::Mutex<u64>>,
     generation: u64,
+    scopes: tokio::sync::Mutex<moleapi_core::VariableScopes>,
+    processing: tokio::sync::watch::Sender<Option<String>>,
+    mask_state: SharedMask,
+}
+impl DataCompletionContext {
+    fn refresh_mask(&self, values: &std::collections::BTreeSet<String>) -> Result<(), ApiError> {
+        let redactor = Arc::new(Redactor::new(values)?);
+        *self.mask_state.write().unwrap() = redactor;
+        Ok(())
+    }
 }
 async fn check(s: &AppState, owner: &str, id: &str) -> Result<SessionSummary, ApiError> {
     let summary = s.protocol_sessions.summary(owner, id).map_err(error)?;
@@ -147,10 +158,13 @@ pub async fn create(
     {
         return Err(ApiError::bad("Pre scripts cannot change the live protocol"));
     }
-    let redactor = Arc::new(Redactor::new(&scopes.private_values)?);
+    let mask_state: SharedMask = Arc::new(std::sync::RwLock::new(Arc::new(Redactor::new(
+        &scopes.private_values,
+    )?)));
+    let redactor = mask_state.clone();
     let mask: Arc<dyn Fn(&str) -> String + Send + Sync> = Arc::new(move |text| {
         let mut value = serde_json::json!(text);
-        redactor.scrub(&mut value);
+        redactor.read().unwrap().scrub(&mut value);
         value.as_str().unwrap_or("[REDACTED]").into()
     });
     let grpc_method = if request.protocol.is_grpc() {
@@ -371,7 +385,7 @@ pub async fn create(
         return Err(error(e));
     }
     if let Some(mut completions) = data_completions {
-        let context = DataCompletionContext {
+        let context = Arc::new(DataCompletionContext {
             state: s.clone(),
             owner: owner.0.clone(),
             session_id: summary.id.clone(),
@@ -381,8 +395,15 @@ pub async fn create(
             prepared_request: prepared_data_request,
             admission: admission.clone(),
             generation,
-        };
-        let mut scopes = scopes;
+            scopes: tokio::sync::Mutex::new(scopes),
+            processing: tokio::sync::watch::channel(None).0,
+            mask_state: mask_state.clone(),
+        });
+        {
+            let mut sessions = s.data_sessions.lock().unwrap();
+            sessions.retain(|_, context| context.strong_count() > 0);
+            sessions.insert(summary.id.clone(), Arc::downgrade(&context));
+        }
         tokio::spawn(async move {
             while let Some(completion) = completions.recv().await {
                 // Workspace deletion uses this gate for its tombstone and history cascade.
@@ -393,7 +414,7 @@ pub async fn create(
                     .lock(&context.owner, &context.workspace_id)
                     .await;
                 let query_id = completion.query_id.clone();
-                let result = save_data_completion(&context, &mut scopes, completion).await;
+                let result = save_data_completion(&context, completion).await;
                 let message = match result {
                     Ok(Some((history_id, response, notice))) => EventMessage::DataProcessed {
                         query_id: query_id.clone(),
@@ -419,13 +440,22 @@ pub async fn create(
                         &context.owner,
                         &context.session_id,
                         EventMessage::DataPostprocessError {
-                            query_id,
+                            query_id: query_id.clone(),
                             message: "Data postprocessing result exceeds session event limits"
                                 .into(),
                         },
                     );
                 }
+                if context.processing.borrow().as_deref() == Some(query_id.as_str()) {
+                    context.processing.send_replace(None);
+                }
             }
+            context
+                .state
+                .data_sessions
+                .lock()
+                .unwrap()
+                .remove(&context.session_id);
         });
     }
     summary.variable_updates = updates;
@@ -434,7 +464,6 @@ pub async fn create(
 }
 async fn save_data_completion(
     context: &DataCompletionContext,
-    scopes: &mut moleapi_core::VariableScopes,
     completion: DataCompletion,
 ) -> Result<Option<(Option<String>, Response, Option<String>)>, ApiError> {
     let guard = context.admission.lock().await;
@@ -446,6 +475,7 @@ async fn save_data_completion(
         return Ok(None);
     }
     let w = owned(&context.state, &context.owner, &context.workspace_id).await?;
+    let mut scopes = context.scopes.lock().await;
     let history_cleared = crate::history::cleared_since(
         &context.state,
         &context.owner,
@@ -531,7 +561,7 @@ async fn save_data_completion(
             collection,
             &context.prepared_request,
             &mut response,
-            scopes,
+            &mut scopes,
         )
         .await?
     };
@@ -574,6 +604,7 @@ async fn save_data_completion(
         )
         .await?
     };
+    context.refresh_mask(&scopes.private_values)?;
     drop(guard);
     if history_id.is_none() && !history_cleared {
         return Ok(None);
@@ -606,11 +637,192 @@ pub async fn send(
     Path(id): Path<String>,
     Json(message): Json<SendMessage>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    check(&s, &owner.0, &id).await?;
+    let summary = check(&s, &owner.0, &id).await?;
+    if let SendMessage::DataQuery {
+        query_id,
+        sql,
+        read_only,
+    } = &message
+        && summary.protocol == "data"
+    {
+        let context = s
+            .data_sessions
+            .lock()
+            .unwrap()
+            .get(&id)
+            .and_then(std::sync::Weak::upgrade)
+            .ok_or_else(ApiError::not_found)?;
+        if let Protocol::Data { config } = &context.prepared_request.protocol
+            && !config.query_pre_script.trim().is_empty()
+        {
+            send_scripted_data_query(
+                &s,
+                &owner.0,
+                &id,
+                &context,
+                query_id.clone(),
+                sql.clone(),
+                *read_only,
+            )
+            .await?;
+            return Ok(Json(serde_json::json!({"ok":true})));
+        }
+    }
     s.protocol_sessions
         .send(&owner.0, &id, message)
         .map_err(error)?;
     Ok(Json(serde_json::json!({"ok":true})))
+}
+
+async fn send_scripted_data_query(
+    s: &AppState,
+    owner: &str,
+    id: &str,
+    context: &DataCompletionContext,
+    query_id: String,
+    selected_sql: String,
+    read_only: bool,
+) -> Result<(), ApiError> {
+    let reservation = s
+        .protocol_sessions
+        .reserve_data_query(owner, id, query_id.clone(), &selected_sql)
+        .map_err(error)?;
+    s.protocol_sessions
+        .data_event(
+            owner,
+            id,
+            EventMessage::DataPreparing {
+                query_id: query_id.clone(),
+            },
+        )
+        .map_err(error)?;
+    let mut processing = context.processing.subscribe();
+    while processing.borrow().is_some() {
+        tokio::select! {
+            _ = reservation.cancelled() => {
+                let _ = s.protocol_sessions.data_event(owner, id, EventMessage::DataCancelled { query_id, write_outcome_unknown:false });
+                return Ok(());
+            }
+            changed = tokio::time::timeout(std::time::Duration::from_secs(30), processing.changed()) => {
+                if !matches!(changed, Ok(Ok(()))) {
+                    let _ = s.protocol_sessions.data_event(owner, id, EventMessage::DataPreprocessError {
+                        query_id, message:"Previous Data query postprocessing is unavailable".into(),
+                    });
+                    return Ok(());
+                }
+            }
+        }
+    }
+    let _workspace_gate = s.webhooks.gates.lock(owner, &context.workspace_id).await;
+    let admitted = context.admission.lock().await;
+    if *admitted != context.generation || check(s, owner, id).await.is_err() {
+        return Err(ApiError::unauthorized());
+    }
+    let mut scopes = context.scopes.lock().await;
+    let before = scopes.clone();
+    let prepared = tokio::select! {
+        _ = reservation.cancelled() => {
+            let _ = s.protocol_sessions.data_event(owner, id, EventMessage::DataCancelled { query_id, write_outcome_unknown:false });
+            return Ok(());
+        }
+        outcome = execution::prepare_data_query(s, &context.prepared_request, &selected_sql, read_only, &mut scopes) => outcome,
+    };
+    let prepared = match prepared {
+        Ok(prepared) => prepared,
+        Err(failure) => {
+            let _ = context.refresh_mask(&scopes.private_values);
+            let _ = s.protocol_sessions.data_event(
+                owner,
+                id,
+                EventMessage::DataPreprocessError {
+                    query_id,
+                    message: failure.message,
+                },
+            );
+            return Ok(());
+        }
+    };
+    if context.refresh_mask(&scopes.private_values).is_err() {
+        let _ = s.protocol_sessions.data_event(
+            owner,
+            id,
+            EventMessage::DataPreprocessError {
+                query_id,
+                message: "Data query privacy redaction unavailable".into(),
+            },
+        );
+        return Ok(());
+    }
+    if reservation.cancelled_now() {
+        let private = scopes.private_values.clone();
+        *scopes = before;
+        scopes.private_values.extend(private);
+        let _ = s.protocol_sessions.data_event(
+            owner,
+            id,
+            EventMessage::DataCancelled {
+                query_id,
+                write_outcome_unknown: false,
+            },
+        );
+        return Ok(());
+    }
+    let event = EventMessage::DataPrepared {
+        query_id: query_id.clone(),
+        sql_changed: prepared
+            .sql
+            .as_ref()
+            .is_some_and(|sql| sql != &selected_sql),
+        tests: prepared.tests,
+        logs: prepared.logs,
+        variable_updates: prepared.updates,
+    };
+    if s.protocol_sessions.data_event(owner, id, event).is_err() {
+        let private = scopes.private_values.clone();
+        *scopes = before;
+        scopes.private_values.extend(private);
+        let _ = s.protocol_sessions.data_event(
+            owner,
+            id,
+            EventMessage::DataPreprocessError {
+                query_id,
+                message: "Data query preparation output exceeds session event limits".into(),
+            },
+        );
+        return Ok(());
+    }
+    let Some(sql) = prepared.sql else {
+        let _ = s
+            .protocol_sessions
+            .data_event(owner, id, EventMessage::DataSkipped { query_id });
+        return Ok(());
+    };
+    context.processing.send_replace(Some(query_id.clone()));
+    let source = match &context.prepared_request.protocol {
+        Protocol::Data { config } => config,
+        _ => unreachable!(),
+    };
+    let effective_read_only = read_only
+        || source.read_only
+        || matches!(
+            source.source,
+            moleapi_core::DataSource::LocalFile | moleapi_core::DataSource::RemoteFile
+        );
+    if let Err(failure) = reservation.dispatch(sql, effective_read_only) {
+        context.processing.send_replace(None);
+        let private = scopes.private_values.clone();
+        *scopes = before;
+        scopes.private_values.extend(private);
+        let _ = s.protocol_sessions.data_event(
+            owner,
+            id,
+            EventMessage::DataPreprocessError {
+                query_id,
+                message: failure.to_string(),
+            },
+        );
+    }
+    Ok(())
 }
 pub async fn close(
     State(s): State<AppState>,

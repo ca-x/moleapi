@@ -44,4 +44,4 @@
 
 - Pure typed-result snapshot and explicit private save flow are implemented. Source/draft are unchanged on invalid data, old result scope switches are fenced, and retry uses a stable dataset ID.
 - A 390px remote CSV query was saved as private JSON with exact decimal text; reload restored it and the testing page selected it. Chinese and English dialogs were inspected.
-- Focused conversion/dialog/UI cases and all 325 frontend tests passed; production frontend and embedded server builds passed. Independent review's concurrent-save and target-switch findings were fixed. Branch CI and current platform gates remain.
+- Focused conversion/dialog/UI cases and all 325 frontend tests passed; production frontend and embedded server builds passed. Independent review's concurrent-save and target-switch findings were fixed. Branch Application CI run38893411079 passed source, check and database jobs. Integration with the merged query-pre feature passed 331 frontend tests and production build locally; integrated CI and current platform gates remain.

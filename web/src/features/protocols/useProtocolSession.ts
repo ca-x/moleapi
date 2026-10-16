@@ -243,17 +243,20 @@ export function useProtocolSession(
     }
   }
   async function send(message: SendMessage) {
+    const cancelData = message.kind === "data_cancel";
     if (
       !sessionId ||
       live?.session.state !== "open" ||
-      sends.current.has(scopeKey())
+      (sends.current.has(scopeKey()) && !cancelData)
     )
       return false;
     const origin = identity;
     const epoch = generation.current;
     const ticket = scopeKey();
-    sends.current.add(ticket);
-    setSendingFor([...sends.current]);
+    if (!cancelData) {
+      sends.current.add(ticket);
+      setSendingFor([...sends.current]);
+    }
     try {
       await api(
         `/api/sessions/${encodeURIComponent(sessionId)}/send`,
@@ -270,8 +273,10 @@ export function useProtocolSession(
         toast.error(liveError(caught));
       return false;
     } finally {
-      sends.current.delete(ticket);
-      if (mounted.current) setSendingFor([...sends.current]);
+      if (!cancelData) {
+        sends.current.delete(ticket);
+        if (mounted.current) setSendingFor([...sends.current]);
+      }
     }
   }
   return {

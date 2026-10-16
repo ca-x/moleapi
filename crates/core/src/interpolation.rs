@@ -118,6 +118,9 @@ pub fn resolve_request(
     // JavaScript is source code, not an interpolated request field.
     value["pre_request_script"] = "".into();
     value["post_response_script"] = "".into();
+    if request.protocol.is_data() {
+        value["protocol"]["query_pre_script"] = "".into();
+    }
     let mqtt_will = if let Protocol::Mqtt { config } = &request.protocol {
         config.will.as_ref().map(|w| w.message.clone())
     } else {
@@ -498,6 +501,11 @@ pub fn resolve_request(
     {
         config.message.payload_source = original.message.payload_source.clone();
         resolved.body = request.body.clone();
+    }
+    if let (Protocol::Data { config }, Protocol::Data { config: original }) =
+        (&mut resolved.protocol, &request.protocol)
+    {
+        config.query_pre_script = original.query_pre_script.clone();
     }
     resolved.pre_request_script = request.pre_request_script.clone();
     resolved.post_response_script = request.post_response_script.clone();

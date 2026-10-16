@@ -696,3 +696,86 @@ pub(crate) async fn postprocess_data(
     }
     Ok(false)
 }
+
+pub(crate) struct PreparedDataQuery {
+    pub sql: Option<String>,
+    pub tests: Vec<TestResult>,
+    pub logs: Vec<ScriptLog>,
+    pub updates: Vec<VariableUpdate>,
+}
+
+pub(crate) async fn prepare_data_query(
+    s: &AppState,
+    request: &RequestSpec,
+    selected_sql: &str,
+    read_only: bool,
+    scopes: &mut VariableScopes,
+) -> Result<PreparedDataQuery, ApiError> {
+    let moleapi_core::Protocol::Data { config } = &request.protocol else {
+        return Err(ApiError::bad("Expected Data request"));
+    };
+    let mut synthetic = request.clone();
+    synthetic.protocol = moleapi_core::Protocol::Http;
+    synthetic.url = "http://data.invalid/query".into();
+    synthetic.body_kind = "text".into();
+    synthetic.body = selected_sql.into();
+    let output = script_phase(s, vec![config.query_pre_script.clone()], &synthetic, None, scopes)
+        .await.map_err(|failure| {
+            scopes.private_values.extend(failure.private_values);
+            if !failure.privacy_complete {
+                return ApiError::bad("Data query pre script failed; details withheld because privacy metadata is incomplete");
+            }
+            let mut value = serde_json::json!(failure.error.message);
+            match crate::privacy::Redactor::new(&scopes.private_values) {
+                Ok(redactor) => redactor.scrub(&mut value),
+                Err(_) => value = serde_json::json!("Data query pre script failed; privacy redaction unavailable"),
+            }
+            ApiError::bad(value.as_str().unwrap_or("Data query pre script failed"))
+        })?;
+    scopes.private_values.extend(output.private_values);
+    let mut expected = synthetic.clone();
+    expected.body = output.request.body.clone();
+    if output.request != expected || output.control.next_request.is_some() {
+        return Err(ApiError::bad(
+            "Data query pre script may only edit SQL and scoped variables",
+        ));
+    }
+    let mut next = scopes.clone();
+    next.apply(&output.updates)
+        .map_err(|e| ApiError::bad(e.to_string()))?;
+    let sql = if output.control.skip_request {
+        None
+    } else {
+        let sql =
+            moleapi_core::resolve_value(&output.request.body, &next.effective()).map_err(|_| {
+                ApiError::bad("Data query SQL has unresolved variables or exceeds limits")
+            })?;
+        let read_only = read_only
+            || config.read_only
+            || matches!(
+                config.source,
+                moleapi_core::DataSource::LocalFile | moleapi_core::DataSource::RemoteFile
+            );
+        moleapi_data::statement(&sql, config.source, read_only).map_err(|_| {
+            ApiError::bad("Prepared Data SQL violates statement or read-only limits")
+        })?;
+        Some(sql)
+    };
+    *scopes = next;
+    let redactor = crate::privacy::Redactor::new(&scopes.private_values)?;
+    let mut details =
+        serde_json::json!({"tests":output.tests,"logs":output.logs,"updates":output.updates});
+    redactor.scrub(&mut details);
+    let mut updates: Vec<VariableUpdate> =
+        serde_json::from_value(details["updates"].clone()).map_err(|_| ApiError::internal())?;
+    for update in &mut updates {
+        update.value = None;
+    }
+    Ok(PreparedDataQuery {
+        sql,
+        tests: serde_json::from_value(details["tests"].clone())
+            .map_err(|_| ApiError::internal())?,
+        logs: serde_json::from_value(details["logs"].clone()).map_err(|_| ApiError::internal())?,
+        updates,
+    })
+}

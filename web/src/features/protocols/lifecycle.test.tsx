@@ -11,6 +11,7 @@ import { useWorkbenchController } from "../workbench/useWorkbenchController";
 import type { useWorkspace } from "../workspaces/useWorkspace";
 import type { useLocalVariables } from "../variables/useLocalVariables";
 import type { ProtocolSession } from "./types";
+import { dataConfig } from "../data/model";
 vi.mock("../../shared/api", async (original) => ({
   ...(await original<typeof import("../../shared/api")>()),
   api: vi.fn(),
@@ -76,6 +77,28 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   client.clear();
+});
+it("sends Data cancellation while a query preparation request is pending", async () => {
+  const dataRequest = {...request, protocol:dataConfig()};
+  const dataSession = {...session, protocol:"data" as const};
+  let finishQuery!: (value:unknown)=>void;
+  vi.mocked(api).mockImplementation((path,method,body) => {
+    if(path==="/api/sessions"&&method==="POST") return Promise.resolve(dataSession);
+    if(path.endsWith("/events?after=0")) return Promise.resolve({events:[],next_cursor:0,earliest_cursor:1,dropped_count:0});
+    if(path==="/api/sessions/session-a/send"&&method==="POST"&&body&&typeof body==="object"&&"kind" in body&&body.kind==="data_query") return new Promise(done=>{finishQuery=done;});
+    if(path==="/api/sessions/session-a/send"&&method==="POST") return Promise.resolve({ok:true});
+    return Promise.resolve(dataSession);
+  });
+  const workspace = {accountId:"account-a",draft,dirty:false,save:vi.fn()} as unknown as ReturnType<typeof useWorkspace>;
+  const locals = {values:()=>[],apply:vi.fn()} as unknown as ReturnType<typeof useLocalVariables>;
+  const hook = renderHook(()=>useProtocolSession(workspace,dataRequest,locals,true),{wrapper:Wrapper});
+  await act(async()=>await hook.result.current.connect());
+  let pending!:Promise<boolean>;
+  act(()=>{pending=hook.result.current.send({kind:"data_query",query_id:"query",sql:"SELECT 1",read_only:true});});
+  await waitFor(()=>expect(hook.result.current.sending).toBe(true));
+  await act(async()=>expect(await hook.result.current.send({kind:"data_cancel",query_id:"query"})).toBe(true));
+  expect(api).toHaveBeenCalledWith("/api/sessions/session-a/send","POST",{kind:"data_cancel",query_id:"query"});
+  await act(async()=>{finishQuery({ok:true});await pending;});
 });
 it("closes late session creation after unmount without applying its private updates", async () => {
   let resolve!: (value: ProtocolSession) => void;

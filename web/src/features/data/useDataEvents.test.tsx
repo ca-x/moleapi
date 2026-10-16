@@ -59,3 +59,36 @@ it("marks partial rows as failed after a terminal query error",()=>{
   expect(result.current.result?.rows).toHaveLength(1);
   expect(result.current.result).toMatchObject({done:true,failed:true});
 });
+it("releases a query after pre script failure without waiting for SQL events",()=>{
+  let events:ProtocolEvent[]=[];
+  const {result,rerender}=renderHook(()=>useDataEvents("session",events,0));
+  act(()=>{result.current.reserve("prepared-query");});
+  events=[event(1,{kind:"data_preparing",query_id:"prepared-query"}),event(2,{kind:"data_preprocess_error",query_id:"prepared-query",message:"Invalid query script"})];
+  rerender();
+  expect(result.current.active).toBe(null);
+  expect(result.current.error).toContain("Invalid query script");
+});
+it("does not show previous rows when a new query fails or is skipped before SQL",()=>{
+  let events=[event(1,{kind:"data_started",query_id:"old"}),event(2,{kind:"data_rows",query_id:"old",rows:[[{kind:"text",value:"old row"}]]}),event(3,{kind:"data_finished",query_id:"old",rows_affected:0,elapsed_ms:1,truncated:false,limit_reason:null})];
+  const {result,rerender}=renderHook(()=>useDataEvents("session",events,0));
+  expect(result.current.result?.rows).toHaveLength(1);
+  act(()=>{result.current.reserve("new");});
+  expect(result.current.result).toBe(null);
+  events=[...events,event(4,{kind:"data_preprocess_error",query_id:"new",message:"bad script"})];rerender();
+  expect(result.current.result).toBe(null);
+  act(()=>{result.current.reserve("skipped");});
+  events=[...events,event(5,{kind:"data_skipped",query_id:"skipped"})];rerender();
+  expect(result.current.result).toBe(null);
+  expect(result.current.active).toBe(null);
+});
+it("retains prepared tests through the SQL result and ignores a stale query",()=>{
+  let events:ProtocolEvent[]=[];
+  const {result,rerender}=renderHook(()=>useDataEvents("session",events,0));
+  act(()=>{result.current.reserve("current");});
+  const prepared={kind:"data_prepared" as const,query_id:"current",sql_changed:true,tests:[{id:"pre",name:"Prepared",passed:true,actual:"ok",expected:"ok"}],logs:[],variable_updates:[]};
+  events=[event(1,{...prepared,query_id:"stale"}),event(2,prepared),event(3,{kind:"data_started",query_id:"current"}),event(4,{kind:"data_finished",query_id:"current",rows_affected:0,elapsed_ms:3,truncated:false,limit_reason:null})];
+  rerender();
+  expect(result.current.preparation?.tests[0].name).toBe("Prepared");
+  expect(result.current.preparation?.sql_changed).toBe(true);
+  expect(result.current.result?.done).toBe(true);
+});

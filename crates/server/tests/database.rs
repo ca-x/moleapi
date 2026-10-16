@@ -450,13 +450,25 @@ pub async fn verify_data_completion_history() {
         .await
         .unwrap();
         let mut data = example_data();
+        let integer_type = if source == "mysql" {
+            "SIGNED"
+        } else {
+            "BIGINT"
+        };
+        let sql = format!(
+            "SELECT CAST(9007199254740993 AS {integer_type}) AS exact, CAST(1.23 AS DECIMAL(10,2)) AS amount"
+        );
+        let pre_script = format!(
+            "pm.request.body.update({});",
+            serde_json::to_string(&sql).unwrap()
+        );
         let request = &mut data["collections"][0]["requests"][0];
         request["method"] = json!("GET");
         request["url"] = json!(url);
         request["body_kind"] = json!("none");
         request["body"] = json!("");
         request["assertions"] = json!([]);
-        request["protocol"] = json!({"kind":"data","source":source,"tls":false,"sql":"SELECT 1"});
+        request["protocol"] = json!({"kind":"data","source":source,"tls":false,"sql":"SELECT 1","query_pre_script":pre_script});
         let (status, workspace) = call(
             &router,
             "POST",
@@ -483,20 +495,12 @@ pub async fn verify_data_completion_history() {
         })
         .await
         .unwrap();
-        let integer_type = if source == "mysql" {
-            "SIGNED"
-        } else {
-            "BIGINT"
-        };
-        let sql = format!(
-            "SELECT CAST(9007199254740993 AS {integer_type}) AS exact, CAST(1.23 AS DECIMAL(10,2)) AS amount"
-        );
         let (status, sent) = call(
             &router,
             "POST",
             &format!("/api/sessions/{id}/send"),
             None,
-            Some(json!({"kind":"data_query","query_id":"typed-db","sql":sql,"read_only":true})),
+            Some(json!({"kind":"data_query","query_id":"typed-db","sql":"SELECT 1 AS placeholder","read_only":true})),
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{sent}");
@@ -522,6 +526,15 @@ pub async fn verify_data_completion_history() {
                             .unwrap()
                             .iter()
                             .any(|event| event["message"]["kind"] == "data_finished"),
+                        "{source}: {events}"
+                    );
+                    assert!(
+                        events["events"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .any(|event| event["message"]["kind"] == "data_prepared"
+                                && event["message"]["sql_changed"] == true),
                         "{source}: {events}"
                     );
                     break;

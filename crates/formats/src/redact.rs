@@ -522,6 +522,8 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
                     request.url = data_privacy.screen_text(&redact_url(&request.url));
                     config.file_base64.clear();
                     config.sql = data_privacy.screen_generation_text(&config.sql);
+                    config.query_pre_script = data_privacy
+                        .screen_bounded(&config.query_pre_script, moleapi_core::MAX_SCRIPT_BYTES);
                     config.file_name = data_privacy.screen_text(&config.file_name);
                     config.table_name = data_privacy.screen_text(&config.table_name);
                 }

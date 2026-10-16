@@ -1,8 +1,9 @@
 use crate::{Command, EventMessage, SendMessage, Session, SessionState};
 use anyhow::{Context, Result, ensure};
-use moleapi_core::{Environment, NetworkPolicy, Protocol, RequestSpec};
+use moleapi_core::{DataSource, Environment, NetworkPolicy, Protocol, RequestSpec};
 use moleapi_data::{Connection, QueryResult};
 use std::{
+    collections::HashSet,
     path::PathBuf,
     sync::{Arc, OnceLock},
     time::{Duration, Instant},
@@ -15,6 +16,7 @@ pub(crate) struct Control {
     pub worker: Option<PathBuf>,
     active: Option<(String, CancellationToken)>,
     commands: usize,
+    used_query_ids: HashSet<String>,
     pub completions: Option<mpsc::Sender<DataCompletion>>,
 }
 pub struct DataCompletion {
@@ -28,6 +30,119 @@ pub enum DataOutcome {
     Success(QueryResult),
     Error(String),
     Cancelled { write_outcome_unknown: bool },
+}
+pub struct DataReservation {
+    session: Arc<Session>,
+    query_id: String,
+    stop: CancellationToken,
+    dispatched: bool,
+}
+impl DataReservation {
+    pub fn cancelled_now(&self) -> bool {
+        self.stop.is_cancelled() || self.session.cancel.is_cancelled()
+    }
+    pub async fn cancelled(&self) {
+        tokio::select! { _ = self.stop.cancelled() => {}, _ = self.session.cancel.cancelled() => {} }
+    }
+    pub fn dispatch(mut self, sql: String, read_only: bool) -> Result<()> {
+        let mut record = self.session.record.lock().unwrap();
+        ensure!(
+            record.summary.state == SessionState::Open
+                && !self.session.cancel.is_cancelled()
+                && !self.stop.is_cancelled(),
+            "Data query was cancelled before dispatch"
+        );
+        ensure!(
+            !sql.trim().is_empty() && sql.len() <= moleapi_core::MAX_SQL_SOURCE,
+            "Data SQL query exceeds limits"
+        );
+        let mut control = self.session.data.lock().unwrap();
+        ensure!(
+            control
+                .active
+                .as_ref()
+                .is_some_and(|(id, _)| id == &self.query_id),
+            "Data query reservation expired"
+        );
+        ensure!(control.commands < 512, "Data command budget exceeded");
+        ensure!(
+            !control.used_query_ids.contains(&self.query_id),
+            "Data query ID was already dispatched"
+        );
+        ensure!(
+            record.input.saturating_add(sql.len()) <= 20 * 1024 * 1024,
+            "Data command input budget exceeded"
+        );
+        let size = sql.len();
+        self.session
+            .commands
+            .try_send(Command::DataQuery {
+                query_id: self.query_id.clone(),
+                sql,
+                read_only,
+                stop: self.stop.clone(),
+            })
+            .context("Data command queue is full")?;
+        record.input += size;
+        control.commands += 1;
+        control.used_query_ids.insert(self.query_id.clone());
+        self.dispatched = true;
+        Ok(())
+    }
+}
+impl Drop for DataReservation {
+    fn drop(&mut self) {
+        if !self.dispatched {
+            let mut control = self.session.data.lock().unwrap();
+            if control
+                .active
+                .as_ref()
+                .is_some_and(|(id, _)| id == &self.query_id)
+            {
+                control.active = None;
+            }
+        }
+    }
+}
+pub(crate) fn reserve(
+    session: &Arc<Session>,
+    query_id: String,
+    sql: &str,
+) -> Result<DataReservation> {
+    let record = session.record.lock().unwrap();
+    ensure!(
+        record.summary.protocol == "data"
+            && record.summary.state == SessionState::Open
+            && !session.cancel.is_cancelled(),
+        "Data connection is not open"
+    );
+    ensure!(
+        !query_id.is_empty() && query_id.len() <= 128 && !query_id.chars().any(char::is_control),
+        "Invalid Data query ID"
+    );
+    ensure!(
+        !sql.trim().is_empty() && sql.len() <= moleapi_core::MAX_SQL_SOURCE,
+        "Data SQL query exceeds limits"
+    );
+    let mut control = session.data.lock().unwrap();
+    ensure!(control.active.is_none(), "A Data query is already running");
+    ensure!(
+        !control.used_query_ids.contains(&query_id),
+        "Data query ID was already dispatched"
+    );
+    ensure!(control.commands < 512, "Data command budget exceeded");
+    ensure!(
+        record.input.saturating_add(sql.len()) <= 20 * 1024 * 1024,
+        "Data command input budget exceeded"
+    );
+    let stop = CancellationToken::new();
+    control.active = Some((query_id.clone(), stop.clone()));
+    Ok(DataReservation {
+        session: session.clone(),
+        query_id,
+        stop,
+        dispatched: false,
+    })
 }
 fn complete(
     session: &Session,
@@ -61,7 +176,15 @@ fn slots() -> Arc<Semaphore> {
     SLOTS.get_or_init(|| Arc::new(Semaphore::new(4))).clone()
 }
 pub(crate) fn send(session: &Arc<Session>, message: SendMessage) -> Result<()> {
-    let mut record = session.record.lock().unwrap();
+    if let SendMessage::DataQuery {
+        query_id,
+        sql,
+        read_only,
+    } = &message
+    {
+        return reserve(session, query_id.clone(), sql)?.dispatch(sql.clone(), *read_only);
+    }
+    let record = session.record.lock().unwrap();
     ensure!(
         record.summary.protocol == "data"
             && record.summary.state == SessionState::Open
@@ -75,43 +198,6 @@ pub(crate) fn send(session: &Arc<Session>, message: SendMessage) -> Result<()> {
                 ensure!(*id == query_id, "Unknown active Data query");
                 stop.cancel();
             }
-            Ok(())
-        }
-        SendMessage::DataQuery {
-            query_id,
-            sql,
-            read_only,
-        } => {
-            ensure!(
-                !query_id.is_empty()
-                    && query_id.len() <= 128
-                    && !query_id.chars().any(char::is_control),
-                "Invalid Data query ID"
-            );
-            ensure!(
-                !sql.trim().is_empty() && sql.len() <= moleapi_core::MAX_SQL_SOURCE,
-                "Data SQL query exceeds limits"
-            );
-            ensure!(control.active.is_none(), "A Data query is already running");
-            ensure!(control.commands < 512, "Data command budget exceeded");
-            ensure!(
-                record.input.saturating_add(sql.len()) <= 20 * 1024 * 1024,
-                "Data command input budget exceeded"
-            );
-            let input_bytes = sql.len();
-            let stop = CancellationToken::new();
-            session
-                .commands
-                .try_send(Command::DataQuery {
-                    query_id: query_id.clone(),
-                    sql,
-                    read_only,
-                    stop: stop.clone(),
-                })
-                .context("Data command queue is full")?;
-            record.input += input_bytes;
-            control.active = Some((query_id, stop));
-            control.commands += 1;
             Ok(())
         }
         SendMessage::DataSchemaRefresh => {
@@ -297,6 +383,12 @@ pub(crate) async fn run(
                 read_only,
                 stop,
             } => {
+                let read_only = read_only
+                    || config.read_only
+                    || matches!(
+                        config.source,
+                        DataSource::LocalFile | DataSource::RemoteFile
+                    );
                 let started = Instant::now();
                 let permit = match slots().try_acquire_owned() {
                     Ok(value) => value,
@@ -446,5 +538,58 @@ pub(crate) async fn run(
             }
             _ => anyhow::bail!("Unexpected Data command"),
         }
+    }
+}
+
+#[cfg(test)]
+mod reservation_tests {
+    use super::*;
+    use crate::{PreparedFeedback, SessionManager};
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn cancelled_reservation_releases_capacity_without_dispatching_sql() {
+        let request:RequestSpec = serde_json::from_value(json!({"id":"data","name":"Data","method":"GET","url":"","description":"","query":[],"headers":[],"body_kind":"none","body":"","auth":{"kind":"none","token":"","username":"","password":""},"timeout_ms":1000,"verify_tls":true,"follow_redirects":false,"assertions":[],"examples":[],"protocol":{"kind":"data","source":"local_file"}})).unwrap();
+        let manager = SessionManager::default();
+        let summary = manager
+            .register(
+                "owner",
+                "workspace",
+                &request,
+                "safe".into(),
+                PreparedFeedback::default(),
+            )
+            .unwrap();
+        let session = manager.owned("owner", &summary.id).unwrap();
+        session.record.lock().unwrap().summary.state = SessionState::Open;
+        let reserved = manager
+            .reserve_data_query("owner", &summary.id, "first".into(), "SELECT 1")
+            .unwrap();
+        assert!(
+            manager
+                .reserve_data_query("owner", &summary.id, "second".into(), "SELECT 2")
+                .is_err()
+        );
+        send(
+            &session,
+            SendMessage::DataCancel {
+                query_id: "first".into(),
+            },
+        )
+        .unwrap();
+        tokio::time::timeout(Duration::from_millis(100), reserved.cancelled())
+            .await
+            .unwrap();
+        assert!(reserved.dispatch("SELECT 1".into(), true).is_err());
+        let next = manager
+            .reserve_data_query("owner", &summary.id, "second".into(), "SELECT 2")
+            .unwrap();
+        next.dispatch("SELECT 3".into(), true).unwrap();
+        let mut receiver = session.receiver.lock().unwrap().take().unwrap();
+        let command = receiver.try_recv().unwrap();
+        assert!(
+            matches!(command, Command::DataQuery { query_id, sql, .. } if query_id == "second" && sql == "SELECT 3")
+        );
+        assert!(receiver.try_recv().is_err());
     }
 }

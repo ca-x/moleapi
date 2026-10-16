@@ -56,6 +56,23 @@ pub enum EventMessage {
     DataStarted {
         query_id: String,
     },
+    DataPreparing {
+        query_id: String,
+    },
+    DataPrepared {
+        query_id: String,
+        sql_changed: bool,
+        tests: Vec<TestResult>,
+        logs: Vec<ScriptLog>,
+        variable_updates: Vec<VariableUpdate>,
+    },
+    DataPreprocessError {
+        query_id: String,
+        message: String,
+    },
+    DataSkipped {
+        query_id: String,
+    },
     DataColumns {
         query_id: String,
         columns: Vec<moleapi_data::Column>,
