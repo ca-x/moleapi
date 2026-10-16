@@ -3,6 +3,7 @@
 import argparse
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -18,7 +19,15 @@ def one_package(directory: Path, suffix: str) -> Path:
 
 
 def extract_rpm(package: Path, destination: Path) -> None:
-    subprocess.run(["bsdtar", "-xf", str(package)], cwd=destination,
+    bsdtar = shutil.which("bsdtar")
+    if bsdtar is None and os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("RUNNER_OS") == "Linux":
+        # The workflow already updated apt metadata before building this package.
+        subprocess.run(["sudo", "apt-get", "install", "-y", "libarchive-tools"],
+                       check=True, timeout=180)
+        bsdtar = shutil.which("bsdtar")
+    if bsdtar is None:
+        raise RuntimeError("bsdtar (libarchive-tools) is required to inspect RPM payloads")
+    subprocess.run([bsdtar, "-xf", str(package)], cwd=destination,
                    check=True, timeout=180)
 
 
