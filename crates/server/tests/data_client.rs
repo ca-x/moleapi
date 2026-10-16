@@ -2,6 +2,7 @@ mod common;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use common::*;
 use std::time::Duration;
+static DATA_CLIENT_TESTS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 fn worker() -> std::path::PathBuf {
     std::path::PathBuf::from(env!("CARGO_BIN_EXE_moleapi-server"))
 }
@@ -88,6 +89,7 @@ async fn query(router: &Router, token: Option<&str>, id: &str, query_id: &str, s
 }
 #[tokio::test]
 async fn actual_native_router_file_worker_schema_query_readonly_and_workspace_lifecycle() {
+    let _serial = DATA_CLIENT_TESTS.lock().await;
     let temp = tempfile::tempdir().unwrap();
     let router = moleapi_server::local_with_worker(&temp.path().join("data.db"), &worker())
         .await
@@ -130,6 +132,7 @@ async fn actual_native_router_file_worker_schema_query_readonly_and_workspace_li
 }
 #[tokio::test]
 async fn hosted_data_sessions_are_owner_scoped_and_logout_closes_work() {
+    let _serial = DATA_CLIENT_TESTS.lock().await;
     let temp = tempfile::tempdir().unwrap();
     let router = moleapi_server::hosted_with_worker(
         config(
@@ -153,6 +156,44 @@ async fn hosted_data_sessions_are_owner_scoped_and_logout_closes_work() {
             &router,
             "GET",
             &format!("/api/sessions/{id}/events"),
+            Some(&other),
+            None
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    query(
+        &router,
+        Some(&owner),
+        id,
+        "owner-only",
+        "SELECT name FROM data WHERE id=2",
+    )
+    .await;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let (_, entries) = call(
+                &router,
+                "GET",
+                "/api/workspaces/data/history",
+                Some(&owner),
+                None,
+            )
+            .await;
+            if entries.as_array().is_some_and(|rows| rows.len() == 1) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        call(
+            &router,
+            "GET",
+            "/api/workspaces/data/history",
             Some(&other),
             None
         )
@@ -188,6 +229,7 @@ async fn hosted_data_sessions_are_owner_scoped_and_logout_closes_work() {
 
 #[tokio::test]
 async fn saved_data_ca_accepts_certificates_and_rejects_private_keys_before_persistence() {
+    let _serial = DATA_CLIENT_TESTS.lock().await;
     let temp = tempfile::tempdir().unwrap();
     let router = local(&temp.path().join("data-ca.db")).await.unwrap();
     let certificate = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
@@ -262,6 +304,7 @@ async fn saved_data_ca_accepts_certificates_and_rejects_private_keys_before_pers
 }
 #[tokio::test]
 async fn remote_file_network_dns_settings_download_real_csv_and_run_bounded_sql_worker() {
+    let _serial = DATA_CLIENT_TESTS.lock().await;
     let (base, server) = serve(Router::new().route(
         "/data.csv",
         axum::routing::get(|headers: axum::http::HeaderMap| async move {
@@ -341,6 +384,7 @@ async fn remote_file_network_dns_settings_download_real_csv_and_run_bounded_sql_
 
 #[tokio::test]
 async fn hosted_checked_remote_xlsx_selects_named_sheet_and_runs_sql() {
+    let _serial = DATA_CLIENT_TESTS.lock().await;
     let (base, server) = serve(Router::new().route(
         "/workbook.xlsx",
         axum::routing::get(|headers: axum::http::HeaderMap| async move {
@@ -422,4 +466,631 @@ async fn hosted_checked_remote_xlsx_selects_named_sheet_and_runs_sql() {
     )
     .await;
     server.abort();
+}
+
+#[tokio::test]
+async fn completed_file_data_query_enters_owner_history_without_rows() {
+    let _serial = DATA_CLIENT_TESTS.lock().await;
+    let temp = tempfile::tempdir().unwrap();
+    let database = temp.path().join("data-history.db");
+    let router = moleapi_server::local_with_worker(&database, &worker())
+        .await
+        .unwrap();
+    let session = create(&router, None).await;
+    let id = session["id"].as_str().unwrap();
+    ready(&router, None, id).await;
+    let events = query(
+        &router,
+        None,
+        id,
+        "history-query",
+        "SELECT name FROM data WHERE id=2",
+    )
+    .await;
+    assert!(events["events"].as_array().unwrap().iter().any(|event| {
+        event["message"]["kind"] == "data_finished"
+            && event["message"]["query_id"] == "history-query"
+    }));
+    let history = tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            let (_, history) =
+                call(&router, "GET", "/api/workspaces/data/history", None, None).await;
+            if let Some(entry) = history.as_array().and_then(|rows| rows.first()) {
+                return entry.clone();
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("Data query was not saved to history");
+    assert_eq!(history["request_id"], "r");
+    assert_eq!(history["method"], "SQL");
+    let body: serde_json::Value =
+        serde_json::from_str(history["response"]["body"].as_str().unwrap()).unwrap();
+    assert_eq!(body["format"], "moleapi-data-result-v1");
+    assert_eq!(body["query_id"], "history-query");
+    assert!(body.get("rows").is_none());
+    assert_eq!(body["rows_withheld"], "file-backed rows are live-only");
+    call(
+        &router,
+        "DELETE",
+        &format!("/api/sessions/{id}"),
+        None,
+        None,
+    )
+    .await;
+    drop(router);
+    let restored = moleapi_server::local_with_worker(&database, &worker())
+        .await
+        .unwrap();
+    let (_, entries) = call(&restored, "GET", "/api/workspaces/data/history", None, None).await;
+    assert_eq!(entries[0]["id"], history["id"]);
+}
+
+#[tokio::test]
+async fn data_query_runs_post_script_once_and_saves_error_outcome() {
+    let _serial = DATA_CLIENT_TESTS.lock().await;
+    let temp = tempfile::tempdir().unwrap();
+    let router = moleapi_server::local_with_worker(&temp.path().join("data-post.db"), &worker())
+        .await
+        .unwrap();
+    let mut document = data();
+    let request = &mut document["collections"][0]["requests"][0];
+    request["post_response_script"] = json!(
+        "pm.test('typed row',()=>pm.expect(pm.response.json().rows[0][0].value).to.equal('second'));"
+    );
+    request["extractions"] = json!([{"id":"missing","name":"Required marker","kind":"json","target":"/missing","scope":"temporary","key":"marker","required":true}]);
+    let (status, workspace) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"data","name":"Data","data":document})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{workspace}");
+    let (status, session) = call(&router, "POST", "/api/sessions", None,
+        Some(json!({"workspace_id":"data","request":workspace["data"]["collections"][0]["requests"][0]}))).await;
+    assert_eq!(status, StatusCode::OK, "{session}");
+    let id = session["id"].as_str().unwrap();
+    ready(&router, None, id).await;
+    query(
+        &router,
+        None,
+        id,
+        "post",
+        "SELECT name FROM data WHERE id=2",
+    )
+    .await;
+    let processed = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let (_, events) = call(
+                &router,
+                "GET",
+                &format!("/api/sessions/{id}/events"),
+                None,
+                None,
+            )
+            .await;
+            if let Some(event) = events["events"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|event| event["message"]["kind"] == "data_processed")
+            {
+                return event["message"].clone();
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(processed["query_id"], "post");
+    assert!(processed["history_id"].is_string());
+    assert_eq!(processed["tests"].as_array().unwrap().len(), 2);
+    assert!(
+        processed["tests"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|test| test["name"] == "typed row" && test["passed"] == true)
+    );
+    assert!(
+        processed["tests"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|test| test["name"] == "Required marker" && test["passed"] == false)
+    );
+    let (_, saved) = call(&router, "GET", "/api/workspaces/data/history", None, None).await;
+    assert!(saved[0]["response"]["tests"].as_array().unwrap().is_empty());
+
+    query(&router, None, id, "bad-sql", "SELECT missing FROM data").await;
+    let history = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let (_, history) =
+                call(&router, "GET", "/api/workspaces/data/history", None, None).await;
+            if history.as_array().is_some_and(|entries| entries.len() == 2) {
+                return history;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let entries = history.as_array().unwrap();
+    assert_eq!(
+        entries
+            .iter()
+            .filter(|entry| entry["response"]["status"] == 200)
+            .count(),
+        1
+    );
+    let failed = entries
+        .iter()
+        .find(|entry| entry["response"]["status"] == 500)
+        .unwrap();
+    let body: serde_json::Value =
+        serde_json::from_str(failed["response"]["body"].as_str().unwrap()).unwrap();
+    assert_eq!(body["query_id"], "bad-sql");
+    assert_eq!(
+        body["error"],
+        "[WITHHELD: file query diagnostics are live-only]"
+    );
+    let failed_processing = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let (_, events) = call(
+                &router,
+                "GET",
+                &format!("/api/sessions/{id}/events"),
+                None,
+                None,
+            )
+            .await;
+            if let Some(event) = events["events"].as_array().unwrap().iter().find(|event| {
+                event["message"]["kind"] == "data_processed"
+                    && event["message"]["query_id"] == "bad-sql"
+            }) {
+                return event["message"].clone();
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(failed_processing["tests"].as_array().unwrap().is_empty());
+
+    query(
+        &router,
+        None,
+        id,
+        "literal",
+        "SELECT 'result exceeds the 5 MiB script/history body limit' AS name",
+    )
+    .await;
+    let processed = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let (_, events) = call(
+                &router,
+                "GET",
+                &format!("/api/sessions/{id}/events"),
+                None,
+                None,
+            )
+            .await;
+            if let Some(event) = events["events"].as_array().unwrap().iter().find(|event| {
+                event["message"]["kind"] == "data_processed"
+                    && event["message"]["query_id"] == "literal"
+            }) {
+                return event["message"].clone();
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(processed["notice"].is_null());
+    assert!(
+        processed["tests"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|test| test["name"] == "typed row")
+    );
+}
+
+#[tokio::test]
+async fn oversized_data_result_saves_metadata_and_skips_post_script() {
+    let _serial = DATA_CLIENT_TESTS.lock().await;
+    let temp = tempfile::tempdir().unwrap();
+    let router = moleapi_server::local_with_worker(&temp.path().join("data-large.db"), &worker())
+        .await
+        .unwrap();
+    let mut document = data();
+    document["collections"][0]["requests"][0]["post_response_script"] =
+        json!("pm.test('must not run',()=>pm.expect(true).to.equal(true));");
+    let (status, workspace) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"data","name":"Data","data":document})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{workspace}");
+    let (status, session) = call(&router, "POST", "/api/sessions", None,
+        Some(json!({"workspace_id":"data","request":workspace["data"]["collections"][0]["requests"][0]}))).await;
+    assert_eq!(status, StatusCode::OK, "{session}");
+    let id = session["id"].as_str().unwrap();
+    ready(&router, None, id).await;
+    query(
+        &router,
+        None,
+        id,
+        "large",
+        "SELECT repeat('x', 60000) AS value FROM range(100)",
+    )
+    .await;
+    let processed = tokio::time::timeout(Duration::from_secs(8), async {
+        loop {
+            let (_, events) = call(
+                &router,
+                "GET",
+                &format!("/api/sessions/{id}/events"),
+                None,
+                None,
+            )
+            .await;
+            if let Some(event) = events["events"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|event| event["message"]["kind"] == "data_processed")
+            {
+                return event["message"].clone();
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(processed["notice"], "body_limit");
+    assert!(processed["tests"].as_array().unwrap().is_empty());
+    let (_, history) = call(&router, "GET", "/api/workspaces/data/history", None, None).await;
+    let body: serde_json::Value =
+        serde_json::from_str(history[0]["response"]["body"].as_str().unwrap()).unwrap();
+    assert!(body.get("rows").is_none());
+    assert!(body["rows_withheld"].as_str().unwrap().contains("5 MiB"));
+}
+
+#[tokio::test]
+async fn cancelled_data_query_records_terminal_outcome_without_replay() {
+    let _serial = DATA_CLIENT_TESTS.lock().await;
+    let temp = tempfile::tempdir().unwrap();
+    let router = moleapi_server::local_with_worker(&temp.path().join("data-cancel.db"), &worker())
+        .await
+        .unwrap();
+    let session = create(&router, None).await;
+    let id = session["id"].as_str().unwrap();
+    ready(&router, None, id).await;
+    let (status, sent) = call(&router, "POST", &format!("/api/sessions/{id}/send"), None,
+        Some(json!({"kind":"data_query","query_id":"cancel-query","sql":"SELECT sum(i) FROM range(10000000000) t(i)","read_only":true}))).await;
+    assert_eq!(status, StatusCode::OK, "{sent}");
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let (_, events) = call(
+                &router,
+                "GET",
+                &format!("/api/sessions/{id}/events"),
+                None,
+                None,
+            )
+            .await;
+            if events["events"].as_array().unwrap().iter().any(|event| {
+                event["message"]["kind"] == "data_started"
+                    && event["message"]["query_id"] == "cancel-query"
+            }) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let (status, stopped) = call(
+        &router,
+        "POST",
+        &format!("/api/sessions/{id}/send"),
+        None,
+        Some(json!({"kind":"data_cancel","query_id":"cancel-query"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{stopped}");
+    tokio::time::timeout(Duration::from_secs(6), async {
+        loop {
+            let (_, events) = call(
+                &router,
+                "GET",
+                &format!("/api/sessions/{id}/events"),
+                None,
+                None,
+            )
+            .await;
+            if events["events"].as_array().unwrap().iter().any(|event| {
+                event["message"]["kind"] == "data_cancelled"
+                    && event["message"]["query_id"] == "cancel-query"
+            }) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let history = tokio::time::timeout(Duration::from_secs(6), async {
+        loop {
+            let (_, entries) =
+                call(&router, "GET", "/api/workspaces/data/history", None, None).await;
+            if let Some(entry) = entries.as_array().and_then(|rows| rows.first()) {
+                return entry.clone();
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let body: serde_json::Value =
+        serde_json::from_str(history["response"]["body"].as_str().unwrap()).unwrap();
+    assert_eq!(body["query_id"], "cancel-query");
+    assert_eq!(body["cancelled"], true);
+    assert_eq!(body["write_outcome_unknown"], false);
+    assert_eq!(history["response"]["status"], 499);
+    assert_eq!(body["elapsed_ms"], history["response"]["elapsed_ms"]);
+}
+
+#[tokio::test]
+async fn clearing_history_does_not_restore_an_already_finished_data_query() {
+    let _serial = DATA_CLIENT_TESTS.lock().await;
+    let temp = tempfile::tempdir().unwrap();
+    let router = moleapi_server::local_with_worker(&temp.path().join("data-clear.db"), &worker())
+        .await
+        .unwrap();
+    let mut document = data();
+    document["collections"][0]["requests"][0]["post_response_script"] = json!(
+        "const until=Date.now()+50;while(Date.now()<until){};pm.test('after-clear',()=>pm.expect(true).to.equal(true));"
+    );
+    let (status, workspace) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"data","name":"Data","data":document})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{workspace}");
+    let (status, session) = call(&router, "POST", "/api/sessions", None,
+        Some(json!({"workspace_id":"data","request":workspace["data"]["collections"][0]["requests"][0]}))).await;
+    assert_eq!(status, StatusCode::OK, "{session}");
+    let id = session["id"].as_str().unwrap();
+    ready(&router, None, id).await;
+    query(
+        &router,
+        None,
+        id,
+        "first",
+        "SELECT name FROM data WHERE id=2",
+    )
+    .await;
+    query(
+        &router,
+        None,
+        id,
+        "clear-me",
+        "SELECT name FROM data WHERE id=2",
+    )
+    .await;
+    let (status, cleared) = call(
+        &router,
+        "DELETE",
+        "/api/workspaces/data/history",
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{cleared}");
+    let processed = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let (_, events) = call(
+                &router,
+                "GET",
+                &format!("/api/sessions/{id}/events"),
+                None,
+                None,
+            )
+            .await;
+            if let Some(event) = events["events"].as_array().unwrap().iter().find(|event| {
+                event["message"]["kind"] == "data_processed"
+                    && event["message"]["query_id"] == "clear-me"
+            }) {
+                return event["message"].clone();
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(
+        processed["tests"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|test| test["name"] == "after-clear" && test["passed"] == true),
+        "{processed}"
+    );
+    assert!(processed["history_id"].is_null());
+    assert_eq!(processed["notice"], "history_cleared");
+    let (_, history) = call(&router, "GET", "/api/workspaces/data/history", None, None).await;
+    assert_eq!(history, json!([]));
+}
+
+#[tokio::test]
+async fn data_completion_keeps_the_collection_chain_from_session_creation() {
+    let _serial = DATA_CLIENT_TESTS.lock().await;
+    let temp = tempfile::tempdir().unwrap();
+    let router = moleapi_server::local_with_worker(&temp.path().join("data-chain.db"), &worker())
+        .await
+        .unwrap();
+    let mut document = data();
+    document["collections"][0]["post_response_script"] =
+        json!("pm.test('original-chain',()=>pm.expect(true).to.equal(true));");
+    let mut moved = document["collections"][0].clone();
+    moved["id"] = json!("new");
+    moved["name"] = json!("New collection");
+    moved["post_response_script"] =
+        json!("pm.test('new-chain',()=>pm.expect(true).to.equal(true));");
+    moved["requests"] = json!([]);
+    document["collections"].as_array_mut().unwrap().push(moved);
+    let (status, workspace) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"data","name":"Data","data":document})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{workspace}");
+    let (status, session) = call(&router, "POST", "/api/sessions", None,
+        Some(json!({"workspace_id":"data","request":workspace["data"]["collections"][0]["requests"][0]}))).await;
+    assert_eq!(status, StatusCode::OK, "{session}");
+    let id = session["id"].as_str().unwrap();
+    ready(&router, None, id).await;
+    let mut changed = workspace["data"].clone();
+    changed["collections"][1]["requests"] = changed["collections"][0]["requests"].clone();
+    changed["collections"][0]["requests"] = json!([]);
+    let (status, updated) = call(
+        &router,
+        "PUT",
+        "/api/workspaces/data",
+        None,
+        Some(json!({"name":"Data","expected_revision":workspace["revision"],"data":changed})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{updated}");
+    query(
+        &router,
+        None,
+        id,
+        "chain",
+        "SELECT name FROM data WHERE id=2",
+    )
+    .await;
+    let processed = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let (_, events) = call(
+                &router,
+                "GET",
+                &format!("/api/sessions/{id}/events"),
+                None,
+                None,
+            )
+            .await;
+            if let Some(event) = events["events"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|event| event["message"]["kind"] == "data_processed")
+            {
+                return event["message"].clone();
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(
+        processed["tests"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|test| test["name"] == "original-chain")
+    );
+    assert!(
+        !processed["tests"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|test| test["name"] == "new-chain")
+    );
+}
+
+#[tokio::test]
+async fn full_data_completion_queue_reports_postprocessing_loss_without_sql_replay() {
+    let _serial = DATA_CLIENT_TESTS.lock().await;
+    let temp = tempfile::tempdir().unwrap();
+    let router =
+        moleapi_server::local_with_worker(&temp.path().join("data-capacity.db"), &worker())
+            .await
+            .unwrap();
+    let mut document = data();
+    document["collections"][0]["requests"][0]["post_response_script"] =
+        json!("const until=Date.now()+400;while(Date.now()<until){};");
+    let (status, workspace) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"data","name":"Data","data":document})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{workspace}");
+    let (status, session) = call(&router, "POST", "/api/sessions", None,
+        Some(json!({"workspace_id":"data","request":workspace["data"]["collections"][0]["requests"][0]}))).await;
+    assert_eq!(status, StatusCode::OK, "{session}");
+    let id = session["id"].as_str().unwrap();
+    ready(&router, None, id).await;
+    for index in 0..8 {
+        query(
+            &router,
+            None,
+            id,
+            &format!("queued-{index}"),
+            "SELECT name FROM data WHERE id=2",
+        )
+        .await;
+    }
+    let (_, events) = call(
+        &router,
+        "GET",
+        &format!("/api/sessions/{id}/events"),
+        None,
+        None,
+    )
+    .await;
+    let events = events["events"].as_array().unwrap();
+    let lost = events
+        .iter()
+        .find(|event| {
+            event["message"]["kind"] == "data_postprocess_error"
+                && event["message"]["message"]
+                    .as_str()
+                    .is_some_and(|text| text.contains("capacity unavailable"))
+        })
+        .expect("full completion queue did not report the dropped processing result");
+    let query_id = &lost["message"]["query_id"];
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event["message"]["kind"] == "data_finished"
+                && &event["message"]["query_id"] == query_id)
+            .count(),
+        1
+    );
+    call(
+        &router,
+        "DELETE",
+        &format!("/api/sessions/{id}"),
+        None,
+        None,
+    )
+    .await;
 }

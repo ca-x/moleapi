@@ -459,10 +459,11 @@ pub(crate) async fn prepare_live(
 > {
     let chain = moleapi_core::collection_chain(&w.data, collection)
         .map_err(|e| ApiError::bad(e.to_string()))?;
-    if std::iter::once(&w.data.post_response_script)
-        .chain(chain.iter().map(|c| &c.post_response_script))
-        .chain(std::iter::once(&r.post_response_script))
-        .any(|script| !script.trim().is_empty())
+    if !r.protocol.is_data()
+        && std::iter::once(&w.data.post_response_script)
+            .chain(chain.iter().map(|c| &c.post_response_script))
+            .chain(std::iter::once(&r.post_response_script))
+            .any(|script| !script.trim().is_empty())
     {
         return Err(ApiError::bad(
             "Post-response scripts are unavailable for live protocols until a per-event script contract exists",
@@ -592,4 +593,106 @@ pub(crate) async fn prepare_live(
         .map_err(|e| ApiError::bad(e.to_string()))?;
     crate::privacy::request_values(&resolved, scopes)?;
     Ok((resolved, feedback, updates, request_updates))
+}
+
+pub(crate) async fn postprocess_data(
+    s: &AppState,
+    w: &Workspace,
+    collection: &Collection,
+    request: &RequestSpec,
+    response: &mut Response,
+    scopes: &mut VariableScopes,
+) -> Result<bool, ApiError> {
+    let chain = moleapi_core::collection_chain(&w.data, collection)
+        .map_err(|e| ApiError::bad(e.to_string()))?;
+    if !request.assertions.is_empty() {
+        response.tests =
+            moleapi_core::assertion_worker(&s.script_worker, &request.assertions, response).await;
+    }
+    if request.extractions.iter().any(|rule| rule.enabled) {
+        for result in
+            moleapi_core::extraction_worker(&s.script_worker, &request.extractions, response).await
+        {
+            let applied = if let Some(update) = result.update {
+                if let Some(value) = &update.value {
+                    scopes.private_values.insert(value.clone());
+                }
+                if update.scope == "environment" && scopes.environment_id.is_none() {
+                    Err("Selected environment is required for this extraction".to_owned())
+                } else {
+                    scopes
+                        .apply(std::slice::from_ref(&update))
+                        .map_err(|_| "Extracted variables exceed execution limits".to_owned())
+                        .map(|_| response.variable_updates.push(update))
+                }
+            } else {
+                Err(result
+                    .error
+                    .unwrap_or_else(|| "Extraction value is missing".into()))
+            };
+            if let Err(message) = applied {
+                if result.required {
+                    response.tests.push(TestResult {
+                        id: format!("extraction-{}", result.id),
+                        name: result.name,
+                        passed: false,
+                        actual: message,
+                        expected: "Required response value is extracted".into(),
+                    });
+                } else {
+                    response.logs.push(ScriptLog {
+                        level: "warn".into(),
+                        message,
+                    });
+                }
+            }
+        }
+    }
+    let post = std::iter::once(request.post_response_script.clone())
+        .chain(chain.iter().rev().map(|c| c.post_response_script.clone()))
+        .chain(std::iter::once(w.data.post_response_script.clone()))
+        .collect::<Vec<_>>();
+    if post.iter().any(|script| !script.trim().is_empty()) {
+        match script_phase(s, post, request, Some(response), scopes).await {
+            Ok(mut output) => {
+                scopes.private_values.extend(output.private_values);
+                scopes
+                    .private_values
+                    .extend(output.updates.iter().filter_map(|u| u.value.clone()));
+                if let Err(error) = scopes.apply(&output.updates) {
+                    response.tests.push(TestResult {
+                        id: "post-script-updates-error".into(),
+                        name: "Post-response variable updates".into(),
+                        passed: false,
+                        actual: error.to_string(),
+                        expected: "Variable updates remain within execution limits".into(),
+                    });
+                    response.logs.extend(output.logs);
+                    return Ok(false);
+                }
+                response.logs.extend(output.logs);
+                for test in &mut output.tests {
+                    test.id = format!("post-{}", test.id);
+                }
+                response.tests.extend(output.tests);
+                response.variable_updates.extend(output.updates);
+            }
+            Err(failure) => {
+                scopes.private_values.extend(failure.private_values);
+                response.logs.push(ScriptLog {
+                    level: "error".into(),
+                    message: failure.error.message.clone(),
+                });
+                response.tests.push(TestResult {
+                    id: "post-script-error".into(),
+                    name: "Post-response script".into(),
+                    passed: false,
+                    actual: failure.error.message,
+                    expected: "Script completes successfully".into(),
+                });
+                return Ok(!failure.privacy_complete);
+            }
+        }
+    }
+    Ok(false)
 }

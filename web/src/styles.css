@@ -506,6 +506,13 @@ kbd {
 .page-panel .response-pane {
   margin: 0;
 }
+.history-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.history-table-scroll .rt-TableRoot {
+  min-width: 620px;
+}
 .status-bar {
   grid-column: 1 / -1;
   display: flex;

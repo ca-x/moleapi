@@ -316,6 +316,7 @@ mod tests {
     #[tokio::test]
     async fn session_storage_contains_only_digest_and_expired_sessions_are_rejected() {
         let state = AppState {
+            history_clears: std::sync::Arc::default(),
             credential_revisions: std::sync::Arc::default(),
             db: crate::storage::connect("sqlite::memory:").await.unwrap(),
             config: crate::Config {
