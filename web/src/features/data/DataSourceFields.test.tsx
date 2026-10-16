@@ -29,3 +29,13 @@ it("a selection finishing after Connect cannot relabel the active dataset",async
   await act(async()=>{finish({name:"new.csv",base64:"MQ=="});});
   expect(change).not.toHaveBeenCalled();expect(screen.getByText("original.csv")).toBeTruthy();
 });
+it("selecting a new XLSX workbook resets a previous worksheet name",async()=>{
+  vi.mocked(pickDataFile).mockResolvedValue({name:"transactions.xlsx",base64:"UEs="});
+  const config={...dataConfig(),source:"local_file" as const,file_format:"xlsx" as const,sheet_name:"Old Sheet"};
+  const change=vi.fn();
+  render(<DataSourceFields config={config} change={change} connected={false}/>);
+  await act(async()=>{fireEvent.click(screen.getByRole("button",{name:"选择数据文件"}));});
+  expect(change).toHaveBeenCalledWith(expect.objectContaining({
+    file_name:"transactions.xlsx",file_format:"xlsx",sheet_name:""
+  }));
+});

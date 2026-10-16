@@ -1,0 +1,5 @@
+# XLSX Data fixture
+
+`generate.py` recreates two deterministic XLSX files with XlsxWriter 3.2.9. It fixes workbook metadata and ZIP timestamps so repeated generation has identical SHA256 bytes. The checked-in `workbook.xlsx` has an Overview sheet and a Transactions sheet with whole numbers, floating cells, booleans, blanks, exact numeric text and a cached formula. Duplicate/blank/case-colliding heading, formula-error and leading-blank-row sheets exercise explicit rejection or row preservation. `oversized-entry.xlsx` has a 65 MiB declared worksheet ZIP entry in a small archive; the reader must reject its central-directory size before Calamine parses it.
+
+The Rust reader uses Calamine 0.36.1 within MoleAPI's existing capped file worker and the current Arrow/DataFusion SQL path. The hosted router fixture serves the same checked-in workbook from a DNS-mapped HTTP endpoint and queries the named Transactions sheet. Local regeneration requires `PYTHONPATH` to contain XlsxWriter 3.2.9; CI consumes the checked-in bytes and does not install Python packages.

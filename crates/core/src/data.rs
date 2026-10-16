@@ -22,6 +22,7 @@ pub enum DataFileFormat {
     Csv,
     Json,
     Parquet,
+    Xlsx,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -30,6 +31,7 @@ pub struct DataConfig {
     pub sql: String,
     pub file_name: String,
     pub file_format: DataFileFormat,
+    pub sheet_name: String,
     pub file_base64: String,
     pub table_name: String,
     pub csv_header: bool,
@@ -44,6 +46,7 @@ impl Default for DataConfig {
             sql: "SELECT 1 AS value".into(),
             file_name: String::new(),
             file_format: DataFileFormat::Csv,
+            sheet_name: String::new(),
             file_base64: String::new(),
             table_name: "data".into(),
             csv_header: true,
@@ -67,6 +70,17 @@ pub fn validate_data_config(config: &DataConfig) -> Result<()> {
     ensure!(
         config.file_name.len() <= 512 && !config.file_name.contains('\0'),
         "Invalid Data file name"
+    );
+    ensure!(
+        config.sheet_name.is_empty()
+            || config.file_format == DataFileFormat::Xlsx
+                && matches!(
+                    config.source,
+                    DataSource::LocalFile | DataSource::RemoteFile
+                )
+                && config.sheet_name.len() <= 128
+                && !config.sheet_name.chars().any(char::is_control),
+        "Invalid XLSX worksheet name"
     );
     ensure!(
         config.ca_pem.len() <= 65536,
@@ -218,6 +232,21 @@ mod tests {
         let copied: DataConfig =
             serde_json::from_value(serde_json::to_value(&config).unwrap()).unwrap();
         assert_eq!(copied, config);
+        let mut legacy = serde_json::to_value(&config).unwrap();
+        legacy.as_object_mut().unwrap().remove("sheet_name");
+        assert!(
+            serde_json::from_value::<DataConfig>(legacy)
+                .unwrap()
+                .sheet_name
+                .is_empty()
+        );
+        let mut worksheet = config.clone();
+        worksheet.sheet_name = "Transactions".into();
+        assert!(validate_data_config(&worksheet).is_err());
+        worksheet.file_format = DataFileFormat::Xlsx;
+        validate_data_config(&worksheet).unwrap();
+        worksheet.source = DataSource::Postgresql;
+        assert!(validate_data_config(&worksheet).is_err());
         assert_eq!(
             data_url(
                 "postgresql://user:pass@db.example/main",

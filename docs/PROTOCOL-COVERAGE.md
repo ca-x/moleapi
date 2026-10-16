@@ -17,7 +17,7 @@
 | TCP Socket/报文处理 | Apifox，Postman公开目录未定位 |真实TCP/TLS、文本/Hex/Base64、原始块/行/32位大小端长度分帧、半关闭/读取/取消/空闲限制、原始草稿/安全导出已实现；实际fixture及浏览器验证，分发验证留到整合 |Tokio、tokio-util BytesCodec/LinesCodec/LengthDelimitedCodec、tokio-rustls/rustls、hex/base64；浏览器Hex显示复用@scure/base |
 | Dubbo | Apifox，Postman公开目录未定位 | 经典 Dubbo2/Hessian2 专用调用、ZooKeeper digest 和 Nacos 命名空间/认证发现已通过官方 Apache3.3.6 提供方互通。ZooKeeper 与 Nacos 元数据报告支持受检预览、显式冲突决策导入、来源记录及 DTO 字段草稿；Nacos 元数据独立配置命名空间/分组及私网 HTTP 认证通过真实 Nacos2.5.1 夹具、390px 浏览器与 run38836986575 四项 wire CI。嵌套 DTO、枚举与标准 List/Set/Map 的受限预览/草稿及真实 worker 调用通过 run38840117333；EDAS 尚无真实沙箱，任意 Java 集合实现/多态、公网认证 TLS、完整平台安装与数据库门禁仍待验证，不宣称整项完成 | Apache Dubbo Java3.3.6 GenericService；固定 JAR SHA256 `154c9a82bdebc496319880c13731b0444f47a840458328a3810bc1402443dd56`；本地加固 `zookeeper-async`5.0.0；固定 Nacos2.5.1 实例列表与配置 API 夹具。Rust 社区经典包0.1.0 在官方提供方返回状态40；官方 Rust dubbo0.4.0 仅支持 Triple |
 | Webhook监听/检查/重放 | 两者 | 已实现持久接收器、私密检查/导出、编辑二进制重放及取消；独立客户端显式本地监听已有真实套接字测试，原生UI/平台验证待完成 | Axum/Hyper、SeaORM、现有checked reqwest、base64 |
-| Data request：PG/MySQL、local/remote file SQL | Postman，Apifox公开目录未定位 | 已实现专用 Data 客户端、文件 SQL、结构浏览、只读/写入、类型结果和导出；真实 PG/MySQL 功能与取消/连接释放已通过 Actions；最新平台验证待完成 | tokio-postgres/tokio-postgres-rustls、mysql_async、SQLparser、DataFusion/Arrow、CodeMirror SQL/Lezer、TanStack Table、Decimal.js、Papa Parse |
+| Data request：PG/MySQL、local/remote file SQL | Postman，Apifox公开目录未定位 | 已实现专用 Data 客户端、CSV/JSON/JSONL/Parquet 及 XLSX 文件 SQL、结构浏览、只读/写入、类型结果和导出。XLSX 选定工作表、类型/空值/公式缓存、ZIP 限额、本地和受检远程查询及390px 保存重载通过本地夹具；真实 PG/MySQL 功能与取消/连接释放已通过 Actions。XLSX 提交的 CI 与平台验证待完成 | tokio-postgres/tokio-postgres-rustls、mysql_async、SQLparser、DataFusion/Arrow、CodeMirror SQL/Lezer、TanStack Table、Decimal.js、Papa Parse、Calamine0.36.1 |
 
 不增加没有公开证据的“竞品已支持”结论；未定位不是断言不支持。HTTP传输承载SOAP/GraphQL/MCP/A2A等不等于完成它们的 schema、方法选择、事件、任务、鉴权和编辑器功能。Apifox/Postman类型与功能参考链接见[完整矩阵](FEATURE-MATRIX.md)，原始目录见[Apifox](APIFOX-CATALOG.md)/[Postman](POSTMAN-CATALOG.md)。
 
@@ -42,4 +42,4 @@ Data 当前边界：数据库 URL 使用已检查并固定的地址与原始 TLS
 
 文件最多 5 MiB；文件查询运行在具有堆/内存/超时限制的独立应用子进程，禁用外部存储与 spill。返回最多 1000 行、6 MiB，单行/单元格另有限制。截断数据库查询保留已读取的行并关闭连接；取消/超时关闭连接，不保证写入已回滚，DDL 可能有数据库自身的隐式提交。精确整数/小数以字符串返回；CSV 小数和 JSON 小数/混合数字列保留精确文本，可显式 CAST AS DECIMAL。JSON 结果导出保留类型、重复列名和截断信息；CSV 空单元格表示 NULL，采用成熟库转义电子表格公式。默认工作区导出移除本地文件字节和已知私密值，显式包含私密数据导出保留原件。MoleAPI 格式支持 Data 往返；Postman/OpenAPI 导出不能表示专用 Data 请求时明确拒绝。
 
-Data 独立后端审查与修复复审已完成；新增真实 PG/MySQL 精度、写入/只读、截断、取消及服务端连接消失断言已通过1f66a50的数据库 CI（run37282409905）。CA 保存/导入与严格 PEM 校验的后续修复另有回归与复审。功能源码验证与数据库/平台分发证据分开记录，不据应用存储支持推断 Data 支持。共享脚本、响应提取/断言、持久数据历史和更完整的数据源格式仍需后续整合。
+Data 独立后端审查与修复复审已完成；新增真实 PG/MySQL 精度、写入/只读、截断、取消及服务端连接消失断言已通过1f66a50的数据库 CI（run37282409905）。CA 保存/导入与严格 PEM 校验的后续修复另有回归与复审。功能源码验证与数据库/平台分发证据分开记录，不据应用存储支持推断 Data 支持。XLSX 的第一张或精确命名工作表已用 Calamine 在隔离 worker 中读取；只使用公式缓存，旧版 XLS/XLSB/ODS 仍未支持。共享脚本、响应提取/断言、持久数据历史和其他数据源格式仍需后续整合。

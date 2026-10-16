@@ -338,3 +338,88 @@ async fn remote_file_network_dns_settings_download_real_csv_and_run_bounded_sql_
     .await;
     server.abort();
 }
+
+#[tokio::test]
+async fn hosted_checked_remote_xlsx_selects_named_sheet_and_runs_sql() {
+    let (base, server) = serve(Router::new().route(
+        "/workbook.xlsx",
+        axum::routing::get(|headers: axum::http::HeaderMap| async move {
+            assert!(
+                headers["host"]
+                    .to_str()
+                    .unwrap()
+                    .starts_with("xlsx-network.test:")
+            );
+            assert_eq!(headers["accept-encoding"], "identity");
+            (
+                [(
+                    "content-type",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )],
+                include_bytes!("../../data/tests/fixtures/workbook.xlsx").to_vec(),
+            )
+        }),
+    ))
+    .await;
+    let port = url::Url::parse(&base).unwrap().port().unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let mut settings = config(
+        moleapi_server::sqlite_database_url(&temp.path().join("xlsx-hosted.db")).unwrap(),
+        true,
+    );
+    settings.allow_private_network = true;
+    let router = hosted(settings).await.unwrap();
+    let token = register(&router, "xlsx-owner").await;
+    let mut source = data();
+    let request = &mut source["collections"][0]["requests"][0];
+    request["url"] = json!(format!("http://xlsx-network.test:{port}/workbook.xlsx"));
+    request["protocol"]["source"] = json!("remote_file");
+    request["protocol"]["file_format"] = json!("xlsx");
+    request["protocol"]["file_name"] = json!("workbook.xlsx");
+    request["protocol"]["sheet_name"] = json!("Transactions");
+    request["protocol"]["file_base64"] = json!("");
+    request["network"] =
+        json!({"dns":[{"hostname":"xlsx-network.test","addresses":["127.0.0.1"]}]});
+    let (status, workspace) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        Some(&token),
+        Some(json!({"id":"xlsx","name":"Remote workbook","data":source})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{workspace}");
+    let (status, session) = call(&router,"POST","/api/sessions",Some(&token),
+        Some(json!({"workspace_id":"xlsx","request":workspace["data"]["collections"][0]["requests"][0]}))).await;
+    assert_eq!(status, StatusCode::OK, "{session}");
+    let id = session["id"].as_str().unwrap();
+    ready(&router, Some(&token), id).await;
+    let events = query(
+        &router,
+        Some(&token),
+        id,
+        "xlsx-query",
+        "SELECT id, CAST(amount AS DECIMAL(10,2)) AS amount, exact_text FROM data WHERE id=1",
+    )
+    .await;
+    let row = events["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|event| {
+            event["message"]["kind"] == "data_rows" && event["message"]["query_id"] == "xlsx-query"
+        })
+        .expect("Hosted XLSX query result missing");
+    assert_eq!(row["message"]["rows"][0][0]["value"], "1");
+    assert_eq!(row["message"]["rows"][0][1]["value"], "1.23");
+    assert_eq!(row["message"]["rows"][0][2]["value"], "9007199254740993");
+    call(
+        &router,
+        "DELETE",
+        &format!("/api/sessions/{id}"),
+        Some(&token),
+        None,
+    )
+    .await;
+    server.abort();
+}

@@ -267,6 +267,11 @@ fn read_batches(config: &DataConfig, bytes: &[u8]) -> Result<Vec<RecordBatch>> {
                 output.push(RecordBatch::new_empty(schema));
             }
         }
+        DataFileFormat::Xlsx => {
+            for batch in crate::xlsx::read_xlsx_batches(config, bytes)? {
+                accept(batch)?;
+            }
+        }
     }
     Ok(output)
 }

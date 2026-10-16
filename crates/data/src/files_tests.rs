@@ -7,6 +7,124 @@ fn config(format: DataFileFormat) -> DataConfig {
         ..Default::default()
     }
 }
+
+const XLSX: &[u8] = include_bytes!("../tests/fixtures/workbook.xlsx");
+
+#[tokio::test]
+async fn xlsx_selected_sheet_preserves_types_nulls_and_cached_formula() {
+    let mut config = config(DataFileFormat::Xlsx);
+    config.sheet_name = "Transactions".into();
+    let source = FileSource::open(&config, XLSX).unwrap();
+    assert_eq!(
+        source
+            .schema()
+            .columns
+            .iter()
+            .map(|column| column.name.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "id",
+            "amount",
+            "active",
+            "label",
+            "exact_text",
+            "calculated",
+            "when"
+        ]
+    );
+    let result = source
+        .query("SELECT id, amount, active, label, exact_text, calculated FROM data ORDER BY id")
+        .await
+        .unwrap();
+    assert_eq!(result.rows[0][0], Cell::Integer { value: "1".into() });
+    assert_eq!(
+        result.rows[0][1],
+        Cell::Text {
+            value: "1.23".into()
+        }
+    );
+    assert_eq!(result.rows[0][2], Cell::Bool { value: true });
+    assert_eq!(
+        result.rows[0][4],
+        Cell::Text {
+            value: "9007199254740993".into()
+        }
+    );
+    assert_eq!(
+        result.rows[0][5],
+        Cell::Text {
+            value: "2.46".into()
+        }
+    );
+    let date = source
+        .query("SELECT \"when\" FROM data WHERE id = 1")
+        .await
+        .unwrap();
+    assert_eq!(
+        date.rows[0][0],
+        Cell::Text {
+            value: "2024-02-29 00:00:00".into()
+        }
+    );
+    assert_eq!(result.rows[1][3], Cell::Null);
+    assert_eq!(
+        result.rows[1][4],
+        Cell::Text {
+            value: "1.23000000000000000001".into()
+        }
+    );
+    let cast = source
+        .query("SELECT CAST(amount AS DECIMAL(10,2)) FROM data WHERE id = 1")
+        .await
+        .unwrap();
+    assert_eq!(
+        cast.rows[0][0],
+        Cell::Decimal {
+            value: "1.23".into()
+        }
+    );
+}
+
+#[test]
+fn xlsx_sheet_selection_headers_and_archive_limits_are_explicit() {
+    let mut config = config(DataFileFormat::Xlsx);
+    let first = FileSource::open(&config, XLSX).unwrap();
+    assert_eq!(first.schema().columns[0].name, "marker");
+    config.sheet_name = "Missing".into();
+    assert!(FileSource::open(&config, XLSX).is_err());
+    config.sheet_name = "Duplicate Headers".into();
+    assert!(FileSource::open(&config, XLSX).is_err());
+    config.sheet_name = "Case Colliding Headers".into();
+    assert!(FileSource::open(&config, XLSX).is_err());
+    config.sheet_name = "Blank Headers".into();
+    assert!(FileSource::open(&config, XLSX).is_err());
+    config.sheet_name = "Error Cells".into();
+    let error = FileSource::open(&config, XLSX).err().unwrap().to_string();
+    assert!(error.contains("invalid or error cell"), "{error}");
+    config.sheet_name = "Duplicate Headers".into();
+    config.csv_header = false;
+    let no_header = FileSource::open(&config, XLSX).unwrap();
+    assert_eq!(no_header.schema().columns[0].name, "column_1");
+    assert!(FileSource::open(&config, b"not a workbook").is_err());
+    let oversized = include_bytes!("../tests/fixtures/oversized-entry.xlsx");
+    let error = FileSource::open(&config, oversized)
+        .err()
+        .unwrap()
+        .to_string();
+    assert!(error.contains("expanded size"), "{error}");
+}
+
+#[tokio::test]
+async fn xlsx_header_means_physical_first_row_and_leading_empty_rows_are_retained() {
+    let mut config = config(DataFileFormat::Xlsx);
+    config.sheet_name = "Leading Blank".into();
+    let error = FileSource::open(&config, XLSX).err().unwrap().to_string();
+    assert!(error.contains("header is empty"), "{error}");
+    config.csv_header = false;
+    let source = FileSource::open(&config, XLSX).unwrap();
+    let result = source.query("SELECT COUNT(*) FROM data").await.unwrap();
+    assert_eq!(result.rows[0][0], Cell::Integer { value: "3".into() });
+}
 #[tokio::test]
 async fn csv_real_filter_aggregation_decimal_cast_and_schema() {
     let source = FileSource::open(
