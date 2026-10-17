@@ -63,6 +63,8 @@ pub struct Example {
     pub headers: Vec<Pair>,
     pub body: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub mock_schema: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub mock_script: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mock_match: Option<MockMatch>,

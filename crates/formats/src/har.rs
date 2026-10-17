@@ -663,6 +663,7 @@ fn import_example(
         id: uid(),
         name: format!("HAR {status}"),
         status: status as u16,
+        mock_schema: String::new(),
         mock_script: String::new(),
         mock_match: None,
         delay_ms: 0,

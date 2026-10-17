@@ -38,6 +38,30 @@ it("edits an opt-in mock implementation without replacing the saved example",asy
   expect(screen.getByRole("button",{name:"Preview Mock"})).toHaveProperty("disabled",true);
 });
 
+it("keeps the static body while editing an explicit Mock JSON Schema",async()=>{
+  await setLanguage("en");
+  const request=newRequest("R","https://example.test/items");
+  request.examples=[{id:"e",name:"Example",status:200,headers:[],body:"static"}];
+  const update=vi.fn();
+  const page=render(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
+  fireEvent.click(screen.getByRole("checkbox",{name:"Generate Mock body from JSON Schema"}));
+  expect(update.mock.lastCall?.[0].examples[0].body).toBe("static");
+  request.examples=[{...request.examples[0],mock_schema:update.mock.lastCall?.[0].examples[0].mock_schema}];
+  page.rerender(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
+  fireEvent.click(screen.getByRole("button",{name:"Edit Mock JSON Schema"}));
+  fireEvent.change(screen.getByRole("textbox",{name:"Mock JSON Schema"}),{target:{value:""}});
+  expect(screen.getByRole("textbox",{name:"Mock JSON Schema"})).toBeTruthy();
+  expect(screen.getByRole("alert").textContent).toContain("Schema must be a JSON object");
+  expect(screen.getByRole("button",{name:"Done"})).toHaveProperty("disabled",true);
+  const revised='{"type":"object","properties":{"id":{"const":3}},"required":["id"]}';
+  fireEvent.change(screen.getByRole("textbox",{name:"Mock JSON Schema"}),{target:{value:revised}});
+  fireEvent.click(screen.getByRole("button",{name:"Done"}));
+  expect(update.mock.lastCall?.[0].examples[0].mock_schema).toBe(revised);
+  expect(update.mock.lastCall?.[0].examples[0].body).toBe("static");
+  await setLanguage("zh-CN");
+  expect(screen.getByRole("button",{name:"编辑 Mock JSON Schema"})).toBeTruthy();
+});
+
 it("shows the mock editor in Chinese",async()=>{
   await setLanguage("zh-CN");
   const request=newRequest("R","https://example.test/");

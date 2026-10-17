@@ -440,6 +440,7 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
             }
             for example in &mut request.examples {
                 example.mock_script.clear();
+                example.mock_schema.clear();
                 let private_match = example.mock_match.as_ref().is_some_and(|rule| {
                     rule.body.is_some()
                         || rule.query.iter().chain(&rule.headers).any(|row| {

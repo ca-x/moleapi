@@ -373,6 +373,7 @@ fn walk(
                     status: status as u16,
                     headers,
                     body: text(&response["body"]),
+                    mock_schema: String::new(),
                     mock_script: String::new(),
                     mock_match: None,
                     delay_ms: 0,

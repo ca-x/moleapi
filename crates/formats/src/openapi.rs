@@ -157,6 +157,7 @@ pub(super) fn import(content: &str) -> Result<ImportResult> {
                                         .unwrap_or("导入示例")
                                         .into(),
                                     status,
+                                    mock_schema: String::new(),
                                     headers: vec![pair("Content-Type", mime)],
                                     mock_script: String::new(),
                                     mock_match: None,
