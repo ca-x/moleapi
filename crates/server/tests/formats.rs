@@ -277,13 +277,44 @@ async fn hosted_har_import_creates_owned_workspace_and_screens_recorded_secrets(
     let source = safe["content"].as_str().unwrap();
     assert!(!source.contains("har-secret"));
     assert!(!source.contains("cookie-secret"));
+    let (status, har_safe) = call(
+        &router,
+        "POST",
+        "/api/workspaces/har-owned/export",
+        Some(&owner),
+        Some(json!({"format":"har","include_secrets":false})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{har_safe}");
+    let har_safe_text = har_safe["content"].as_str().unwrap();
+    assert!(!har_safe_text.contains("har-secret"));
+    assert!(!har_safe_text.contains("cookie-secret"));
+    assert_eq!(
+        moleapi_formats::import("har", har_safe_text)
+            .unwrap()
+            .data
+            .collections[0]
+            .requests
+            .len(),
+        3
+    );
+    let (status, har_full) = call(
+        &router,
+        "POST",
+        "/api/workspaces/har-owned/export",
+        Some(&owner),
+        Some(json!({"format":"har","include_secrets":true})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{har_full}");
+    assert!(har_full["content"].as_str().unwrap().contains("har-secret"));
     assert_eq!(
         call(
             &router,
             "POST",
             "/api/workspaces/har-owned/export",
             Some(&other),
-            Some(json!({"format":"moleapi","include_secrets":true}))
+            Some(json!({"format":"har","include_secrets":true}))
         )
         .await
         .0,
