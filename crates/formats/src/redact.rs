@@ -728,6 +728,10 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
         }
     }
     for specification in &mut result.data.specifications {
+        if specification.kind == "insomnia" {
+            specification.source.clear();
+            continue;
+        }
         if let Ok(mut value) = serde_yaml_ng::from_str::<Value>(&specification.source) {
             if specification.kind == "postman" {
                 redact_postman_unmapped_transport(&mut value, &privacy);
@@ -1022,7 +1026,7 @@ fn redact_value(value: &mut Value) {
         _ => {}
     }
 }
-fn sensitive(key: &str) -> bool {
+pub(super) fn sensitive(key: &str) -> bool {
     let key = key.to_ascii_lowercase();
     matches!(
         key.as_str(),

@@ -1,0 +1,15 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2026-10-18T00:00:00.000Z",
+  "__export_source": "insomnia.desktop.app:v11.0.0",
+  "resources": [
+    {"_id":"__WORKSPACE_ID__","_type":"workspace","name":"Insomnia QA"},
+    {"_id":"__BASE_ENVIRONMENT_ID__","_type":"environment","parentId":"__WORKSPACE_ID__","name":"Base Environment","data":{"base_url":"https://example.test","api_key":"insomnia-secret"}},
+    {"_id":"__env_1__","_type":"environment","parentId":"__BASE_ENVIRONMENT_ID__","name":"Staging","data":{"base_url":"https://staging.example.test"}},
+    {"_id":"__folder_1__","_type":"request_group","parentId":"__WORKSPACE_ID__","name":"Catalog"},
+    {"_id":"__folder_2__","_type":"request_group","parentId":"__folder_1__","name":"Nested"},
+    {"_id":"__request_1__","_type":"request","parentId":"__folder_2__","name":"List items","method":"GET","url":"{{ _.base_url }}/items?tag=a&tag=b","parameters":[{"name":"tag","value":"a"},{"name":"tag","value":"b"}],"headers":[{"name":"X-Trace","value":"fixture"}],"authentication":{"type":"basic","username":"ada","password":"basic-secret"},"body":{}},
+    {"_id":"__request_2__","_type":"request","parentId":"__folder_1__","name":"Submit form","method":"POST","url":"https://example.test/form","headers":[{"name":"Content-Type","value":"application/x-www-form-urlencoded"}],"authentication":{"type":"bearer","token":"bearer-secret"},"body":{"mimeType":"application/x-www-form-urlencoded","params":[{"name":"color","value":"red"},{"name":"color","value":"blue"}]}}
+  ]
+}

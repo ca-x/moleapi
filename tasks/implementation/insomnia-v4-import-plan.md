@@ -6,10 +6,10 @@
 
 ## Task 1: Shared converter and privacy
 
-- [ ] Add a minimal, real V4 fixture with workspace, folders, requests, base/child environments and exact source. Add a failing formats import test.
-- [ ] Implement bounded resource preflight (version, IDs, counts, parents/cycles) and type/body/auth/query mapping through existing `moleapi-formats` helpers. Reject unsupported semantics atomically.
-- [ ] Store the exact original under `Specification.kind=insomnia`. Clear it in default backup, retain it in full backup, and reject unverified external export. Add privacy and failure regressions.
-- [ ] Run focused and full formats suites, strict formats Clippy and rustfmt; commit.
+- [x] Add a representative V4 fixture with workspace, folders, requests and base/child environments, then watch the shared importer test fail before implementation. An actual Insomnia-generated export remains a later interoperability check.
+- [x] Implement bounded resource preflight (version, IDs, counts, parents/cycles) and type/body/auth/query mapping through existing `moleapi-formats` helpers. Reject unsupported semantics atomically.
+- [x] Store the exact original under `Specification.kind=insomnia`. Clear it in default backup, retain it in full backup, and reject unverified external export. Add privacy and failure regressions.
+- [x] Run focused and full formats suites, strict formats Clippy and rustfmt; commit.
 
 ## Task 2: Hosted, CLI and editor entry points
 
