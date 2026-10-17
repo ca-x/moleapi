@@ -108,7 +108,7 @@ fn insomnia_rejects_conflicting_and_unrepresentable_resources_atomically() {
     assert!(import("insomnia", &source.to_string()).is_err());
 
     source = base.clone();
-    source["resources"][5]["authentication"]["disabled"] = Value::Bool(true);
+    source["resources"][5]["authentication"]["disabled"] = Value::String("true".into());
     assert!(import("insomnia", &source.to_string()).is_err());
 
     source = base.clone();
@@ -121,6 +121,14 @@ fn insomnia_rejects_conflicting_and_unrepresentable_resources_atomically() {
 
     source = base.clone();
     source["resources"][6]["body"]["fileName"] = Value::String("/private/file".into());
+    assert!(import("insomnia", &source.to_string()).is_err());
+
+    source = base.clone();
+    source["resources"][7]["cookies"] = serde_json::json!([{"name":"sid","value":"private"}]);
+    assert!(import("insomnia", &source.to_string()).is_err());
+
+    source = base.clone();
+    source["resources"][8]["contents"] = Value::String("openapi: 3.1.0".into());
     assert!(import("insomnia", &source.to_string()).is_err());
 
     source = base;
@@ -177,4 +185,54 @@ fn insomnia_caps_sources_and_rejects_unrepresentable_environment_values() {
         source["resources"].as_array_mut().unwrap().push(extra);
     }
     assert!(import("insomnia", &source.to_string()).is_err());
+}
+
+#[test]
+fn insomnia_v4_accepts_an_optional_export_type_marker() {
+    let mut source: Value = serde_json::from_str(SOURCE).unwrap();
+    source.as_object_mut().unwrap().remove("_type");
+    assert_eq!(
+        import("insomnia", &source.to_string()).unwrap().name,
+        "Insomnia QA"
+    );
+}
+
+#[test]
+fn insomnia_v4_accepts_a_request_only_export_with_an_implicit_workspace() {
+    let mut source: Value = serde_json::from_str(SOURCE).unwrap();
+    source["resources"].as_array_mut().unwrap().remove(0);
+    let imported = import("insomnia", &source.to_string()).unwrap();
+    assert_eq!(imported.name, "Insomnia import");
+    assert_eq!(
+        imported
+            .data
+            .collections
+            .iter()
+            .map(|c| c.requests.len())
+            .sum::<usize>(),
+        2
+    );
+}
+
+#[test]
+fn insomnia_auth_disabled_flag_preserves_on_and_off_wire_semantics() {
+    let mut source: Value = serde_json::from_str(SOURCE).unwrap();
+    source["resources"][5]["authentication"]["disabled"] = Value::Bool(false);
+    let imported = import("insomnia", &source.to_string()).unwrap();
+    let nested = imported
+        .data
+        .collections
+        .iter()
+        .find(|c| c.name == "Nested")
+        .unwrap();
+    assert_eq!(nested.requests[0].auth.kind, "basic");
+    source["resources"][5]["authentication"]["disabled"] = Value::Bool(true);
+    let imported = import("insomnia", &source.to_string()).unwrap();
+    let nested = imported
+        .data
+        .collections
+        .iter()
+        .find(|c| c.name == "Nested")
+        .unwrap();
+    assert_eq!(nested.requests[0].auth.kind, "none");
 }

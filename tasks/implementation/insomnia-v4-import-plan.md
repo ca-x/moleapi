@@ -19,6 +19,6 @@
 
 ## Task 3: Final evidence and integration
 
-- [ ] Run relevant Rust/frontend suites, strict Clippy, formatting, frontend then embedded server/CLI builds. Record supported and rejected V4 cases in a coverage document and implementation status.
+- [x] Run relevant Rust/frontend suites, strict Clippy, formatting, frontend then embedded server/CLI builds. Record supported and rejected V4 cases in a coverage document and implementation status.
 - [ ] Request independent read-only review, fix Critical/Important issues and re-review.
 - [ ] Push a draft PR based on main; run exact-head three-database/Docker/native CI, inspect package smoke and merge a verified batch. Keep V5, unsupported Insomnia resources and the full matrix open.

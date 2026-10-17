@@ -23,8 +23,8 @@ pub(super) fn import(content: &str) -> Result<ImportResult> {
         "Insomnia export format must be V4 JSON"
     );
     ensure!(
-        source["_type"] == "export",
-        "Insomnia V4 export type is missing"
+        source.get("_type").is_none_or(|kind| kind == "export"),
+        "Insomnia V4 export type is invalid"
     );
     let resources = source["resources"]
         .as_array()
@@ -58,6 +58,7 @@ pub(super) fn import(content: &str) -> Result<ImportResult> {
             "request_group" | "folder" => folders += 1,
             "request" => requests += 1,
             "environment" => environments += 1,
+            "cookie_jar" | "api_spec" => {}
             kind => bail!("Unsupported Insomnia resource type {kind}"),
         }
     }
@@ -69,10 +70,52 @@ pub(super) fn import(content: &str) -> Result<ImportResult> {
         folders <= MAX_FOLDERS && environments <= MAX_ENVIRONMENTS,
         "Insomnia folder or environment limit exceeded"
     );
-    let workspace_id = workspace.context("Insomnia workspace is missing")?;
-    let workspace_source = by_id[workspace_id];
-    let name = field(workspace_source, "name")?.to_owned();
+    let workspace_id = workspace.unwrap_or("__WORKSPACE_ID__");
+    ensure!(
+        workspace.is_some()
+            || resources
+                .iter()
+                .any(|resource| resource["parentId"] == workspace_id),
+        "Insomnia workspace is missing"
+    );
+    let name = match workspace {
+        Some(id) => field(by_id[id], "name")?.to_owned(),
+        None => source
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or("Insomnia import")
+            .to_owned(),
+    };
     ensure!(!name.trim().is_empty(), "Insomnia workspace name is empty");
+    let mut warnings = Vec::new();
+    for resource in resources {
+        match field(resource, "_type")? {
+            "cookie_jar" => {
+                ensure!(
+                    field(resource, "parentId")? == workspace_id,
+                    "Insomnia Cookie Jar parent is invalid"
+                );
+                ensure!(
+                    resource["cookies"].as_array().is_some_and(Vec::is_empty),
+                    "Insomnia Cookie Jar contains unmapped cookies"
+                );
+                warnings.push("Empty Insomnia Cookie Jar omitted".into());
+            }
+            "api_spec" => {
+                ensure!(
+                    field(resource, "parentId")? == workspace_id,
+                    "Insomnia API Spec parent is invalid"
+                );
+                ensure!(
+                    matches!(resource.get("contents"), None | Some(Value::Null))
+                        || resource["contents"].as_str() == Some(""),
+                    "Insomnia API Spec contents cannot be mapped"
+                );
+                warnings.push("Empty Insomnia API Spec omitted".into());
+            }
+            _ => {}
+        }
+    }
 
     let mut folder_ids = HashMap::new();
     for resource in resources {
@@ -112,7 +155,6 @@ pub(super) fn import(content: &str) -> Result<ImportResult> {
 
     let (parsed_environments, variables) = read_environments(resources, workspace_id)?;
     let placeholders = Regex::new(r"\{\{\s*_\.\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")?;
-    let mut warnings = Vec::new();
     let specification_id = uid();
     for resource in resources {
         if field(resource, "_type")? != "request" {
@@ -503,47 +545,59 @@ fn read_auth(source: &Value, request: &mut moleapi_core::RequestSpec) -> Result<
         return Ok(());
     }
     let kind = field(auth, "type")?;
+    let active = enabled(auth)?;
     if kind == "none" {
-        ensure!(object.len() == 1, "Unsupported Insomnia no-auth settings");
+        ensure!(
+            object
+                .keys()
+                .all(|key| matches!(key.as_str(), "type" | "disabled")),
+            "Unsupported Insomnia no-auth settings"
+        );
         return Ok(());
     }
-    ensure!(
-        !request
-            .headers
-            .iter()
-            .any(|row| row.enabled && row.key.eq_ignore_ascii_case("authorization")),
-        "Insomnia auth conflicts with explicit Authorization header"
-    );
     match kind {
         "basic" => {
             ensure!(
-                object
-                    .keys()
-                    .all(|key| matches!(key.as_str(), "type" | "username" | "password")),
+                object.keys().all(|key| matches!(
+                    key.as_str(),
+                    "type" | "username" | "password" | "disabled"
+                )),
                 "Unsupported Insomnia Basic auth settings"
             );
             let username = field(auth, "username")?;
             let password = field(auth, "password")?;
             literal(username)?;
             literal(password)?;
-            request.auth.kind = "basic".into();
-            request.auth.username = username.into();
-            request.auth.password = password.into();
+            if active {
+                request.auth.kind = "basic".into();
+                request.auth.username = username.into();
+                request.auth.password = password.into();
+            }
         }
         "bearer" => {
             ensure!(
                 object
                     .keys()
-                    .all(|key| matches!(key.as_str(), "type" | "token")),
+                    .all(|key| matches!(key.as_str(), "type" | "token" | "disabled")),
                 "Unsupported Insomnia Bearer auth settings"
             );
             let token = field(auth, "token")?;
             literal(token)?;
-            request.auth.kind = "bearer".into();
-            request.auth.token = token.into();
+            if active {
+                request.auth.kind = "bearer".into();
+                request.auth.token = token.into();
+            }
         }
         kind => bail!("Unsupported Insomnia authentication type {kind}"),
     }
+    ensure!(
+        !active
+            || !request
+                .headers
+                .iter()
+                .any(|row| row.enabled && row.key.eq_ignore_ascii_case("authorization")),
+        "Insomnia auth conflicts with explicit Authorization header"
+    );
     Ok(())
 }
 

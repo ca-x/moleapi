@@ -10,6 +10,8 @@
     {"_id":"__folder_1__","_type":"request_group","parentId":"__WORKSPACE_ID__","name":"Catalog"},
     {"_id":"__folder_2__","_type":"request_group","parentId":"__folder_1__","name":"Nested"},
     {"_id":"__request_1__","_type":"request","parentId":"__folder_2__","name":"List items","method":"GET","url":"{{ _.base_url }}/items?tag=a&tag=b","parameters":[{"name":"tag","value":"a"},{"name":"tag","value":"b"}],"headers":[{"name":"X-Trace","value":"fixture"}],"authentication":{"type":"basic","username":"ada","password":"basic-secret"},"body":{}},
-    {"_id":"__request_2__","_type":"request","parentId":"__folder_1__","name":"Submit form","method":"POST","url":"https://example.test/form","headers":[{"name":"Content-Type","value":"application/x-www-form-urlencoded"}],"authentication":{"type":"bearer","token":"bearer-secret"},"body":{"mimeType":"application/x-www-form-urlencoded","params":[{"name":"color","value":"red"},{"name":"color","value":"blue"}]}}
+    {"_id":"__request_2__","_type":"request","parentId":"__folder_1__","name":"Submit form","method":"POST","url":"https://example.test/form","headers":[{"name":"Content-Type","value":"application/x-www-form-urlencoded"}],"authentication":{"type":"bearer","token":"bearer-secret"},"body":{"mimeType":"application/x-www-form-urlencoded","params":[{"name":"color","value":"red"},{"name":"color","value":"blue"}]}},
+    {"_id":"__cookie_jar__","_type":"cookie_jar","parentId":"__WORKSPACE_ID__","name":"Default Jar","cookies":[]},
+    {"_id":"__api_spec__","_type":"api_spec","parentId":"__WORKSPACE_ID__","contents":""}
   ]
 }
