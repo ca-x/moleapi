@@ -140,7 +140,7 @@ async fn hosted_mock_calls_are_owner_scoped_and_deleted_with_the_workspace() {
         StatusCode::OK
     );
     let db = Database::connect(url).await.unwrap();
-    let count=db.query_one(Statement::from_string(DatabaseBackend::Sqlite,"SELECT COUNT(*) AS count FROM documents WHERE kind IN ('mock-call','mock-call-sequence') AND ref_id = 'w'")) .await.unwrap().unwrap();
+    let count=db.query_one(Statement::from_string(DatabaseBackend::Sqlite,"SELECT COUNT(*) AS count FROM documents WHERE kind IN ('mock-call','mock-call-seq') AND ref_id = 'w'")) .await.unwrap().unwrap();
     let count: i64 = count.try_get("", "count").unwrap();
     assert_eq!(count, 0);
 }

@@ -11,7 +11,8 @@ use sea_orm::{
 use serde::{Deserialize, Serialize};
 
 const KIND: &str = "mock-call";
-const SEQUENCE_KIND: &str = "mock-call-sequence";
+const SEQUENCE_KIND: &str = "mock-call-seq";
+const _: () = assert!(KIND.len() <= 16 && SEQUENCE_KIND.len() <= 16);
 const RETAIN: i64 = 200;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
