@@ -110,6 +110,12 @@ export interface Example {
   headers: Pair[];
   body: string;
   mock_script?: string;
+  mock_match?: {
+    priority: number;
+    query?: Pair[];
+    headers?: Pair[];
+    body?: string;
+  };
 }
 export interface RequestNetwork {
   http_mode: "http1" | "auto" | "http2_prior_knowledge";

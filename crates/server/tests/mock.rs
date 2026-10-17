@@ -255,3 +255,327 @@ async fn hosted_dynamic_mock_does_not_cross_workspace_owners() {
     assert_eq!(status, StatusCode::CREATED, "{result}");
     assert_eq!(result["raw"], "owner-only");
 }
+
+#[tokio::test]
+async fn routed_mock_selects_matching_example_then_falls_back() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("matching.db")).await.unwrap();
+    let mut data = example_data();
+    let request = &mut data["collections"][0]["requests"][0];
+    request["method"] = json!("POST");
+    request["url"] = json!("https://example.test/v1/items");
+    request["examples"] = json!([
+        {"id":"default","name":"Default","status":200,"headers":[],"body":"fallback"},
+        {"id":"matched","name":"Matched","status":202,"headers":[],"body":"selected","mock_match":{"priority":5,"query":[{"id":"q","key":"mode","value":"fast","enabled":true}],"headers":[{"id":"h","key":"X-Choice","value":"fast","enabled":true}],"body":"hello"}},
+        {"id":"lower","name":"Lower","status":203,"headers":[],"body":"lower","mock_match":{"priority":1,"body":"hello"}}
+    ]);
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            None,
+            Some(json!({"id":"w","name":"W","data":data}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/mocks/w/v1/items?mode=fast")
+                .header("x-choice", "fast")
+                .body(Body::from("hello"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    assert_eq!(
+        to_bytes(response.into_body(), 100).await.unwrap().as_ref(),
+        b"selected"
+    );
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/mocks/w/v1/items?mode=slow")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        to_bytes(response.into_body(), 100).await.unwrap().as_ref(),
+        b"fallback"
+    );
+    assert_eq!(
+        call(&router, "GET", "/api/mocks/w/v1/items", None, None)
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[tokio::test]
+async fn routed_mock_matches_path_variables_duplicate_query_and_selected_script_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("matching-script.db")).await.unwrap();
+    let mut data = example_data();
+    data["script_mode"] = json!("v2");
+    let request = &mut data["collections"][0]["requests"][0];
+    request["method"] = json!("POST");
+    request["url"] = json!("https://example.test/v1/{item}");
+    request["examples"] = json!([
+        {"id":"default","name":"Default","status":200,"headers":[],"body":"fallback"},
+        {"id":"matched","name":"Matched","status":202,"headers":[],"body":"seed","mock_match":{"query":[{"id":"q1","key":"tag","value":"one","enabled":true},{"id":"q2","key":"tag","value":"one","enabled":true}],"headers":[{"id":"h","key":"X-Mode","value":"fast","enabled":true}]},"mock_script":"pm.mock.setBody(pm.request.method+':'+pm.request.body.raw)"},
+        {"id":"unselected","name":"Unselected","status":203,"headers":[],"body":"never","mock_match":{"priority":90,"headers":[{"id":"h2","key":"X-Mode","value":"never","enabled":true}]},"mock_script":"throw new Error('unselected-secret')"}
+    ]);
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            None,
+            Some(json!({"id":"w","name":"W","data":data}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/mocks/w/v1/123?tag=one&tag=one")
+                .header("x-mode", "fast")
+                .body(Body::from("hello"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    assert_eq!(
+        to_bytes(response.into_body(), 100).await.unwrap().as_ref(),
+        b"POST:hello"
+    );
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/mocks/w/v1/123?tag=one")
+                .header("x-mode", "fast")
+                .body(Body::from("hello"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        to_bytes(response.into_body(), 100).await.unwrap().as_ref(),
+        b"fallback"
+    );
+}
+
+#[tokio::test]
+async fn hosted_routed_mock_denies_another_owner() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = hosted(config(
+        format!(
+            "sqlite://{}?mode=rwc",
+            dir.path().join("owners.db").display()
+        ),
+        true,
+    ))
+    .await
+    .unwrap();
+    let alice = register(&router, "matchalice").await;
+    let bob = register(&router, "matchbobby").await;
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["url"] = json!("https://example.test/items");
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            Some(&alice),
+            Some(json!({"id":"w","name":"W","data":data}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        call(&router, "GET", "/api/mocks/w/items", Some(&bob), None)
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        call(&router, "GET", "/api/mocks/w/items", Some(&alice), None)
+            .await
+            .0,
+        StatusCode::CREATED
+    );
+}
+
+#[tokio::test]
+async fn routed_mock_prefers_literal_path_and_requires_saved_query_pairs() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("specificity.db")).await.unwrap();
+    let mut data = example_data();
+    let mut generic = data["collections"][0]["requests"][0].clone();
+    generic["id"] = json!("generic");
+    generic["url"] = json!("https://example.test/v1/{id}");
+    generic["examples"][0]["body"] = json!("generic");
+    let mut literal = generic.clone();
+    literal["id"] = json!("literal");
+    literal["url"] = json!("https://example.test/v1/special");
+    literal["query"] = json!([{"id":"q","key":"mode","value":"exact","enabled":true}]);
+    literal["examples"][0]["body"] = json!("literal");
+    data["collections"][0]["requests"] = json!([generic, literal]);
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            None,
+            Some(json!({"id":"w","name":"W","data":data}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let (status, answer) = call(
+        &router,
+        "GET",
+        "/api/mocks/w/v1/special?mode=exact",
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(answer["raw"], "literal");
+    let (status, answer) = call(&router, "GET", "/api/mocks/w/v1/special", None, None).await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(answer["raw"], "generic");
+}
+
+#[tokio::test]
+async fn routed_mock_excludes_connection_nominated_headers_and_bounds_body() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("safe-input.db")).await.unwrap();
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["url"] = json!("https://example.test/items");
+    data["collections"][0]["requests"][0]["examples"] = json!([
+        {"id":"default","name":"Default","status":200,"headers":[],"body":"safe"},
+        {"id":"hop","name":"Hop","status":202,"headers":[],"body":"unsafe","mock_match":{"headers":[{"id":"h","key":"X-Hop","value":"private","enabled":true}]}}
+    ]);
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            None,
+            Some(json!({"id":"w","name":"W","data":data}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/mocks/w/items")
+                .header("connection", "x-hop")
+                .header("x-hop", "private")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        to_bytes(response.into_body(), 100).await.unwrap().as_ref(),
+        b"safe"
+    );
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/mocks/w/items")
+                .body(Body::from(vec![b'a'; 1024 * 1024 + 1]))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert!(
+        !String::from_utf8_lossy(&to_bytes(response.into_body(), 1024).await.unwrap())
+            .contains("unsafe")
+    );
+}
+
+#[tokio::test]
+async fn routed_mock_rejects_nested_template_segments_and_large_uri_components() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("uri-bounds.db")).await.unwrap();
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["url"] = json!("https://example.test/v1/{{id}}");
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            None,
+            Some(json!({"id":"w","name":"W","data":data.clone()}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        call(&router, "GET", "/api/mocks/w/v1/ordinary", None, None)
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+    let mut bounded = data["collections"][0]["requests"][0].clone();
+    bounded["id"] = json!("bounded");
+    bounded["url"] = json!("https://example.test/v1/{id}");
+    data["collections"][0]["requests"]
+        .as_array_mut()
+        .unwrap()
+        .push(bounded);
+    assert_eq!(
+        call(
+            &router,
+            "PUT",
+            "/api/workspaces/w",
+            None,
+            Some(json!({"name":"W","expected_revision":1,"data":data}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let long_query = format!("/api/mocks/w/v1/ordinary?x={}", "a".repeat(9_000));
+    assert_eq!(
+        call(&router, "GET", &long_query, None, None).await.0,
+        StatusCode::BAD_REQUEST
+    );
+    let long_path = format!("/api/mocks/w/v1/{}", "a".repeat(5_000));
+    assert_eq!(
+        call(&router, "GET", &long_path, None, None).await.0,
+        StatusCode::BAD_REQUEST
+    );
+}

@@ -540,6 +540,10 @@ async fn build(
         .route(
             "/mock/{workspace_id}/{request_id}/{example_id}",
             get(mock::mock),
+        )
+        .route(
+            "/mocks/{workspace_id}/{*path}",
+            axum::routing::any(mock::dispatch),
         );
     let protected = if local {
         protected
