@@ -119,6 +119,38 @@ fn mock_match_rules_are_additive_and_bounded() {
     .unwrap();
     assert!(validate_request(&invalid, true).is_err());
 }
+
+#[test]
+fn saved_mock_delay_is_additive_and_limited_to_thirty_seconds() {
+    let mut request = request();
+    request.examples.push(
+        serde_json::from_value(
+            json!({"id":"e","name":"Delayed","status":202,"headers":[],"body":"ok","delay_ms":125}),
+        )
+        .unwrap(),
+    );
+    assert!(validate_request(&request, true).is_ok());
+    assert_eq!(
+        serde_json::to_value(&request).unwrap()["examples"][0]["delay_ms"],
+        125
+    );
+    let old: Example = serde_json::from_value(
+        json!({"id":"old","name":"Old","status":200,"headers":[],"body":"ok"}),
+    )
+    .unwrap();
+    assert!(serde_json::to_value(old).unwrap().get("delay_ms").is_none());
+    request.examples[0] = serde_json::from_value(
+        json!({"id":"e","name":"Too slow","status":202,"headers":[],"body":"ok","delay_ms":30001}),
+    )
+    .unwrap();
+    assert!(validate_request(&request, true).is_err());
+    assert!(
+        serde_json::from_value::<Example>(
+            json!({"id":"e","name":"Invalid","status":200,"headers":[],"body":"ok","delay_ms":-1})
+        )
+        .is_err()
+    );
+}
 #[test]
 fn canonical_specification_references_and_size_are_checked() {
     let mut r = request();

@@ -665,6 +665,7 @@ fn import_example(
         status: status as u16,
         mock_script: String::new(),
         mock_match: None,
+        delay_ms: 0,
         headers: response
             .headers
             .into_iter()
