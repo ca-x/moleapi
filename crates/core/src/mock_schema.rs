@@ -314,6 +314,99 @@ fn has_name_suggestion(
     Ok(false)
 }
 
+fn union_authored_candidate(
+    root: &Value,
+    origin: &Value,
+    schema: &Value,
+    composed: &Value,
+    depth: usize,
+    context: &mut GenerateContext,
+) -> Result<Option<Value>> {
+    context.nodes += 1;
+    ensure!(
+        depth <= MAX_DEPTH && context.nodes <= MAX_NODES,
+        "Mock schema union search budget exceeded"
+    );
+    let object = schema
+        .as_object()
+        .context("Mock schema node is not an object")?;
+    if let Some(pointer) = object.get("$ref").and_then(Value::as_str) {
+        let target = root
+            .pointer(&pointer[1..])
+            .context("Unresolved Mock schema reference")?;
+        return union_authored_candidate(root, origin, target, composed, depth + 1, context);
+    }
+    for key in ["const", "examples", "default", "enum"] {
+        let candidates: Vec<&Value> = match (key, object.get(key)) {
+            ("examples" | "enum", Some(Value::Array(values))) => values.iter().collect(),
+            (_, Some(value)) => vec![value],
+            _ => Vec::new(),
+        };
+        for candidate in candidates {
+            if valid_candidate(root, origin, candidate, context)?
+                && valid_candidate(root, composed, candidate, context)?
+            {
+                return Ok(Some(candidate.clone()));
+            }
+        }
+    }
+    for key in ["oneOf", "anyOf"] {
+        if let Some(branches) = object.get(key).and_then(Value::as_array) {
+            for branch in branches {
+                if let Some(value) =
+                    union_authored_candidate(root, origin, branch, composed, depth + 1, context)?
+                {
+                    return Ok(Some(value));
+                }
+            }
+        }
+    }
+    Ok(None)
+}
+
+fn union_name_candidate(
+    root: &Value,
+    origin: &Value,
+    schema: &Value,
+    composed: &Value,
+    name: &str,
+    depth: usize,
+    context: &mut GenerateContext,
+) -> Result<Option<Value>> {
+    context.nodes += 1;
+    ensure!(
+        depth <= MAX_DEPTH && context.nodes <= MAX_NODES,
+        "Mock schema union search budget exceeded"
+    );
+    let object = schema
+        .as_object()
+        .context("Mock schema node is not an object")?;
+    if let Some(pointer) = object.get("$ref").and_then(Value::as_str) {
+        let target = root
+            .pointer(&pointer[1..])
+            .context("Unresolved Mock schema reference")?;
+        return union_name_candidate(root, origin, target, composed, name, depth + 1, context);
+    }
+    if let Some(value) = name_suggestion(name, object)
+        && valid_candidate(root, origin, &value, context)?
+        && valid_candidate(root, composed, &value, context)?
+    {
+        return Ok(Some(value));
+    }
+    for key in ["oneOf", "anyOf"] {
+        if let Some(branches) = object.get(key).and_then(Value::as_array) {
+            for branch in branches {
+                if let Some(value) =
+                    union_name_candidate(root, origin, branch, composed, name, depth + 1, context)?
+                {
+                    return Ok(Some(value));
+                }
+            }
+        }
+    }
+    Ok(None)
+}
+
 fn insert_bounded(
     values: &mut Map<String, Value>,
     name: &str,
@@ -398,6 +491,32 @@ fn synthesize(
         .and_then(Value::as_array)
     {
         ensure!(depth < MAX_DEPTH, "Mock schema generation depth exceeded");
+        if context.infer_names {
+            for branch in branches {
+                if let Some(value) =
+                    union_authored_candidate(root, branch, branch, schema, depth + 1, context)?
+                {
+                    context.values.insert(schema_key, value.clone());
+                    return Ok(value);
+                }
+            }
+            if let Some(name) = name {
+                for branch in branches {
+                    if let Some(value) = union_name_candidate(
+                        root,
+                        branch,
+                        branch,
+                        schema,
+                        name,
+                        depth + 1,
+                        context,
+                    )? {
+                        context.values.insert(schema_key, value.clone());
+                        return Ok(value);
+                    }
+                }
+            }
+        }
         for branch in branches {
             let candidate = synthesize(root, branch, name, depth + 1, refs, context);
             ensure!(
@@ -880,5 +999,41 @@ mod tests {
             serde_json::json!({"$defs":{"deep":deep},"type":"object","properties":properties})
                 .to_string();
         assert!(generate_mock_schema_with_names(&source).is_err());
+    }
+
+    #[test]
+    fn union_names_beat_earlier_generic_branches_but_not_authored_values() {
+        for keyword in ["oneOf", "anyOf"] {
+            for branches in [
+                serde_json::json!([{"type":"integer"},{"type":"string"}]),
+                serde_json::json!([{"type":"string"},{"type":"integer"}]),
+            ] {
+                let mut union = Map::new();
+                union.insert(keyword.into(), branches);
+                let schema = serde_json::json!({"type":"object","properties":{"email":Value::Object(union)},"required":["email"]});
+                assert_eq!(
+                    serde_json::from_str::<Value>(
+                        &generate_mock_schema_with_names(&schema.to_string()).unwrap()
+                    )
+                    .unwrap(),
+                    serde_json::json!({"email":"ada@example.test"}),
+                    "{keyword}"
+                );
+            }
+        }
+        let authored = r#"{"type":"object","properties":{"email":{"oneOf":[{"type":"integer","const":7},{"type":"string"}]}},"required":["email"]}"#;
+        assert_eq!(
+            serde_json::from_str::<Value>(&generate_mock_schema_with_names(authored).unwrap())
+                .unwrap(),
+            serde_json::json!({"email":7})
+        );
+        let authored_later = r#"{"type":"object","properties":{"email":{"oneOf":[{"type":"integer"},{"type":"string","default":"saved@example.test"}]}},"required":["email"]}"#;
+        assert_eq!(
+            serde_json::from_str::<Value>(
+                &generate_mock_schema_with_names(authored_later).unwrap()
+            )
+            .unwrap(),
+            serde_json::json!({"email":"saved@example.test"})
+        );
     }
 }
