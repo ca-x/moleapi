@@ -67,8 +67,17 @@ fn scan(schema: &Value, path: &str, depth: usize, nodes: &mut usize) -> Result<(
         );
     }
     if object.contains_key("prefixItems") {
+        let array_type = match object.get("type") {
+            Some(Value::String(kind)) => kind == "array",
+            Some(Value::Array(types)) => {
+                types.len() == 2
+                    && types.iter().any(|value| value.as_str() == Some("null"))
+                    && types.iter().any(|value| value.as_str() == Some("array"))
+            }
+            _ => false,
+        };
         ensure!(
-            object.get("type").and_then(Value::as_str) == Some("array")
+            array_type
                 && object.keys().all(|key| {
                     matches!(
                         key.as_str(),
@@ -636,6 +645,7 @@ mod tests {
             r#""cat""#
         );
         assert_eq!(generate_mock_schema(r#"{"anyOf":[{"type":"string","minLength":3,"maxLength":2},{"type":"integer","minimum":4}]}"#).unwrap(),"4");
+        assert_eq!(generate_mock_schema(r##"{"$defs":{"bad":{"type":"string","minLength":3,"maxLength":2}},"anyOf":[{"$ref":"#/$defs/bad"},{"type":"integer","minimum":4}]}"##).unwrap(),"4");
         assert!(
             validate_mock_schema(
                 r#"{"oneOf":[{"type":"integer","minimum":0},{"type":"number","minimum":0}]}"#
@@ -659,6 +669,10 @@ mod tests {
         assert_eq!(
             generate_mock_schema(r#"{"type":["null","string"],"minLength":2}"#).unwrap(),
             r#""xx""#
+        );
+        assert_eq!(
+            generate_mock_schema(r#"{"type":["null","array"],"prefixItems":[{"type":"integer","const":3}],"minItems":1}"#).unwrap(),
+            "[3]"
         );
         assert_eq!(generate_mock_schema(r#"{"type":"array","prefixItems":[{"type":"string","const":"x"},{"type":"integer","minimum":2}],"items":false,"minItems":2,"maxItems":2}"#).unwrap(),r#"["x",2]"#);
         assert_eq!(generate_mock_schema(r#"{"type":"array","prefixItems":[{"type":"integer","const":1}],"items":{"type":"string","const":"a"},"minItems":3}"#).unwrap(),r#"[1,"a","a"]"#);
@@ -694,5 +708,28 @@ mod tests {
         ] {
             assert!(validate_mock_schema(source).is_err(), "{source}");
         }
+    }
+
+    #[test]
+    fn union_branch_failures_cannot_bypass_global_work_budgets() {
+        let mut properties = Map::new();
+        for index in 0..300 {
+            properties.insert(
+                index.to_string(),
+                serde_json::json!({"type":"integer","examples":["bad"]}),
+            );
+        }
+        let required: Vec<String> = properties.keys().cloned().collect();
+        let candidate_heavy = serde_json::json!({"anyOf":[{"type":"object","properties":properties,"required":required},{"type":"string","const":"ok"}]});
+        assert!(validate_mock_schema(&candidate_heavy.to_string()).is_err());
+
+        let node_heavy = serde_json::json!({"anyOf":[{"type":"array","minItems":10001,"items":{"type":"null"}},{"type":"string","const":"ok"}]});
+        assert!(validate_mock_schema(&node_heavy.to_string()).is_err());
+
+        let mut nested = serde_json::json!({"type":"string"});
+        for _ in 0..65 {
+            nested = serde_json::json!({"anyOf":[nested]});
+        }
+        assert!(validate_mock_schema(&nested.to_string()).is_err());
     }
 }
