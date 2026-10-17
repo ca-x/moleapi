@@ -360,8 +360,18 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
         );
         ensure!(example.body.len() <= MAX_BODY, "Example body exceeds 5 MiB");
         if !example.mock_schema.is_empty() {
-            crate::validate_mock_schema(&example.mock_schema)?;
+            if example.mock_name_inference {
+                crate::generate_mock_schema_with_names(&example.mock_schema)?;
+            } else {
+                crate::validate_mock_schema(&example.mock_schema)?;
+            }
         }
+        ensure!(
+            !example.mock_name_inference
+                || !example.mock_schema.is_empty()
+                || example.mock_schema_link.is_some(),
+            "Mock name inference requires a schema"
+        );
         ensure!(
             example.mock_schema.is_empty() || example.mock_schema_link.is_none(),
             "Inline and linked Mock schemas are mutually exclusive"
@@ -481,6 +491,7 @@ pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
     }
     let mut linked_indexes: HashMap<&str, OpenapiMockIndex> = HashMap::new();
     let mut linked_responses: HashMap<(&str, &str), OpenapiMockResponse> = HashMap::new();
+    let mut linked_name_checked: HashSet<(&str, &str)> = HashSet::new();
     let mut linked_examples = 0usize;
     let mut collections = HashSet::new();
     let mut requests = HashSet::new();
@@ -567,6 +578,11 @@ pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
                                 .eq_ignore_ascii_case(media)),
                         "Linked Mock Content-Type differs from selected response media"
                     );
+                    if e.mock_name_inference
+                        && linked_name_checked.insert((spec.id.as_str(), link.pointer.as_str()))
+                    {
+                        crate::generate_mock_schema_with_names(&selected.schema)?;
+                    }
                 }
                 ensure!(
                     e.mock_script.is_empty() || data.script_mode == crate::ScriptMode::V2,

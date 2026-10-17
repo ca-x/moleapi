@@ -2,6 +2,77 @@ mod common;
 use common::*;
 
 #[tokio::test]
+async fn public_mock_uses_saved_name_inference_without_exposing_schema_settings() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = hosted(config(
+        moleapi_server::sqlite_database_url(&dir.path().join("named-share.db")).unwrap(),
+        true,
+    ))
+    .await
+    .unwrap();
+    let owner = register(&router, "namedshareowner").await;
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["examples"][0]["mock_schema"] =
+        json!(r#"{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}"#);
+    data["collections"][0]["requests"][0]["examples"][0]["mock_name_inference"] = json!(true);
+    let (status, body) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        Some(&owner),
+        Some(json!({"id":"w","name":"W","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, share) = call(
+        &router,
+        "POST",
+        "/api/workspaces/w/mock-shares",
+        Some(&owner),
+        Some(json!({"request_id":"r","expires_in_days":1})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{share}");
+    let path = format!("/api/public/mock/{}/e", share["token"].as_str().unwrap());
+    assert_eq!(
+        call(&router, "GET", &path, None, None).await,
+        (StatusCode::CREATED, json!({"name":"Ada Lovelace"}))
+    );
+    let (_, mut saved) = call(&router, "GET", "/api/workspaces/w", Some(&owner), None).await;
+    saved["data"]["collections"][0]["requests"][0]["examples"][0]["mock_name_inference"] =
+        json!(false);
+    let (status, body) = call(
+        &router,
+        "PUT",
+        "/api/workspaces/w",
+        Some(&owner),
+        Some(json!({"name":"W","expected_revision":saved["revision"],"data":saved["data"]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        call(&router, "GET", &path, None, None).await.0,
+        StatusCode::NOT_FOUND
+    );
+    let (_, rotated) = call(
+        &router,
+        "POST",
+        &format!(
+            "/api/workspaces/w/mock-shares/{}/rotate",
+            share["id"].as_str().unwrap()
+        ),
+        Some(&owner),
+        None,
+    )
+    .await;
+    let next_path = format!("/api/public/mock/{}/e", rotated["token"].as_str().unwrap());
+    assert_eq!(
+        call(&router, "GET", &next_path, None, None).await,
+        (StatusCode::CREATED, json!({"name":""}))
+    );
+}
+
+#[tokio::test]
 async fn public_composed_mock_uses_bounded_schema_generation() {
     let dir = tempfile::tempdir().unwrap();
     let router = hosted(config(

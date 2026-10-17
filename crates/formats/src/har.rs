@@ -664,6 +664,7 @@ fn import_example(
         name: format!("HAR {status}"),
         status: status as u16,
         mock_schema: String::new(),
+        mock_name_inference: false,
         mock_schema_link: None,
         mock_script: String::new(),
         mock_match: None,

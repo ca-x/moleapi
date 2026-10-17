@@ -374,6 +374,7 @@ fn walk(
                     headers,
                     body: text(&response["body"]),
                     mock_schema: String::new(),
+                    mock_name_inference: false,
                     mock_schema_link: None,
                     mock_script: String::new(),
                     mock_match: None,

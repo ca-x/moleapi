@@ -121,6 +121,38 @@ async fn composed_schema_generates_the_same_direct_and_routed_tuple() {
 }
 
 #[tokio::test]
+async fn opted_in_name_inference_reaches_direct_and_routed_mock_without_changing_static_body() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("named-schema.db")).await.unwrap();
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["url"] = json!("https://example.test/items");
+    data["collections"][0]["requests"][0]["examples"][0]["body"] = json!("unchanged static body");
+    data["collections"][0]["requests"][0]["examples"][0]["mock_schema"] = json!(
+        r#"{"type":"object","properties":{"id":{"type":"integer"},"name":{"type":"string"}},"required":["id","name"]}"#
+    );
+    data["collections"][0]["requests"][0]["examples"][0]["mock_name_inference"] = json!(true);
+    let (status, body) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"w","name":"Named","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    for path in ["/api/mock/w/r/e", "/api/mocks/w/items"] {
+        assert_eq!(
+            call(&router, "GET", path, None, None).await,
+            (StatusCode::CREATED, json!({"id":1,"name":"Ada Lovelace"}))
+        );
+    }
+    let (_, saved) = call(&router, "GET", "/api/workspaces/w", None, None).await;
+    let example = &saved["data"]["collections"][0]["requests"][0]["examples"][0];
+    assert_eq!(example["body"], "unchanged static body");
+    assert_eq!(example["mock_name_inference"], true);
+}
+
+#[tokio::test]
 async fn linked_composed_response_preserves_component_schema_on_real_calls() {
     let dir = tempfile::tempdir().unwrap();
     let router = local(&dir.path().join("linked-composed.db")).await.unwrap();
@@ -128,7 +160,8 @@ async fn linked_composed_response_preserves_component_schema_on_real_calls() {
     data["collections"][0]["requests"][0]["url"] = json!("https://example.test/items");
     data["collections"][0]["requests"][0]["specification_id"] = json!("spec");
     data["collections"][0]["requests"][0]["examples"][0]["mock_schema_link"] = json!({"specification_id":"spec","pointer":"#/paths/~1items/get/responses/201/content/application~1json/schema"});
-    let source = json!({"openapi":"3.1.0","paths":{"/items":{"get":{"responses":{"201":{"content":{"application/json":{"schema":{"allOf":[{"type":"object","properties":{"id":{"$ref":"#/components/schemas/Id"}},"required":["id"]},{"type":"object","properties":{"name":{"type":"string","const":"Ada"}},"required":["name"]}]}}}}}}}},"components":{"schemas":{"Id":{"type":"integer","minimum":3}}}});
+    data["collections"][0]["requests"][0]["examples"][0]["mock_name_inference"] = json!(true);
+    let source = json!({"openapi":"3.1.0","paths":{"/items":{"get":{"responses":{"201":{"content":{"application/json":{"schema":{"allOf":[{"type":"object","properties":{"id":{"$ref":"#/components/schemas/Id"}},"required":["id"]},{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}]}}}}}}}},"components":{"schemas":{"Id":{"type":"integer","minimum":3}}}});
     data["specifications"] = json!([{"id":"spec","name":"Spec","kind":"openapi","dialect":"3.1.0","source":source.to_string()}]);
     let (status, body) = call(
         &router,
@@ -149,9 +182,33 @@ async fn linked_composed_response_preserves_component_schema_on_real_calls() {
         assert_eq!(response.headers()["content-type"], "application/json");
         assert_eq!(
             to_bytes(response.into_body(), 1024).await.unwrap().as_ref(),
-            br#"{"id":3,"name":"Ada"}"#
+            br#"{"id":3,"name":"Ada Lovelace"}"#
         );
     }
+}
+
+#[tokio::test]
+async fn linked_name_inference_rejects_conflicting_optional_values_at_save() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("linked-names-invalid.db"))
+        .await
+        .unwrap();
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["specification_id"] = json!("spec");
+    data["collections"][0]["requests"][0]["examples"][0]["status"] = json!(200);
+    data["collections"][0]["requests"][0]["examples"][0]["mock_schema_link"] = json!({"specification_id":"spec","pointer":"#/paths/~1items/get/responses/200/content/application~1json/schema"});
+    data["collections"][0]["requests"][0]["examples"][0]["mock_name_inference"] = json!(true);
+    let source = json!({"openapi":"3.1.0","paths":{"/items":{"get":{"responses":{"200":{"content":{"application/json":{"schema":{"allOf":[{"type":"object","properties":{"name":{"type":"string","const":"A"}}},{"type":"object","properties":{"name":{"type":"string"}}}]}}}}}}}}});
+    data["specifications"] = json!([{"id":"spec","name":"Spec","kind":"openapi","dialect":"3.1.0","source":source.to_string()}]);
+    let (status, body) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"w","name":"Invalid names","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
 }
 
 #[tokio::test]
