@@ -2,7 +2,7 @@ use crate::{
     ApiError, AppState, auth::Identity, execution, mock_logs, mock_public, workspaces::owned,
 };
 use axum::{
-    Extension,
+    Extension, Json,
     body::to_bytes,
     extract::{OriginalUri, Path, Request, State},
 };
@@ -10,8 +10,91 @@ use axum::{
     http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode},
     response::IntoResponse,
 };
+use serde::Deserialize;
 #[derive(Clone)]
 pub(crate) struct SavedExample;
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ValidateLinkedSchema {
+    request_id: String,
+    specification_id: String,
+    pointer: String,
+    expected_revision: i64,
+}
+
+pub async fn validate_linked_schema(
+    State(s): State<AppState>,
+    Extension(owner): Extension<Identity>,
+    Path(id): Path<String>,
+    Json(input): Json<ValidateLinkedSchema>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    if input.request_id.len() > 128
+        || input.specification_id.len() > 128
+        || input.pointer.len() > 4096
+    {
+        return Err(ApiError::bad(
+            "Linked Mock selection exceeds its size limit",
+        ));
+    }
+    let workspace = owned(&s, &owner.0, &id).await?;
+    if workspace.revision != input.expected_revision {
+        return Err(ApiError::conflict(
+            "Workspace changed before linked Mock validation",
+        ));
+    }
+    let request = workspace
+        .data
+        .collections
+        .iter()
+        .flat_map(|collection| &collection.requests)
+        .find(|request| request.id == input.request_id)
+        .ok_or_else(ApiError::not_found)?;
+    if request.protocol != moleapi_core::Protocol::Http
+        || request.specification_id.as_deref() != Some(input.specification_id.as_str())
+    {
+        return Err(ApiError::bad(
+            "Linked Mock source does not match HTTP request",
+        ));
+    }
+    let spec = workspace
+        .data
+        .specifications
+        .iter()
+        .find(|spec| spec.id == input.specification_id)
+        .ok_or_else(ApiError::not_found)?
+        .clone();
+    let method = request.method.clone();
+    let permit = s
+        .mock_schema_slots
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| ApiError {
+            status: StatusCode::TOO_MANY_REQUESTS,
+            message: "Mock schema generation capacity reached".into(),
+        })?;
+    let selected = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        moleapi_core::OpenapiMockIndex::parse(&spec)?.response_schema(&input.pointer)
+    })
+    .await
+    .map_err(|_| ApiError::internal())?
+    .map_err(|error| ApiError::bad(error.to_string()))?;
+    if selected.method != method {
+        return Err(ApiError::bad(
+            "Linked Mock operation method differs from saved request",
+        ));
+    }
+    let current = owned(&s, &owner.0, &id).await?;
+    if current.revision != workspace.revision {
+        return Err(ApiError::conflict(
+            "Workspace changed during linked Mock validation",
+        ));
+    }
+    Ok(Json(
+        serde_json::json!({"method":selected.method,"status":selected.status,"media_type":selected.media_type}),
+    ))
+}
 
 pub async fn mock(
     State(s): State<AppState>,

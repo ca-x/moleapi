@@ -144,6 +144,75 @@ async fn linked_openapi_schema_uses_current_saved_specification_for_direct_and_r
 }
 
 #[tokio::test]
+async fn linked_openapi_choice_validation_is_owner_scoped_and_rejects_unsupported_schema() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = hosted(config(
+        moleapi_server::sqlite_database_url(&dir.path().join("linked-choice.db")).unwrap(),
+        true,
+    ))
+    .await
+    .unwrap();
+    let owner = register(&router, "choiceowner").await;
+    let foreign = register(&router, "choiceother").await;
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["specification_id"] = json!("spec");
+    let source = |unsupported: bool| {
+        json!({"openapi":"3.1.0","paths":{"/items":{"get":{"responses":{"201":{"content":{"application/json":{"schema":if unsupported {json!({"type":"string","pattern":".*"})} else {json!({"type":"integer","minimum":3})}}}}}}}}}).to_string()
+    };
+    data["specifications"] = json!([{"id":"spec","name":"Spec","kind":"openapi","dialect":"3.1.0","source":source(false)}]);
+    let (status, saved) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        Some(&owner),
+        Some(json!({"id":"w","name":"W","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    let endpoint = "/api/workspaces/w/mock-schema/validate";
+    let input = json!({"request_id":"r","specification_id":"spec","pointer":"#/paths/~1items/get/responses/201/content/application~1json/schema","expected_revision":saved["revision"]});
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            endpoint,
+            Some(&foreign),
+            Some(input.clone())
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    let (status, result) = call(&router, "POST", endpoint, Some(&owner), Some(input.clone())).await;
+    assert_eq!(status, StatusCode::OK, "{result}");
+    assert_eq!(
+        result,
+        json!({"method":"GET","status":201,"media_type":"application/json"})
+    );
+    let mut changed = saved;
+    changed["data"]["specifications"][0]["source"] = json!(source(true));
+    let (status, updated) = call(
+        &router,
+        "PUT",
+        "/api/workspaces/w",
+        Some(&owner),
+        Some(json!({"name":"W","expected_revision":changed["revision"],"data":changed["data"]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{updated}");
+    assert_eq!(
+        call(&router, "POST", endpoint, Some(&owner), Some(input.clone()))
+            .await
+            .0,
+        StatusCode::CONFLICT
+    );
+    let mut current = input;
+    current["expected_revision"] = updated["revision"].clone();
+    let (status, invalid) = call(&router, "POST", endpoint, Some(&owner), Some(current)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{invalid}");
+}
+
+#[tokio::test]
 async fn saved_error_status_example_retains_body_and_headers() {
     let directory = tempfile::tempdir().unwrap();
     let router = common::local(&directory.path().join("errors.db"))

@@ -96,6 +96,10 @@ impl OpenapiMockIndex {
             .and_then(|media| media.get("schema"))
             .context("Linked Mock JSON schema is missing")?;
         let mut schema = if let Some(reference) = raw.get("$ref").and_then(Value::as_str) {
+            ensure!(
+                raw.as_object().is_some_and(|object| object.len() == 1),
+                "Linked Mock root reference siblings are unsupported"
+            );
             resolver.check_ref(reference, "#/components/schemas/")?;
             resolver.stack.push(reference.to_owned());
             let target = self
@@ -267,7 +271,6 @@ impl<'a> Resolver<'a> {
                         "uuid" | "email" | "date" | "date-time" | "uri" => {
                             output.insert("format".into(), value.clone());
                         }
-                        "int32" | "int64" | "float" | "double" => {}
                         _ => bail!("Unsupported linked Mock format {format}"),
                     }
                 }
@@ -394,6 +397,33 @@ components:
         assert!(
             index
                 .schema("#/paths/~1id/get/responses/200/content/text~1plain/schema")
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn root_reference_siblings_and_numeric_formats_reject_without_loss() {
+        let pointer = "#/paths/~1id/get/responses/200/content/application~1json/schema";
+        let mut document = serde_json::json!({"openapi":"3.1.0","paths":{"/id":{"get":{"responses":{"200":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/Id","minLength":5}}}}}}}},"components":{"schemas":{"Id":{"type":"string"}}}});
+        let spec = |value: &Value| Specification {
+            id: "s".into(),
+            name: "S".into(),
+            kind: "openapi".into(),
+            source: value.to_string(),
+            dialect: "3.1.0".into(),
+        };
+        assert!(
+            OpenapiMockIndex::parse(&spec(&document))
+                .unwrap()
+                .schema(pointer)
+                .is_err()
+        );
+        document["paths"]["/id"]["get"]["responses"]["200"]["content"]["application/json"]["schema"] =
+            serde_json::json!({"type":"integer","format":"int32"});
+        assert!(
+            OpenapiMockIndex::parse(&spec(&document))
+                .unwrap()
+                .schema(pointer)
                 .is_err()
         );
     }

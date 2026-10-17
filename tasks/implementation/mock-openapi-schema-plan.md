@@ -32,12 +32,13 @@
 
 ## Task 2: Current-source Mock generation and public capability fence
 
-**Files:** `crates/server/src/mock.rs`, `crates/server/src/mock_public.rs`, `crates/server/tests/mock.rs`, `crates/server/tests/mock_public.rs`, database test if needed.
+**Files:** `crates/server/src/{lib,mock,mock_public}.rs`, `crates/server/tests/mock.rs`, `crates/server/tests/mock_public.rs`, database test if needed.
 
 **Interfaces:** `serve_selected` resolves a linked example from its current workspace snapshot in the eight-slot blocking generation path. `request_digest` accepts the workspace and includes linked specification source only for requests that use it.
 
 - [ ] Write real direct/routed/public HTTP tests for current linked output, owner denial, script precedence, source edit/missing pointer, generic errors, stale/rotated public URL and cross-instance delayed-source edit.
 - [ ] Implement generation and digest fencing without static-body fallback; reuse existing response/header/log/delay behavior.
+- [ ] Expose owner-scoped validation for a selected pointer before the UI writes it; return method/status/media only and fence revision changes.
 - [ ] Run focused server suites and strict server Clippy; commit.
 
 ## Task 3: Backup and explicit UI selection
@@ -45,7 +46,7 @@
 **Files:** `crates/formats/src/lib.rs`, `crates/formats/src/redact.rs`, format tests, `web/src/shared/types.ts`, `web/src/features/requests/{RequestEditor,ExamplesEditor}.tsx`, UI tests, English/Chinese catalogs.
 
 - [ ] Add default/full backup and external rejection tests; add UI tests for operation without ID, JSON/YAML source, mode switching and retained static body.
-- [ ] Pass saved specifications to the examples editor, list exact response pointers and source labels, and keep the selection inside the mobile dialog. Clear linked mode in privacy backups and reject unsupported external mappings.
+- [ ] Pass saved specifications to the examples editor, list exact response pointers and source labels, validate a choice through the owner API before patching the draft, and keep the selection usable in the mobile request pane. Compare specification ID and pointer together. Clear linked mode in privacy backups and reject unsupported external mappings.
 - [ ] Run formats/frontend suites, production build and actual bilingual 390px save/reload/preview/real-call checks; commit.
 
 ## Task 4: Final evidence and shipping

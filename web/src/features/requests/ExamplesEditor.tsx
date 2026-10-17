@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { t, useLanguage } from "../../shared/i18n";
 import { Badge, Button, Card, Checkbox, Dialog, Flex, Select, Text, TextArea, TextField } from "@radix-ui/themes";
 import { Trash2 } from "lucide-react";
-import { native, previewMock, token } from "../../shared/api";
+import { api, native, previewMock, token } from "../../shared/api";
+import { safeMessage } from "../../shared/model";
 import { Editor, Field, PairEditor, ToolButton } from "../../shared/ui";
 import type { RequestSpec, Specification } from "../../shared/types";
 import MockCallActivity from "./MockCallActivity";
@@ -35,6 +36,7 @@ export default function ExamplesEditor({
   dark,
   asyncMock,
   workspaceId,
+  workspaceRevision,
   specifications = [],
   dirty = false,
 }: {
@@ -43,6 +45,7 @@ export default function ExamplesEditor({
   dark: boolean;
   asyncMock?: boolean;
   workspaceId?: string;
+  workspaceRevision?: number;
   specifications?: Specification[];
   dirty?: boolean;
 }) {
@@ -50,8 +53,13 @@ export default function ExamplesEditor({
   const [preview,setPreview]=useState<{scope:string;fingerprint:string;status:number;body:string}|null>(null);
   const [busy,setBusy]=useState("");
   const [error,setError]=useState("");
+  const [selectionError,setSelectionError]=useState<{id:string;message:string}|null>(null);
+  const [selectionBusy,setSelectionBusy]=useState("");
+  const selectionVersion=useRef(0);
   const linkedSpec=specifications.find(spec=>spec.id===request.specification_id&&spec.kind==="openapi");
   const linkedChoices=useMemo(()=>linkedSpec?openapiMockChoices(linkedSpec.source,request.method):[],[linkedSpec?.source,request.method]);
+  useEffect(()=>{selectionVersion.current++;setSelectionBusy("");},[request.id,linkedSpec?.source,workspaceRevision]);
+  const validLink=(example:RequestSpec["examples"][number])=>!!linkedSpec&&example.mock_schema_link?.specification_id===linkedSpec.id&&linkedChoices.some(choice=>choice.pointer===example.mock_schema_link?.pointer);
   const patchExample=(exampleId:string,patch:Partial<RequestSpec["examples"][number]>)=>{
     setPreview(null);setError("");
     update({examples:request.examples.map(item=>item.id===exampleId?{...item,...patch}:item)});
@@ -125,12 +133,21 @@ export default function ExamplesEditor({
           }}/></Field>
           <Editor value={example.body} readOnly dark={dark} height="150px" />
           {linkedSpec ? <Field label={t("Mock 正文来源")} hint={t("来源规范：{{name}}",{name:linkedSpec.name})}>
-            <Select.Root value={example.mock_schema_link?.pointer??(example.mock_schema?"inline":"static")} onValueChange={value=>{
+            <Select.Root value={example.mock_schema_link?(validLink(example)?example.mock_schema_link.pointer:"stale"):(example.mock_schema?"inline":"static")} onValueChange={value=>{
+              const version=++selectionVersion.current;
+              setSelectionError(null);
               if(value==="static")patchExample(example.id,{mock_schema:undefined,mock_schema_link:undefined});
               else if(value==="inline")patchExample(example.id,{mock_schema:example.mock_schema||'{"type":"object","properties":{}}',mock_schema_link:undefined});
-              else {
+              else if(value!=="stale") {
                 const chosen=linkedChoices.find(choice=>choice.pointer===value);
-                if(chosen)patchExample(example.id,{status:chosen.status,headers:example.headers.map(header=>header.enabled&&header.key.toLowerCase()==="content-type"?{...header,value:chosen.mediaType}:header),mock_schema:undefined,mock_schema_link:{specification_id:linkedSpec.id,pointer:value}});
+                if(!chosen)return;
+                if(!workspaceId||dirty||workspaceRevision===undefined){setSelectionError({id:example.id,message:t("先保存工作区，再选择关联响应。")});return;}
+                const identity=token();
+                setSelectionBusy(example.id);
+                void api<{method:string;status:number;media_type:string}>(`/api/workspaces/${encodeURIComponent(workspaceId)}/mock-schema/validate`,"POST",{request_id:request.id,specification_id:linkedSpec.id,pointer:value,expected_revision:workspaceRevision})
+                  .then(result=>{if(selectionVersion.current===version&&token()===identity)patchExample(example.id,{status:result.status,headers:example.headers.map(header=>header.enabled&&header.key.toLowerCase()==="content-type"?{...header,value:result.media_type}:header),mock_schema:undefined,mock_schema_link:{specification_id:linkedSpec.id,pointer:value}});})
+                  .catch(reason=>{if(selectionVersion.current===version&&token()===identity)setSelectionError({id:example.id,message:t("无法使用所选响应 Schema：{{reason}}",{reason:safeMessage(reason)})});})
+                  .finally(()=>{if(selectionVersion.current===version&&token()===identity)setSelectionBusy("");});
               }
             }}>
               <Select.Trigger aria-label={t("Mock 正文来源")} />
@@ -138,12 +155,14 @@ export default function ExamplesEditor({
                 <Select.Item value="static">{t("已保存的静态正文")}</Select.Item>
                 <Select.Item value="inline">{t("内联 JSON Schema")}</Select.Item>
                 {linkedChoices.map(choice=><Select.Item key={choice.pointer} value={choice.pointer}>{choice.label}</Select.Item>)}
-                {example.mock_schema_link&&!linkedChoices.some(choice=>choice.pointer===example.mock_schema_link?.pointer)&&<Select.Item value={example.mock_schema_link.pointer}>{t("已关联的响应不可用")}</Select.Item>}
+                {example.mock_schema_link&&!validLink(example)&&<Select.Item value="stale">{t("已关联的响应不可用")}</Select.Item>}
               </Select.Content>
             </Select.Root>
           </Field> : <Text as="label" size="2"><Checkbox checked={!!example.mock_schema} onCheckedChange={checked=>patchExample(example.id,{mock_schema:checked===true?'{"type":"object","properties":{}}':undefined,mock_schema_link:undefined})}/> {t("根据 JSON Schema 生成 Mock 正文")}</Text>}
           {linkedSpec&&linkedChoices.length===0&&<Text size="1" color="gray">{t("规范中没有可选的 JSON 响应。")}</Text>}
-          {example.mock_schema_link&&!linkedSpec&&<><Text role="alert" size="1" color="red">{t("关联的 OpenAPI 规范不可用；请选择静态正文或内联 Schema。")}</Text><Button variant="soft" color="gray" onClick={()=>patchExample(example.id,{mock_schema_link:undefined})}>{t("清除 Schema 关联")}</Button></>}
+          {example.mock_schema_link&&!validLink(example)&&<><Text role="alert" size="1" color="red">{linkedSpec?t("关联的响应与当前规范不匹配；请重新选择。") :t("关联的 OpenAPI 规范不可用；请选择静态正文或内联 Schema。")}</Text><Button variant="soft" color="gray" onClick={()=>patchExample(example.id,{mock_schema_link:undefined})}>{t("清除 Schema 关联")}</Button></>}
+          {selectionBusy===example.id&&<Text size="1" color="gray">{t("正在校验关联响应…")}</Text>}
+          {selectionError?.id===example.id&&<Text role="alert" size="1" color="red">{selectionError.message}</Text>}
           {!!example.mock_schema && <SchemaEditorDialog schema={example.mock_schema} dark={dark} onCommit={mock_schema=>patchExample(example.id,{mock_schema})}/>}
           {workspaceId && <Text as="p" size="1" color="gray" style={{overflowWrap:"anywhere"}}>{t("Mock 地址")}: <code>{`/api/mock/${encodeURIComponent(workspaceId)}/${encodeURIComponent(request.id)}/${encodeURIComponent(example.id)}`}</code></Text>}
           {workspaceId && routePath && <Text as="p" size="1" color="gray" style={{overflowWrap:"anywhere"}}>{t("匹配路由")}: <code>{`${request.method} /api/mocks/${encodeURIComponent(workspaceId)}${routePath}`}</code></Text>}
