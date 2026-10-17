@@ -4,6 +4,7 @@ mod auth;
 mod ci;
 mod cookies;
 mod credential_revocations;
+mod data_datasets;
 mod dubbo;
 mod entities;
 mod execution;

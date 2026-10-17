@@ -1,4 +1,5 @@
 mod common;
+use base64::{Engine, engine::general_purpose::STANDARD};
 use common::*;
 use std::sync::{Arc, Mutex};
 fn definition(enabled: bool) -> Value {
@@ -117,6 +118,59 @@ async fn cron_executes_saved_scenario_environment_dataset_and_saves_a_private_re
     assert_eq!(status, StatusCode::OK);
     assert_eq!(saved["summary"]["iteration_count"], 2);
     assert_eq!(&observed.lock().unwrap()[..2], &["first", "second"]);
+    let (_, mut current) = call(&router, "GET", "/api/workspaces/w", None, None).await;
+    let revision = current["revision"].clone();
+    let mut query = current["data"]["collections"][0]["requests"][0].clone();
+    query["id"] = "data-query".into();
+    query["url"] = "".into();
+    query["headers"] = json!([]);
+    query["protocol"] = json!({"kind":"data","source":"local_file","file_name":"scheduled.csv","file_format":"csv","file_base64":STANDARD.encode(b"value\nfresh-one\nfresh-two\n"),"table_name":"data","sql":"SELECT value FROM data","read_only":true});
+    current["data"]["collections"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"id":"sources","name":"Sources","description":"","requests":[query]}));
+    current["data"]["datasets"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"id":"fresh","name":"Fresh","query":{"request_id":"data-query"}}));
+    let (status, updated) = call(
+        &router,
+        "PUT",
+        "/api/workspaces/w",
+        None,
+        Some(json!({"name":"Cron","expected_revision":revision,"data":current["data"]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{updated}");
+    let mut live = definition(false);
+    live["dataset_id"] = "fresh".into();
+    live["environment_id"] = "dev".into();
+    let (status, schedule) = call(
+        &router,
+        "POST",
+        "/api/workspaces/w/schedules",
+        None,
+        Some(live),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{schedule}");
+    let id = schedule["id"].as_str().unwrap();
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            &format!("/api/workspaces/w/schedules/{id}/run"),
+            None,
+            None
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let done = completed(&router, id).await;
+    assert_eq!(done["last_run"]["status"], "passed", "{done}");
+    assert_eq!(done["last_run"]["passed"], 2);
+    assert_eq!(&observed.lock().unwrap()[2..4], &["fresh-one", "fresh-two"]);
     fixture.abort();
 }
 #[tokio::test]

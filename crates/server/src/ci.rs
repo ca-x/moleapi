@@ -89,21 +89,25 @@ pub async fn generate(
         return Err(ApiError::not_found());
     }
     if let Some(id) = &config.dataset {
-        let source = workspace
+        let saved = workspace
             .data
             .datasets
             .iter()
             .find(|value| value.id == *id)
-            .and_then(|value| value.source.as_ref())
             .ok_or_else(|| ApiError::bad("Saved dataset source is missing"))?;
-        let parsed = source
-            .parse()
-            .map_err(|error| ApiError::bad(error.to_string()))?;
-        if config
-            .iterations
-            .is_some_and(|count| usize::from(count) > parsed.rows.len())
-        {
-            return Err(ApiError::bad("Iterations exceed selected dataset rows"));
+        if saved.query.is_none() {
+            let parsed = saved
+                .source
+                .as_ref()
+                .ok_or_else(|| ApiError::bad("Saved dataset source is missing"))?
+                .parse()
+                .map_err(|error| ApiError::bad(error.to_string()))?;
+            if config
+                .iterations
+                .is_some_and(|count| usize::from(count) > parsed.rows.len())
+            {
+                return Err(ApiError::bad("Iterations exceed selected dataset rows"));
+            }
         }
         if matches!(config.source, Source::File { .. }) {
             let exported = moleapi_formats::export(&workspace, "moleapi", false)
@@ -114,7 +118,7 @@ pub async fn generate(
                 .data
                 .datasets
                 .iter()
-                .any(|value| value.id == *id && value.source.is_some())
+                .any(|value| value.id == *id && (value.source.is_some() || value.query.is_some()))
             {
                 return Err(ApiError::bad(
                     "Dataset source is withheld by private export; supply a prepared repository data file",

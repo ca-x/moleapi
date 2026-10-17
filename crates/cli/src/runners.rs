@@ -264,7 +264,25 @@ async fn task(
     let path = ["workspaces", claim.workspace.id.as_str(), "run"];
     let run = local.request("POST", &path, &[], Some(body));
     tokio::pin!(run);
-    let mut heartbeat = tokio::time::interval(Duration::from_secs(20));
+    let live_dataset = selection.dataset_id.as_ref().is_some_and(|id| {
+        claim
+            .workspace
+            .data
+            .datasets
+            .iter()
+            .any(|dataset| dataset.id == *id && dataset.query.is_some())
+    });
+    let heartbeat_period = if live_dataset {
+        Duration::from_secs(1)
+    } else {
+        Duration::from_secs(20)
+    };
+    let heartbeat_timeout = if live_dataset {
+        Duration::from_secs(2)
+    } else {
+        Duration::from_secs(10)
+    };
+    let mut heartbeat = tokio::time::interval(heartbeat_period);
     heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     heartbeat.tick().await;
     let interrupted = loop {
@@ -276,7 +294,7 @@ async fn task(
             }
             _ = heartbeat.tick() => {
                 let lease = json!({"lease_token":claim.lease_token});
-                if control(remote, &["runners",runner,"tasks",&claim.task.id,"heartbeat"], Some(lease)).await.is_err() { break false; }
+                if !matches!(tokio::time::timeout(heartbeat_timeout,remote.request("POST", &["runners",runner,"tasks",&claim.task.id,"heartbeat"],&[],Some(lease))).await, Ok(Ok(_))) { break false; }
             }
         }
     };

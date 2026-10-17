@@ -22,6 +22,13 @@ pub struct SavedDataset {
     pub secret: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<DatasetSource>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query: Option<SavedQueryDataset>,
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SavedQueryDataset {
+    pub request_id: String,
 }
 fn dataset_secret() -> bool {
     true
@@ -41,6 +48,19 @@ pub fn validate_saved_datasets(datasets: &[SavedDataset]) -> Result<()> {
                 && dataset.description.len() <= 4096,
             "Invalid dataset name or description"
         );
+        ensure!(
+            dataset.source.is_none() || dataset.query.is_none(),
+            "Dataset cannot have both a literal source and a Data query"
+        );
+        if let Some(query) = &dataset.query {
+            ensure!(dataset.secret, "Data query datasets must be private");
+            ensure!(
+                !query.request_id.is_empty()
+                    && query.request_id.len() <= 128
+                    && !query.request_id.chars().any(char::is_control),
+                "Invalid Data query request ID"
+            );
+        }
         if let Some(source) = &dataset.source {
             bytes = bytes.saturating_add(source.source.len());
             ensure!(
@@ -198,7 +218,7 @@ mod tests {
     fn saved_dataset_metadata_and_original_source_are_backward_compatible() {
         let value: SavedDataset =
             serde_json::from_str(r#"{"id":"d","name":"Missing source"}"#).unwrap();
-        assert!(value.secret && value.source.is_none());
+        assert!(value.secret && value.source.is_none() && value.query.is_none());
         validate_saved_datasets(std::slice::from_ref(&value)).unwrap();
         assert!(validate_saved_datasets(&[value.clone(), value]).is_err());
         let source = "value\n\"line\nnext\"\n";
@@ -211,11 +231,29 @@ mod tests {
                 format: "csv".into(),
                 source: source.into(),
             }),
+            query: None,
         };
         validate_saved_datasets(std::slice::from_ref(&value)).unwrap();
         let restored: SavedDataset =
             serde_json::from_str(&serde_json::to_string(&value).unwrap()).unwrap();
         assert_eq!(restored.source.unwrap().source, source);
+    }
+    #[test]
+    fn query_source_is_private_and_exclusive() {
+        let dataset: SavedDataset = serde_json::from_str(
+            r#"{"id":"d","name":"Fresh","query":{"request_id":"data-request"}}"#,
+        )
+        .unwrap();
+        validate_saved_datasets(std::slice::from_ref(&dataset)).unwrap();
+        assert_eq!(dataset.query.unwrap().request_id, "data-request");
+        for invalid in [
+            r#"{"id":"d","name":"Fresh","secret":false,"query":{"request_id":"data-request"}}"#,
+            r#"{"id":"d","name":"Fresh","query":{"request_id":""}}"#,
+            r#"{"id":"d","name":"Fresh","query":{"request_id":"data-request"},"source":{"format":"json","source":"[{}]"}}"#,
+        ] {
+            let value: SavedDataset = serde_json::from_str(invalid).unwrap();
+            assert!(validate_saved_datasets(&[value]).is_err());
+        }
     }
     #[test]
     fn datasets_parse_csv_quotes_and_typed_json() {
