@@ -375,6 +375,7 @@ fn walk(
                     body: text(&response["body"]),
                     mock_script: String::new(),
                     mock_match: None,
+                    delay_ms: 0,
                 });
             }
         }

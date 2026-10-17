@@ -493,6 +493,24 @@ async fn serve_selected(
         draft.body,
     )
         .into_response();
+    if e.delay_ms > 0 {
+        if e.delay_ms > 30_000 {
+            return Err(ApiError::bad("Mock delay exceeds 30000 ms"));
+        }
+        let _permit = s
+            .mock_delay_slots
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| ApiError {
+                status: StatusCode::TOO_MANY_REQUESTS,
+                message: "Delayed Mock capacity reached".into(),
+            })?;
+        tokio::time::sleep(std::time::Duration::from_millis(e.delay_ms)).await;
+        let current = owned(s, owner, &w.id).await?;
+        if current.revision != w.revision {
+            return Err(ApiError::conflict("Workspace changed during Mock delay"));
+        }
+    }
     response.extensions_mut().insert(SavedExample);
     Ok(response)
 }
