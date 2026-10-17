@@ -56,13 +56,15 @@ export default function ExamplesEditor({
   const [selectionError,setSelectionError]=useState<{id:string;message:string}|null>(null);
   const [selectionBusy,setSelectionBusy]=useState("");
   const selectionVersion=useRef(0);
+  const latestRequest=useRef(request);
+  latestRequest.current=request;
   const linkedSpec=specifications.find(spec=>spec.id===request.specification_id&&spec.kind==="openapi");
   const linkedChoices=useMemo(()=>linkedSpec?openapiMockChoices(linkedSpec.source,request.method):[],[linkedSpec?.source,request.method]);
-  useEffect(()=>{selectionVersion.current++;setSelectionBusy("");},[request.id,linkedSpec?.source,workspaceRevision]);
+  useEffect(()=>{selectionVersion.current++;setSelectionBusy("");},[request.id,request.method,request.specification_id,linkedSpec?.source,workspaceRevision]);
   const validLink=(example:RequestSpec["examples"][number])=>!!linkedSpec&&example.mock_schema_link?.specification_id===linkedSpec.id&&linkedChoices.some(choice=>choice.pointer===example.mock_schema_link?.pointer);
   const patchExample=(exampleId:string,patch:Partial<RequestSpec["examples"][number]>)=>{
     setPreview(null);setError("");
-    update({examples:request.examples.map(item=>item.id===exampleId?{...item,...patch}:item)});
+    update({examples:latestRequest.current.examples.map(item=>item.id===exampleId?{...item,...patch}:item)});
   };
   let routePath="";
   let routeHasQuery=request.query.some(row=>row.enabled);
@@ -145,7 +147,7 @@ export default function ExamplesEditor({
                 const identity=token();
                 setSelectionBusy(example.id);
                 void api<{method:string;status:number;media_type:string}>(`/api/workspaces/${encodeURIComponent(workspaceId)}/mock-schema/validate`,"POST",{request_id:request.id,specification_id:linkedSpec.id,pointer:value,expected_revision:workspaceRevision})
-                  .then(result=>{if(selectionVersion.current===version&&token()===identity)patchExample(example.id,{status:result.status,headers:example.headers.map(header=>header.enabled&&header.key.toLowerCase()==="content-type"?{...header,value:result.media_type}:header),mock_schema:undefined,mock_schema_link:{specification_id:linkedSpec.id,pointer:value}});})
+                  .then(result=>{if(selectionVersion.current===version&&token()===identity&&latestRequest.current.method===request.method&&latestRequest.current.specification_id===linkedSpec.id){const current=latestRequest.current.examples.find(item=>item.id===example.id);if(current)patchExample(example.id,{status:result.status,headers:current.headers.map(header=>header.enabled&&header.key.toLowerCase()==="content-type"?{...header,value:result.media_type}:header),mock_schema:undefined,mock_schema_link:{specification_id:linkedSpec.id,pointer:value}});}})
                   .catch(reason=>{if(selectionVersion.current===version&&token()===identity)setSelectionError({id:example.id,message:t("无法使用所选响应 Schema：{{reason}}",{reason:safeMessage(reason)})});})
                   .finally(()=>{if(selectionVersion.current===version&&token()===identity)setSelectionBusy("");});
               }

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import {cleanup,fireEvent,render,screen,waitFor} from "@testing-library/react";
+import {act,cleanup,fireEvent,render,screen,waitFor} from "@testing-library/react";
 import {Theme} from "@radix-ui/themes";
 import {afterEach,expect,it,vi} from "vitest";
 import {setLanguage} from "../../shared/i18n";
@@ -115,6 +115,35 @@ it("shows a stale link when the request switches to a different specification wi
   expect(screen.getByRole("alert").textContent).toContain("does not match this specification");
   fireEvent.click(screen.getByRole("button",{name:"Clear schema link"}));
   expect(update.mock.lastCall?.[0].examples[0].mock_schema_link).toBeUndefined();
+});
+
+it("keeps newer example edits while linked-response validation is pending",async()=>{
+  vi.stubGlobal("ResizeObserver",class {observe(){} unobserve(){} disconnect(){}});
+  HTMLElement.prototype.scrollIntoView=()=>{};
+  await setLanguage("en");
+  const request=newRequest("R","https://example.test/items");
+  request.specification_id="spec";
+  request.examples=[{id:"e",name:"Before",status:200,headers:[{id:"h",key:"Content-Type",value:"text/plain",enabled:true}],body:"static"}];
+  const source=JSON.stringify({openapi:"3.1.0",paths:{"/items":{get:{responses:{"200":{content:{"application/json":{schema:{type:"string"}}}}}}}}});
+  const specifications=[{id:"spec",name:"Spec",kind:"openapi",source,dialect:"3.1.0"}];
+  let resolveValidation!:(value:{method:string;status:number;media_type:string})=>void;
+  api.mockImplementation(()=>new Promise(resolve=>{resolveValidation=resolve;}));
+  const update=vi.fn();
+  const page=render(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w" workspaceRevision={1} specifications={specifications}/></Theme>);
+  fireEvent.click(screen.getByRole("combobox",{name:"Mock body source"}));
+  fireEvent.click(screen.getByRole("option",{name:/GET \/items · 200 application\/json/}));
+  const updatedRequest={...request,examples:[{...request.examples[0],name:"After",headers:[{...request.examples[0].headers[0],value:"text/html"}]}]};
+  page.rerender(<Theme><ExamplesEditor request={updatedRequest} update={update} dark={false} workspaceId="w" workspaceRevision={1} specifications={specifications}/></Theme>);
+  await act(async()=>resolveValidation({method:"GET",status:200,media_type:"application/json"}));
+  await waitFor(()=>expect(update).toHaveBeenCalled());
+  expect(update.mock.lastCall?.[0].examples[0]).toMatchObject({name:"After",headers:[{value:"application/json"}]});
+  let resolveSecond!:(value:{method:string;status:number;media_type:string})=>void;
+  api.mockImplementation(()=>new Promise(resolve=>{resolveSecond=resolve;}));
+  fireEvent.click(screen.getByRole("combobox",{name:"Mock body source"}));
+  fireEvent.click(screen.getByRole("option",{name:/GET \/items · 200 application\/json/}));
+  page.rerender(<Theme><ExamplesEditor request={{...updatedRequest,method:"POST"}} update={update} dark={false} workspaceId="w" workspaceRevision={1} specifications={specifications}/></Theme>);
+  await act(async()=>resolveSecond({method:"GET",status:200,media_type:"application/json"}));
+  expect(update).toHaveBeenCalledTimes(1);
 });
 
 it("shows the mock editor in Chinese",async()=>{
