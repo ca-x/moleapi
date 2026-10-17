@@ -158,6 +158,7 @@ pub(super) fn import(content: &str) -> Result<ImportResult> {
                                         .into(),
                                     status,
                                     headers: vec![pair("Content-Type", mime)],
+                                    mock_script: String::new(),
                                     body: if mime.contains("json") {
                                         serde_json::to_string_pretty(example)?
                                     } else {

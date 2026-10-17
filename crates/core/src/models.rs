@@ -51,6 +51,8 @@ pub struct Example {
     pub status: u16,
     pub headers: Vec<Pair>,
     pub body: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub mock_script: String,
 }
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "lowercase")]
@@ -253,8 +255,22 @@ pub struct Environment {
     pub name: String,
     pub variables: Vec<Pair>,
 }
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScriptMode {
+    #[default]
+    V1,
+    V2,
+}
+impl ScriptMode {
+    pub fn is_v1(&self) -> bool {
+        *self == Self::V1
+    }
+}
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct WorkspaceData {
+    #[serde(default, skip_serializing_if = "ScriptMode::is_v1")]
+    pub script_mode: ScriptMode,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub scenarios: Vec<crate::Scenario>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

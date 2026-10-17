@@ -52,16 +52,53 @@ fn compatibility_defaults_preserve_old_workspace_and_request_documents() {
     )
     .unwrap();
     assert!(w.specifications.is_empty());
+    assert_eq!(w.script_mode, ScriptMode::V1);
+    let mut async_workspace = w.clone();
+    async_workspace.script_mode = ScriptMode::V2;
+    let restored: WorkspaceData =
+        serde_json::from_value(serde_json::to_value(&async_workspace).unwrap()).unwrap();
+    assert_eq!(restored.script_mode, ScriptMode::V2);
+    assert!(
+        serde_json::from_value::<WorkspaceData>(
+            json!({"schema_version":1,"collections":[],"environments":[],"script_mode":"v3"})
+        )
+        .is_err()
+    );
     let r = request();
     assert!(r.specification_id.is_none());
     assert!(r.operation_id.is_none());
     assert!(validate_workspace(&w).is_ok());
 }
 #[test]
+fn mock_implementation_scripts_require_explicit_v2_mode() {
+    let mut request = request();
+    request.examples.push(serde_json::from_value(json!({"id":"mock","name":"Dynamic","status":200,"headers":[],"body":"static","mock_script":"pm.mock.setBody('dynamic')"})).unwrap());
+    let mut workspace: WorkspaceData = serde_json::from_value(
+        json!({"schema_version":1,"collections":[],"environments":[],"active_environment_id":null}),
+    )
+    .unwrap();
+    workspace.collections.push(Collection {
+        id: "c".into(),
+        name: "C".into(),
+        description: String::new(),
+        parent_id: None,
+        variables_enabled: None,
+        auth: None,
+        variables: vec![],
+        pre_request_script: String::new(),
+        post_response_script: String::new(),
+        requests: vec![request],
+    });
+    assert!(validate_workspace(&workspace).is_err());
+    workspace.script_mode = ScriptMode::V2;
+    validate_workspace(&workspace).unwrap();
+}
+#[test]
 fn canonical_specification_references_and_size_are_checked() {
     let mut r = request();
     r.specification_id = Some("spec".into());
     let mut w = WorkspaceData {
+        script_mode: ScriptMode::V1,
         scenarios: vec![],
         datasets: vec![],
         auth: None,

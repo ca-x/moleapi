@@ -557,6 +557,7 @@ async fn save_data_completion(
     } else {
         execution::postprocess_data(
             &context.state,
+            &context.owner,
             &context.workspace,
             collection,
             &context.prepared_request,
@@ -725,7 +726,7 @@ async fn send_scripted_data_query(
             let _ = s.protocol_sessions.data_event(owner, id, EventMessage::DataCancelled { query_id, write_outcome_unknown:false });
             return Ok(());
         }
-        outcome = execution::prepare_data_query(s, &context.prepared_request, &selected_sql, read_only, &mut scopes) => outcome,
+        outcome = execution::prepare_data_query(s, owner, &context.workspace, &context.prepared_request, &selected_sql, read_only, &mut scopes) => outcome,
     };
     let prepared = match prepared {
         Ok(prepared) => prepared,

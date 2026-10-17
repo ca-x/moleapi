@@ -73,3 +73,185 @@ async fn saved_error_status_example_retains_body_and_headers() {
         b"custom mock failure"
     );
 }
+#[tokio::test]
+async fn dynamic_mock_queries_owned_dataset_and_sees_only_safe_incoming_request_fields() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("dynamic.db")).await.unwrap();
+    let mut data = example_data();
+    data["script_mode"] = json!("v2");
+    data["datasets"] = json!([{"id":"d","name":"Rows","source":{"format":"json","source":"[{\"value\":\"dynamic\"}]"}}]);
+    data["collections"][0]["requests"][0]["examples"][0]["mock_script"] = json!(
+        "if(!pm.request.url.includes('safe=yes')||pm.request.url.includes('token=hidden')||pm.request.headers.get('cookie')!==undefined||pm.request.headers.get('x-hop')!==undefined||pm.request.headers.get('x-safe')!=='visible')throw new Error('unsafe incoming Mock request');const result=await pm.datasets('d').executeQuery('SELECT value FROM data');for await(const row of result.rows){pm.mock.setStatus(202);pm.mock.setHeader('x-row',row.value);pm.mock.setBody({value:row.value});}"
+    );
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            None,
+            Some(json!({"id":"w","name":"Dynamic","data":data}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/mock/w/r/e?safe=yes&token=hidden")
+                .header("cookie", "private-cookie")
+                .header("connection", "X-Hop")
+                .header("x-hop", "private-hop")
+                .header("x-safe", "visible")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    assert_eq!(response.headers()["x-row"], "dynamic");
+    assert_eq!(
+        to_bytes(response.into_body(), 1024).await.unwrap().as_ref(),
+        b"{\"value\":\"dynamic\"}"
+    );
+    let (_, mut saved) = call(&router, "GET", "/api/workspaces/w", None, None).await;
+    for script in [
+        "pm.request.url='http://evil.test';pm.mock.setBody('leak');",
+        "pm.mock.setHeader('bad name','leak');",
+    ] {
+        saved["data"]["collections"][0]["requests"][0]["examples"][0]["mock_script"] =
+            json!(script);
+        let (status,updated)=call(&router,"PUT","/api/workspaces/w",None,Some(json!({"name":"Dynamic","expected_revision":saved["revision"],"data":saved["data"]}))).await;
+        assert_eq!(status, StatusCode::OK, "{updated}");
+        saved = updated;
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/mock/w/r/e")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = to_bytes(response.into_body(), 1024).await.unwrap();
+        assert!(!String::from_utf8_lossy(&body).contains("leak"));
+    }
+}
+#[tokio::test]
+async fn dynamic_mock_loads_query_backed_dataset_through_host_bridge() {
+    use base64::Engine;
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("dynamic-live.db")).await.unwrap();
+    let mut data = example_data();
+    data["script_mode"] = json!("v2");
+    let mut source = data["collections"][0]["requests"][0].clone();
+    source["id"] = json!("data-query");
+    source["url"] = json!("");
+    source["protocol"] = json!({"kind":"data","source":"local_file","file_name":"rows.csv","file_format":"csv","file_base64":base64::engine::general_purpose::STANDARD.encode(b"value\nlive-private\n"),"table_name":"data","sql":"SELECT value FROM data","read_only":true});
+    data["collections"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"id":"sources","name":"Sources","description":"","requests":[source]}));
+    data["datasets"] = json!([{"id":"live","name":"Live","query":{"request_id":"data-query"}}]);
+    data["collections"][0]["requests"][0]["examples"][0]["mock_script"] = json!(
+        "const result=await pm.datasets('live').executeQuery('SELECT value FROM data');for await(const row of result.rows)pm.mock.setBody(row.value);"
+    );
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            None,
+            Some(json!({"id":"w","name":"Dynamic","data":data}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/mock/w/r/e")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    assert_eq!(
+        to_bytes(response.into_body(), 1024).await.unwrap().as_ref(),
+        b"live-private"
+    );
+    let (_, mut saved) = call(&router, "GET", "/api/workspaces/w", None, None).await;
+    saved["data"]["collections"][0]["requests"][0]["examples"][0]["mock_script"] = json!(
+        "const result=await pm.datasets('live').executeQuery('SELECT value FROM data');for await(const row of result.rows)throw new Error(row.value);"
+    );
+    let (status, updated) = call(
+        &router,
+        "PUT",
+        "/api/workspaces/w",
+        None,
+        Some(json!({"name":"Dynamic","expected_revision":saved["revision"],"data":saved["data"]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{updated}");
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/mock/w/r/e")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert!(
+        !String::from_utf8_lossy(&to_bytes(response.into_body(), 1024).await.unwrap())
+            .contains("live-private")
+    );
+}
+#[tokio::test]
+async fn hosted_dynamic_mock_does_not_cross_workspace_owners() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = hosted(config(
+        format!(
+            "sqlite://{}?mode=rwc",
+            dir.path().join("hosted.db").display()
+        ),
+        true,
+    ))
+    .await
+    .unwrap();
+    let alice = register(&router, "mockalice").await;
+    let bob = register(&router, "mockbobby").await;
+    let mut data = example_data();
+    data["script_mode"] = json!("v2");
+    data["collections"][0]["requests"][0]["examples"][0]["mock_script"] =
+        json!("pm.mock.setBody('owner-only');");
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            Some(&alice),
+            Some(json!({"id":"w","name":"W","data":data}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        call(&router, "GET", "/api/mock/w/r/e", Some(&bob), None)
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+    let (status, result) = call(&router, "GET", "/api/mock/w/r/e", Some(&alice), None).await;
+    assert_eq!(status, StatusCode::CREATED, "{result}");
+    assert_eq!(result["raw"], "owner-only");
+}

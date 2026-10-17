@@ -355,6 +355,7 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
             "Example status must be 200–599"
         );
         ensure!(example.body.len() <= MAX_BODY, "Example body exceeds 5 MiB");
+        validate_script(&example.mock_script)?;
         for h in example.headers.iter().filter(|h| h.enabled) {
             if !templates || !h.key.contains("{{") {
                 HeaderName::from_bytes(h.key.as_bytes()).context("Invalid example header")?;
@@ -441,6 +442,10 @@ pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
             }
             let mut examples = HashSet::new();
             for e in &r.examples {
+                ensure!(
+                    e.mock_script.is_empty() || data.script_mode == crate::ScriptMode::V2,
+                    "Mock implementation scripts require compatibility v2"
+                );
                 ensure!(
                     !e.id.is_empty() && examples.insert(&e.id),
                     "Example IDs must be unique and nonempty"
