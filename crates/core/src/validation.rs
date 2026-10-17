@@ -1,7 +1,7 @@
 use crate::*;
 use anyhow::{Context, Result, bail, ensure};
 use reqwest::header::{HeaderName, HeaderValue};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
     crate::validate_extractions(&r.extractions)?;
     crate::validate_a2a(r, templates)?;
@@ -362,6 +362,10 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
         if !example.mock_schema.is_empty() {
             crate::validate_mock_schema(&example.mock_schema)?;
         }
+        ensure!(
+            example.mock_schema.is_empty() || example.mock_schema_link.is_none(),
+            "Inline and linked Mock schemas are mutually exclusive"
+        );
         validate_script(&example.mock_script)?;
         if let Some(rule) = &example.mock_match {
             validate_mock_match(rule)?;
@@ -446,12 +450,14 @@ pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
     validate_script(&data.pre_request_script)?;
     validate_script(&data.post_response_script)?;
     let mut specifications = HashSet::new();
+    let mut specification_by_id = HashMap::new();
     for spec in &data.specifications {
         ensure!(
             !spec.id.is_empty() && specifications.insert(&spec.id),
             "Specification IDs must be unique and nonempty"
         );
         ensure!(spec.source.len() <= MAX_BODY, "Specification exceeds 5 MiB");
+        specification_by_id.insert(spec.id.as_str(), spec);
         if spec.kind == "a2a-agent-card" {
             ensure!(
                 matches!(spec.dialect.as_str(), "a2a-0.3" | "a2a-1.0"),
@@ -473,6 +479,7 @@ pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
             graphql_schema_sdl(spec)?;
         }
     }
+    let mut linked_indexes: HashMap<&str, OpenapiMockIndex> = HashMap::new();
     let mut collections = HashSet::new();
     let mut requests = HashSet::new();
     let mut environments = HashSet::new();
@@ -504,6 +511,50 @@ pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
             }
             let mut examples = HashSet::new();
             for e in &r.examples {
+                if let Some(link) = &e.mock_schema_link {
+                    ensure!(
+                        r.protocol == Protocol::Http,
+                        "Linked Mock schema requires HTTP request"
+                    );
+                    ensure!(
+                        r.specification_id.as_deref() == Some(link.specification_id.as_str()),
+                        "Linked Mock specification must match request"
+                    );
+                    let spec = specification_by_id
+                        .get(link.specification_id.as_str())
+                        .context("Linked Mock specification does not exist")?;
+                    if !linked_indexes.contains_key(spec.id.as_str()) {
+                        linked_indexes.insert(spec.id.as_str(), OpenapiMockIndex::parse(spec)?);
+                    }
+                    let selected = linked_indexes
+                        .get(spec.id.as_str())
+                        .context("Linked Mock specification index is missing")?
+                        .response_schema(&link.pointer)?;
+                    ensure!(
+                        selected.method == r.method && selected.status == e.status,
+                        "Linked Mock operation method or status differs from saved example"
+                    );
+                    let media = selected
+                        .media_type
+                        .split(';')
+                        .next()
+                        .unwrap_or_default()
+                        .trim();
+                    ensure!(
+                        e.headers
+                            .iter()
+                            .filter(|header| header.enabled
+                                && header.key.eq_ignore_ascii_case("content-type"))
+                            .all(|header| header
+                                .value
+                                .split(';')
+                                .next()
+                                .unwrap_or_default()
+                                .trim()
+                                .eq_ignore_ascii_case(media)),
+                        "Linked Mock Content-Type differs from selected response media"
+                    );
+                }
                 ensure!(
                     e.mock_script.is_empty() || data.script_mode == crate::ScriptMode::V2,
                     "Mock implementation scripts require compatibility v2"
