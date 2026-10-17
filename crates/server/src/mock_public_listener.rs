@@ -3,7 +3,7 @@ use axum::{
     Json, Router,
     extract::{Request, State},
     middleware::{self, Next},
-    response::{IntoResponse, Response},
+    response::Response,
 };
 use serde::Deserialize;
 use tokio_util::sync::CancellationToken;
@@ -66,7 +66,7 @@ fn status_json(bridge: Option<&Bridge>) -> serde_json::Value {
 async fn fence(State(stop): State<CancellationToken>, request: Request, next: Next) -> Response {
     tokio::select! {
         biased;
-        _ = stop.cancelled() => ApiError::not_found().into_response(),
+        _ = stop.cancelled() => mock_public::public_response(Err(ApiError::not_found())),
         response = next.run(request) => response,
     }
 }

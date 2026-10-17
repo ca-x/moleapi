@@ -300,7 +300,12 @@ async fn stopping_native_listener_cancels_a_delayed_public_call() {
         .await
         .expect("stopped listener did not cancel its call")
         .unwrap();
-    assert!(result.is_err() || result.unwrap().status() != StatusCode::CREATED);
+    if let Ok(response) = result {
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(response.headers()["cache-control"], "no-store");
+        assert_eq!(response.headers()["referrer-policy"], "no-referrer");
+        assert_eq!(response.headers()["access-control-allow-origin"], "*");
+    }
     assert_eq!(slots.available_permits(), 32);
 }
 

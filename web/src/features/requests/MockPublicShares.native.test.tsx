@@ -35,3 +35,29 @@ it("requires an explicitly started native listener and uses its actual origin fo
   expect(screen.queryByText(/msp_native/)).toBeNull();
   expect(screen.getByRole("button", { name: "Create public URL" })).toHaveProperty("disabled", true);
 });
+
+it("shows the actual LAN bind after reopening the share dialog", async () => {
+  await setLanguage("en");
+  api.mockImplementation(async (path: string) => path === "/api/mock-public/listener"
+    ? { active: true, origin: "http://127.0.0.1:18974", bind: "0.0.0.0:18974" }
+    : []);
+  render(<Theme><MockPublicShares workspaceId="w" requestId="r" examples={[]} routePath="" hasSavedQuery={false} dirty={false} /></Theme>);
+  expect(await screen.findByText("Bound to 0.0.0.0:18974")).toBeTruthy();
+  expect(screen.getByText(/All interfaces accept LAN calls/)).toBeTruthy();
+  expect(screen.getByRole("combobox", { name: "Bind address" })).toHaveProperty("disabled", true);
+  expect(screen.getByRole("combobox", { name: "Bind address" }).textContent).toContain("All interfaces");
+  expect(screen.getByRole("button", { name: "Stop listener" })).toBeTruthy();
+});
+
+it("waits for initial status before enabling start", async () => {
+  await setLanguage("en");
+  let resolveStatus!: (status: { active: boolean; origin: null; bind: null }) => void;
+  api.mockImplementation((path: string) => path === "/api/mock-public/listener"
+    ? new Promise(resolve => { resolveStatus = resolve; })
+    : Promise.resolve([]));
+  render(<Theme><MockPublicShares workspaceId="w" requestId="r" examples={[]} routePath="" hasSavedQuery={false} dirty={false} /></Theme>);
+  expect(screen.getByRole("button", { name: "Start listener" })).toHaveProperty("disabled", true);
+  resolveStatus({ active: false, origin: null, bind: null });
+  expect(await screen.findByText("The local listener is stopped")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Start listener" })).toHaveProperty("disabled", false);
+});

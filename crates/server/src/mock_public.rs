@@ -427,7 +427,7 @@ fn safe_uri(path: &str, original: &Uri) -> Result<Uri, ApiError> {
     .map_err(|_| ApiError::bad("Invalid public Mock path"))
 }
 
-fn public_response(result: Result<Response, ApiError>) -> Response {
+pub(crate) fn public_response(result: Result<Response, ApiError>) -> Response {
     let mut response = match result {
         Ok(response) => response,
         Err(error) => match error.status {

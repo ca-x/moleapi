@@ -22,6 +22,7 @@
   "无法读取或操作本地 Mock 监听。": "Could not read or control the local Mock listener.",
   "正在读取监听状态…": "Loading listener status…",
   "监听中：{{origin}}": "Listening at {{origin}}",
+  "实际绑定：{{bind}}": "Bound to {{bind}}",
   "尚未启动本地监听": "The local listener is stopped",
   "端口 0 自动分配；重启监听后旧地址可能需要轮换。": "Port 0 assigns a free port. After restarting, old URLs may need rotation.",
   "先启动本地监听，再创建或轮换公开地址；仍可撤销旧地址。": "Start the local listener before creating or rotating public URLs. You can still revoke old URLs.",

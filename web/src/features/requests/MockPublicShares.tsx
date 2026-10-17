@@ -47,12 +47,19 @@ export default function MockPublicShares({ workspaceId, requestId, examples, rou
   const portNumber = Number(port);
   const validPort = Number.isInteger(portNumber) && portNumber >= 0 && portNumber <= 65535;
   const listenerReady = !native || listener?.active === true;
+  const listenerLoading = native && listener === null && !listenerError;
+  const lanActive = listener?.active === true && listener.bind?.startsWith("0.0.0.0:") === true;
 
   useEffect(() => {
     if (!native) return;
     let active = true;
     void api<ListenerStatus>("/api/mock-public/listener")
-      .then(result => { if (active) setListener(result); })
+      .then(result => {
+        if (active) {
+          setListener(result);
+          if (result.active) setHost(result.bind?.startsWith("0.0.0.0:") ? "0.0.0.0" : "127.0.0.1");
+        }
+      })
       .catch(() => { if (active) setListenerError(true); });
     return () => { active = false; };
   }, []);
@@ -113,7 +120,7 @@ export default function MockPublicShares({ workspaceId, requestId, examples, rou
     catch { setError(true); }
   };
   const startStop = async () => {
-    if (listenerBusy || busy || (!listener?.active && (!validPort || (host === "0.0.0.0" && !allowLan)))) return;
+    if (listenerLoading || listenerBusy || busy || (!listener?.active && (!validPort || (host === "0.0.0.0" && !allowLan)))) return;
     setListenerBusy(true); setListenerError(false);
     try {
       const result = listener?.active
@@ -135,15 +142,16 @@ export default function MockPublicShares({ workspaceId, requestId, examples, rou
       <Text as="p" size="2" weight="medium">{t("本地 Mock 监听")}</Text>
       <Text as="p" size="1" color="gray">{t("监听只在手动启动后开放；停止会取消正在等待的公开调用。")}</Text>
       <Flex gap="2" align="end" wrap="wrap">
-        <label className="mock-share-days"><Text size="2">{t("监听地址")}</Text><Select.Root value={host} onValueChange={value => { setHost(value); setAllowLan(false); }}><Select.Trigger aria-label={t("监听地址")} /><Select.Content><Select.Item value="127.0.0.1">{t("仅本机")}</Select.Item><Select.Item value="0.0.0.0">{t("所有接口")}</Select.Item></Select.Content></Select.Root></label>
+        <label className="mock-share-days"><Text size="2">{t("监听地址")}</Text><Select.Root value={host} disabled={listener?.active === true} onValueChange={value => { setHost(value); setAllowLan(false); }}><Select.Trigger aria-label={t("监听地址")} /><Select.Content><Select.Item value="127.0.0.1">{t("仅本机")}</Select.Item><Select.Item value="0.0.0.0">{t("所有接口")}</Select.Item></Select.Content></Select.Root></label>
         <label className="mock-share-days"><Text size="2">{t("端口 (0 自动分配)")}</Text><TextField.Root aria-label={t("端口 (0 自动分配)")} type="number" min="0" max="65535" step="1" value={port} onChange={event => setPort(event.target.value)} /></label>
-        <Button size="2" style={{minHeight:44}} disabled={listenerBusy || !!busy || (!listener?.active && (!validPort || (host === "0.0.0.0" && !allowLan)))} onClick={() => void startStop()}>{listener?.active?t("停止监听"):t("启动监听")}</Button>
+        <Button size="2" style={{minHeight:44}} disabled={listenerLoading || listenerBusy || !!busy || (!listener?.active && (!validPort || (host === "0.0.0.0" && !allowLan)))} onClick={() => void startStop()}>{listener?.active?t("停止监听"):t("启动监听")}</Button>
       </Flex>
-      {host === "0.0.0.0" && <><Text as="label" size="2"><Checkbox checked={allowLan} onCheckedChange={checked => setAllowLan(checked === true)} /> {t("确认允许局域网访问")}</Text><Text as="p" size="1" color="red">{t("所有接口会接受局域网调用；非本机访问请通过 HTTPS 代理。")}</Text></>}
+      {host === "0.0.0.0" && !listener?.active && <Text as="label" size="2"><Checkbox checked={allowLan} onCheckedChange={checked => setAllowLan(checked === true)} /> {t("确认允许局域网访问")}</Text>}
+      {(listener?.active ? lanActive : host === "0.0.0.0") && <Text as="p" size="1" color="red">{t("所有接口会接受局域网调用；非本机访问请通过 HTTPS 代理。")}</Text>}
       {!validPort && <Text role="alert" size="1" color="red">{t("端口必须是 0–65535 的整数。")}</Text>}
       {listenerError && <Text role="alert" size="1" color="red">{t("无法读取或操作本地 Mock 监听。")}</Text>}
       {listener === null && !listenerError && <Text size="1" color="gray">{t("正在读取监听状态…")}</Text>}
-      {listener?.active ? <Text as="p" size="1">{t("监听中：{{origin}}", { origin: listener.origin ?? "" })}</Text> : listener && <Text as="p" size="1" color="gray">{t("尚未启动本地监听")}</Text>}
+      {listener?.active ? <><Text as="p" size="1">{t("监听中：{{origin}}", { origin: listener.origin ?? "" })}</Text><Text as="p" size="1">{t("实际绑定：{{bind}}", { bind: listener.bind ?? "" })}</Text></> : listener && <Text as="p" size="1" color="gray">{t("尚未启动本地监听")}</Text>}
       <Text as="p" size="1" color="gray">{t("端口 0 自动分配；重启监听后旧地址可能需要轮换。")}</Text>
     </div>}
     {dirty && <Text as="p" size="1" color="gray">{t("先保存工作区，再创建公开地址。已有地址仍可撤销。")}</Text>}
