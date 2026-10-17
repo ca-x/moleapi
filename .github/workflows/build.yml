@@ -164,7 +164,8 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev rpm
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev rpm rpm2cpio cpio
+          echo 'APPIMAGE_EXTRACT_AND_RUN=1' >> "$GITHUB_ENV"
       - run: npm --prefix web ci
       - name: Generate platform icons from provided transparent logo
         working-directory: desktop
@@ -172,16 +173,29 @@ jobs:
       - run: python scripts/prepare_openapi_generator.py
       - run: python scripts/prepare_dubbo_worker.py
       - run: python scripts/prepare_java_runtime.py --target ${{ matrix.target }}
+      - name: Expose bundled JVM libraries to Linux AppImage dependency scan
+        if: runner.os == 'Linux'
+        run: |
+          java_lib="$GITHUB_WORKSPACE/vendor/java-runtime/current/payload/lib"
+          test -f "$java_lib/server/libjvm.so"
+          echo "LD_LIBRARY_PATH=$java_lib/server:$java_lib" >> "$GITHUB_ENV"
       - uses: tauri-apps/tauri-action@v0
         with:
           projectPath: desktop
           tauriScript: ../web/node_modules/.bin/tauri
-          args: --config tauri.java.json --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+          args: --verbose --config tauri.java.json --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+      - name: Restore original bundled Java in Linux AppImage
+        if: runner.os == 'Linux'
+        run: python scripts/repair-linux-appimage-java.py target/${{ matrix.target }}/release/bundle
       - name: Verify desktop worker without opening a GUI
         run: python scripts/check-script-worker.py target/${{ matrix.target }}/release/moleapi
       - name: Verify actual bundled desktop JVM and original runtime files
         run: python scripts/check-bundled-java.py target/${{ matrix.target }}/release/moleapi --runtime-only
+      - name: Smoke extracted Linux deb, rpm and AppImage packages
+        if: runner.os == 'Linux'
+        run: python scripts/check-linux-desktop-packages.py target/${{ matrix.target }}/release/bundle
       - uses: actions/upload-artifact@v4
+        if: ${{ success() || (failure() && runner.os == 'Linux') }}
         with:
           name: desktop-${{ matrix.target }}
           path: |
@@ -191,7 +205,7 @@ jobs:
             target/${{ matrix.target }}/release/bundle/**/*.dmg
             target/${{ matrix.target }}/release/bundle/**/*.exe
             target/${{ matrix.target }}/release/bundle/**/*.msi
-          if-no-files-found: error
+          if-no-files-found: warn
   objc-qa:
     if: github.event_name == 'workflow_dispatch' && inputs.objc_qa == true
     timeout-minutes: 180
