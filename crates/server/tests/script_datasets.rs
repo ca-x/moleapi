@@ -213,3 +213,162 @@ async fn v2_scripts_do_not_block_a_separate_query_backed_runner_dataset() {
     assert_eq!(report["passed"], 2, "{report}");
     fixture.abort();
 }
+
+#[tokio::test]
+async fn live_script_dataset_loads_on_demand_before_the_real_http_request() {
+    let (url, fixture) = serve(Router::new().route(
+        "/",
+        axum::routing::get(|headers: axum::http::HeaderMap| async move {
+            assert_eq!(headers["x-live"], "live-private");
+            "ok"
+        }),
+    ))
+    .await;
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("script-live.db")).await.unwrap();
+    let mut data = example_data();
+    data["script_mode"] = json!("v2");
+    data["global_variables"] =
+        json!([{"id":"target","key":"target","value":"'wrong'","enabled":true,"secret":true}]);
+    let request = &mut data["collections"][0]["requests"][0];
+    request["url"] = json!(format!("{url}/"));
+    request["pre_request_script"] = json!(
+        "pm.variables.set('target',\"'live-private'\"); const result=await pm.datasets('live').executeView('by-value',['live-private']); for await(const row of result.rows) pm.request.headers.upsert({key:'x-live',value:row.value});"
+    );
+    let request = request.clone();
+    let mut source = request.clone();
+    source["id"] = json!("data-query");
+    source["url"] = json!("");
+    source["pre_request_script"] = json!("");
+    source["protocol"] = json!({"kind":"data","source":"local_file","file_name":"rows.csv","file_format":"csv","file_base64":base64::engine::general_purpose::STANDARD.encode(b"value\nwrong\nlive-private\n"),"table_name":"data","sql":"SELECT value FROM data WHERE value = {{target}}","read_only":true});
+    let mut unused = source.clone();
+    unused["id"] = json!("unused-query");
+    unused["url"] = json!("http://127.0.0.1:1/unreachable");
+    unused["protocol"] = json!({"kind":"data","source":"remote_file","file_name":"missing.csv","file_format":"csv","table_name":"data","sql":"SELECT value FROM data","read_only":true});
+    data["collections"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"id":"sources","name":"Sources","description":"","requests":[source,unused]}));
+    data["datasets"] = json!([{"id":"live","name":"Live","query":{"request_id":"data-query"},"views":[{"id":"by-value","name":"By value","sql":"SELECT value FROM data WHERE value = ?"}]},{"id":"unused","name":"Unrelated","query":{"request_id":"unused-query"}}]);
+    let (status, saved) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"w","name":"W","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    let (status, response) = call(
+        &router,
+        "POST",
+        "/api/execute",
+        None,
+        Some(json!({"workspace_id":"w","request":request})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(response["status"], 200);
+    let (_, history) = call(&router, "GET", "/api/workspaces/w/history", None, None).await;
+    assert!(!history.to_string().contains("live-private"), "{history}");
+    fixture.abort();
+}
+
+#[tokio::test]
+async fn edited_workspace_cannot_send_after_caught_live_dataset_refresh_failure() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    let started = Arc::new(tokio::sync::Notify::new());
+    let release = Arc::new(tokio::sync::Notify::new());
+    let calls = Arc::new(AtomicUsize::new(0));
+    let source_started = started.clone();
+    let source_release = release.clone();
+    let destination_calls = calls.clone();
+    let (url, fixture) = serve(
+        Router::new()
+            .route(
+                "/source",
+                axum::routing::get(move || {
+                    let started = source_started.clone();
+                    let release = source_release.clone();
+                    async move {
+                        started.notify_one();
+                        release.notified().await;
+                        "value\nlive-private\n"
+                    }
+                }),
+            )
+            .route(
+                "/destination",
+                axum::routing::get(move || {
+                    let calls = destination_calls.clone();
+                    async move {
+                        calls.fetch_add(1, Ordering::SeqCst);
+                        "sent"
+                    }
+                }),
+            ),
+    )
+    .await;
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("script-live-revision.db"))
+        .await
+        .unwrap();
+    let mut data = example_data();
+    data["script_mode"] = json!("v2");
+    let request = &mut data["collections"][0]["requests"][0];
+    request["url"] = json!(format!("{url}/destination"));
+    request["pre_request_script"] = json!(
+        "try { await pm.datasets('live').executeQuery('SELECT value FROM data'); } catch (error) { pm.test('caught',()=>pm.expect(error.message).to.equal('Live dataset refresh failed')); }"
+    );
+    let request = request.clone();
+    let mut source = request.clone();
+    source["id"] = json!("data-query");
+    source["url"] = json!(format!("{url}/source"));
+    source["pre_request_script"] = json!("");
+    source["protocol"] = json!({"kind":"data","source":"remote_file","file_name":"rows.csv","file_format":"csv","table_name":"data","sql":"SELECT value FROM data","read_only":true});
+    data["collections"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"id":"sources","name":"Sources","description":"","requests":[source]}));
+    data["datasets"] = json!([{"id":"live","name":"Live","query":{"request_id":"data-query"}}]);
+    let (status, saved) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"w","name":"W","data":data.clone()})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    let running_router = router.clone();
+    let running = tokio::spawn(async move {
+        call(
+            &running_router,
+            "POST",
+            "/api/execute",
+            None,
+            Some(json!({"workspace_id":"w","request":request})),
+        )
+        .await
+    });
+    tokio::time::timeout(std::time::Duration::from_secs(2), started.notified())
+        .await
+        .unwrap();
+    let (status, updated) = call(
+        &router,
+        "PUT",
+        "/api/workspaces/w",
+        None,
+        Some(json!({"name":"Updated","expected_revision":saved["revision"],"data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{updated}");
+    release.notify_one();
+    let (status, response) = running.await.unwrap();
+    assert_eq!(status, StatusCode::CONFLICT, "{response}");
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    fixture.abort();
+}

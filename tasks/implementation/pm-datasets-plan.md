@@ -20,7 +20,7 @@
 ### 1. Versioned bounded asynchronous script phases
 
 - [x] Add an explicit workspace-level v2 script mode with a backward-compatible v1 default and validation.
-- [x] Add a failing worker regression for top-level await, settled/rejected/never-settling Promise, detached mutation and private failure output. Keep the existing v1 tests unchanged.
+- [x] Add a failing worker regression for top-level await, settled/rejected/never-settling Promise, settled detached work before export and private failure output. Keep the existing v1 tests unchanged.
 - [x] Implement bounded QuickJS promise evaluation/job draining under the existing process watchdog, with one final exported state only after settlement. Verify worker cancellation/reap, strict Clippy and format; commit.
 
 ### 2. Read-only dataset query substrate
@@ -37,7 +37,7 @@
 
 ### 4. Live source and Mock completion
 
-- [ ] Design and implement a checked on-demand host bridge for query-backed dataset IDs under the script phase deadline, without worker network access or eager refresh of unrelated sources.
+- [x] Design and implement a checked on-demand host bridge for query-backed dataset IDs under the script phase deadline, without worker network access or eager refresh of unrelated sources.
 - [ ] Add a Mock implementation script contract and execute the same dataset handle from a bounded owner-scoped mock request.
 - [ ] Run real owner/revocation/cancellation/privacy tests, full relevant suites, three-database CI, native packages and independent review. Update matrix/coverage claims only with exact evidence.
 
@@ -50,6 +50,8 @@
 **Main integration:** PR #11's query-backed Data datasets merged to `main` at `105cb91`. The script branch merged that head at `56e6271`; combined focused Rust checks, strict Clippy, 351 frontend tests and production build passed. Query-backed datasets are represented explicitly in v2 worker input; unrelated scripts and the existing refresh runner continue to work. Referencing one through `pm.datasets` reports that the on-demand host bridge remains unavailable. It must not be counted as supported until task 4 is complete.
 
 **View acceptance:** A real offline CLI process, manually triggered schedule and self-hosted Agent all executed saved view queries. In a 390px hosted browser, the saved dataset/view IDs were read from the editor and used in a pre-request `executeView` script; the actual loopback GET and both assertions passed after save/reload in English and again in Chinese, with 390px document width. A red/green SQL regression corrected integer-column affinity so bound string parameters match exact integer values. The native Tauri UI and final platform/database gates remain open separately.
+
+**Live script bridge checkpoint:** A separate bounded line-framed worker mode requests only referenced query-backed dataset IDs through stdio. The host reuses the owned Data refresh path, limits work to the script deadline, caches each loaded dataset within a phase, forwards validated current in-script variable scopes and carries private values into failure/history redaction. Real local-file and remote-file fixtures, a slow-source timeout, a caught-error workspace-revision race, and self-hosted Agent baseline/revocation/edit runs pass. QuickJS now checks actual Promise states after draining jobs, allowing caught query errors while rejecting genuinely pending or unhandled work. SQL diagnostics from a failed script query are generic so authored private literals are not echoed. Native/three-database gates, wider lease/cancellation scenarios and Mock execution remain open before task 4 can close.
 
 ## Review focus
 

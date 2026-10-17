@@ -51,10 +51,42 @@ fn v2_top_level_await_settles_before_exporting_mutations() {
     assert!(evaluate_v2("await new Promise(() => {}); pm.variables.set('late','no');").is_err());
 }
 #[test]
-fn v2_detached_work_does_not_escape_a_phase() {
+fn v2_caught_rejection_can_finish_a_phase() {
+    let caught = evaluate_v2("try { await Promise.reject(new Error('handled')); } catch (error) { pm.variables.set('caught', error.message); }").unwrap();
+    assert_eq!(caught.updates[0].value.as_deref(), Some("handled"));
+}
+#[test]
+fn v2_caught_dataset_query_rejection_can_finish_a_phase() {
+    let saved: SavedDataset =
+        serde_json::from_value(json!({"id":"live","name":"Live","query":{"request_id":"r"}}))
+            .unwrap();
+    let marker = moleapi_script_runtime::dataset_query::live_query_marker(&saved);
+    let output = moleapi_script_runtime::run_with_datasets(&["try { await pm.datasets('live').executeQuery('SELECT 1'); } catch (error) { pm.variables.set('caught', error.message); }".into()], &request(), None, &VariableScopes::default(), &[marker]).unwrap();
     assert!(
-        evaluate_v2("Promise.resolve().then(() => pm.variables.set('late','no')); 42;").is_err()
+        output.updates[0]
+            .value
+            .as_deref()
+            .unwrap()
+            .contains("on-demand script bridge")
     );
+}
+#[test]
+fn dataset_sql_errors_do_not_echo_private_query_literals() {
+    let dataset: SavedDataset = serde_json::from_value(
+        json!({"id":"d","name":"Rows","source":{"format":"json","source":"[{\"id\":1}]"}}),
+    )
+    .unwrap();
+    let snapshot = moleapi_script_runtime::dataset_query::snapshot_dataset(&dataset)
+        .unwrap()
+        .0;
+    let output = moleapi_script_runtime::run_with_datasets(&["try { await pm.datasets('d').executeQuery(\"SELECT 'private-diagnostic' FROM missing_table\"); } catch (error) { console.log(error.message); }".into()], &request(), None, &VariableScopes::default(), &[snapshot]).unwrap();
+    assert_eq!(output.logs[0].message, "Dataset query failed");
+}
+#[test]
+fn v2_detached_work_is_drained_or_rejected_before_a_phase_returns() {
+    let settled =
+        evaluate_v2("Promise.resolve().then(() => pm.variables.set('late','no')); 42;").unwrap();
+    assert_eq!(settled.updates[0].value.as_deref(), Some("no"));
     assert!(evaluate_v2("new Promise(() => {}); 42;").is_err());
 }
 #[test]

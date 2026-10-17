@@ -257,7 +257,8 @@
       const execute = (sql, params, isView) => {
           return Promise.resolve().then(() => {
             if (typeof sql !== "string" || !sql || !Array.isArray(params) || params.length > 64 || params.some(value => typeof value !== "string")) throw new Error("Dataset query requires a SQL statement or view ID and up to 64 string parameters");
-            const values = parse(queryDataset(id, sql, params, isView));
+            const currentScopes = stringify({project:scopes.project,collection:scopes.collection,environment:scopes.environment,data:scopes.data,temporary:scopes.temporary});
+            const values = parse(queryDataset(id, sql, params, isView, currentScopes));
             return Object.freeze({rows: Object.freeze({async *[Symbol.asyncIterator]() { for (const row of values) yield parse(stringify(row)); }})});
           });
       };
