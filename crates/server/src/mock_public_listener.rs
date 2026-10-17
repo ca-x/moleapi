@@ -65,6 +65,7 @@ fn status_json(bridge: Option<&Bridge>) -> serde_json::Value {
 
 async fn fence(State(stop): State<CancellationToken>, request: Request, next: Next) -> Response {
     tokio::select! {
+        biased;
         _ = stop.cancelled() => ApiError::not_found().into_response(),
         response = next.run(request) => response,
     }
@@ -136,7 +137,8 @@ pub async fn start(
 
 pub async fn stop(State(state): State<AppState>) -> Result<Json<serde_json::Value>, ApiError> {
     let hub = local_hub(&state)?;
-    if let Some(mut bridge) = hub.bridge.lock().await.take() {
+    let mut slot = hub.bridge.lock().await;
+    if let Some(mut bridge) = slot.take() {
         bridge.stop.cancel();
         if tokio::time::timeout(std::time::Duration::from_secs(2), &mut bridge.task)
             .await
