@@ -239,6 +239,57 @@ fn har_export_stops_before_accumulating_more_than_twenty_megabytes() {
 }
 
 #[test]
+fn har_export_keeps_empty_query_keys_that_http_transport_sends() {
+    let original = import("har", &har().to_string()).unwrap();
+    let mut saved = workspace(original.data);
+    saved.data.collections[0].requests[0].query.push(
+        serde_json::from_value(json!({"id":"empty-key","key":"","value":"present","enabled":true}))
+            .unwrap(),
+    );
+    let exported = export(&saved, "har", true).unwrap();
+    let reimported = import("har", &exported.content).unwrap();
+    assert_eq!(
+        reimported.data.collections[0].requests[0].url,
+        "https://api.example.test/items?tag=one&tag=two&=present"
+    );
+}
+
+#[test]
+fn har_export_and_import_leave_text_content_type_absent_when_not_authored() {
+    let original = import("har", &har().to_string()).unwrap();
+    let mut saved = workspace(original.data);
+    let request = &mut saved.data.collections[0].requests[2];
+    request.body_kind = "text".into();
+    request.body = "plain body".into();
+    request
+        .headers
+        .retain(|row| !row.key.eq_ignore_ascii_case("content-type"));
+    let exported = export(&saved, "har", true).unwrap();
+    let source: Value = serde_json::from_str(&exported.content).unwrap();
+    assert_eq!(
+        source["log"]["entries"][2]["request"]["postData"]["mimeType"],
+        "text/plain"
+    );
+    assert!(
+        !source["log"]["entries"][2]["request"]["headers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|header| header["name"] == "Content-Type")
+    );
+    let reimported = import("har", &exported.content).unwrap();
+    let request = &reimported.data.collections[0].requests[2];
+    assert_eq!(request.body_kind, "text");
+    assert_eq!(request.body, "plain body");
+    assert!(
+        !request
+            .headers
+            .iter()
+            .any(|row| row.key.eq_ignore_ascii_case("content-type"))
+    );
+}
+
+#[test]
 fn har_import_rejects_ambiguous_or_unrepresentable_requests_atomically() {
     let mut source = har();
     source["log"]["version"] = json!("1.1");

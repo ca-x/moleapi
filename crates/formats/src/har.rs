@@ -89,7 +89,6 @@ pub(super) fn export(workspace: &Workspace) -> Result<(String, Vec<String>)> {
                 "HAR requires an absolute HTTP(S) URL without credentials or fragment"
             );
             for row in request.query.iter().filter(|row| row.enabled) {
-                ensure!(!row.key.is_empty(), "HAR query key is empty");
                 url.query_pairs_mut().append_pair(&row.key, &row.value);
             }
             if request.use_cookie_jar {
@@ -216,11 +215,13 @@ fn export_body(
             || request.body_kind == "form" && kind == "application/x-www-form-urlencoded",
         "HAR Content-Type disagrees with request body mode"
     );
-    if !headers.iter().any(|header| {
-        header["name"]
-            .as_str()
-            .is_some_and(|name| name.eq_ignore_ascii_case("content-type"))
-    }) {
+    if request.body_kind != "text"
+        && !headers.iter().any(|header| {
+            header["name"]
+                .as_str()
+                .is_some_and(|name| name.eq_ignore_ascii_case("content-type"))
+        })
+    {
         headers.push(json!({"name":"Content-Type","value":mime}));
     }
     Ok(Some(json!({"mimeType":mime,"text":request.body})))
@@ -572,7 +573,7 @@ fn import_body(
                 .eq_ignore_ascii_case(&kind),
             "HAR entry {number} Content-Type disagrees with postData"
         );
-    } else {
+    } else if mode != "text" {
         request.headers.push(pair("Content-Type", mime));
     }
     request.body_kind = mode.into();
