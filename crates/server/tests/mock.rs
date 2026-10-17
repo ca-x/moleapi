@@ -639,9 +639,16 @@ async fn saved_mock_delay_applies_after_static_or_dynamic_response_construction_
 #[tokio::test]
 async fn delayed_mock_admission_is_bounded() {
     let dir = tempfile::tempdir().unwrap();
-    let router = local(&dir.path().join("delay-capacity.db")).await.unwrap();
+    let slots = std::sync::Arc::new(tokio::sync::Semaphore::new(32));
+    let router = moleapi_server::local_with_mock_delay_slots_for_test(
+        &dir.path().join("delay-capacity.db"),
+        std::path::Path::new(env!("CARGO_BIN_EXE_moleapi-server")),
+        slots.clone(),
+    )
+    .await
+    .unwrap();
     let mut data = example_data();
-    data["collections"][0]["requests"][0]["examples"][0]["delay_ms"] = json!(2_000);
+    data["collections"][0]["requests"][0]["examples"][0]["delay_ms"] = json!(30_000);
     assert_eq!(
         call(
             &router,
@@ -655,40 +662,52 @@ async fn delayed_mock_admission_is_bounded() {
         StatusCode::OK
     );
     let mut calls = tokio::task::JoinSet::new();
-    for _ in 0..48 {
+    for _ in 0..32 {
         let router = router.clone();
         calls.spawn(async move { call(&router, "GET", "/api/mock/w/r/e", None, None).await.0 });
     }
-    let mut served = 0;
-    let mut limited = 0;
-    while let Some(result) = calls.join_next().await {
-        match result.unwrap() {
-            StatusCode::CREATED => served += 1,
-            StatusCode::TOO_MANY_REQUESTS => limited += 1,
-            other => panic!("unexpected Mock delay status: {other}"),
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        while slots.available_permits() != 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
         }
+    })
+    .await
+    .expect("32 requests did not enter the delayed Mock queue");
+    slots.close();
+    for _ in 0..16 {
+        assert_eq!(
+            call(&router, "GET", "/api/mock/w/r/e", None, None).await.0,
+            StatusCode::TOO_MANY_REQUESTS
+        );
     }
-    assert!(served <= 32, "served {served} delayed requests");
-    assert!(limited >= 16, "limited only {limited} delayed requests");
+    calls.abort_all();
+    while calls.join_next().await.is_some() {}
     let (status, logs) = call(&router, "GET", "/api/workspaces/w/mock-calls", None, None).await;
     assert_eq!(status, StatusCode::OK, "{logs}");
-    assert_eq!(logs.as_array().unwrap().len(), 48);
+    assert_eq!(logs.as_array().unwrap().len(), 16);
     assert_eq!(
         logs.as_array()
             .unwrap()
             .iter()
             .filter(|row| row["response_status"] == 429)
             .count(),
-        limited
+        16
     );
 }
 
 #[tokio::test]
 async fn edited_workspace_cannot_serve_a_delayed_static_mock() {
     let dir = tempfile::tempdir().unwrap();
-    let router = local(&dir.path().join("delay-revision.db")).await.unwrap();
+    let slots = std::sync::Arc::new(tokio::sync::Semaphore::new(32));
+    let router = moleapi_server::local_with_mock_delay_slots_for_test(
+        &dir.path().join("delay-revision.db"),
+        std::path::Path::new(env!("CARGO_BIN_EXE_moleapi-server")),
+        slots.clone(),
+    )
+    .await
+    .unwrap();
     let mut data = example_data();
-    data["collections"][0]["requests"][0]["examples"][0]["delay_ms"] = json!(800);
+    data["collections"][0]["requests"][0]["examples"][0]["delay_ms"] = json!(5_000);
     let (status, saved) = call(
         &router,
         "POST",
@@ -703,7 +722,13 @@ async fn edited_workspace_cannot_serve_a_delayed_static_mock() {
         tokio::spawn(
             async move { call(&running_router, "GET", "/api/mock/w/r/e", None, None).await },
         );
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        while slots.available_permits() != 31 {
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("Mock request did not enter the delay after reading the workspace");
     data["collections"][0]["requests"][0]["examples"][0]["body"] = json!("updated");
     assert_eq!(
         call(

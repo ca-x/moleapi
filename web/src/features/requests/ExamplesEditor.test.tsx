@@ -88,6 +88,10 @@ it("edits and reloads a bounded saved Mock delay in both languages",async()=>{
   const page=render(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
   fireEvent.change(screen.getByRole("spinbutton",{name:"Mock delay (ms)"}),{target:{value:"120"}});
   expect(update.mock.lastCall?.[0].examples[0].delay_ms).toBe(120);
+  for(const [typed,expected] of [["-1",0],["30001",30_000],["1.5",2]] as const){
+    fireEvent.change(screen.getByRole("spinbutton",{name:"Mock delay (ms)"}),{target:{value:typed}});
+    expect(update.mock.lastCall?.[0].examples[0].delay_ms).toBe(expected);
+  }
   request.examples=[{...request.examples[0],delay_ms:120}];
   page.rerender(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
   expect(screen.getByRole("spinbutton",{name:"Mock delay (ms)"})).toHaveProperty("value","120");

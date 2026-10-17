@@ -80,7 +80,10 @@ export default function ExamplesEditor({
               </ToolButton>
             </Flex>
           </Flex>
-          <Field label={t("Mock 延迟（毫秒）")} hint={t("0 表示立即响应；最多等待 30000 毫秒。")}><TextField.Root type="number" min="0" max="30000" step="1" value={example.delay_ms??0} onChange={event=>patchExample(example.id,{delay_ms:Number(event.target.value)})}/></Field>
+          <Field label={t("Mock 延迟（毫秒）")} hint={t("0 表示立即响应；最多等待 30000 毫秒。")}><TextField.Root type="number" min="0" max="30000" step="1" value={example.delay_ms??0} onChange={event=>{
+            const value=Number(event.target.value);
+            if(Number.isFinite(value))patchExample(example.id,{delay_ms:Math.min(30_000,Math.max(0,Math.round(value)))});
+          }}/></Field>
           <Editor value={example.body} readOnly dark={dark} height="150px" />
           {workspaceId && <Text as="p" size="1" color="gray" style={{overflowWrap:"anywhere"}}>{t("Mock 地址")}: <code>{`/api/mock/${encodeURIComponent(workspaceId)}/${encodeURIComponent(request.id)}/${encodeURIComponent(example.id)}`}</code></Text>}
           {workspaceId && routePath && <Text as="p" size="1" color="gray" style={{overflowWrap:"anywhere"}}>{t("匹配路由")}: <code>{`${request.method} /api/mocks/${encodeURIComponent(workspaceId)}${routePath}`}</code></Text>}

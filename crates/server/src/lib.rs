@@ -196,6 +196,30 @@ pub async fn local_with_project_runtime_and_resources(
         true,
         Some(runtime),
         resource_root.map(Path::to_owned),
+        None,
+    )
+    .await
+}
+/// Test harness entrypoint for observing delayed Mock admission without a timing guess.
+#[doc(hidden)]
+pub async fn local_with_mock_delay_slots_for_test(
+    database_path: &Path,
+    worker: &Path,
+    slots: Arc<tokio::sync::Semaphore>,
+) -> anyhow::Result<Router> {
+    build(
+        Config {
+            database_url: storage::sqlite_url(database_path)?,
+            setup_token: String::new(),
+            allow_registration: false,
+            allow_private_network: true,
+        },
+        true,
+        worker.to_owned(),
+        true,
+        None,
+        None,
+        Some(slots),
     )
     .await
 }
@@ -208,7 +232,7 @@ pub async fn hosted(config: Config) -> anyhow::Result<Router> {
 
 /// Embedder entrypoint with an explicitly trusted worker executable.
 pub async fn hosted_with_worker(config: Config, worker: &Path) -> anyhow::Result<Router> {
-    build(config, false, worker.to_owned(), true, None, None).await
+    build(config, false, worker.to_owned(), true, None, None, None).await
 }
 pub async fn setup_required(database_url: &str) -> anyhow::Result<bool> {
     use sea_orm::EntityTrait;
@@ -231,6 +255,7 @@ pub async fn offline_with_worker(database_path: &Path, worker: &Path) -> anyhow:
         false,
         None,
         None,
+        None,
     )
     .await
 }
@@ -241,6 +266,7 @@ async fn build(
     background: bool,
     project_runtime: Option<moleapi_generation::project::ProjectRuntime>,
     resource_root: Option<PathBuf>,
+    mock_delay_slots: Option<Arc<tokio::sync::Semaphore>>,
 ) -> anyhow::Result<Router> {
     anyhow::ensure!(
         script_worker.is_absolute(),
@@ -268,7 +294,8 @@ async fn build(
         local,
         sync_lock: Arc::new(tokio::sync::Mutex::new(())),
         script_slots: Arc::new(tokio::sync::Semaphore::new(4)),
-        mock_delay_slots: Arc::new(tokio::sync::Semaphore::new(32)),
+        mock_delay_slots: mock_delay_slots
+            .unwrap_or_else(|| Arc::new(tokio::sync::Semaphore::new(32))),
         generation_slots: Arc::new(tokio::sync::Semaphore::new(4)),
         project_slots: Arc::new(tokio::sync::Semaphore::new(2)),
         project_jobs: Arc::default(),
