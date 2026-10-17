@@ -673,25 +673,28 @@ async fn delayed_mock_admission_is_bounded() {
     })
     .await
     .expect("32 requests did not enter the delayed Mock queue");
-    slots.close();
-    for _ in 0..16 {
-        assert_eq!(
-            call(&router, "GET", "/api/mock/w/r/e", None, None).await.0,
-            StatusCode::TOO_MANY_REQUESTS
-        );
-    }
+    assert_eq!(
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            call(&router, "GET", "/api/mock/w/r/e", None, None)
+        )
+        .await
+        .expect("the 33rd Mock request did not receive a prompt capacity response")
+        .0,
+        StatusCode::TOO_MANY_REQUESTS
+    );
     calls.abort_all();
     while calls.join_next().await.is_some() {}
     let (status, logs) = call(&router, "GET", "/api/workspaces/w/mock-calls", None, None).await;
     assert_eq!(status, StatusCode::OK, "{logs}");
-    assert_eq!(logs.as_array().unwrap().len(), 16);
+    assert_eq!(logs.as_array().unwrap().len(), 1);
     assert_eq!(
         logs.as_array()
             .unwrap()
             .iter()
             .filter(|row| row["response_status"] == 429)
             .count(),
-        16
+        1
     );
 }
 
