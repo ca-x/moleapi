@@ -88,6 +88,73 @@ async fn saved_schema_generates_direct_and_routed_json_before_optional_script() 
 }
 
 #[tokio::test]
+async fn composed_schema_generates_the_same_direct_and_routed_tuple() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("composed-schema.db")).await.unwrap();
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["url"] = json!("https://example.test/items");
+    data["collections"][0]["requests"][0]["examples"][0]["mock_schema"] = json!(
+        r#"{"type":"array","prefixItems":[{"oneOf":[{"type":"string","const":"Ada"},{"type":"integer","minimum":5}]},{"type":["null","integer"],"minimum":3}],"items":false,"minItems":2}"#
+    );
+    let (status, body) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"w","name":"Composed","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    for path in ["/api/mock/w/r/e", "/api/mocks/w/items"] {
+        let response = router
+            .clone()
+            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        assert_eq!(response.headers()["content-type"], "application/json");
+        assert_eq!(
+            to_bytes(response.into_body(), 1024).await.unwrap().as_ref(),
+            br#"["Ada",3]"#
+        );
+    }
+}
+
+#[tokio::test]
+async fn linked_composed_response_preserves_component_schema_on_real_calls() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("linked-composed.db")).await.unwrap();
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["url"] = json!("https://example.test/items");
+    data["collections"][0]["requests"][0]["specification_id"] = json!("spec");
+    data["collections"][0]["requests"][0]["examples"][0]["mock_schema_link"] = json!({"specification_id":"spec","pointer":"#/paths/~1items/get/responses/201/content/application~1json/schema"});
+    let source = json!({"openapi":"3.1.0","paths":{"/items":{"get":{"responses":{"201":{"content":{"application/json":{"schema":{"allOf":[{"type":"object","properties":{"id":{"$ref":"#/components/schemas/Id"}},"required":["id"]},{"type":"object","properties":{"name":{"type":"string","const":"Ada"}},"required":["name"]}]}}}}}}}},"components":{"schemas":{"Id":{"type":"integer","minimum":3}}}});
+    data["specifications"] = json!([{"id":"spec","name":"Spec","kind":"openapi","dialect":"3.1.0","source":source.to_string()}]);
+    let (status, body) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"w","name":"Linked composed","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    for path in ["/api/mock/w/r/e", "/api/mocks/w/items"] {
+        let response = router
+            .clone()
+            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        assert_eq!(response.headers()["content-type"], "application/json");
+        assert_eq!(
+            to_bytes(response.into_body(), 1024).await.unwrap().as_ref(),
+            br#"{"id":3,"name":"Ada"}"#
+        );
+    }
+}
+
+#[tokio::test]
 async fn linked_openapi_schema_uses_current_saved_specification_for_direct_and_routed_calls() {
     let dir = tempfile::tempdir().unwrap();
     let router = local(&dir.path().join("linked-schema.db")).await.unwrap();

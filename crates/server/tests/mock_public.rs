@@ -2,6 +2,45 @@ mod common;
 use common::*;
 
 #[tokio::test]
+async fn public_composed_mock_uses_bounded_schema_generation() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = hosted(config(
+        moleapi_server::sqlite_database_url(&dir.path().join("composed-share.db")).unwrap(),
+        true,
+    ))
+    .await
+    .unwrap();
+    let owner = register(&router, "composedshareowner").await;
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["examples"][0]["mock_schema"] = json!(
+        r#"{"anyOf":[{"type":"string","minLength":2,"maxLength":1},{"type":"object","properties":{"ok":{"type":"boolean","const":true}},"required":["ok"]}]}"#
+    );
+    let (status, body) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        Some(&owner),
+        Some(json!({"id":"w","name":"W","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, share) = call(
+        &router,
+        "POST",
+        "/api/workspaces/w/mock-shares",
+        Some(&owner),
+        Some(json!({"request_id":"r","expires_in_days":1})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{share}");
+    let path = format!("/api/public/mock/{}/e", share["token"].as_str().unwrap());
+    assert_eq!(
+        call(&router, "GET", &path, None, None).await,
+        (StatusCode::CREATED, json!({"ok":true}))
+    );
+}
+
+#[tokio::test]
 async fn linked_openapi_source_edit_stales_public_mock_until_rotation() {
     let dir = tempfile::tempdir().unwrap();
     let router = hosted(config(
