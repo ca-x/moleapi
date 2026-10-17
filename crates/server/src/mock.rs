@@ -657,6 +657,7 @@ async fn serve_selected(
         None
     };
     let response_body = if let Some(schema_source) = schema_source {
+        let infer_names = e.mock_name_inference;
         let permit = s
             .mock_schema_slots
             .clone()
@@ -668,11 +669,17 @@ async fn serve_selected(
         let (body, media_type) =
             tokio::task::spawn_blocking(move || -> anyhow::Result<(String, String)> {
                 let _permit = permit;
+                let generate = |schema: &str| {
+                    if infer_names {
+                        moleapi_core::generate_mock_schema_with_names(schema)
+                    } else {
+                        moleapi_core::generate_mock_schema(schema)
+                    }
+                };
                 match schema_source {
-                    SchemaSource::Inline(schema) => Ok((
-                        moleapi_core::generate_mock_schema(&schema)?,
-                        "application/json".into(),
-                    )),
+                    SchemaSource::Inline(schema) => {
+                        Ok((generate(&schema)?, "application/json".into()))
+                    }
                     SchemaSource::Linked(spec, pointer, method, status) => {
                         let selected = moleapi_core::OpenapiMockIndex::parse(&spec)?
                             .response_schema(&pointer)?;
@@ -680,10 +687,7 @@ async fn serve_selected(
                             selected.method == method && selected.status == status,
                             "Linked Mock operation changed"
                         );
-                        Ok((
-                            moleapi_core::generate_mock_schema(&selected.schema)?,
-                            selected.media_type,
-                        ))
+                        Ok((generate(&selected.schema)?, selected.media_type))
                     }
                 }
             })

@@ -111,6 +111,7 @@ export interface Example {
   body: string;
   mock_schema?: string;
   mock_schema_link?: { specification_id: string; pointer: string };
+  mock_name_inference?: boolean;
   mock_script?: string;
   mock_match?: {
     priority: number;

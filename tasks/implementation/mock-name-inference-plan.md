@@ -15,9 +15,9 @@
 
 ## Task 2: Shared runtime and editor
 
-- [ ] Pass the saved flag through direct, routed, public and preview paths without new endpoints or privacy surfaces. Add real HTTP regression cases including disabled legacy behavior.
-- [ ] Expose a bilingual opt-in toggle next to the selected Schema source, retaining an unsaved draft across editor open/close and old static body behavior.
-- [ ] Run focused server/frontend suites and a saved/reloaded 390px browser flow with an actual generated direct/routed response; commit.
+- [x] Pass the saved flag through direct, routed, public and preview paths without new endpoints or privacy surfaces. Add real HTTP regression cases including disabled legacy behavior.
+- [x] Expose a bilingual opt-in toggle next to the selected Schema source, retaining an unsaved draft across editor open/close and old static body behavior.
+- [x] Run focused server/frontend suites and a saved/reloaded 390px browser flow with an actual generated direct/routed response; commit.
 
 ## Task 3: Acceptance and integration
 
