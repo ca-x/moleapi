@@ -266,6 +266,41 @@ async fn identical_storage_auth_cas_tests_on_every_configured_database() {
             to_bytes(response.into_body(), 100).await.unwrap().as_ref(),
             b"example body"
         );
+        let (one, two) = tokio::join!(
+            call(&router, "GET", "/api/mock/shared-id/r/e", Some(&a), None),
+            call(
+                &router_again,
+                "GET",
+                "/api/mock/shared-id/r/e",
+                Some(&a),
+                None
+            ),
+        );
+        assert_eq!(one.0, StatusCode::CREATED, "{one:?}");
+        assert_eq!(two.0, StatusCode::CREATED, "{two:?}");
+        let (status, mock_calls) = call(
+            &router_again,
+            "GET",
+            "/api/workspaces/shared-id/mock-calls",
+            Some(&a),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{mock_calls}");
+        assert_eq!(mock_calls.as_array().unwrap().len(), 3);
+        assert_eq!(mock_calls[0]["sequence"], 3);
+        assert_eq!(mock_calls[0]["response_status"], 201);
+        assert!(!mock_calls.to_string().contains("example body"));
+        let (status, other_calls) = call(
+            &router_again,
+            "GET",
+            "/api/workspaces/shared-id/mock-calls",
+            Some(&b),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(other_calls.as_array().unwrap().is_empty());
         assert_eq!(
             call(
                 &router,

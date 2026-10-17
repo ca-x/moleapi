@@ -15,6 +15,7 @@ mod graphql;
 mod grpc;
 mod history;
 mod mock;
+mod mock_logs;
 mod notifications;
 mod oauth1;
 mod oauth2;
@@ -373,6 +374,10 @@ async fn build(
         .route(
             "/workspaces/{id}/history",
             get(history::history).delete(history::clear_history),
+        )
+        .route(
+            "/workspaces/{id}/mock-calls",
+            get(mock_logs::list).delete(mock_logs::clear),
         )
         .route(
             "/workspaces/{workspace}/reports",
