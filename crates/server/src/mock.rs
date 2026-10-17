@@ -75,7 +75,10 @@ async fn serve_direct(
         collection
             .requests
             .iter()
-            .find(|r| r.id == request_id)
+            .find(|r| {
+                r.id == request_id
+                    && grant.is_none_or(|_| r.protocol == moleapi_core::Protocol::Http)
+            })
             .and_then(|r| {
                 r.examples
                     .iter()
@@ -130,6 +133,9 @@ async fn serve_direct(
         (status, outcome),
     )
     .await?;
+    if let Some(grant) = grant {
+        mock_public::still_active(s, grant).await?;
+    }
     result
 }
 
@@ -345,6 +351,9 @@ async fn serve_routed(
         (status, outcome),
     )
     .await?;
+    if let Some(grant) = grant {
+        mock_public::still_active(s, grant).await?;
+    }
     result
 }
 

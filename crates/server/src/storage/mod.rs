@@ -118,6 +118,7 @@ pub async fn replace_in<C: ConnectionTrait>(
     if updated.rows_affected != 1 {
         return Ok(None);
     }
+    crate::mock_public::revoke_removed_requests(tx, owner, &previous, &next).await?;
     insert_doc(
         tx,
         uuid::Uuid::new_v4().to_string(),

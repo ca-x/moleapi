@@ -56,7 +56,7 @@ export default function ExamplesEditor({
         <Dialog.Content maxWidth="min(560px, calc(100vw - 24px))" style={{maxHeight:"calc(100dvh - 24px)",overflowY:"auto"}}>
           <Dialog.Title>{t("公开 Mock")}</Dialog.Title>
           <Dialog.Description>{t("默认仅工作区成员可访问。公开地址只分享当前请求；任何持有地址的人都可以调用。")}</Dialog.Description>
-          <MockPublicShares workspaceId={workspaceId} requestId={request.id} examples={request.examples.map(example=>({id:example.id,name:example.name}))} routePath={routePath} hasSavedQuery={routeHasQuery} dirty={dirty}/>
+          <MockPublicShares workspaceId={workspaceId} requestId={request.id} examples={request.examples.map(example=>({id:example.id,name:example.name,dynamic:!!example.mock_script?.length}))} routePath={routePath} hasSavedQuery={routeHasQuery} dirty={dirty}/>
           <Flex justify="end" mt="4"><Dialog.Close><Button variant="soft">{t("完成")}</Button></Dialog.Close></Flex>
         </Dialog.Content>
       </Dialog.Root>}

@@ -468,8 +468,9 @@ async fn replacing_a_request_with_the_same_id_requires_explicit_share_rotation()
         call(&router, "GET", &old, None, None).await.0,
         StatusCode::CREATED
     );
-    let replacement = data["collections"][0]["requests"][0].clone();
-    data["collections"][0]["requests"] = json!([]);
+    let mut replacement = data["collections"][0]["requests"][0].clone();
+    replacement["examples"][0]["body"] = json!("new content");
+    data["collections"][0]["requests"] = json!([replacement.clone()]);
     assert_eq!(
         call(
             &router,
@@ -486,60 +487,12 @@ async fn replacing_a_request_with_the_same_id_requires_explicit_share_rotation()
         call(&router, "GET", &old, None, None).await.0,
         StatusCode::NOT_FOUND
     );
-    assert_eq!(
-        call(
-            &router,
-            "POST",
-            &format!(
-                "/api/workspaces/w/mock-shares/{}/rotate",
-                share["id"].as_str().unwrap()
-            ),
-            Some(&owner),
-            None
-        )
-        .await
-        .0,
-        StatusCode::NOT_FOUND
-    );
-    let mut replacement = replacement;
-    replacement["examples"][0]["body"] = json!("new content");
-    data["collections"][0]["requests"] = json!([replacement]);
-    assert_eq!(
-        call(
-            &router,
-            "PUT",
-            "/api/workspaces/w",
-            Some(&owner),
-            Some(json!({"name":"W","expected_revision":2,"data":data}))
-        )
-        .await
-        .0,
-        StatusCode::OK
-    );
-    assert_eq!(
-        call(&router, "GET", &old, None, None).await.0,
-        StatusCode::NOT_FOUND
-    );
-    let (_, listed) = call(
-        &router,
-        "GET",
-        "/api/workspaces/w/mock-shares",
-        Some(&owner),
-        None,
-    )
-    .await;
+    let shares = "/api/workspaces/w/mock-shares";
+    let (_, listed) = call(&router, "GET", shares, Some(&owner), None).await;
     assert_eq!(listed[0]["stale"], true);
-    let (_, rotated) = call(
-        &router,
-        "POST",
-        &format!(
-            "/api/workspaces/w/mock-shares/{}/rotate",
-            share["id"].as_str().unwrap()
-        ),
-        Some(&owner),
-        None,
-    )
-    .await;
+    let rotate = format!("{shares}/{}/rotate", share["id"].as_str().unwrap());
+    let (status, rotated) = call(&router, "POST", &rotate, Some(&owner), None).await;
+    assert_eq!(status, StatusCode::OK, "{rotated}");
     let fresh = format!("/api/public/mock/{}/e", rotated["token"].as_str().unwrap());
     let (status, body) = call(&router, "GET", &fresh, None, None).await;
     assert_eq!(status, StatusCode::CREATED, "{body}");
@@ -547,6 +500,62 @@ async fn replacing_a_request_with_the_same_id_requires_explicit_share_rotation()
     assert_eq!(
         call(&router, "GET", &old, None, None).await.0,
         StatusCode::NOT_FOUND
+    );
+    data["collections"][0]["requests"] = json!([]);
+    assert_eq!(
+        call(
+            &router,
+            "PUT",
+            "/api/workspaces/w",
+            Some(&owner),
+            Some(json!({"name":"W","expected_revision":2,"data":data.clone()}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        call(&router, "GET", &fresh, None, None).await.0,
+        StatusCode::NOT_FOUND
+    );
+    let (_, listed) = call(&router, "GET", shares, Some(&owner), None).await;
+    assert!(listed.as_array().unwrap().is_empty());
+    data["collections"][0]["requests"] = json!([replacement]);
+    assert_eq!(
+        call(
+            &router,
+            "PUT",
+            "/api/workspaces/w",
+            Some(&owner),
+            Some(json!({"name":"W","expected_revision":3,"data":data}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        call(&router, "GET", &fresh, None, None).await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        call(&router, "POST", &rotate, Some(&owner), None).await.0,
+        StatusCode::NOT_FOUND
+    );
+    let (_, new_share) = call(
+        &router,
+        "POST",
+        shares,
+        Some(&owner),
+        Some(json!({"request_id":"r","expires_in_days":7})),
+    )
+    .await;
+    let newly_authorized = format!(
+        "/api/public/mock/{}/e",
+        new_share["token"].as_str().unwrap()
+    );
+    assert_eq!(
+        call(&router, "GET", &newly_authorized, None, None).await.0,
+        StatusCode::CREATED
     );
 }
 
@@ -650,6 +659,75 @@ async fn expired_public_mock_capability_cannot_call_or_rotate() {
     assert_eq!(listed.as_array().unwrap().len(), 1);
     assert_eq!(
         call(&router, "GET", &path, None, None).await.0,
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[tokio::test]
+async fn rotation_cannot_reauthorize_a_non_http_request() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = hosted(moleapi_server::Config {
+        database_url: moleapi_server::sqlite_database_url(&dir.path().join("protocol.db")).unwrap(),
+        setup_token: "setup-secret".into(),
+        allow_registration: true,
+        allow_private_network: true,
+    })
+    .await
+    .unwrap();
+    let owner = register(&router, "protocolowner").await;
+    let mut data = example_data();
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            Some(&owner),
+            Some(json!({"id":"w","name":"W","data":data.clone()}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let (_, share) = call(
+        &router,
+        "POST",
+        "/api/workspaces/w/mock-shares",
+        Some(&owner),
+        Some(json!({"request_id":"r","expires_in_days":7})),
+    )
+    .await;
+    data["collections"][0]["requests"][0]["protocol"] = json!({"kind":"sse"});
+    let (status, updated) = call(
+        &router,
+        "PUT",
+        "/api/workspaces/w",
+        Some(&owner),
+        Some(json!({"name":"W","expected_revision":1,"data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{updated}");
+    let (status, rotated) = call(
+        &router,
+        "POST",
+        &format!(
+            "/api/workspaces/w/mock-shares/{}/rotate",
+            share["id"].as_str().unwrap()
+        ),
+        Some(&owner),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{rotated}");
+    assert_eq!(
+        call(
+            &router,
+            "GET",
+            &format!("/api/public/mock/{}/e", share["token"].as_str().unwrap()),
+            None,
+            None
+        )
+        .await
+        .0,
         StatusCode::NOT_FOUND
     );
 }

@@ -23,7 +23,7 @@ it("shows public URLs once, then rotates and revokes the saved share", async () 
     rows = [];
     return { revoked: true };
   });
-  const props = { workspaceId: "w", requestId: "r", examples: [{ id: "e", name: "Example" }], routePath: "/items", hasSavedQuery: false, dirty: false };
+  const props = { workspaceId: "w", requestId: "r", examples: [{ id: "e", name: "Example", dynamic: false }], routePath: "/items", hasSavedQuery: false, dirty: false };
   const page = render(<Theme><MockPublicShares {...props} /></Theme>);
   expect(await screen.findByText("No public URLs for this request")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Create public URL" }));
@@ -48,7 +48,7 @@ it("shows public URLs once, then rotates and revokes the saved share", async () 
 it("requires a saved draft and valid expiry while explaining dynamic access in Chinese", async () => {
   await setLanguage("zh-CN");
   api.mockResolvedValue([]);
-  render(<Theme><MockPublicShares workspaceId="w" requestId="r" examples={[{ id: "e", name: "示例" }]} routePath="/items" hasSavedQuery={false} dirty /></Theme>);
+  render(<Theme><MockPublicShares workspaceId="w" requestId="r" examples={[{ id: "e", name: "示例", dynamic: false }]} routePath="/items" hasSavedQuery={false} dirty /></Theme>);
   expect(screen.getByText("先保存工作区，再创建公开地址。已有地址仍可撤销。")).toBeTruthy();
   expect(screen.getByRole("button", { name: "创建公开地址" })).toHaveProperty("disabled", true);
   fireEvent.change(screen.getByRole("spinbutton", { name: "有效期（天）" }), { target: { value: "91" } });
@@ -64,10 +64,20 @@ it("does not offer a ready-to-copy routed URL when saved query conditions are re
     id: "share-1", request_id: "r", expires_at: 2_000_000_000,
     allow_dynamic: false, stale: false, token: "msp_first",
   });
-  render(<Theme><MockPublicShares workspaceId="w" requestId="r" examples={[{ id: "e", name: "Example" }]} routePath="/items" hasSavedQuery dirty={false} /></Theme>);
+  render(<Theme><MockPublicShares workspaceId="w" requestId="r" examples={[{ id: "e", name: "Example", dynamic: false }, { id: "script", name: "Script", dynamic: true }]} routePath="/items" hasSavedQuery dirty={false} /></Theme>);
   await screen.findByText("No public URLs for this request");
   fireEvent.click(screen.getByRole("button", { name: "Create public URL" }));
   expect(await screen.findByText(/This request needs query parameters/)).toBeTruthy();
   expect(screen.getAllByText(/msp_first/)).toHaveLength(1);
   expect(screen.queryByText("Public matching URL")).toBeNull();
+});
+
+it("does not create a dead static share for a request with only dynamic examples", async () => {
+  await setLanguage("en");
+  api.mockResolvedValue([]);
+  render(<Theme><MockPublicShares workspaceId="w" requestId="r" examples={[{ id: "script", name: "Script", dynamic: true }]} routePath="/items" hasSavedQuery={false} dirty={false} /></Theme>);
+  expect(await screen.findByText(/only dynamic examples/)).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Create public URL" })).toHaveProperty("disabled", true);
+  fireEvent.click(screen.getByRole("checkbox", { name: "Allow Mock scripts on this public URL" }));
+  expect(screen.getByRole("button", { name: "Create public URL" })).toHaveProperty("disabled", false);
 });

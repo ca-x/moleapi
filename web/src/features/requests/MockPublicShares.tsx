@@ -15,7 +15,7 @@ interface GrantedShare extends MockShare { token: string }
 export default function MockPublicShares({ workspaceId, requestId, examples, routePath, hasSavedQuery, dirty }: {
   workspaceId: string;
   requestId: string;
-  examples: { id: string; name: string }[];
+  examples: { id: string; name: string; dynamic: boolean }[];
   routePath: string;
   hasSavedQuery: boolean;
   dirty: boolean;
@@ -36,6 +36,7 @@ export default function MockPublicShares({ workspaceId, requestId, examples, rou
   const currentIssued = issued?.scope === scope && issued.identity === identity ? issued.share : null;
   const expiryDays = Number(days);
   const validDays = Number.isInteger(expiryDays) && expiryDays >= 1 && expiryDays <= 90;
+  const shareable = allowDynamic || examples.some(example => !example.dynamic);
 
   useEffect(() => {
     setIssued(null);
@@ -54,7 +55,7 @@ export default function MockPublicShares({ workspaceId, requestId, examples, rou
   }, [path, requestId, scope, identity, refresh, dirty]);
 
   const create = async () => {
-    if (dirty || examples.length === 0 || !validDays || busy) return;
+    if (dirty || examples.length === 0 || !shareable || !validDays || busy) return;
     setBusy("create"); setError(false); setConfirm(null);
     try {
       const share = await api<GrantedShare>(path, "POST", {
@@ -94,15 +95,16 @@ export default function MockPublicShares({ workspaceId, requestId, examples, rou
   const origin = typeof window === "undefined" ? "" : window.location.origin;
   const issuedLinks = currentIssued ? [
     ...(routePath && !hasSavedQuery ? [{ label: t("公开匹配地址"), url: `${origin}/api/public/mocks/${encodeURIComponent(currentIssued.token)}${routePath}` }] : []),
-    ...examples.map(example => ({ label: `${t("示例地址")} · ${example.name}`, url: `${origin}/api/public/mock/${encodeURIComponent(currentIssued.token)}/${encodeURIComponent(example.id)}` })),
+    ...examples.filter(example => currentIssued.allow_dynamic || !example.dynamic).map(example => ({ label: `${t("示例地址")} · ${example.name}`, url: `${origin}/api/public/mock/${encodeURIComponent(currentIssued.token)}/${encodeURIComponent(example.id)}` })),
   ] : [];
 
   return <section aria-label={t("公开 Mock")} className="mock-public-shares">
     {dirty && <Text as="p" size="1" color="gray">{t("先保存工作区，再创建公开地址。已有地址仍可撤销。")}</Text>}
     {examples.length === 0 && <Text as="p" size="1" color="gray">{t("先保存一个响应示例，才能创建公开地址。")}</Text>}
+    {examples.length > 0 && !shareable && <Text as="p" size="1" color="gray">{t("此请求只有动态示例；创建公开地址前须允许 Mock 脚本。")}</Text>}
     <Flex gap="2" align="end" wrap="wrap">
       <label className="mock-share-days"><Text size="2">{t("有效期（天）")}</Text><TextField.Root aria-label={t("有效期（天）")} type="number" min="1" max="90" step="1" value={days} onChange={event => setDays(event.target.value)} /></label>
-      <Button size="2" style={{ minHeight: 44 }} disabled={dirty || examples.length === 0 || !validDays || !!busy} loading={busy === "create"} onClick={() => void create()}>{t("创建公开地址")}</Button>
+      <Button size="2" style={{ minHeight: 44 }} disabled={dirty || examples.length === 0 || !shareable || !validDays || !!busy} loading={busy === "create"} onClick={() => void create()}>{t("创建公开地址")}</Button>
     </Flex>
     {!validDays && <Text role="alert" size="1" color="red">{t("有效期必须是 1–90 天的整数。")}</Text>}
     <Text as="label" size="2"><Checkbox checked={allowDynamic} onCheckedChange={checked => setAllowDynamic(checked === true)} /> {t("允许公开地址运行 Mock 脚本")}</Text>

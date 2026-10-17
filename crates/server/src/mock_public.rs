@@ -79,6 +79,28 @@ fn request_digest(request: &moleapi_core::RequestSpec) -> Result<String, ApiErro
     Ok(hex::encode(Sha256::digest(bytes)))
 }
 
+fn validate_target(
+    request: &moleapi_core::RequestSpec,
+    allow_dynamic: bool,
+) -> Result<(), ApiError> {
+    if request.protocol != moleapi_core::Protocol::Http || request.examples.is_empty() {
+        return Err(ApiError::bad(
+            "Public Mock requires a saved HTTP response example",
+        ));
+    }
+    if !allow_dynamic
+        && request
+            .examples
+            .iter()
+            .all(|example| !example.mock_script.is_empty())
+    {
+        return Err(ApiError::bad(
+            "Public Mock requires a static example or explicit dynamic permission",
+        ));
+    }
+    Ok(())
+}
+
 fn bound_request<'a>(
     workspace: &'a moleapi_core::Workspace,
     share: &MockShare,
@@ -99,6 +121,47 @@ pub(crate) fn request_matches(
         .map(|request| request_digest(request).map(|digest| digest == share.request_digest))
         .transpose()
         .map(|result| result.unwrap_or(false))
+}
+
+/// A removed request permanently loses its public capabilities, even if its ID is reused later.
+pub(crate) async fn revoke_removed_requests<C: sea_orm::ConnectionTrait>(
+    db: &C,
+    owner: &str,
+    previous: &moleapi_core::Workspace,
+    next: &moleapi_core::Workspace,
+) -> Result<(), sea_orm::DbErr> {
+    let current_ids: std::collections::HashSet<_> = next
+        .data
+        .collections
+        .iter()
+        .flat_map(|collection| &collection.requests)
+        .map(|request| request.id.as_str())
+        .collect();
+    let removed: std::collections::HashSet<_> = previous
+        .data
+        .collections
+        .iter()
+        .flat_map(|collection| &collection.requests)
+        .map(|request| request.id.as_str())
+        .filter(|id| !current_ids.contains(id))
+        .collect();
+    if removed.is_empty() {
+        return Ok(());
+    }
+    let rows = document::Entity::find()
+        .filter(document::Column::Owner.eq(owner))
+        .filter(document::Column::Kind.eq(KIND))
+        .filter(document::Column::RefId.eq(&previous.id))
+        .all(db)
+        .await?;
+    for row in rows {
+        let share: MockShare = serde_json::from_str(&row.payload)
+            .map_err(|_| sea_orm::DbErr::Custom("Corrupt Mock share".into()))?;
+        if removed.contains(share.request_id.as_str()) {
+            document::Entity::delete_by_id(row.id).exec(db).await?;
+        }
+    }
+    Ok(())
 }
 
 fn management(
@@ -208,21 +271,7 @@ pub async fn create(
         .flat_map(|collection| &collection.requests)
         .find(|request| request.id == input.request_id)
         .ok_or_else(ApiError::not_found)?;
-    if request.protocol != moleapi_core::Protocol::Http || request.examples.is_empty() {
-        return Err(ApiError::bad(
-            "Public Mock requires a saved HTTP response example",
-        ));
-    }
-    if !input.allow_dynamic
-        && request
-            .examples
-            .iter()
-            .all(|example| !example.mock_script.is_empty())
-    {
-        return Err(ApiError::bad(
-            "Public Mock requires a static example or explicit dynamic permission",
-        ));
-    }
+    validate_target(request, input.allow_dynamic)?;
     let now = chrono::Utc::now().timestamp();
     let mut active = 0u64;
     for (key, existing) in owned_shares(&tx, &owner.0, &workspace).await? {
@@ -294,6 +343,7 @@ pub async fn rotate(
         .await?
         .ok_or_else(ApiError::not_found)?;
     let request = bound_request(&current, &share).ok_or_else(ApiError::not_found)?;
+    validate_target(request, share.allow_dynamic)?;
     share.request_digest = request_digest(request)?;
     let (token, key) = new_token();
     document::Entity::delete_by_id(old_key).exec(&tx).await?;

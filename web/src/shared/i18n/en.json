@@ -16,6 +16,7 @@
   "默认仅工作区成员可访问。公开地址只分享当前请求；任何持有地址的人都可以调用。": "Only workspace members have access by default. A public URL shares this request only; anyone with the URL can call it.",
   "先保存工作区，再创建公开地址。已有地址仍可撤销。": "Save the workspace before creating a public URL. Existing URLs can still be revoked.",
   "先保存一个响应示例，才能创建公开地址。": "Save a response example before creating a public URL.",
+  "此请求只有动态示例；创建公开地址前须允许 Mock 脚本。": "This request has only dynamic examples. Allow Mock scripts before creating a public URL.",
   "有效期（天）": "Expires in days",
   "创建公开地址": "Create public URL",
   "有效期必须是 1–90 天的整数。": "Expiry must be a whole number from 1 to 90 days.",
