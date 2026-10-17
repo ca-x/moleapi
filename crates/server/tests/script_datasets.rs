@@ -372,3 +372,99 @@ async fn edited_workspace_cannot_send_after_caught_live_dataset_refresh_failure(
     assert_eq!(calls.load(Ordering::SeqCst), 0);
     fixture.abort();
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn edited_literal_dataset_cannot_send_after_script_worker_starts() {
+    use std::{
+        os::unix::fs::PermissionsExt,
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
+    };
+    let calls = Arc::new(AtomicUsize::new(0));
+    let destination_calls = calls.clone();
+    let (url, fixture) = serve(Router::new().route(
+        "/destination",
+        axum::routing::get(move || {
+            let calls = destination_calls.clone();
+            async move {
+                calls.fetch_add(1, Ordering::SeqCst);
+                "sent"
+            }
+        }),
+    ))
+    .await;
+    let dir = tempfile::tempdir().unwrap();
+    let ready = dir.path().join("worker-ready");
+    let release = dir.path().join("worker-release");
+    let wrapper = dir.path().join("worker-wrapper");
+    let real_worker = env!("CARGO_BIN_EXE_moleapi-server");
+    std::fs::write(
+        &wrapper,
+        format!(
+            "#!/bin/sh\ntouch '{}'\nwhile [ ! -f '{}' ]; do sleep 0.01; done\nexec '{}' \"$@\"\n",
+            ready.display(),
+            release.display(),
+            real_worker
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let router =
+        moleapi_server::local_with_worker(&dir.path().join("literal-revision.db"), &wrapper)
+            .await
+            .unwrap();
+    let mut data = example_data();
+    data["script_mode"] = json!("v2");
+    data["datasets"] = json!([{"id":"saved","name":"Rows","source":{"format":"json","source":"[{\"token\":\"old\"}]"}}]);
+    let request = &mut data["collections"][0]["requests"][0];
+    request["url"] = json!(format!("{url}/destination"));
+    request["pre_request_script"] = json!(
+        "const result=await pm.datasets('saved').executeQuery('SELECT token FROM data');for await(const row of result.rows)pm.request.headers.upsert({key:'x-dataset',value:row.token});"
+    );
+    let request = request.clone();
+    let (status, saved) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"w","name":"W","data":data.clone()})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    let running_router = router.clone();
+    let running = tokio::spawn(async move {
+        call(
+            &running_router,
+            "POST",
+            "/api/execute",
+            None,
+            Some(json!({"workspace_id":"w","request":request})),
+        )
+        .await
+    });
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        while !ready.exists() {
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    data["datasets"][0]["source"]["source"] = json!("[{\"token\":\"new\"}]");
+    let (status, updated) = call(
+        &router,
+        "PUT",
+        "/api/workspaces/w",
+        None,
+        Some(json!({"name":"W","expected_revision":saved["revision"],"data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{updated}");
+    std::fs::write(release, b"").unwrap();
+    let (status, response) = running.await.unwrap();
+    assert_eq!(status, StatusCode::CONFLICT, "{response}");
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    fixture.abort();
+}

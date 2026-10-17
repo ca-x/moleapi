@@ -81,7 +81,7 @@ async fn dynamic_mock_queries_owned_dataset_and_sees_only_safe_incoming_request_
     data["script_mode"] = json!("v2");
     data["datasets"] = json!([{"id":"d","name":"Rows","source":{"format":"json","source":"[{\"value\":\"dynamic\"}]"}}]);
     data["collections"][0]["requests"][0]["examples"][0]["mock_script"] = json!(
-        "if(!pm.request.url.includes('safe=yes')||pm.request.url.includes('token=hidden')||pm.request.headers.get('cookie')!==undefined)throw new Error('unsafe incoming Mock request');const result=await pm.datasets('d').executeQuery('SELECT value FROM data');for await(const row of result.rows){pm.mock.setStatus(202);pm.mock.setHeader('x-row',row.value);pm.mock.setBody({value:row.value});}"
+        "if(!pm.request.url.includes('safe=yes')||pm.request.url.includes('token=hidden')||pm.request.headers.get('cookie')!==undefined||pm.request.headers.get('x-hop')!==undefined||pm.request.headers.get('x-safe')!=='visible')throw new Error('unsafe incoming Mock request');const result=await pm.datasets('d').executeQuery('SELECT value FROM data');for await(const row of result.rows){pm.mock.setStatus(202);pm.mock.setHeader('x-row',row.value);pm.mock.setBody({value:row.value});}"
     );
     assert_eq!(
         call(
@@ -101,6 +101,9 @@ async fn dynamic_mock_queries_owned_dataset_and_sees_only_safe_incoming_request_
             Request::builder()
                 .uri("/api/mock/w/r/e?safe=yes&token=hidden")
                 .header("cookie", "private-cookie")
+                .header("connection", "X-Hop")
+                .header("x-hop", "private-hop")
+                .header("x-safe", "visible")
                 .body(Body::empty())
                 .unwrap(),
         )

@@ -166,14 +166,36 @@ fn safe_incoming_request(
     );
     request.headers.clear();
     let mut bytes = 0usize;
+    let mut nominated = Vec::new();
+    for value in headers.get_all("connection").iter() {
+        let value = value
+            .to_str()
+            .map_err(|_| ApiError::bad("Invalid Mock Connection header"))?;
+        for name in value.split(',') {
+            nominated.push(
+                HeaderName::from_bytes(name.trim().as_bytes())
+                    .map_err(|_| ApiError::bad("Invalid Mock Connection header"))?,
+            );
+        }
+    }
     for (index, (key, value)) in headers.iter().enumerate() {
         if index >= 100 {
             return Err(ApiError::bad("Mock headers exceed 100 entries"));
         }
         if moleapi_core::sensitive_query_key(key.as_str())
+            || nominated.contains(key)
             || matches!(
                 key.as_str(),
-                "cookie" | "authorization" | "proxy-authorization" | "connection"
+                "cookie"
+                    | "authorization"
+                    | "proxy-authorization"
+                    | "connection"
+                    | "keep-alive"
+                    | "proxy-authenticate"
+                    | "te"
+                    | "trailer"
+                    | "transfer-encoding"
+                    | "upgrade"
             )
         {
             continue;

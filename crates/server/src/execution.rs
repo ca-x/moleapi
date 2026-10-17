@@ -239,8 +239,7 @@ async fn script_phase(
         )
         .await
     };
-    if has_live
-        && data.script_mode == moleapi_core::ScriptMode::V2
+    if data.script_mode == moleapi_core::ScriptMode::V2
         && let Ok(output) = &result
     {
         let changed = match owned(s, owner, &w.id).await {
