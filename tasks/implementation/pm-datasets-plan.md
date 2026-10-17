@@ -19,9 +19,9 @@
 
 ### 1. Versioned bounded asynchronous script phases
 
-- [ ] Add an explicit workspace-level v2 script mode with a backward-compatible v1 default and validation.
-- [ ] Add a failing worker regression for top-level await, settled/rejected/never-settling Promise, detached mutation and private failure output. Keep the existing v1 tests unchanged.
-- [ ] Implement bounded QuickJS promise evaluation/job draining under the existing process watchdog, with one final exported state only after settlement. Verify worker cancellation/reap, strict Clippy and format; commit.
+- [x] Add an explicit workspace-level v2 script mode with a backward-compatible v1 default and validation.
+- [x] Add a failing worker regression for top-level await, settled/rejected/never-settling Promise, detached mutation and private failure output. Keep the existing v1 tests unchanged.
+- [x] Implement bounded QuickJS promise evaluation/job draining under the existing process watchdog, with one final exported state only after settlement. Verify worker cancellation/reap, strict Clippy and format; commit.
 
 ### 2. Read-only dataset query substrate
 
@@ -40,6 +40,8 @@
 - [ ] Design and implement a checked on-demand host bridge for query-backed dataset IDs under the script phase deadline, without worker network access or eager refresh of unrelated sources.
 - [ ] Add a Mock implementation script contract and execute the same dataset handle from a bounded owner-scoped mock request.
 - [ ] Run real owner/revocation/cancellation/privacy tests, full relevant suites, three-database CI, native packages and independent review. Update matrix/coverage claims only with exact evidence.
+
+**Checkpoint 2026-10-17:** commits `89c6d52` and `1e13d54` add the explicit v2 phase worker, settings control, stable table names and isolated SQLite adapter. The adapter passes direct tests, but workspace snapshot admission, `pm.datasets` binding, views and live/Mock bridges remain open; no Data matrix row is closed by these commits.
 
 ## Review focus
 
