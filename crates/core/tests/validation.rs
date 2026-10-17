@@ -147,6 +147,16 @@ fn linked_mock_schema_requires_matching_saved_operation_status_and_media() {
             local_value: None,
         });
     assert!(validate_workspace(&workspace).is_err());
+    workspace.collections[0].requests[0].examples[0]
+        .headers
+        .clear();
+    let original = workspace.collections[0].requests[0].examples[0].clone();
+    for index in 1..=256 {
+        let mut extra = original.clone();
+        extra.id = format!("linked-{index}");
+        workspace.collections[0].requests[0].examples.push(extra);
+    }
+    assert!(validate_workspace(&workspace).is_err());
 }
 
 #[test]

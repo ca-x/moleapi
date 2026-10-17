@@ -75,14 +75,11 @@ impl OpenapiMockIndex {
             (200..=599).contains(&status),
             "Linked Mock response status must be 200–599"
         );
-        let mime = parts[6]
-            .split(';')
-            .next()
-            .unwrap_or_default()
-            .trim()
-            .to_ascii_lowercase();
+        let mime: mime::Mime = parts[6]
+            .parse()
+            .context("Invalid linked Mock response media type")?;
         ensure!(
-            mime == "application/json" || mime.ends_with("+json"),
+            mime.essence_str() == "application/json" || mime.suffix() == Some(mime::JSON),
             "Linked Mock response must use JSON media"
         );
         let operation = self.document["paths"]
@@ -266,24 +263,12 @@ impl<'a> Resolver<'a> {
                 }
                 "format" => {
                     let format = value.as_str().context("Invalid linked Mock format")?;
-                    let fixed = match format {
-                        "uuid" => Some("00000000-0000-4000-8000-000000000000"),
-                        "email" => Some("mock@example.test"),
-                        "date" => Some("2026-01-01"),
-                        "date-time" => Some("2026-01-01T00:00:00Z"),
-                        "uri" => Some("https://example.test/mock"),
-                        "int32" | "int64" | "float" | "double" => None,
+                    match format {
+                        "uuid" | "email" | "date" | "date-time" | "uri" => {
+                            output.insert("format".into(), value.clone());
+                        }
+                        "int32" | "int64" | "float" | "double" => {}
                         _ => bail!("Unsupported linked Mock format {format}"),
-                    };
-                    if let Some(fixed) = fixed
-                        && !source.keys().any(|key| {
-                            matches!(
-                                key.as_str(),
-                                "const" | "default" | "enum" | "examples" | "example"
-                            )
-                        })
-                    {
-                        output.insert("default".into(), Value::String(fixed.into()));
                     }
                 }
                 "nullable" | "readOnly" | "deprecated" => {

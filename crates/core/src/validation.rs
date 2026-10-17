@@ -1,7 +1,7 @@
 use crate::*;
 use anyhow::{Context, Result, bail, ensure};
 use reqwest::header::{HeaderName, HeaderValue};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, hash_map::Entry};
 pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
     crate::validate_extractions(&r.extractions)?;
     crate::validate_a2a(r, templates)?;
@@ -480,6 +480,8 @@ pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
         }
     }
     let mut linked_indexes: HashMap<&str, OpenapiMockIndex> = HashMap::new();
+    let mut linked_responses: HashMap<(&str, &str), OpenapiMockResponse> = HashMap::new();
+    let mut linked_examples = 0usize;
     let mut collections = HashSet::new();
     let mut requests = HashSet::new();
     let mut environments = HashSet::new();
@@ -512,6 +514,11 @@ pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
             let mut examples = HashSet::new();
             for e in &r.examples {
                 if let Some(link) = &e.mock_schema_link {
+                    linked_examples += 1;
+                    ensure!(
+                        linked_examples <= 256,
+                        "Workspace exceeds 256 linked Mock examples"
+                    );
                     ensure!(
                         r.protocol == Protocol::Http,
                         "Linked Mock schema requires HTTP request"
@@ -526,10 +533,16 @@ pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
                     if !linked_indexes.contains_key(spec.id.as_str()) {
                         linked_indexes.insert(spec.id.as_str(), OpenapiMockIndex::parse(spec)?);
                     }
-                    let selected = linked_indexes
-                        .get(spec.id.as_str())
-                        .context("Linked Mock specification index is missing")?
-                        .response_schema(&link.pointer)?;
+                    let selected =
+                        match linked_responses.entry((spec.id.as_str(), link.pointer.as_str())) {
+                            Entry::Occupied(entry) => entry.into_mut(),
+                            Entry::Vacant(entry) => entry.insert(
+                                linked_indexes
+                                    .get(spec.id.as_str())
+                                    .context("Linked Mock specification index is missing")?
+                                    .response_schema(&link.pointer)?,
+                            ),
+                        };
                     ensure!(
                         selected.method == r.method && selected.status == e.status,
                         "Linked Mock operation method or status differs from saved example"

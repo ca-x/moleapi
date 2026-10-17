@@ -17,7 +17,7 @@ vi.mock("../../shared/ui",()=>({
   PairEditor:({rows}:{rows:unknown[]})=><div data-testid="match-pairs">{rows.length}</div>,
   ToolButton:({label,onClick,children}:{label:string;onClick:()=>void;children:React.ReactNode})=><button aria-label={label} onClick={onClick}>{children}</button>
 }));
-afterEach(cleanup);
+afterEach(()=>{cleanup();vi.unstubAllGlobals();Reflect.deleteProperty(HTMLElement.prototype,"scrollIntoView");});
 
 it("edits an opt-in mock implementation without replacing the saved example",async()=>{
   await setLanguage("en");
@@ -60,6 +60,23 @@ it("keeps the static body while editing an explicit Mock JSON Schema",async()=>{
   expect(update.mock.lastCall?.[0].examples[0].body).toBe("static");
   await setLanguage("zh-CN");
   expect(screen.getByRole("button",{name:"编辑 Mock JSON Schema"})).toBeTruthy();
+});
+
+it("selects a saved OpenAPI response without an operationId and keeps the static body",async()=>{
+  vi.stubGlobal("ResizeObserver",class {observe(){} unobserve(){} disconnect(){}});
+  HTMLElement.prototype.scrollIntoView=()=>{};
+  await setLanguage("en");
+  const request=newRequest("R","https://example.test/items");
+  request.specification_id="spec";
+  request.examples=[{id:"e",name:"Example",status:201,headers:[{id:"h",key:"Content-Type",value:"text/plain",enabled:true}],body:"static"}];
+  const source=JSON.stringify({openapi:"3.1.0",paths:{"/items":{get:{responses:{"200":{content:{"application/json":{schema:{type:"string",example:"linked"}}}}}}}}});
+  const specifications=[{id:"spec",name:"Pet API",kind:"openapi",source,dialect:"3.1.0"}];
+  const update=vi.fn();
+  render(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w" specifications={specifications}/></Theme>);
+  fireEvent.click(screen.getByRole("combobox",{name:"Mock body source"}));
+  fireEvent.click(screen.getByRole("option",{name:/GET \/items · 200 application\/json/}));
+  expect(update.mock.lastCall?.[0].examples[0]).toMatchObject({status:200,headers:[{value:"application/json"}],body:"static",mock_schema_link:{specification_id:"spec",pointer:"#/paths/~1items/get/responses/200/content/application~1json/schema"}});
+  expect(JSON.stringify(update.mock.lastCall?.[0].examples[0])).not.toContain("mock_schema\":\"\"");
 });
 
 it("shows the mock editor in Chinese",async()=>{

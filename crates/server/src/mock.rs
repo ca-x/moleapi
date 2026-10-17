@@ -551,22 +551,29 @@ async fn serve_selected(
     body: &[u8],
 ) -> Result<axum::response::Response, ApiError> {
     let mut response_headers = e.headers.clone();
-    let response_body = if e.mock_schema.is_empty() {
-        e.body.clone()
-    } else {
-        if !response_headers
+    enum SchemaSource {
+        Inline(String),
+        Linked(moleapi_core::Specification, String, String, u16),
+    }
+    let schema_source = if let Some(link) = &e.mock_schema_link {
+        let spec = w
+            .data
+            .specifications
             .iter()
-            .any(|header| header.enabled && header.key.eq_ignore_ascii_case("content-type"))
-        {
-            response_headers.push(moleapi_core::Pair {
-                id: "mock-schema-content-type".into(),
-                key: "Content-Type".into(),
-                value: "application/json".into(),
-                enabled: true,
-                secret: None,
-                local_value: None,
-            });
-        }
+            .find(|spec| spec.id == link.specification_id)
+            .ok_or_else(ApiError::not_found)?;
+        Some(SchemaSource::Linked(
+            spec.clone(),
+            link.pointer.clone(),
+            request.method.clone(),
+            e.status,
+        ))
+    } else if !e.mock_schema.is_empty() {
+        Some(SchemaSource::Inline(e.mock_schema.clone()))
+    } else {
+        None
+    };
+    let response_body = if let Some(schema_source) = schema_source {
         let permit = s
             .mock_schema_slots
             .clone()
@@ -575,14 +582,53 @@ async fn serve_selected(
                 status: StatusCode::TOO_MANY_REQUESTS,
                 message: "Mock schema generation capacity reached".into(),
             })?;
-        let schema = e.mock_schema.clone();
-        tokio::task::spawn_blocking(move || {
-            let _permit = permit;
-            moleapi_core::generate_mock_schema(&schema)
-        })
-        .await
-        .map_err(|_| ApiError::internal())?
-        .map_err(|_| ApiError::bad("Invalid saved Mock schema"))?
+        let (body, media_type) =
+            tokio::task::spawn_blocking(move || -> anyhow::Result<(String, String)> {
+                let _permit = permit;
+                match schema_source {
+                    SchemaSource::Inline(schema) => Ok((
+                        moleapi_core::generate_mock_schema(&schema)?,
+                        "application/json".into(),
+                    )),
+                    SchemaSource::Linked(spec, pointer, method, status) => {
+                        let selected = moleapi_core::OpenapiMockIndex::parse(&spec)?
+                            .response_schema(&pointer)?;
+                        anyhow::ensure!(
+                            selected.method == method && selected.status == status,
+                            "Linked Mock operation changed"
+                        );
+                        Ok((
+                            moleapi_core::generate_mock_schema(&selected.schema)?,
+                            selected.media_type,
+                        ))
+                    }
+                }
+            })
+            .await
+            .map_err(|_| ApiError::internal())?
+            .map_err(|_| ApiError::bad("Invalid saved Mock schema"))?;
+        if !response_headers
+            .iter()
+            .any(|header| header.enabled && header.key.eq_ignore_ascii_case("content-type"))
+        {
+            response_headers.push(moleapi_core::Pair {
+                id: "mock-schema-content-type".into(),
+                key: "Content-Type".into(),
+                value: media_type,
+                enabled: true,
+                secret: None,
+                local_value: None,
+            });
+        }
+        let current = owned(s, owner, &w.id).await?;
+        if current.revision != w.revision {
+            return Err(ApiError::conflict(
+                "Workspace changed during Mock schema generation",
+            ));
+        }
+        body
+    } else {
+        e.body.clone()
     };
     let mut draft = moleapi_script_runtime::MockResponseDraft {
         status: e.status,
