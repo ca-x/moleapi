@@ -16,7 +16,7 @@
 
 - Cyclic or repeated `$ref` must end within the budget and never use an external resolver.
 - An authored default/example/enum that violates the surrounding type or bounds must not escape to the response.
-- `oneOf` must choose a value satisfying exactly one branch, while `allOf` satisfies all branches or fails.
+- `oneOf`, `allOf` and other unsupported keywords must reject at save time with a field path.
 - Public error text and logs must not disclose private schema bodies.
 - Save/reload and full backup preserve the schema; default backup explicitly omits it and incompatible external export rejects it without silent loss.
 

@@ -359,6 +359,9 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
             "Example status must be 200–599"
         );
         ensure!(example.body.len() <= MAX_BODY, "Example body exceeds 5 MiB");
+        if !example.mock_schema.is_empty() {
+            crate::validate_mock_schema(&example.mock_schema)?;
+        }
         validate_script(&example.mock_script)?;
         if let Some(rule) = &example.mock_match {
             validate_mock_match(rule)?;

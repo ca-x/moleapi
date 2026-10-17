@@ -62,3 +62,28 @@ fn mock_delay_survives_native_backup_but_external_formats_reject_it() {
     assert!(export(&workspace, "postman", true).is_err());
     assert!(export(&workspace, "openapi", true).is_err());
 }
+
+#[test]
+fn mock_schema_is_private_in_default_backup_and_exact_in_full_backup() {
+    let schema = r#"{"type":"string","default":"private-schema-example"}"#;
+    let mut source = json!({"id":"w","name":"Schema","revision":1,"updated_at":"now","data":{"schema_version":1,"collections":[{"id":"c","name":"C","description":"","requests":[{"id":"r","name":"R","method":"GET","url":"https://example.test/","description":"","query":[],"headers":[],"body_kind":"none","body":"","auth":{"kind":"none","token":"","username":"","password":""},"timeout_ms":1000,"follow_redirects":true,"verify_tls":true,"assertions":[],"examples":[{"id":"e","name":"Schema","status":200,"headers":[],"body":"static"}]}]}],"environments":[],"active_environment_id":null}});
+    source["data"]["collections"][0]["requests"][0]["examples"][0]["mock_schema"] = json!(schema);
+    let workspace: Workspace = serde_json::from_value(source).unwrap();
+    validate_workspace(&workspace.data).unwrap();
+    let safe = export(&workspace, "moleapi", false).unwrap();
+    assert!(!safe.content.contains("private-schema-example"));
+    assert!(
+        import("moleapi", &safe.content).unwrap().data.collections[0].requests[0].examples[0]
+            .mock_schema
+            .is_empty()
+    );
+    let full = export(&workspace, "moleapi", true).unwrap();
+    assert_eq!(
+        import("moleapi", &full.content).unwrap().data.collections[0].requests[0].examples[0]
+            .mock_schema,
+        schema
+    );
+    for format in ["postman", "openapi", "har"] {
+        assert!(export(&workspace, format, true).is_err(), "{format}");
+    }
+}
