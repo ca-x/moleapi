@@ -1,6 +1,6 @@
 //! Private stdin/stdout worker protocol; the host kills native work past its deadline.
 use crate::{ScriptFailure, ScriptOutput};
-use moleapi_core::{RequestSpec, Response, VariableScopes};
+use moleapi_core::{RequestSpec, Response, ScriptMode, VariableScopes};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeSet,
@@ -20,6 +20,8 @@ pub const MAX_WORKER_INPUT: usize = 24 * 1024 * 1024;
 pub const MAX_WORKER_OUTPUT: usize = 32 * 1024 * 1024;
 #[derive(Serialize, Deserialize)]
 struct WorkerInput {
+    #[serde(default)]
+    mode: ScriptMode,
     #[serde(default)]
     condition: Option<String>,
     scripts: Vec<String>,
@@ -58,12 +60,13 @@ pub fn dispatch_worker() -> anyhow::Result<bool> {
     );
     let mut input: WorkerInput = serde_json::from_slice(&bytes)?;
     input.scopes.private_values = input.private_values;
-    let output = match crate::run_with_condition(
+    let output = match crate::run_with_condition_mode(
         &input.scripts,
         &input.request,
         input.response.as_ref(),
         &input.scopes,
         input.condition.as_deref(),
+        input.mode,
     ) {
         Ok(output) => WorkerOutput::Success {
             output: Box::new(output),
@@ -91,7 +94,25 @@ pub async fn run_worker(
     response: Option<&Response>,
     scopes: &VariableScopes,
 ) -> Result<ScriptOutput, ScriptFailure> {
-    run_worker_input(executable, scripts, request, response, scopes, None).await
+    run_worker_with_mode(
+        executable,
+        scripts,
+        request,
+        response,
+        scopes,
+        ScriptMode::V1,
+    )
+    .await
+}
+pub async fn run_worker_with_mode(
+    executable: &Path,
+    scripts: Vec<String>,
+    request: &RequestSpec,
+    response: Option<&Response>,
+    scopes: &VariableScopes,
+    mode: ScriptMode,
+) -> Result<ScriptOutput, ScriptFailure> {
+    run_worker_input(executable, scripts, request, response, scopes, None, mode).await
 }
 pub async fn condition_worker(
     executable: &Path,
@@ -107,6 +128,7 @@ pub async fn condition_worker(
         response,
         scopes,
         Some(expression.into()),
+        ScriptMode::V1,
     )
     .await
 }
@@ -117,6 +139,7 @@ async fn run_worker_input(
     response: Option<&Response>,
     scopes: &VariableScopes,
     condition: Option<String>,
+    mode: ScriptMode,
 ) -> Result<ScriptOutput, ScriptFailure> {
     let deadline = tokio::time::Instant::now() + WORKER_DEADLINE;
     if !executable.is_absolute() {
@@ -127,6 +150,7 @@ async fn run_worker_input(
         ));
     }
     let payload = serde_json::to_vec(&WorkerInput {
+        mode,
         condition,
         scripts,
         request: request.clone(),

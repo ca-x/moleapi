@@ -1,5 +1,5 @@
 use moleapi_core::*;
-use moleapi_script_runtime::run;
+use moleapi_script_runtime::{run, run_with_mode};
 use serde_json::json;
 fn request() -> RequestSpec {
     serde_json::from_value(json!({"id":"r","name":"r","method":"GET","url":"https://example.com/","description":"","query":[],"headers":[],"body_kind":"none","body":"","auth":{"kind":"none","token":"","username":"","password":""},"timeout_ms":1000,"follow_redirects":true,"verify_tls":true,"assertions":[],"examples":[]})).unwrap()
@@ -27,6 +27,35 @@ fn evaluate(source: &str) -> anyhow::Result<moleapi_script_runtime::ScriptOutput
         None,
         &VariableScopes::default(),
     )
+}
+fn evaluate_v2(source: &str) -> anyhow::Result<moleapi_script_runtime::ScriptOutput> {
+    run_with_mode(
+        &[source.into()],
+        &request(),
+        None,
+        &VariableScopes::default(),
+        ScriptMode::V2,
+    )
+}
+#[test]
+fn v2_top_level_await_settles_before_exporting_mutations() {
+    let output = evaluate_v2("const answer = await Promise.resolve(42); pm.variables.set('answer', answer); pm.test('mode', () => pm.expect(pm.compatibilityVersion).to.equal('moleapi-pm/2'));").unwrap();
+    assert_eq!(output.updates[0].value.as_deref(), Some("42"));
+    assert!(output.tests[0].passed);
+    assert!(
+        evaluate_v2(
+            "await Promise.reject(new Error('async failure')); pm.variables.set('late','no');"
+        )
+        .is_err()
+    );
+    assert!(evaluate_v2("await new Promise(() => {}); pm.variables.set('late','no');").is_err());
+}
+#[test]
+fn v2_detached_work_does_not_escape_a_phase() {
+    assert!(
+        evaluate_v2("Promise.resolve().then(() => pm.variables.set('late','no')); 42;").is_err()
+    );
+    assert!(evaluate_v2("new Promise(() => {}); 42;").is_err());
 }
 #[test]
 fn execution_flow_directives_are_typed_and_skip_short_circuits_phase_scripts() {

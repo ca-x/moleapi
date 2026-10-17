@@ -52,6 +52,18 @@ fn compatibility_defaults_preserve_old_workspace_and_request_documents() {
     )
     .unwrap();
     assert!(w.specifications.is_empty());
+    assert_eq!(w.script_mode, ScriptMode::V1);
+    let mut async_workspace = w.clone();
+    async_workspace.script_mode = ScriptMode::V2;
+    let restored: WorkspaceData =
+        serde_json::from_value(serde_json::to_value(&async_workspace).unwrap()).unwrap();
+    assert_eq!(restored.script_mode, ScriptMode::V2);
+    assert!(
+        serde_json::from_value::<WorkspaceData>(
+            json!({"schema_version":1,"collections":[],"environments":[],"script_mode":"v3"})
+        )
+        .is_err()
+    );
     let r = request();
     assert!(r.specification_id.is_none());
     assert!(r.operation_id.is_none());
@@ -62,6 +74,7 @@ fn canonical_specification_references_and_size_are_checked() {
     let mut r = request();
     r.specification_id = Some("spec".into());
     let mut w = WorkspaceData {
+        script_mode: ScriptMode::V1,
         scenarios: vec![],
         datasets: vec![],
         auth: None,

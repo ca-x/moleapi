@@ -1,8 +1,10 @@
 //! Bounded QuickJS runtime with the deliberately limited `moleapi-pm/1` API.
 //! No filesystem, native modules, timers, processes or independent networking.
 use anyhow::{Context as _, Result, ensure};
-use moleapi_core::{RequestSpec, Response, ScriptLog, TestResult, VariableScopes, VariableUpdate};
-use rquickjs::{Context, Ctx, Exception, Function, Runtime, Value};
+use moleapi_core::{
+    RequestSpec, Response, ScriptLog, ScriptMode, TestResult, VariableScopes, VariableUpdate,
+};
+use rquickjs::{Context, Ctx, Exception, Function, Runtime, Value, promise::PromiseHookType};
 use serde::{Deserialize, Serialize};
 use std::{
     cell::{Cell, RefCell},
@@ -23,6 +25,7 @@ struct Input<'a> {
     request: &'a RequestSpec,
     response: Option<&'a Response>,
     scopes: &'a VariableScopes,
+    mode: ScriptMode,
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ScriptOutput {
@@ -119,14 +122,24 @@ pub fn run(
     response: Option<&Response>,
     scopes: &VariableScopes,
 ) -> Result<ScriptOutput> {
-    run_with_condition(scripts, request, response, scopes, None)
+    run_with_mode(scripts, request, response, scopes, ScriptMode::V1)
 }
-pub(crate) fn run_with_condition(
+pub fn run_with_mode(
+    scripts: &[String],
+    request: &RequestSpec,
+    response: Option<&Response>,
+    scopes: &VariableScopes,
+    mode: ScriptMode,
+) -> Result<ScriptOutput> {
+    run_with_condition_mode(scripts, request, response, scopes, None, mode)
+}
+pub(crate) fn run_with_condition_mode(
     scripts: &[String],
     request: &RequestSpec,
     response: Option<&Response>,
     scopes: &VariableScopes,
     condition: Option<&str>,
+    mode: ScriptMode,
 ) -> Result<ScriptOutput> {
     if let Some(expression) = condition {
         ensure!(
@@ -142,6 +155,7 @@ pub(crate) fn run_with_condition(
         request,
         response,
         scopes,
+        mode,
     })?;
     ensure!(
         input.len() <= 16 * 1024 * 1024,
@@ -159,7 +173,25 @@ pub(crate) fn run_with_condition(
         runtime.set_interrupt_handler(Some(Box::new(move || Instant::now() >= deadline)));
         let promise_seen = Rc::new(Cell::new(false));
         let promise_flag = promise_seen.clone();
-        runtime.set_promise_hook(Some(Box::new(move |_, _, _, _| promise_flag.set(true))));
+        let pending_promises = Rc::new(Cell::new(0usize));
+        let pending = pending_promises.clone();
+        runtime.set_promise_hook(Some(Box::new(move |_, kind, _, _| {
+            promise_flag.set(true);
+            match kind {
+                PromiseHookType::Init => pending.set(pending.get().saturating_add(1)),
+                PromiseHookType::Resolve => pending.set(pending.get().saturating_sub(1)),
+                _ => {}
+            }
+        })));
+        let unhandled_rejections = Rc::new(Cell::new(0usize));
+        let unhandled = unhandled_rejections.clone();
+        runtime.set_host_promise_rejection_tracker(Some(Box::new(move |_, _, _, handled| {
+            unhandled.set(if handled {
+                unhandled.get().saturating_sub(1)
+            } else {
+                unhandled.get().saturating_add(1)
+            });
+        })));
         let context = Context::full(&runtime).context("Create JavaScript context")?;
         let output = context.with(|ctx| {
             let skipped = Rc::new(Cell::new(false));
@@ -170,25 +202,25 @@ pub(crate) fn run_with_condition(
                     skip_flag.set(true);
                 })?,
             )?;
-            let evaluate = |source: &str| -> Result<Value<'_>> {
-                ctx.eval(source).map_err(|error| {
-                    let detail = if error.is_exception() {
-                        let caught = ctx.catch();
-                        // Never format arbitrary script objects through user-defined callbacks.
-                        if let Some(object) = caught.as_object() {
-                            object
-                                .get::<_, String>("message")
-                                .unwrap_or_else(|_| "JavaScript exception".into())
-                        } else {
-                            "JavaScript exception".into()
-                        }
+            let describe_error = |error: rquickjs::Error| {
+                let detail = if error.is_exception() {
+                    let caught = ctx.catch();
+                    // Never format arbitrary script objects through user-defined callbacks.
+                    if let Some(object) = caught.as_object() {
+                        object
+                            .get::<_, String>("message")
+                            .unwrap_or_else(|_| "JavaScript exception".into())
                     } else {
-                        error.to_string()
-                    };
-                    let detail: String = detail.chars().take(4096).collect();
-                    anyhow::anyhow!("JavaScript error: {detail}")
-                })
+                        "JavaScript exception".into()
+                    }
+                } else {
+                    error.to_string()
+                };
+                let detail: String = detail.chars().take(4096).collect();
+                anyhow::anyhow!("JavaScript error: {detail}")
             };
+            let evaluate =
+                |source: &str| -> Result<Value<'_>> { ctx.eval(source).map_err(describe_error) };
             let values = private_values.clone();
             let complete = privacy_complete.clone();
             let capture = Function::new(
@@ -313,15 +345,32 @@ pub(crate) fn run_with_condition(
                     None
                 };
             for script in scripts.iter().filter(|s| !s.trim().is_empty()) {
-                let result = match evaluate(script) {
+                let result = match if mode == ScriptMode::V2 {
+                    ctx.eval_promise(script.as_str())
+                        .map_err(describe_error)
+                        .and_then(|promise| promise.finish::<Value>().map_err(describe_error))
+                } else {
+                    evaluate(script)
+                } {
                     Ok(result) => result,
                     Err(_) if skipped.get() => break,
                     Err(error) => return Err(error),
                 };
-                ensure!(
-                    !result.is_promise() && !promise_seen.get(),
-                    "Asynchronous scripts are unsupported in pm compatibility v1"
-                );
+                if mode == ScriptMode::V1 {
+                    ensure!(
+                        !result.is_promise() && !promise_seen.get(),
+                        "Asynchronous scripts are unsupported in pm compatibility v1"
+                    );
+                } else {
+                    ensure!(
+                        pending_promises.get() == 0,
+                        "Unsettled asynchronous jobs are unsupported"
+                    );
+                    ensure!(
+                        unhandled_rejections.get() == 0,
+                        "Unhandled asynchronous rejection"
+                    );
+                }
                 if skipped.get() {
                     break;
                 }

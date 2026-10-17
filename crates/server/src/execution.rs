@@ -73,6 +73,7 @@ struct PhaseFailure {
 }
 async fn script_phase(
     s: &AppState,
+    mode: moleapi_core::ScriptMode,
     scripts: Vec<String>,
     request: &RequestSpec,
     response: Option<&Response>,
@@ -90,13 +91,20 @@ async fn script_phase(
             private_values: scopes.private_values.clone(),
             privacy_complete: true,
         })?;
-    moleapi_script_runtime::run_worker(&s.script_worker, scripts, request, response, scopes)
-        .await
-        .map_err(|failure| PhaseFailure {
-            error: ApiError::bad(failure.message),
-            private_values: failure.private_values,
-            privacy_complete: failure.privacy_complete,
-        })
+    moleapi_script_runtime::run_worker_with_mode(
+        &s.script_worker,
+        scripts,
+        request,
+        response,
+        scopes,
+        mode,
+    )
+    .await
+    .map_err(|failure| PhaseFailure {
+        error: ApiError::bad(failure.message),
+        private_values: failure.private_values,
+        privacy_complete: failure.privacy_complete,
+    })
 }
 pub(crate) struct DeferredHistory {
     pub request: RequestSpec,
@@ -186,7 +194,7 @@ pub(crate) async fn perform_deferred(
     let mut updates = vec![];
     let mut redact_failed_response = false;
     if pre.iter().any(|s| !s.trim().is_empty()) {
-        let output = script_phase(s, pre, &request, None, scopes)
+        let output = script_phase(s, w.data.script_mode, pre, &request, None, scopes)
             .await
             .map_err(|failure| failure.error)?;
         scopes.execution = output.control;
@@ -364,7 +372,16 @@ pub(crate) async fn perform_deferred(
         }
     }
     if post.iter().any(|s| !s.trim().is_empty()) {
-        match script_phase(s, post, &resolved, Some(&response), scopes).await {
+        match script_phase(
+            s,
+            w.data.script_mode,
+            post,
+            &resolved,
+            Some(&response),
+            scopes,
+        )
+        .await
+        {
             Ok(mut output) => {
                 if output.control.next_request.is_some() {
                     scopes.execution.next_request = output.control.next_request;
@@ -486,7 +503,7 @@ pub(crate) async fn prepare_live(
     let mut feedback = moleapi_protocols::PreparedFeedback::default();
     let mut updates = vec![];
     if scripts.iter().any(|s| !s.trim().is_empty()) {
-        let output = script_phase(s, scripts, &request, None, scopes).await.map_err(|failure| {
+        let output = script_phase(s, w.data.script_mode, scripts, &request, None, scopes).await.map_err(|failure| {
             scopes.private_values.extend(failure.private_values);
             let mut message = serde_json::json!(failure.error.message);
             if failure.privacy_complete {
@@ -653,7 +670,7 @@ pub(crate) async fn postprocess_data(
         .chain(std::iter::once(w.data.post_response_script.clone()))
         .collect::<Vec<_>>();
     if post.iter().any(|script| !script.trim().is_empty()) {
-        match script_phase(s, post, request, Some(response), scopes).await {
+        match script_phase(s, w.data.script_mode, post, request, Some(response), scopes).await {
             Ok(mut output) => {
                 scopes.private_values.extend(output.private_values);
                 scopes
@@ -706,6 +723,7 @@ pub(crate) struct PreparedDataQuery {
 
 pub(crate) async fn prepare_data_query(
     s: &AppState,
+    mode: moleapi_core::ScriptMode,
     request: &RequestSpec,
     selected_sql: &str,
     read_only: bool,
@@ -719,7 +737,7 @@ pub(crate) async fn prepare_data_query(
     synthetic.url = "http://data.invalid/query".into();
     synthetic.body_kind = "text".into();
     synthetic.body = selected_sql.into();
-    let output = script_phase(s, vec![config.query_pre_script.clone()], &synthetic, None, scopes)
+    let output = script_phase(s, mode, vec![config.query_pre_script.clone()], &synthetic, None, scopes)
         .await.map_err(|failure| {
             scopes.private_values.extend(failure.private_values);
             if !failure.privacy_complete {

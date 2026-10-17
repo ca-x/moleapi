@@ -19,7 +19,8 @@
   const skipRequest=__moleapiSkipRequest;
   const MAX_VALUE = 1024 * 1024, MAX_OUTPUT = 64 * 1024;
   let outputBytes = 0;
-  const unsupported = name => { throw new Error(`Unsupported pm API: ${name} (compatibility v1)`); };
+  const mode=input.mode === "v2" ? "v2" : "v1";
+  const unsupported = name => { throw new Error(`Unsupported pm API: ${name} (compatibility ${mode})`); };
   const checked = value => {
     const text = typeof value === "string" ? value : stringify(value);
     if (typeof text !== "string" || text.length > MAX_VALUE) throw new Error("Variable value exceeds 1 MiB or cannot be serialized");
@@ -248,7 +249,7 @@
     return chain;
   };
   const pm = {
-    compatibilityVersion: "moleapi-pm/1",
+    compatibilityVersion: mode === "v2" ? "moleapi-pm/2" : "moleapi-pm/1",
     variables: store("temporary",true),
     iterationData: iterationValues ? api({
       get:key=>has(iterationValues,String(key))?parse(stringify(iterationValues[String(key)])):undefined,

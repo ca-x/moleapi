@@ -60,6 +60,9 @@ pub fn import(format: &str, content: &str) -> Result<ImportResult> {
 }
 
 pub fn export(workspace: &Workspace, format: &str, include_secrets: bool) -> Result<ExportResult> {
+    if workspace.data.script_mode == moleapi_core::ScriptMode::V2 && format != "moleapi" {
+        bail!("Async script mode requires MoleAPI backup until external mappings are verified");
+    }
     if format != "moleapi" && !workspace.data.datasets.is_empty() {
         bail!("This export format cannot preserve saved datasets; use MoleAPI backup");
     }
@@ -288,6 +291,7 @@ pub(crate) fn data(
 ) -> WorkspaceData {
     let environment_id = uid();
     WorkspaceData {
+        script_mode: moleapi_core::ScriptMode::V1,
         scenarios: vec![],
         datasets: vec![],
         auth: None,

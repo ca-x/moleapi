@@ -174,6 +174,7 @@ export interface ScenarioStep {id:string;request_id:string;name:string;group:str
 export interface ScenarioParallel {id:string;name:string;step_ids:string[];concurrency:number}
 export interface Scenario {notification_ids?:string[];id:string;name:string;description:string;collection_id:string;steps:ScenarioStep[];parallel?:ScenarioParallel[]}
 export interface WorkspaceData {
+  script_mode?: "v1" | "v2";
   scenarios?:Scenario[];
   datasets?:SavedDataset[];
   auth?: Auth | null;

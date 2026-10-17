@@ -1,5 +1,5 @@
-use moleapi_core::{RequestSpec, VariableScopes};
-use moleapi_script_runtime::{WORKER_DEADLINE, run_worker};
+use moleapi_core::{RequestSpec, ScriptMode, VariableScopes};
+use moleapi_script_runtime::{WORKER_DEADLINE, run_worker, run_worker_with_mode};
 use serde_json::json;
 use std::{
     path::Path,
@@ -51,6 +51,41 @@ async fn worker_returns_live_results_and_failed_phase_privacy_without_mutations(
     let failure=run_worker(executable(),vec!["pm.variables.set('issued','generated-private');throw new Error(pm.variables.get('issued'));".into()],&request(),None,&VariableScopes::default()).await.unwrap_err();
     assert!(failure.privacy_complete);
     assert!(failure.private_values.contains("generated-private"));
+}
+#[tokio::test]
+async fn versioned_worker_settles_await_and_rejects_detached_or_private_failures() {
+    let scopes = VariableScopes::default();
+    let script = "const value = await Promise.resolve('ready'); pm.variables.set('result', value);";
+    assert!(
+        run_worker(executable(), vec![script.into()], &request(), None, &scopes)
+            .await
+            .is_err()
+    );
+    let output = run_worker_with_mode(
+        executable(),
+        vec![script.into()],
+        &request(),
+        None,
+        &scopes,
+        ScriptMode::V2,
+    )
+    .await
+    .unwrap();
+    assert_eq!(output.updates[0].value.as_deref(), Some("ready"));
+    let failure = run_worker_with_mode(executable(), vec!["pm.variables.set('secret','private-value'); await Promise.reject(new Error(pm.variables.get('secret')));".into()], &request(), None, &scopes, ScriptMode::V2).await.unwrap_err();
+    assert!(failure.privacy_complete);
+    assert!(failure.private_values.contains("private-value"));
+    let detached = run_worker_with_mode(
+        executable(),
+        vec!["Promise.resolve().then(() => pm.variables.set('late','no'));".into()],
+        &request(),
+        None,
+        &scopes,
+        ScriptMode::V2,
+    )
+    .await
+    .unwrap_err();
+    assert!(detached.message.contains("Unsettled"));
 }
 #[cfg(unix)]
 fn fake_worker(directory: &Path, name: &str, source: &str) -> std::path::PathBuf {
