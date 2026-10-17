@@ -1,0 +1,13 @@
+# Saved Schema Mock response coverage
+
+Scope: first explicit JSON Schema response profile for `mock-002`, specified in `docs/specs/mock-schema-response.md`. This does not cover automatic OpenAPI response-schema linking, composition/union/tuple schemas, field-name fake data rules or the full Mock module.
+
+An optional saved-example `mock_schema` generates deterministic JSON for the existing direct and routed Mock paths before the optional script and bounded delay. Old examples retain their exact static bodies. The profile accepts basic JSON types, properties/required fields, arrays, const/enum/default/examples, numeric and length bounds, and local `#/$defs/...` references. Unsupported keywords and external/cyclic references reject at save time; source and generated output have explicit size/depth/node budgets. Generation runs in a blocking worker with eight concurrent permits. A public request still uses the existing one-request capability, privacy response, revision and revocation fences.
+
+The default privacy backup omits the authored schema because const/default/examples may contain private values; a full MoleAPI backup preserves it. Postman/OpenAPI/HAR exports reject examples with schema mode until an exact mapping exists.
+
+Local evidence so far: core generator tests cover required/optional fields, local refs, authored precedence, array bounds, invalid and cyclic input, and legacy JSON. All core tests, all formats tests and strict core/formats Clippy passed. Real server HTTP tests passed for direct/routed generation, script override, public share stale/rotation and the existing 15 Mock plus 9 public Mock tests. The frontend suite passed 366 cases before the final neutral-button color change; the focused editor suite and production build passed after the mobile dialog change. Strict server Clippy and the embedded build passed; the final frontend build was followed by another embedded build.
+
+Actual hosted browser on an owned workspace: enabled Schema mode, saved `id >= 3` and `name = Ada`, reloaded and observed exact source retained; the real Preview Mock returned `{"id":3,"name":"Ada"}`. At 390px the first inline editor was clipped by the request pane, so schema editing moved into a bounded dialog. English/Chinese 390px dialog screenshots show full controls and document width 390px. A focused axe check found the default soft accent button at 4.31:1; after changing it to neutral gray and rebuilding the embedded app, the focused dialog audit reported zero violations and zero incomplete checks.
+
+Remaining evidence: full server suite, exact-head three-database CI, Docker and native package checks, independent code review, and actual installed package smoke. The profile is not a complete `mock-002` claim.

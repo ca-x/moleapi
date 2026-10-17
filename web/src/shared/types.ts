@@ -109,6 +109,7 @@ export interface Example {
   status: number;
   headers: Pair[];
   body: string;
+  mock_schema?: string;
   mock_script?: string;
   mock_match?: {
     priority: number;

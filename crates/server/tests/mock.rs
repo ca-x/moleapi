@@ -39,6 +39,55 @@ async fn saved_mock_example_uses_status_body_and_only_safe_headers() {
 }
 
 #[tokio::test]
+async fn saved_schema_generates_direct_and_routed_json_before_optional_script() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("schema.db")).await.unwrap();
+    let mut data = example_data();
+    data["script_mode"] = json!("v2");
+    data["collections"][0]["requests"][0]["url"] = json!("https://example.test/items");
+    data["collections"][0]["requests"][0]["examples"][0]["mock_schema"] = json!(
+        r#"{"type":"object","properties":{"id":{"type":"integer","minimum":3}},"required":["id"]}"#
+    );
+    let (status, body) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"w","name":"Schema","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    for path in ["/api/mock/w/r/e", "/api/mocks/w/items"] {
+        let response = router
+            .clone()
+            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        assert_eq!(response.headers()["content-type"], "application/json");
+        assert_eq!(
+            to_bytes(response.into_body(), 1024).await.unwrap().as_ref(),
+            br#"{"id":3}"#
+        );
+    }
+    let (_, mut saved) = call(&router, "GET", "/api/workspaces/w", None, None).await;
+    saved["data"]["collections"][0]["requests"][0]["examples"][0]["mock_script"] =
+        json!("pm.mock.setBody({id:99});");
+    let (status, updated) = call(
+        &router,
+        "PUT",
+        "/api/workspaces/w",
+        None,
+        Some(json!({"name":"Schema","expected_revision":saved["revision"],"data":saved["data"]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{updated}");
+    let (status, result) = call(&router, "GET", "/api/mock/w/r/e", None, None).await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(result, json!({"id":99}));
+}
+
+#[tokio::test]
 async fn saved_error_status_example_retains_body_and_headers() {
     let directory = tempfile::tempdir().unwrap();
     let router = common::local(&directory.path().join("errors.db"))

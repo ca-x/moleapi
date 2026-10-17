@@ -550,10 +550,44 @@ async fn serve_selected(
     method: &Method,
     body: &[u8],
 ) -> Result<axum::response::Response, ApiError> {
+    let mut response_headers = e.headers.clone();
+    let response_body = if e.mock_schema.is_empty() {
+        e.body.clone()
+    } else {
+        if !response_headers
+            .iter()
+            .any(|header| header.enabled && header.key.eq_ignore_ascii_case("content-type"))
+        {
+            response_headers.push(moleapi_core::Pair {
+                id: "mock-schema-content-type".into(),
+                key: "Content-Type".into(),
+                value: "application/json".into(),
+                enabled: true,
+                secret: None,
+                local_value: None,
+            });
+        }
+        let permit = s
+            .mock_schema_slots
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| ApiError {
+                status: StatusCode::TOO_MANY_REQUESTS,
+                message: "Mock schema generation capacity reached".into(),
+            })?;
+        let schema = e.mock_schema.clone();
+        tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            moleapi_core::generate_mock_schema(&schema)
+        })
+        .await
+        .map_err(|_| ApiError::internal())?
+        .map_err(|_| ApiError::bad("Invalid saved Mock schema"))?
+    };
     let mut draft = moleapi_script_runtime::MockResponseDraft {
         status: e.status,
-        headers: e.headers.clone(),
-        body: e.body.clone(),
+        headers: response_headers,
+        body: response_body,
     };
     if !e.mock_script.trim().is_empty() {
         if w.data.script_mode != moleapi_core::ScriptMode::V2 {

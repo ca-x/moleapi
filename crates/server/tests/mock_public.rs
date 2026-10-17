@@ -2,6 +2,78 @@ mod common;
 use common::*;
 
 #[tokio::test]
+async fn public_schema_mock_requires_rotation_after_schema_change() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = hosted(config(
+        moleapi_server::sqlite_database_url(&dir.path().join("schema-share.db")).unwrap(),
+        true,
+    ))
+    .await
+    .unwrap();
+    let owner = register(&router, "schemasalice").await;
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["examples"][0]["mock_schema"] =
+        json!(r#"{"type":"object","properties":{"id":{"const":1}},"required":["id"]}"#);
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            Some(&owner),
+            Some(json!({"id":"w","name":"W","data":data}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let (_, share) = call(
+        &router,
+        "POST",
+        "/api/workspaces/w/mock-shares",
+        Some(&owner),
+        Some(json!({"request_id":"r","expires_in_days":1})),
+    )
+    .await;
+    let old = format!("/api/public/mock/{}/e", share["token"].as_str().unwrap());
+    assert_eq!(
+        call(&router, "GET", &old, None, None).await,
+        (StatusCode::CREATED, json!({"id":1}))
+    );
+    let (_, mut saved) = call(&router, "GET", "/api/workspaces/w", Some(&owner), None).await;
+    saved["data"]["collections"][0]["requests"][0]["examples"][0]["mock_schema"] =
+        json!(r#"{"type":"object","properties":{"id":{"const":2}},"required":["id"]}"#);
+    let (status, body) = call(
+        &router,
+        "PUT",
+        "/api/workspaces/w",
+        Some(&owner),
+        Some(json!({"name":"W","expected_revision":saved["revision"],"data":saved["data"]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        call(&router, "GET", &old, None, None).await.0,
+        StatusCode::NOT_FOUND
+    );
+    let (_, rotated) = call(
+        &router,
+        "POST",
+        &format!(
+            "/api/workspaces/w/mock-shares/{}/rotate",
+            share["id"].as_str().unwrap()
+        ),
+        Some(&owner),
+        None,
+    )
+    .await;
+    let new = format!("/api/public/mock/{}/e", rotated["token"].as_str().unwrap());
+    assert_eq!(
+        call(&router, "GET", &new, None, None).await,
+        (StatusCode::CREATED, json!({"id":2}))
+    );
+}
+
+#[tokio::test]
 async fn owner_creates_lists_rotates_and_revokes_private_mock_share_capabilities() {
     let dir = tempfile::tempdir().unwrap();
     let database = dir.path().join("mock-shares.db");

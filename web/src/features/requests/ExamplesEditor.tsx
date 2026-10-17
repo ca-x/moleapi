@@ -7,6 +7,12 @@ import { Editor, Field, PairEditor, ToolButton } from "../../shared/ui";
 import type { RequestSpec } from "../../shared/types";
 import MockCallActivity from "./MockCallActivity";
 import MockPublicShares from "./MockPublicShares";
+
+function invalidSchemaInput(source:string):boolean {
+  if(new TextEncoder().encode(source).length>256*1024)return true;
+  try { const value=JSON.parse(source); return !value||typeof value!=="object"||Array.isArray(value); }
+  catch { return true; }
+}
 export default function ExamplesEditor({
   request,
   update,
@@ -98,6 +104,17 @@ export default function ExamplesEditor({
             if(Number.isFinite(value))patchExample(example.id,{delay_ms:Math.min(30_000,Math.max(0,Math.round(value)))});
           }}/></Field>
           <Editor value={example.body} readOnly dark={dark} height="150px" />
+          <Text as="label" size="2"><Checkbox checked={!!example.mock_schema} onCheckedChange={checked=>patchExample(example.id,{mock_schema:checked===true?'{"type":"object","properties":{}}':""})}/> {t("根据 JSON Schema 生成 Mock 正文")}</Text>
+          {!!example.mock_schema && <Dialog.Root>
+            <Dialog.Trigger><Button variant="soft">{t("编辑 Mock JSON Schema")}</Button></Dialog.Trigger>
+            <Dialog.Content maxWidth="min(720px, calc(100vw - 24px))" style={{maxHeight:"calc(100dvh - 24px)",overflowY:"auto"}}>
+              <Dialog.Title>{t("Mock JSON Schema")}</Dialog.Title>
+              <Dialog.Description>{t("保存后使用下方预览；支持基本类型、属性、数组和本地 $defs 引用。原静态正文保留。")}</Dialog.Description>
+              <Editor label={t("Mock JSON Schema")} value={example.mock_schema} onChange={mock_schema=>patchExample(example.id,{mock_schema})} dark={dark} language="json" height="320px" />
+              {invalidSchemaInput(example.mock_schema) && <Text role="alert" size="1" color="red">{t("Schema 必须是 256 KiB 内的 JSON 对象；保存时会检查支持的规则。")}</Text>}
+              <Flex justify="end" mt="4"><Dialog.Close><Button variant="soft" color="gray">{t("完成")}</Button></Dialog.Close></Flex>
+            </Dialog.Content>
+          </Dialog.Root>}
           {workspaceId && <Text as="p" size="1" color="gray" style={{overflowWrap:"anywhere"}}>{t("Mock 地址")}: <code>{`/api/mock/${encodeURIComponent(workspaceId)}/${encodeURIComponent(request.id)}/${encodeURIComponent(example.id)}`}</code></Text>}
           {workspaceId && routePath && <Text as="p" size="1" color="gray" style={{overflowWrap:"anywhere"}}>{t("匹配路由")}: <code>{`${request.method} /api/mocks/${encodeURIComponent(workspaceId)}${routePath}`}</code></Text>}
           {workspaceId && !routePath && <Text size="1" color="gray">{t("Mock 匹配路由需要字面量 HTTP URL；路径变量使用单层 {name}。")}</Text>}
