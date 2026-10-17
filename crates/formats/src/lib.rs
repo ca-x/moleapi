@@ -215,10 +215,22 @@ pub fn export(workspace: &Workspace, format: &str, include_secrets: bool) -> Res
     } else {
         redact::workspace(workspace)
     };
-    let (suffix, content) = match format {
-        "moleapi" => ("moleapi.json", serde_json::to_string_pretty(&workspace)?),
-        "postman" => ("postman_collection.json", postman::export(&workspace)?),
-        "openapi" => ("openapi.json", openapi::export(&workspace)?),
+    let (suffix, content, warnings) = match format {
+        "moleapi" => (
+            "moleapi.json",
+            serde_json::to_string_pretty(&workspace)?,
+            vec![],
+        ),
+        "postman" => (
+            "postman_collection.json",
+            postman::export(&workspace)?,
+            vec![],
+        ),
+        "openapi" => ("openapi.json", openapi::export(&workspace)?, vec![]),
+        "har" => {
+            let (content, warnings) = har::export(&workspace)?;
+            ("har", content, warnings)
+        }
         _ => bail!("不支持的导出格式"),
     };
     let filename = workspace
@@ -242,9 +254,11 @@ pub fn export(workspace: &Workspace, format: &str, include_secrets: bool) -> Res
     };
     Ok(ExportResult {
         warnings: if runtime_asap {
-            vec!["postman_runtime_asap".into()]
+            let mut warnings = warnings;
+            warnings.push("postman_runtime_asap".into());
+            warnings
         } else {
-            vec![]
+            warnings
         },
         filename: format!(
             "{}.{}",

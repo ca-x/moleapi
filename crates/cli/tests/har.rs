@@ -58,6 +58,35 @@ async fn cli_imports_har_file_and_default_export_screens_recorded_credentials() 
     let source = std::fs::read_to_string(safe).unwrap();
     assert!(!source.contains("har-secret"));
     assert!(!source.contains("cookie-secret"));
+    let har_output = temporary.path().join("safe.har");
+    let exported = cli(&[
+        "--database",
+        database.to_str().unwrap(),
+        "export",
+        "--workspace",
+        id,
+        "--format",
+        "har",
+        "--output",
+        har_output.to_str().unwrap(),
+    ])
+    .await;
+    assert!(
+        exported.status.success(),
+        "{}",
+        String::from_utf8_lossy(&exported.stderr)
+    );
+    let har_text = std::fs::read_to_string(har_output).unwrap();
+    assert!(!har_text.contains("har-secret"));
+    assert_eq!(
+        moleapi_formats::import("har", &har_text)
+            .unwrap()
+            .data
+            .collections[0]
+            .requests
+            .len(),
+        3
+    );
     let mut unsupported: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&input).unwrap()).unwrap();
     unsupported["log"]["entries"][1]["request"]["postData"]["mimeType"] =
