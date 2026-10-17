@@ -51,7 +51,7 @@ async fn linked_openapi_source_edit_stales_public_mock_until_rotation() {
     .unwrap();
     let owner = register(&router, "linkedsharealice").await;
     let source = |id: u64| {
-        json!({"openapi":"3.1.0","paths":{"/items":{"get":{"responses":{"201":{"content":{"application/json":{"schema":{"type":"object","properties":{"id":{"const":id}},"required":["id"]}}}}}}}}}).to_string()
+        json!({"openapi":"3.1.0","paths":{"/items":{"get":{"responses":{"201":{"content":{"application/json":{"schema":{"allOf":[{"type":"object","properties":{"id":{"const":id}},"required":["id"]},{"type":"object","properties":{"name":{"const":"Ada"}},"required":["name"]}]}}}}}}}}}).to_string()
     };
     let mut data = example_data();
     data["collections"][0]["requests"][0]["specification_id"] = json!("spec");
@@ -81,7 +81,7 @@ async fn linked_openapi_source_edit_stales_public_mock_until_rotation() {
     let old = format!("/api/public/mock/{}/e", share["token"].as_str().unwrap());
     assert_eq!(
         call(&router, "GET", &old, None, None).await,
-        (StatusCode::CREATED, json!({"id":1}))
+        (StatusCode::CREATED, json!({"id":1,"name":"Ada"}))
     );
     let (_, mut saved) = call(&router, "GET", "/api/workspaces/w", Some(&owner), None).await;
     saved["data"]["specifications"][0]["source"] = json!(source(2));
@@ -112,7 +112,7 @@ async fn linked_openapi_source_edit_stales_public_mock_until_rotation() {
     let new = format!("/api/public/mock/{}/e", rotated["token"].as_str().unwrap());
     assert_eq!(
         call(&router, "GET", &new, None, None).await,
-        (StatusCode::CREATED, json!({"id":2}))
+        (StatusCode::CREATED, json!({"id":2,"name":"Ada"}))
     );
 }
 
