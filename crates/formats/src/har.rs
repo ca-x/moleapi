@@ -374,6 +374,7 @@ fn import_example(
         name: format!("HAR {status}"),
         status: status as u16,
         mock_script: String::new(),
+        mock_match: None,
         headers: response
             .headers
             .into_iter()

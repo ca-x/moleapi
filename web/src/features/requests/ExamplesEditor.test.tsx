@@ -12,6 +12,7 @@ vi.mock("../../shared/api",()=>({previewMock,token:()=>null}));
 vi.mock("../../shared/ui",()=>({
   Editor:({label,value,onChange}:{label?:string;value:string;onChange?:(value:string)=>void})=><textarea aria-label={label??"example-body"} value={value} readOnly={!onChange} onChange={event=>onChange?.(event.target.value)}/>,
   Field:({label,children}:{label:string;children:React.ReactNode})=><label>{label}{children}</label>,
+  PairEditor:({rows}:{rows:unknown[]})=><div data-testid="match-pairs">{rows.length}</div>,
   ToolButton:({label,onClick,children}:{label:string;onClick:()=>void;children:React.ReactNode})=><button aria-label={label} onClick={onClick}>{children}</button>
 }));
 afterEach(cleanup);
@@ -41,4 +42,30 @@ it("shows the mock editor in Chinese",async()=>{
   request.examples=[{id:"e",name:"Example",status:200,headers:[],body:"static"}];
   render(<Theme><ExamplesEditor request={request} update={vi.fn()} dark={false} asyncMock workspaceId="w"/></Theme>);
   expect(screen.getByRole("textbox",{name:"Mock 实现脚本"})).toBeTruthy();
+});
+
+it("edits a saved example's Mock matching rule and shows its routed URL",async()=>{
+  await setLanguage("en");
+  const request=newRequest("R","https://example.test/items");
+  request.examples=[{id:"e",name:"Example",status:200,headers:[],body:"static"}];
+  const update=vi.fn();
+  const page=render(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
+  expect(screen.getByText(/POST|GET \/api\/mocks\/w\/items/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button",{name:"Add Mock match conditions"}));
+  expect(update.mock.calls[0][0].examples[0].mock_match).toEqual({priority:0,query:[],headers:[],body:""});
+  request.examples=[{...request.examples[0],mock_match:{priority:0,query:[],headers:[],body:""}}];
+  page.rerender(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
+  fireEvent.change(screen.getByRole("spinbutton",{name:"Match priority"}),{target:{value:"9"}});
+  expect(update.mock.lastCall?.[0].examples[0].mock_match.priority).toBe(9);
+  fireEvent.click(screen.getByRole("button",{name:"Remove match conditions"}));
+  expect(update.mock.lastCall?.[0].examples[0].mock_match).toBeUndefined();
+});
+
+it("loads saved match rules when empty condition arrays were omitted from JSON",async()=>{
+  await setLanguage("en");
+  const request=newRequest("R","https://example.test/items");
+  request.examples=[{id:"e",name:"Example",status:202,headers:[],body:"matched",mock_match:{priority:4,query:[{id:"q",key:"mode",value:"fast",enabled:true}]}}];
+  render(<Theme><ExamplesEditor request={request} update={vi.fn()} dark={false} workspaceId="w"/></Theme>);
+  expect(screen.getByRole("spinbutton",{name:"Match priority"})).toHaveProperty("value","4");
+  expect(screen.getAllByTestId("match-pairs")).toHaveLength(2);
 });

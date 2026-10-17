@@ -440,6 +440,18 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
             }
             for example in &mut request.examples {
                 example.mock_script.clear();
+                let private_match = example.mock_match.as_ref().is_some_and(|rule| {
+                    rule.body.is_some()
+                        || rule.query.iter().chain(&rule.headers).any(|row| {
+                            row.secret == Some(true)
+                                || sensitive(&row.key)
+                                || row.local_value.is_some()
+                                || privacy.screen_text(&row.value) != row.value
+                        })
+                });
+                if private_match {
+                    example.mock_match = None;
+                }
                 for header in &mut example.headers {
                     if sensitive(&header.key) {
                         header.value.clear();

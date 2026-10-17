@@ -93,6 +93,32 @@ fn mock_implementation_scripts_require_explicit_v2_mode() {
     workspace.script_mode = ScriptMode::V2;
     validate_workspace(&workspace).unwrap();
 }
+
+#[test]
+fn mock_match_rules_are_additive_and_bounded() {
+    let mut request = request();
+    request.examples.push(serde_json::from_value(json!({"id":"e","name":"Matched","status":200,"headers":[],"body":"ok","mock_match":{"priority":7,"query":[{"id":"q","key":"mode","value":"fast","enabled":true}],"headers":[],"body":"exact"}})).unwrap());
+    assert!(validate_request(&request, true).is_ok());
+    let saved = serde_json::to_value(&request).unwrap();
+    assert_eq!(saved["examples"][0]["mock_match"]["priority"], 7);
+    assert_eq!(saved["examples"][0]["mock_match"]["body"], "exact");
+    let restored: RequestSpec = serde_json::from_value(saved).unwrap();
+    assert_eq!(
+        serde_json::to_value(restored).unwrap()["examples"][0]["mock_match"]["priority"],
+        7
+    );
+
+    let mut invalid = request.clone();
+    invalid.examples[0] = serde_json::from_value(json!({"id":"e","name":"Matched","status":200,"headers":[],"body":"ok","mock_match":{"priority":101,"query":[{"id":"q","key":"mode","value":"fast","enabled":true}]}})).unwrap();
+    assert!(validate_request(&invalid, true).is_err());
+    invalid.examples[0] = serde_json::from_value(json!({"id":"e","name":"Matched","status":200,"headers":[],"body":"ok","mock_match":{"headers":[{"id":"h","key":"Authorization","value":"secret","enabled":true}]}})).unwrap();
+    assert!(validate_request(&invalid, true).is_err());
+    invalid.examples[0] = serde_json::from_value(
+        json!({"id":"e","name":"Matched","status":200,"headers":[],"body":"ok","mock_match":{}}),
+    )
+    .unwrap();
+    assert!(validate_request(&invalid, true).is_err());
+}
 #[test]
 fn canonical_specification_references_and_size_are_checked() {
     let mut r = request();

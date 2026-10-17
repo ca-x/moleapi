@@ -60,6 +60,17 @@ pub fn import(format: &str, content: &str) -> Result<ImportResult> {
 }
 
 pub fn export(workspace: &Workspace, format: &str, include_secrets: bool) -> Result<ExportResult> {
+    if format != "moleapi"
+        && workspace
+            .data
+            .collections
+            .iter()
+            .flat_map(|collection| &collection.requests)
+            .flat_map(|request| &request.examples)
+            .any(|example| example.mock_match.is_some())
+    {
+        bail!("Mock match rules require MoleAPI backup until external mappings are verified");
+    }
     if workspace.data.script_mode == moleapi_core::ScriptMode::V2 && format != "moleapi" {
         bail!("Async script mode requires MoleAPI backup until external mappings are verified");
     }

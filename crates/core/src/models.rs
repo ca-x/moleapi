@@ -44,6 +44,17 @@ pub struct Assertion {
     pub target: String,
     pub expected: String,
 }
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MockMatch {
+    #[serde(default)]
+    pub priority: u8,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub query: Vec<Pair>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub headers: Vec<Pair>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+}
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Example {
     pub id: String,
@@ -53,6 +64,8 @@ pub struct Example {
     pub body: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub mock_script: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mock_match: Option<MockMatch>,
 }
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "lowercase")]
