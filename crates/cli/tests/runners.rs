@@ -193,6 +193,7 @@ async fn real_agent_executes_private_local_request_and_returns_owned_redacted_re
         "/verify",
         get(|headers: HeaderMap| async move {
             assert_eq!(headers["x-secret"], "runtime-agent-secret");
+            assert_eq!(headers["x-view"], "one");
             axum::Json(json!({"received":headers["x-secret"].to_str().unwrap()}))
         }),
     ))
@@ -219,12 +220,18 @@ async fn real_agent_executes_private_local_request_and_returns_owned_redacted_re
     let token_path = temporary.path().join("session.txt");
     std::fs::write(&token_path, token).unwrap();
     let mut data = source(&endpoint)["data"].clone();
+    data["script_mode"] = json!("v2");
+    data["datasets"][0]["views"] =
+        json!([{"id":"agent-view","name":"Agent row","sql":"SELECT row FROM data WHERE row = ?"}]);
     data["collections"][0]["requests"]
         .as_array_mut()
         .unwrap()
         .truncate(1);
     let request = &mut data["collections"][0]["requests"][0];
     request["url"] = json!(format!("{endpoint}/verify"));
+    request["pre_request_script"] = json!(
+        "const result=await pm.datasets('rows').executeView('agent-view',['one']); for await (const row of result.rows) pm.request.headers.upsert({key:'x-view',value:row.row});"
+    );
     request["headers"] =
         json!([{"id":"secret","key":"X-Secret","value":"{{secret}}","enabled":true}]);
     request["extractions"] = json!([]);
@@ -432,6 +439,7 @@ async fn real_agent_executes_private_local_request_and_returns_owned_redacted_re
     query["url"] = "".into();
     query["headers"] = json!([]);
     query["post_response_script"] = "".into();
+    query["pre_request_script"] = "".into();
     query["protocol"] = json!({"kind":"data","source":"local_file","file_name":"runner.csv","file_format":"csv","file_base64":"dmFsdWUKb25lCnR3bwo=","table_name":"data","sql":"SELECT value FROM data","read_only":true});
     updated_data["collections"]
         .as_array_mut()

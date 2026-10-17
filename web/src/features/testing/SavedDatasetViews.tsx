@@ -27,6 +27,7 @@ export default function SavedDatasetViews({ views, onChange, disabled }: {
       }}>{t("添加视图")}</Button>
     </Flex>
     {selected && <>
+      <Field label={t("脚本视图 ID")} hint={t("在 executeView(ID) 中使用此 ID。点击字段即可选中完整 ID。") }><TextField.Root readOnly value={selected.id} onFocus={event=>event.currentTarget.select()}/></Field>
       <Field label={t("视图名称")}><TextField.Root value={selected.name} maxLength={256} disabled={disabled} onChange={event => update({ name: event.target.value })}/></Field>
       <Field label={t("视图 SQL")} hint={selected.sql === undefined ? t("此视图的 SQL 未包含在备份中，执行前需重新填写。") : t("只允许一条只读 SELECT 或 CTE；使用 ? 绑定参数。")}>
         <TextArea aria-label={t("视图 SQL")} value={selected.sql ?? ""} rows={5} disabled={disabled} onChange={event => update({ sql: event.target.value })}/>

@@ -23,6 +23,7 @@ it("preserves an existing SQL table name when the dataset is edited",async()=>{
  fireEvent.focus(identifier);expect(identifier.selectionStart).toBe(0);expect(identifier.selectionEnd).toBe(1);
  expect((screen.getByRole("textbox",{name:/^SQL table name/}) as HTMLInputElement).value).toBe("orders_2026");
  expect((screen.getByRole("textbox",{name:"View SQL"}) as HTMLTextAreaElement).value).toBe("SELECT id FROM orders_2026");
+ expect((screen.getByRole("textbox",{name:/^Script view ID/}) as HTMLInputElement).value).toBe("v");
  fireEvent.click(screen.getByRole("button",{name:"Save dataset to workspace"}));
  await waitFor(()=>expect(state.updateData).toHaveBeenCalled());
  const result=state.updateData.mock.calls[0][0]({datasets:state.draft.data.datasets});

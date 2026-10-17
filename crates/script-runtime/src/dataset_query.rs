@@ -231,17 +231,26 @@ pub fn query_snapshot(dataset: &QuerySnapshot, sql: &str, params: &[String]) -> 
         .iter()
         .enumerate()
         .map(|(index, name)| {
-            let is_boolean = dataset
+            let values = dataset
                 .rows
                 .iter()
                 .filter_map(|row| row.get(index))
                 .filter(|value| !matches!(value, QueryCell::Null))
-                .all(|value| matches!(value, QueryCell::Boolean(_)));
-            format!(
-                "{} {}",
-                identifier(name),
-                if is_boolean { "BOOLEAN" } else { "" }
-            )
+                .collect::<Vec<_>>();
+            let declared_type = if values
+                .iter()
+                .all(|value| matches!(value, QueryCell::Boolean(_)))
+            {
+                "BOOLEAN"
+            } else if values
+                .iter()
+                .all(|value| matches!(value, QueryCell::Integer(_)))
+            {
+                "INTEGER"
+            } else {
+                ""
+            };
+            format!("{} {}", identifier(name), declared_type)
         })
         .collect::<Vec<_>>()
         .join(",");

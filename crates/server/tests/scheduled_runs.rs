@@ -47,6 +47,7 @@ async fn cron_executes_saved_scenario_environment_dataset_and_saves_a_private_re
                 let calls = calls.clone();
                 async move {
                     assert_eq!(headers.get("x-token").unwrap(), "scheduled-private");
+                    assert_eq!(headers.get("x-view").unwrap(), "first");
                     calls.lock().unwrap().push(query["value"].clone());
                     axum::Json(json!(query))
                 }
@@ -57,11 +58,15 @@ async fn cron_executes_saved_scenario_environment_dataset_and_saves_a_private_re
     let temp = tempfile::tempdir().unwrap();
     let router = local(&temp.path().join("cron.db")).await.unwrap();
     let mut data = example_data();
+    data["script_mode"] = json!("v2");
     data["collections"][0]["requests"][0]["url"] = format!("{url}/?value={{{{value}}}}").into();
+    data["collections"][0]["requests"][0]["pre_request_script"] = json!(
+        "const result=await pm.datasets('data').executeView('all'); for await (const row of result.rows) if (row.value === 'first') pm.request.headers.upsert({key:'x-view',value:row.value});"
+    );
     data["collections"][0]["requests"][0]["headers"] =
         json!([{"id":"token","key":"X-Token","value":"{{token}}","enabled":true}]);
     data["environments"] = json!([{"id":"dev","name":"Dev","variables":[{"id":"token","key":"token","value":"scheduled-private","secret":true,"enabled":true}]}]);
-    data["datasets"] = json!([{"id":"data","name":"Rows","source":{"format":"json","source":"[{\"value\":\"first\"},{\"value\":\"second\"}]"}}]);
+    data["datasets"] = json!([{"id":"data","name":"Rows","source":{"format":"json","source":"[{\"value\":\"first\"},{\"value\":\"second\"}]"},"views":[{"id":"all","name":"All","sql":"SELECT value FROM data"}]}]);
     data["scenarios"] = json!([{"id":"s","name":"Scenario","collection_id":"c","steps":[{"id":"step","request_id":"r"}]}]);
     assert_eq!(
         call(

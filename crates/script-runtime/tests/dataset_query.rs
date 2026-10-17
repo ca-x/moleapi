@@ -46,6 +46,18 @@ fn literal_dataset_sql_uses_bound_parameters_and_exact_integer_text() {
 }
 
 #[test]
+fn integer_columns_match_bound_string_parameters_without_losing_exact_output() {
+    let dataset = source("json", r#"[{"id":1},{"id":2}]"#);
+    let rows = query_dataset(
+        &dataset,
+        "SELECT id FROM orders WHERE id = ?",
+        &["1".into()],
+    )
+    .unwrap();
+    assert_eq!(rows, vec![json!({"id":"1"})]);
+}
+
+#[test]
 fn literal_dataset_sql_preserves_direct_boolean_null_and_decimal_text() {
     let dataset = source(
         "json",
