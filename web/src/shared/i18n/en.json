@@ -9,6 +9,7 @@
   "状态码": "Status code",
   "Mock 地址": "Mock URL",
   "匹配路由": "Matching route",
+  "Mock 匹配路由需要字面量 HTTP URL；路径变量使用单层 {name}。": "Mock matching needs a literal HTTP URL. Use a single {name} segment for path variables.",
   "添加 Mock 匹配条件": "Add Mock match conditions",
   "匹配条件全部满足时选中此示例；空正文只匹配无正文请求。": "This example is selected when all conditions match. An empty body condition matches only requests without a body.",
   "匹配优先级": "Match priority",

@@ -69,3 +69,12 @@ it("loads saved match rules when empty condition arrays were omitted from JSON",
   expect(screen.getByRole("spinbutton",{name:"Match priority"})).toHaveProperty("value","4");
   expect(screen.getAllByTestId("match-pairs")).toHaveLength(2);
 });
+
+it("does not advertise nested URL templates as routed Mock paths",async()=>{
+  await setLanguage("en");
+  const request=newRequest("R","https://example.test/v1/{{id}}");
+  request.examples=[{id:"e",name:"Example",status:200,headers:[],body:"static"}];
+  render(<Theme><ExamplesEditor request={request} update={vi.fn()} dark={false} workspaceId="w"/></Theme>);
+  expect(screen.getByText(/single \{name\} segment/)).toBeTruthy();
+  expect(screen.queryByText(/\/api\/mocks\/w\/v1/)).toBeNull();
+});

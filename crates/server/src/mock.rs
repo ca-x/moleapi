@@ -59,6 +59,7 @@ pub async fn dispatch(
     incoming: Request,
 ) -> Result<axum::response::Response, ApiError> {
     let (parts, body) = incoming.into_parts();
+    check_uri_budget(&uri)?;
     let bytes = to_bytes(body, 1024 * 1024)
         .await
         .map_err(|_| ApiError::bad("Mock request body exceeds 1 MiB"))?;
@@ -171,10 +172,25 @@ fn path_match(saved: &str, actual: &str) -> Option<usize> {
             .decode_utf8()
             .ok()?;
         let saved = saved.as_ref();
-        if saved.starts_with('{') && saved.ends_with('}') && saved.len() > 2 {
+        let placeholder = saved
+            .strip_prefix('{')
+            .and_then(|name| name.strip_suffix('}'))
+            .is_some_and(|name| {
+                name.len() <= 64
+                    && name
+                        .bytes()
+                        .next()
+                        .is_some_and(|byte| byte.is_ascii_alphabetic() || byte == b'_')
+                    && name
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+            });
+        if placeholder {
             if actual.is_empty() {
                 return None;
             }
+        } else if saved.contains(['{', '}']) {
+            return None;
         } else if saved == actual {
             literal += 1;
         } else {
@@ -182,6 +198,13 @@ fn path_match(saved: &str, actual: &str) -> Option<usize> {
         }
     }
     Some(literal)
+}
+
+fn check_uri_budget(uri: &axum::http::Uri) -> Result<(), ApiError> {
+    if uri.path().len() > 4096 || uri.query().is_some_and(|query| query.len() > 8192) {
+        return Err(ApiError::bad("Mock path or query exceeds byte limit"));
+    }
+    Ok(())
 }
 
 fn pairs_match<'a>(
@@ -337,6 +360,7 @@ fn safe_incoming_request(
     method: &Method,
     body: &[u8],
 ) -> Result<moleapi_core::RequestSpec, ApiError> {
+    check_uri_budget(uri)?;
     let mut request = saved.clone();
     request.method = method.as_str().into();
     request.protocol = moleapi_core::Protocol::Http;

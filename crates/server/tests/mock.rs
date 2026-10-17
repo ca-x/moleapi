@@ -524,3 +524,58 @@ async fn routed_mock_excludes_connection_nominated_headers_and_bounds_body() {
             .contains("unsafe")
     );
 }
+
+#[tokio::test]
+async fn routed_mock_rejects_nested_template_segments_and_large_uri_components() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("uri-bounds.db")).await.unwrap();
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["url"] = json!("https://example.test/v1/{{id}}");
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            None,
+            Some(json!({"id":"w","name":"W","data":data.clone()}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        call(&router, "GET", "/api/mocks/w/v1/ordinary", None, None)
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+    let mut bounded = data["collections"][0]["requests"][0].clone();
+    bounded["id"] = json!("bounded");
+    bounded["url"] = json!("https://example.test/v1/{id}");
+    data["collections"][0]["requests"]
+        .as_array_mut()
+        .unwrap()
+        .push(bounded);
+    assert_eq!(
+        call(
+            &router,
+            "PUT",
+            "/api/workspaces/w",
+            None,
+            Some(json!({"name":"W","expected_revision":1,"data":data}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let long_query = format!("/api/mocks/w/v1/ordinary?x={}", "a".repeat(9_000));
+    assert_eq!(
+        call(&router, "GET", &long_query, None, None).await.0,
+        StatusCode::BAD_REQUEST
+    );
+    let long_path = format!("/api/mocks/w/v1/{}", "a".repeat(5_000));
+    assert_eq!(
+        call(&router, "GET", &long_path, None, None).await.0,
+        StatusCode::BAD_REQUEST
+    );
+}

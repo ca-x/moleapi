@@ -29,7 +29,10 @@ export default function ExamplesEditor({
     update({examples:request.examples.map(item=>item.id===exampleId?{...item,...patch}:item)});
   };
   let routePath="";
-  try{routePath=new URL(request.url).pathname.replace(/%7B/gi,"{").replace(/%7D/gi,"}");}catch{routePath="";}
+  try{
+    routePath=new URL(request.url).pathname.replace(/%7B/gi,"{").replace(/%7D/gi,"}");
+    if(routePath.split("/").some(segment=>/[{}]/.test(segment)&&!/^[{][A-Za-z_][A-Za-z0-9_]{0,63}[}]$/.test(segment)))routePath="";
+  }catch{routePath="";}
   const previewExample=(exampleId:string)=>{
     if(!workspaceId||dirty)return;
     const scope=`${workspaceId}/${request.id}/${exampleId}`;
@@ -79,6 +82,7 @@ export default function ExamplesEditor({
           <Editor value={example.body} readOnly dark={dark} height="150px" />
           {workspaceId && <Text as="p" size="1" color="gray" style={{overflowWrap:"anywhere"}}>{t("Mock 地址")}: <code>{`/api/mock/${encodeURIComponent(workspaceId)}/${encodeURIComponent(request.id)}/${encodeURIComponent(example.id)}`}</code></Text>}
           {workspaceId && routePath && <Text as="p" size="1" color="gray" style={{overflowWrap:"anywhere"}}>{t("匹配路由")}: <code>{`${request.method} /api/mocks/${encodeURIComponent(workspaceId)}${routePath}`}</code></Text>}
+          {workspaceId && !routePath && <Text size="1" color="gray">{t("Mock 匹配路由需要字面量 HTTP URL；路径变量使用单层 {name}。")}</Text>}
           {workspaceId && <Button variant="soft" disabled={dirty||busy!==""} loading={busy===`${workspaceId}/${request.id}/${example.id}`} onClick={()=>previewExample(example.id)}>{t("预览 Mock")}</Button>}
           {dirty && <Text size="1" color="gray">{t("先保存工作区，再预览 Mock。")}</Text>}
           {error===`${workspaceId}/${request.id}/${example.id}` && <Text role="alert" size="1" color="red">{t("Mock 预览失败，请检查脚本与数据源。")}</Text>}
