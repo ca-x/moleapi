@@ -169,7 +169,7 @@ fn management(
     session: Option<Extension<SessionAuthentication>>,
 ) -> Result<(), ApiError> {
     if state.local {
-        return Err(ApiError::not_found());
+        return Ok(());
     }
     if session.is_none() {
         return Err(ApiError::forbidden(
@@ -177,6 +177,15 @@ fn management(
         ));
     }
     Ok(())
+}
+
+pub(crate) fn routes() -> axum::Router<AppState> {
+    axum::Router::new()
+        .route(
+            "/public/mock/{token}/{example_id}",
+            axum::routing::get(direct).options(preflight),
+        )
+        .route("/public/mocks/{token}/{*path}", axum::routing::any(routed))
 }
 
 fn new_token() -> (String, String) {

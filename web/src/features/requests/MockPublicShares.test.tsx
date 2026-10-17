@@ -6,7 +6,7 @@ import { setLanguage } from "../../shared/i18n";
 import MockPublicShares from "./MockPublicShares";
 
 const api = vi.hoisted(() => vi.fn());
-vi.mock("../../shared/api", () => ({ api, token: () => "owner-session" }));
+vi.mock("../../shared/api", () => ({ api, native: false, token: () => "owner-session" }));
 beforeEach(() => api.mockReset());
 afterEach(cleanup);
 

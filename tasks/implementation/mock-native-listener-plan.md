@@ -8,3 +8,5 @@ Parent: `tasks/implementation/remaining-work-plan.md` milestone 4, `docs/specs/m
 4. [ ] Run relevant suites, strict format/Clippy/build, configured database/Docker/native CI and independent review. Merge only with exact-head evidence; record remaining HTTPS/custom-domain/organization limits.
 
 Decision: a listener task needs an `AppState` clone for the shared Mock runtime. To avoid `Hub -> JoinHandle -> AppState -> Hub`, `AppState` stores a `Weak<ListenerHub>` while the outer local Router owns the strong `Arc<ListenerHub>` through an extension. The public TCP Router receives only the weak-bearing state clone. Dropping the outer Router drops the hub, cancels and aborts its task; explicit stop awaits it with a deadline.
+
+Source checkpoint, 2026-10-18: the separate native socket and UI controls are implemented on top of the hosted share branch. Three local real-socket tests passed, covering explicit loopback/LAN start, owner IPC isolation, stop/restart/router drop and cancellation during delay. Focused frontend tests, TypeScript build and strict server Clippy passed. Full suites, integrated main, installed-platform evidence and independent review remain open.
