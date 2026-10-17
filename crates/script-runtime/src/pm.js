@@ -2,6 +2,7 @@
   "use strict";
   const stringify = JSON.stringify.bind(JSON), parse = JSON.parse.bind(JSON);
   const source = input.request, scopes = input.scopes;
+  const mock = input.mock ? parse(stringify(input.mock)) : null;
   const iterationInfo=scopes.iteration, iterationValues=scopes.iteration_data;
   const taint = __moleapiTaint;
   const uncertain = __moleapiPrivacyUncertain, privacyOverflow = __moleapiPrivacyOverflow, captureUrl = __moleapiCaptureUrl, captureQuery = __moleapiCaptureQuery;
@@ -17,9 +18,11 @@
   const logs = [], tests = [], updates = [];
   const control={next_request:null,skip_request:false};
   const skipRequest=__moleapiSkipRequest;
+  const queryDataset=__moleapiQueryDataset;
   const MAX_VALUE = 1024 * 1024, MAX_OUTPUT = 64 * 1024;
   let outputBytes = 0;
-  const unsupported = name => { throw new Error(`Unsupported pm API: ${name} (compatibility v1)`); };
+  const mode=input.mode === "v2" ? "v2" : "v1";
+  const unsupported = name => { throw new Error(`Unsupported pm API: ${name} (compatibility ${mode})`); };
   const checked = value => {
     const text = typeof value === "string" ? value : stringify(value);
     if (typeof text !== "string" || text.length > MAX_VALUE) throw new Error("Variable value exceeds 1 MiB or cannot be serialized");
@@ -248,7 +251,23 @@
     return chain;
   };
   const pm = {
-    compatibilityVersion: "moleapi-pm/1",
+    compatibilityVersion: mode === "v2" ? "moleapi-pm/2" : "moleapi-pm/1",
+    datasets(id) {
+      if (mode !== "v2") return unsupported("datasets");
+      if (typeof id !== "string" || !id || id.length > 128) throw new Error("Dataset ID must be a nonempty string up to 128 characters");
+      const execute = (sql, params, isView) => {
+          return Promise.resolve().then(() => {
+            if (typeof sql !== "string" || !sql || !Array.isArray(params) || params.length > 64 || params.some(value => typeof value !== "string")) throw new Error("Dataset query requires a SQL statement or view ID and up to 64 string parameters");
+            const currentScopes = stringify({project:scopes.project,collection:scopes.collection,environment:scopes.environment,data:scopes.data,temporary:scopes.temporary});
+            const values = parse(queryDataset(id, sql, params, isView, currentScopes));
+            return Object.freeze({rows: Object.freeze({async *[Symbol.asyncIterator]() { for (const row of values) yield parse(stringify(row)); }})});
+          });
+      };
+      return api(Object.freeze({
+        executeQuery: (sql, params = []) => execute(sql, params, false),
+        executeView: (viewId, params = []) => execute(viewId, params, true)
+      }), "datasets");
+    },
     variables: store("temporary",true),
     iterationData: iterationValues ? api({
       get:key=>has(iterationValues,String(key))?parse(stringify(iterationValues[String(key)])):undefined,
@@ -294,6 +313,16 @@
       to: {have: {status: expected => expect(response.status).equal(expected)}, be: {get ok() { return expect(response.status >= 200 && response.status < 300).true; }}}
     },"response");
   } else Object.defineProperty(pm,"response",{get: () => { throw new Error("pm.response is only available after the network response"); }});
+  if (mock) pm.mock = api({
+    setStatus(status) { if (!Number.isInteger(status) || status < 200 || status > 599) throw new Error("Mock status must be 200–599"); mock.status = status; },
+    setHeader(key,value) {
+      if (typeof key !== "string" || !key || key.length > 256 || typeof value !== "string" || value.length > 8192 || /[\r\n]/.test(key+value)) throw new Error("Invalid Mock header");
+      const existing=mock.headers.find(row=>row.key.toLowerCase()===key.toLowerCase());
+      if (existing) {existing.value=value;existing.enabled=true;}
+      else {if(mock.headers.length>=100)throw new Error("Mock exceeds 100 headers");mock.headers.push({id:`mock-${mock.headers.length}`,key,value,enabled:true});}
+    },
+    setBody(value) { const body=typeof value==="string"?value:stringify(value);if(typeof body!=="string"||body.length>5*1024*1024)throw new Error("Mock body exceeds 5 MiB or is not serializable");mock.body=body; }
+  },"mock");
   Object.defineProperty(globalThis,"pm",{value:api(pm,"pm"),writable:false,configurable:false});
   Object.defineProperty(globalThis,"console",{value: Object.fromEntries(["log","info","warn","error","debug"].map(level => [level,(...args) => {
     if (logs.length >= 200) throw new Error("Script exceeds 200 log entries");
@@ -301,6 +330,6 @@
   }])),writable:false});
   for (const name of ["require","fetch","setTimeout","setInterval","queueMicrotask"]) globalThis[name] = () => unsupported(name);
   captureCurrentRequest();
-  const exportState = () => stringify({request:source,logs,tests,updates,control});
+  const exportState = () => stringify({request:source,logs,tests,updates,control,mock_response:mock});
   Object.defineProperty(globalThis,"__moleapiExport",{value:exportState,writable:false,configurable:false});
 })

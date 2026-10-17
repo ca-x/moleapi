@@ -83,6 +83,56 @@ async fn offline_runs_share_scripts_extraction_environment_dataset_and_exit_code
     fixture.abort();
 }
 #[tokio::test]
+async fn offline_cli_executes_saved_view_in_async_pre_and_post_scripts() {
+    let (url, fixture) = serve(Router::new().route(
+        "/view",
+        get(|headers: HeaderMap| async move {
+            assert_eq!(headers["x-view-row"], "one");
+            Json(json!({"ok":true}))
+        }),
+    ))
+    .await;
+    let temporary = tempfile::tempdir().unwrap();
+    let input = temporary.path().join("view-workspace.json");
+    let mut workspace = source(&url);
+    workspace["data"]["script_mode"] = json!("v2");
+    workspace["data"]["datasets"][0]["views"] =
+        json!([{"id":"by-row","name":"By row","sql":"SELECT row FROM data WHERE row = ?"}]);
+    workspace["data"]["collections"][0]["requests"]
+        .as_array_mut()
+        .unwrap()
+        .truncate(1);
+    workspace["data"]["scenarios"] = json!([]);
+    let request = &mut workspace["data"]["collections"][0]["requests"][0];
+    request["url"] = json!(format!("{url}/view"));
+    request["extractions"] = json!([]);
+    request["pre_request_script"] = json!(
+        "const result=await pm.datasets('rows').executeView('by-row',['one']); for await (const row of result.rows) pm.request.headers.upsert({key:'x-view-row',value:row.row});"
+    );
+    request["post_response_script"] = json!(
+        "const result=await pm.datasets('rows').executeQuery('SELECT count(*) AS total FROM data'); for await (const row of result.rows) pm.test('row count',()=>pm.expect(row.total).to.equal('2'));"
+    );
+    write(&input, &workspace);
+    let summary = result(
+        cli(&[
+            "run",
+            "--input",
+            input.to_str().unwrap(),
+            "--request",
+            "Token",
+            "--environment",
+            "Development",
+            "--ci",
+            "--no-notifications",
+        ])
+        .await,
+        0,
+    );
+    assert_eq!(summary["executed_steps"], 1);
+    assert_eq!(summary["failed"], 0);
+    fixture.abort();
+}
+#[tokio::test]
 async fn remote_login_tokens_owned_runs_exports_and_selection_errors() {
     let (url, fixture) = serve(Router::new().route(
         "/token",

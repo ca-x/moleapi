@@ -355,6 +355,10 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
             "Example status must be 200–599"
         );
         ensure!(example.body.len() <= MAX_BODY, "Example body exceeds 5 MiB");
+        validate_script(&example.mock_script)?;
+        if let Some(rule) = &example.mock_match {
+            validate_mock_match(rule)?;
+        }
         for h in example.headers.iter().filter(|h| h.enabled) {
             if !templates || !h.key.contains("{{") {
                 HeaderName::from_bytes(h.key.as_bytes()).context("Invalid example header")?;
@@ -363,6 +367,58 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
                 HeaderValue::from_str(&h.value).context("Invalid example header")?;
             }
         }
+    }
+    Ok(())
+}
+fn validate_mock_match(rule: &MockMatch) -> Result<()> {
+    ensure!(
+        rule.priority <= 100
+            && rule.query.len() <= 20
+            && rule.headers.len() <= 20
+            && rule
+                .body
+                .as_ref()
+                .is_none_or(|body| body.len() <= 1024 * 1024),
+        "Mock match rule exceeds its priority or size limit"
+    );
+    ensure!(
+        rule.body.is_some()
+            || rule.query.iter().any(|row| row.enabled)
+            || rule.headers.iter().any(|row| row.enabled),
+        "Mock match rule needs a query, header or body condition"
+    );
+    for row in rule.query.iter().filter(|row| row.enabled) {
+        ensure!(
+            !crate::sensitive_query_key(&row.key)
+                && !row.key.contains("{{")
+                && !row.value.contains("{{")
+                && row.local_value.is_none(),
+            "Mock query match must be literal and non-sensitive"
+        );
+    }
+    for row in rule.headers.iter().filter(|row| row.enabled) {
+        let name =
+            HeaderName::from_bytes(row.key.as_bytes()).context("Invalid Mock match header")?;
+        HeaderValue::from_str(&row.value).context("Invalid Mock match header")?;
+        ensure!(
+            !crate::sensitive_query_key(name.as_str())
+                && !matches!(
+                    name.as_str(),
+                    "authorization"
+                        | "cookie"
+                        | "proxy-authorization"
+                        | "connection"
+                        | "keep-alive"
+                        | "proxy-authenticate"
+                        | "te"
+                        | "trailer"
+                        | "transfer-encoding"
+                        | "upgrade"
+                )
+                && !row.value.contains("{{")
+                && row.local_value.is_none(),
+            "Mock header match must be literal and safe"
+        );
     }
     Ok(())
 }
@@ -441,6 +497,10 @@ pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
             }
             let mut examples = HashSet::new();
             for e in &r.examples {
+                ensure!(
+                    e.mock_script.is_empty() || data.script_mode == crate::ScriptMode::V2,
+                    "Mock implementation scripts require compatibility v2"
+                );
                 ensure!(
                     !e.id.is_empty() && examples.insert(&e.id),
                     "Example IDs must be unique and nonempty"

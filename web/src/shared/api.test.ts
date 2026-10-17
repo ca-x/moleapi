@@ -1,9 +1,17 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api, ApiError } from "./api";
+import { api, ApiError, previewMock } from "./api";
 afterEach(() => {
   sessionStorage.clear();
   vi.unstubAllGlobals();
+});
+it("previews an intentional 404 Mock body while rejecting an expired session",async()=>{
+  sessionStorage.setItem("moleapi_token","owner");
+  const fetcher=vi.fn().mockResolvedValueOnce({status:404,text:async()=>"saved example not found"}).mockResolvedValueOnce({status:401,text:async()=>"expired"});
+  vi.stubGlobal("fetch",fetcher);
+  expect(await previewMock("/api/mock/w/r/e")).toEqual({status:404,body:"saved example not found"});
+  expect(fetcher).toHaveBeenCalledWith("/api/mock/w/r/e",{headers:{Authorization:"Bearer owner"}});
+  await expect(previewMock("/api/mock/w/r/e")).rejects.toBeInstanceOf(ApiError);
 });
 describe("hosted session expiry", () => {
   it("reports current-session expiry so the app can show login while retaining its draft", async () => {

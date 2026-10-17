@@ -1,8 +1,14 @@
 //! Bounded QuickJS runtime with the deliberately limited `moleapi-pm/1` API.
 //! No filesystem, native modules, timers, processes or independent networking.
 use anyhow::{Context as _, Result, ensure};
-use moleapi_core::{RequestSpec, Response, ScriptLog, TestResult, VariableScopes, VariableUpdate};
-use rquickjs::{Context, Ctx, Exception, Function, Runtime, Value};
+use dataset_query::QuerySnapshot;
+use moleapi_core::{
+    Pair, RequestSpec, Response, ScriptLog, ScriptMode, TestResult, VariableScopes, VariableUpdate,
+};
+use rquickjs::{
+    Context, Ctx, Exception, Function, Persistent, Runtime, Value,
+    promise::{PromiseHookType, PromiseState},
+};
 use serde::{Deserialize, Serialize};
 use std::{
     cell::{Cell, RefCell},
@@ -10,10 +16,26 @@ use std::{
     rc::Rc,
     time::{Duration, Instant},
 };
+pub mod dataset_query;
 mod failure;
 mod worker;
 pub use failure::ScriptFailure;
 pub use worker::*;
+pub(crate) type LiveLoader =
+    Rc<dyn Fn(&str, &VariableScopes) -> Result<(QuerySnapshot, BTreeSet<String>)>>;
+pub(crate) struct RuntimeOptions<'a> {
+    pub condition: Option<&'a str>,
+    pub mode: ScriptMode,
+    pub datasets: &'a [QuerySnapshot],
+    pub loader: Option<LiveLoader>,
+    pub mock: Option<&'a MockResponseDraft>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MockResponseDraft {
+    pub status: u16,
+    pub headers: Vec<Pair>,
+    pub body: String,
+}
 
 pub const MEMORY_LIMIT: usize = 64 * 1024 * 1024;
 pub const DEADLINE: Duration = Duration::from_millis(250);
@@ -23,6 +45,8 @@ struct Input<'a> {
     request: &'a RequestSpec,
     response: Option<&'a Response>,
     scopes: &'a VariableScopes,
+    mode: ScriptMode,
+    mock: Option<&'a MockResponseDraft>,
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ScriptOutput {
@@ -36,6 +60,8 @@ pub struct ScriptOutput {
     pub updates: Vec<VariableUpdate>,
     #[serde(default)]
     pub private_values: BTreeSet<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mock_response: Option<MockResponseDraft>,
 }
 
 fn capture_private(
@@ -119,15 +145,85 @@ pub fn run(
     response: Option<&Response>,
     scopes: &VariableScopes,
 ) -> Result<ScriptOutput> {
-    run_with_condition(scripts, request, response, scopes, None)
+    run_with_mode(scripts, request, response, scopes, ScriptMode::V1)
 }
-pub(crate) fn run_with_condition(
+pub fn run_with_mode(
     scripts: &[String],
     request: &RequestSpec,
     response: Option<&Response>,
     scopes: &VariableScopes,
-    condition: Option<&str>,
+    mode: ScriptMode,
 ) -> Result<ScriptOutput> {
+    run_with_options(
+        scripts,
+        request,
+        response,
+        scopes,
+        RuntimeOptions {
+            condition: None,
+            mode,
+            datasets: &[],
+            loader: None,
+            mock: None,
+        },
+    )
+}
+pub fn run_with_datasets(
+    scripts: &[String],
+    request: &RequestSpec,
+    response: Option<&Response>,
+    scopes: &VariableScopes,
+    datasets: &[QuerySnapshot],
+) -> Result<ScriptOutput> {
+    run_with_options(
+        scripts,
+        request,
+        response,
+        scopes,
+        RuntimeOptions {
+            condition: None,
+            mode: ScriptMode::V2,
+            datasets,
+            loader: None,
+            mock: None,
+        },
+    )
+}
+pub fn run_mock(
+    scripts: &[String],
+    request: &RequestSpec,
+    scopes: &VariableScopes,
+    datasets: &[QuerySnapshot],
+    mock: &MockResponseDraft,
+) -> Result<ScriptOutput> {
+    run_with_options(
+        scripts,
+        request,
+        None,
+        scopes,
+        RuntimeOptions {
+            condition: None,
+            mode: ScriptMode::V2,
+            datasets,
+            loader: None,
+            mock: Some(mock),
+        },
+    )
+}
+pub(crate) fn run_with_options(
+    scripts: &[String],
+    request: &RequestSpec,
+    response: Option<&Response>,
+    scopes: &VariableScopes,
+    options: RuntimeOptions<'_>,
+) -> Result<ScriptOutput> {
+    let RuntimeOptions {
+        condition,
+        mode,
+        datasets,
+        loader,
+        mock,
+    } = options;
     if let Some(expression) = condition {
         ensure!(
             !expression.trim().is_empty() && expression.len() <= 4096,
@@ -137,11 +233,14 @@ pub(crate) fn run_with_condition(
     for script in scripts {
         moleapi_core::validate_script(script)?;
     }
+    ensure!(datasets.len() <= 20, "Too many script datasets");
     scopes.validate()?;
     let input = serde_json::to_string(&Input {
         request,
         response,
         scopes,
+        mode,
+        mock,
     })?;
     ensure!(
         input.len() <= 16 * 1024 * 1024,
@@ -155,11 +254,37 @@ pub(crate) fn run_with_condition(
         let runtime = Runtime::new().context("Create JavaScript runtime")?;
         runtime.set_memory_limit(MEMORY_LIMIT);
         runtime.set_max_stack_size(512 * 1024);
-        let deadline = Instant::now() + DEADLINE;
-        runtime.set_interrupt_handler(Some(Box::new(move || Instant::now() >= deadline)));
+        let vm_deadline = Rc::new(Cell::new(Instant::now() + DEADLINE));
+        let interrupt_deadline = vm_deadline.clone();
+        runtime.set_interrupt_handler(Some(Box::new(move || {
+            Instant::now() >= interrupt_deadline.get()
+        })));
         let promise_seen = Rc::new(Cell::new(false));
         let promise_flag = promise_seen.clone();
-        runtime.set_promise_hook(Some(Box::new(move |_, _, _, _| promise_flag.set(true))));
+        let promises = Rc::new(RefCell::new(Vec::<Persistent<Value<'static>>>::new()));
+        let tracked = promises.clone();
+        let promise_overflow = Rc::new(Cell::new(false));
+        let overflow = promise_overflow.clone();
+        runtime.set_promise_hook(Some(Box::new(move |ctx, kind, promise, _| {
+            promise_flag.set(true);
+            if kind == PromiseHookType::Init && promise.is_promise() {
+                let mut values = tracked.borrow_mut();
+                if values.len() < 10_000 {
+                    values.push(Persistent::save(&ctx, promise));
+                } else {
+                    overflow.set(true);
+                }
+            }
+        })));
+        let unhandled_rejections = Rc::new(Cell::new(0usize));
+        let unhandled = unhandled_rejections.clone();
+        runtime.set_host_promise_rejection_tracker(Some(Box::new(move |_, _, _, handled| {
+            unhandled.set(if handled {
+                unhandled.get().saturating_sub(1)
+            } else {
+                unhandled.get().saturating_add(1)
+            });
+        })));
         let context = Context::full(&runtime).context("Create JavaScript context")?;
         let output = context.with(|ctx| {
             let skipped = Rc::new(Cell::new(false));
@@ -170,25 +295,111 @@ pub(crate) fn run_with_condition(
                     skip_flag.set(true);
                 })?,
             )?;
-            let evaluate = |source: &str| -> Result<Value<'_>> {
-                ctx.eval(source).map_err(|error| {
-                    let detail = if error.is_exception() {
-                        let caught = ctx.catch();
-                        // Never format arbitrary script objects through user-defined callbacks.
-                        if let Some(object) = caught.as_object() {
-                            object
-                                .get::<_, String>("message")
-                                .unwrap_or_else(|_| "JavaScript exception".into())
-                        } else {
-                            "JavaScript exception".into()
+            let snapshots = Rc::new(RefCell::new(datasets.to_vec()));
+            let loaded_private = private_values.clone();
+            let complete = privacy_complete.clone();
+            let query_deadline = vm_deadline.clone();
+            ctx.globals().set(
+                "__moleapiQueryDataset",
+                Function::new(
+                    ctx.clone(),
+                    move |ctx: Ctx<'_>,
+                          id: String,
+                          sql: String,
+                          params: Vec<String>,
+                          is_view: bool,
+                          scope_json: String|
+                          -> rquickjs::Result<String> {
+                        let Some(index) = snapshots
+                            .borrow()
+                            .iter()
+                            .position(|dataset| dataset.id == id)
+                        else {
+                            return Err(Exception::throw_message(
+                                &ctx,
+                                "Saved dataset ID is unavailable",
+                            ));
+                        };
+                        if snapshots.borrow()[index].live_query {
+                            let Some(load) = loader.as_ref() else {
+                                return Err(Exception::throw_message(
+                                    &ctx,
+                                    "Live query-backed datasets require an on-demand script bridge",
+                                ));
+                            };
+                            let started = Instant::now();
+                            let current_scopes: VariableScopes = serde_json::from_str(&scope_json)
+                                .map_err(|_| {
+                                    Exception::throw_message(
+                                        &ctx,
+                                        "Invalid live dataset scope snapshot",
+                                    )
+                                })?;
+                            current_scopes.validate().map_err(|_| {
+                                Exception::throw_message(
+                                    &ctx,
+                                    "Live dataset scope snapshot exceeds limits",
+                                )
+                            })?;
+                            let loaded = load(&id, &current_scopes);
+                            query_deadline.set(query_deadline.get() + started.elapsed());
+                            let (snapshot, private) = loaded.map_err(|_| {
+                                Exception::throw_message(&ctx, "Live dataset refresh failed")
+                            })?;
+                            if snapshot.id != id || snapshot.live_query {
+                                return Err(Exception::throw_message(
+                                    &ctx,
+                                    "Live dataset response is invalid",
+                                ));
+                            }
+                            {
+                                let mut values = loaded_private.borrow_mut();
+                                values.extend(private);
+                                if values.len() > 5000
+                                    || values.iter().map(String::len).sum::<usize>()
+                                        > 4 * moleapi_core::MAX_VARIABLE_BYTES
+                                {
+                                    complete.set(false);
+                                    return Err(Exception::throw_message(
+                                        &ctx,
+                                        "Live dataset private values exceed execution limit",
+                                    ));
+                                }
+                            }
+                            snapshots.borrow_mut()[index] = snapshot;
                         }
+                        let dataset = snapshots.borrow()[index].clone();
+                        let rows = if is_view {
+                            dataset_query::query_view(&dataset, &sql, &params)
+                        } else {
+                            dataset_query::query_snapshot(&dataset, &sql, &params)
+                        }
+                        .map_err(|_| Exception::throw_message(&ctx, "Dataset query failed"))?;
+                        serde_json::to_string(&rows).map_err(|_| {
+                            Exception::throw_message(&ctx, "Cannot encode dataset query rows")
+                        })
+                    },
+                )?,
+            )?;
+            let describe_error = |error: rquickjs::Error| {
+                let detail = if error.is_exception() {
+                    let caught = ctx.catch();
+                    // Never format arbitrary script objects through user-defined callbacks.
+                    if let Some(object) = caught.as_object() {
+                        object
+                            .get::<_, String>("message")
+                            .unwrap_or_else(|_| "JavaScript exception".into())
                     } else {
-                        error.to_string()
-                    };
-                    let detail: String = detail.chars().take(4096).collect();
-                    anyhow::anyhow!("JavaScript error: {detail}")
-                })
+                        "JavaScript exception".into()
+                    }
+                } else {
+                    error.to_string()
+                };
+                let detail: String = detail.chars().take(4096).collect();
+                anyhow::anyhow!("JavaScript error: {detail}")
             };
+            let evaluate =
+                |source: &str| -> Result<Value<'_>> { ctx.eval(source).map_err(describe_error) };
             let values = private_values.clone();
             let complete = privacy_complete.clone();
             let capture = Function::new(
@@ -296,6 +507,7 @@ pub(crate) fn run_with_condition(
                 "__moleapiCaptureBegin",
                 "__moleapiCaptureEnd",
                 "__moleapiSkipRequest",
+                "__moleapiQueryDataset",
             ] {
                 ctx.globals().remove(name)?;
             }
@@ -313,15 +525,45 @@ pub(crate) fn run_with_condition(
                     None
                 };
             for script in scripts.iter().filter(|s| !s.trim().is_empty()) {
-                let result = match evaluate(script) {
+                let result = match if mode == ScriptMode::V2 {
+                    ctx.eval_promise(script.as_str())
+                        .map_err(describe_error)
+                        .and_then(|promise| promise.finish::<Value>().map_err(describe_error))
+                } else {
+                    evaluate(script)
+                } {
                     Ok(result) => result,
                     Err(_) if skipped.get() => break,
                     Err(error) => return Err(error),
                 };
-                ensure!(
-                    !result.is_promise() && !promise_seen.get(),
-                    "Asynchronous scripts are unsupported in pm compatibility v1"
-                );
+                if mode == ScriptMode::V1 {
+                    ensure!(
+                        !result.is_promise() && !promise_seen.get(),
+                        "Asynchronous scripts are unsupported in pm compatibility v1"
+                    );
+                } else {
+                    let mut jobs = 0usize;
+                    while ctx.execute_pending_job() {
+                        jobs += 1;
+                        ensure!(jobs <= 10_000, "Asynchronous script job limit exceeded");
+                    }
+                    ensure!(
+                        !promise_overflow.get(),
+                        "Asynchronous script promise limit exceeded"
+                    );
+                    let mut unsettled = false;
+                    for saved in promises.borrow_mut().drain(..) {
+                        let value = saved.restore(&ctx)?;
+                        if let Some(promise) = value.as_promise() {
+                            unsettled |= promise.state() == PromiseState::Pending;
+                        }
+                    }
+                    ensure!(!unsettled, "Unsettled asynchronous jobs are unsupported");
+                    ensure!(
+                        unhandled_rejections.get() == 0,
+                        "Unhandled asynchronous rejection"
+                    );
+                }
                 if skipped.get() {
                     break;
                 }
@@ -335,6 +577,18 @@ pub(crate) fn run_with_condition(
             );
             let mut output: ScriptOutput =
                 serde_json::from_str(&output).context("Invalid JavaScript output")?;
+            if mock.is_some() {
+                let response = output
+                    .mock_response
+                    .as_ref()
+                    .context("Mock script did not export a response")?;
+                ensure!(
+                    (200..=599).contains(&response.status)
+                        && response.body.len() <= moleapi_core::MAX_BODY
+                        && response.headers.len() <= 100,
+                    "Mock response exceeds status, header or body limits"
+                );
+            }
             output.condition_result = condition_result;
             ensure!(
                 output.logs.len() <= 200
@@ -359,14 +613,20 @@ pub(crate) fn run_with_condition(
             validated.apply(&output.updates)?;
             output.private_values = private_values.borrow().clone();
             Ok(output)
-        })?;
+        });
+        promises.borrow_mut().clear();
+        let output = output?;
         ensure!(
             privacy_complete.get() && active_capture.get() == 0,
             "Private variable history exceeds execution limit"
         );
         ensure!(
             !runtime.is_job_pending(),
-            "Asynchronous scripts are unsupported in pm compatibility v1"
+            if mode == ScriptMode::V1 {
+                "Asynchronous scripts are unsupported in pm compatibility v1"
+            } else {
+                "Detached asynchronous jobs are unsupported"
+            }
         );
         Ok(output)
     })();

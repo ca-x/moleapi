@@ -373,6 +373,8 @@ fn walk(
                     status: status as u16,
                     headers,
                     body: text(&response["body"]),
+                    mock_script: String::new(),
+                    mock_match: None,
                 });
             }
         }

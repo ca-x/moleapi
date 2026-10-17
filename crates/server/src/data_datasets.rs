@@ -84,7 +84,7 @@ pub(crate) async fn refresh(input: Refresh<'_>) -> Result<Dataset, ApiError> {
         biased;
         _ = cancel.cancelled() => return Err(ApiError::bad("Dataset refresh cancelled")),
         _ = tokio::time::sleep_until(deadline) => return Err(ApiError::bad("Dataset refresh deadline exceeded")),
-        outcome = execution::prepare_data_query(state, &prepared, &selected_sql, true, &mut scopes) => outcome?.sql.ok_or_else(|| ApiError::bad("Dataset query was skipped"))?,
+        outcome = execution::prepare_data_query(state, owner, workspace, &prepared, &selected_sql, true, &mut scopes) => outcome?.sql.ok_or_else(|| ApiError::bad("Dataset query was skipped"))?,
     };
     if cancel.is_cancelled() || Instant::now() >= deadline {
         return Err(ApiError::bad("Dataset refresh cancelled or timed out"));

@@ -5,7 +5,7 @@ import RequestAuthEditor from "../authentication/RequestAuthEditor";
 import LanguageSelector from "../../shared/i18n/LanguageSelector";
 import { t, useLanguage, message } from "../../shared/i18n";
 import { Button, Card, Flex, Text, TextField } from "@radix-ui/themes";
-import { Field } from "../../shared/ui";
+import { Choice, Field } from "../../shared/ui";
 import { api, native } from "../../shared/api";
 import { useWorkbench } from "../workbench/context";
 export default function SettingsPanel() {
@@ -46,6 +46,22 @@ export default function SettingsPanel() {
         </Field>
       )}
       {draft && <Field label={t("工作区鉴权")}><RequestAuthEditor auth={draft.data.auth ?? {kind:"none",token:"",username:"",password:""}} change={auth=>updateData(data=>({...data,auth}))} dark={dark} inherit={false} collectionId={null}/></Field>}
+      {draft && (
+        <Field
+          label={t("脚本兼容模式")}
+          hint={t("v2 支持顶层 await；切换后，此工作区的全部前置和后置脚本都使用所选模式。")}
+        >
+          <Choice<"v1" | "v2">
+            label={t("脚本兼容模式")}
+            value={draft.data.script_mode ?? "v1"}
+            onChange={(script_mode) => updateData((data) => ({ ...data, script_mode }))}
+            options={[
+              { value: "v1", label: t("v1（同步脚本）") },
+              { value: "v2", label: t("v2（异步脚本）") },
+            ]}
+          />
+        </Field>
+      )}
       {native && sync.data?.connected && (
         <Card>
           <Text as="p" size="2">

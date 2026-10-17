@@ -193,6 +193,7 @@ async fn real_agent_executes_private_local_request_and_returns_owned_redacted_re
         "/verify",
         get(|headers: HeaderMap| async move {
             assert_eq!(headers["x-secret"], "runtime-agent-secret");
+            assert_eq!(headers["x-view"], "one");
             axum::Json(json!({"received":headers["x-secret"].to_str().unwrap()}))
         }),
     ))
@@ -219,12 +220,18 @@ async fn real_agent_executes_private_local_request_and_returns_owned_redacted_re
     let token_path = temporary.path().join("session.txt");
     std::fs::write(&token_path, token).unwrap();
     let mut data = source(&endpoint)["data"].clone();
+    data["script_mode"] = json!("v2");
+    data["datasets"][0]["views"] =
+        json!([{"id":"agent-view","name":"Agent row","sql":"SELECT row FROM data WHERE row = ?"}]);
     data["collections"][0]["requests"]
         .as_array_mut()
         .unwrap()
         .truncate(1);
     let request = &mut data["collections"][0]["requests"][0];
     request["url"] = json!(format!("{endpoint}/verify"));
+    request["pre_request_script"] = json!(
+        "const result=await pm.datasets('rows').executeView('agent-view',['one']); for await (const row of result.rows) pm.request.headers.upsert({key:'x-view',value:row.row});"
+    );
     request["headers"] =
         json!([{"id":"secret","key":"X-Secret","value":"{{secret}}","enabled":true}]);
     request["extractions"] = json!([]);
@@ -432,6 +439,7 @@ async fn real_agent_executes_private_local_request_and_returns_owned_redacted_re
     query["url"] = "".into();
     query["headers"] = json!([]);
     query["post_response_script"] = "".into();
+    query["pre_request_script"] = "".into();
     query["protocol"] = json!({"kind":"data","source":"local_file","file_name":"runner.csv","file_format":"csv","file_base64":"dmFsdWUKb25lCnR3bwo=","table_name":"data","sql":"SELECT value FROM data","read_only":true});
     updated_data["collections"]
         .as_array_mut()
@@ -611,7 +619,11 @@ async fn interrupt_cancels_local_execution_and_persists_cancelled_hosted_task() 
     fixture.abort();
 }
 
-async fn query_dataset_agent_closes_source_after_invalidation(edit_workspace: bool) {
+async fn query_dataset_agent_closes_source_after_invalidation(
+    edit_workspace: bool,
+    script_bridge: bool,
+    baseline: bool,
+) {
     use std::{
         sync::{
             Arc,
@@ -624,6 +636,7 @@ async fn query_dataset_agent_closes_source_after_invalidation(edit_workspace: bo
     let source_url = format!("http://{}", listener.local_addr().unwrap());
     let (started_tx, started_rx) = tokio::sync::oneshot::channel();
     let (closed_tx, closed_rx) = tokio::sync::oneshot::channel();
+    let (resume_tx, resume_rx) = tokio::sync::oneshot::channel();
     let source_server = tokio::spawn(async move {
         let (mut socket, _) = listener.accept().await.unwrap();
         let mut bytes = [0u8; 4096];
@@ -638,8 +651,21 @@ async fn query_dataset_agent_closes_source_after_invalidation(edit_workspace: bo
                 break;
             }
         }
-        socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/csv\r\nContent-Length: 1000000\r\n\r\nvalue\n").await.unwrap();
+        if script_bridge {
+            socket
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Type: text/csv\r\nContent-Length: 10\r\n\r\n",
+                )
+                .await
+                .unwrap();
+        } else {
+            socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/csv\r\nContent-Length: 1000000\r\n\r\nvalue\n").await.unwrap();
+        }
         let _ = started_tx.send(());
+        if script_bridge {
+            let _ = resume_rx.await;
+            let _ = socket.write_all(b"value\none\n").await;
+        }
         loop {
             match socket.read(&mut bytes).await {
                 Ok(0) | Err(_) => {
@@ -683,6 +709,9 @@ async fn query_dataset_agent_closes_source_after_invalidation(edit_workspace: bo
     let registered = api(&http,&server,None,reqwest::Method::POST,"auth/register",Some(json!({"username":"liveagentowner","password":"fixture-password-123","setup_token":"live-agent-setup"}))).await;
     let owner = registered["token"].as_str().unwrap();
     let mut data = source(&endpoint)["data"].clone();
+    if script_bridge {
+        data["script_mode"] = json!("v2");
+    }
     data["collections"][0]["requests"]
         .as_array_mut()
         .unwrap()
@@ -691,9 +720,15 @@ async fn query_dataset_agent_closes_source_after_invalidation(edit_workspace: bo
     request["url"] = format!("{endpoint}/verify").into();
     request["extractions"] = json!([]);
     request["post_response_script"] = "".into();
+    if script_bridge {
+        request["pre_request_script"] = json!(
+            "try { await pm.datasets('live').executeQuery('SELECT value FROM data'); } catch (error) {};"
+        );
+    }
     let mut query = request.clone();
     query["id"] = "live-query".into();
     query["url"] = format!("{source_url}/source").into();
+    query["pre_request_script"] = "".into();
     query["protocol"] = json!({"kind":"data","source":"remote_file","file_name":"live.csv","file_format":"csv","table_name":"data","sql":"SELECT value FROM data","read_only":true});
     query["timeout_ms"] = 30000.into();
     data["collections"]
@@ -730,7 +765,12 @@ async fn query_dataset_agent_closes_source_after_invalidation(edit_workspace: bo
         Some(json!({"workspace_id":"w","name":"Live credential"})),
     )
     .await;
-    let task = api(&http,&server,Some(owner),reqwest::Method::POST,"workspaces/w/runner-tasks",Some(json!({"runner_id":runner_id,"expected_revision":workspace["revision"],"selection":{"collection_id":"c","dataset_id":"live"}}))).await;
+    let selection = if script_bridge {
+        json!({"collection_id":"c"})
+    } else {
+        json!({"collection_id":"c","dataset_id":"live"})
+    };
+    let task = api(&http,&server,Some(owner),reqwest::Method::POST,"workspaces/w/runner-tasks",Some(json!({"runner_id":runner_id,"expected_revision":workspace["revision"],"selection":selection}))).await;
     let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_moleapi-cli"))
         .args([
             "--server",
@@ -753,6 +793,22 @@ async fn query_dataset_agent_closes_source_after_invalidation(edit_workspace: bo
         .await
         .unwrap()
         .unwrap();
+    if baseline {
+        let _ = resume_tx.send(());
+        let status = tokio::time::timeout(Duration::from_secs(5), child.wait())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            status.success(),
+            "Agent did not complete the baseline live script query"
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        source_server.abort();
+        service.abort();
+        fixture.abort();
+        return;
+    }
     if edit_workspace {
         let current = api(
             &http,
@@ -790,6 +846,10 @@ async fn query_dataset_agent_closes_source_after_invalidation(edit_workspace: bo
         )
         .await;
         assert_eq!(revoked["revoked"], true);
+    }
+    if script_bridge {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let _ = resume_tx.send(());
     }
     tokio::time::timeout(Duration::from_secs(6), closed_rx)
         .await
@@ -837,10 +897,22 @@ async fn query_dataset_agent_closes_source_after_invalidation(edit_workspace: bo
 
 #[tokio::test]
 async fn revoked_query_dataset_agent_closes_its_live_source_before_next_run_step() {
-    query_dataset_agent_closes_source_after_invalidation(false).await;
+    query_dataset_agent_closes_source_after_invalidation(false, false, false).await;
 }
 
 #[tokio::test]
 async fn edited_query_dataset_agent_closes_its_old_live_source_before_next_run_step() {
-    query_dataset_agent_closes_source_after_invalidation(true).await;
+    query_dataset_agent_closes_source_after_invalidation(true, false, false).await;
+}
+#[tokio::test]
+async fn revoked_script_dataset_agent_closes_live_source_before_request() {
+    query_dataset_agent_closes_source_after_invalidation(false, true, false).await;
+}
+#[tokio::test]
+async fn edited_script_dataset_agent_closes_live_source_before_request() {
+    query_dataset_agent_closes_source_after_invalidation(true, true, false).await;
+}
+#[tokio::test]
+async fn script_dataset_agent_reaches_request_when_the_live_source_completes() {
+    query_dataset_agent_closes_source_after_invalidation(false, true, true).await;
 }

@@ -4,6 +4,7 @@ import {afterEach,expect,it,vi} from "vitest";
 import {Theme} from "@radix-ui/themes";
 import {useWorkbench} from "../workbench/context";
 import InterchangeFields from "./InterchangeFields";
+import {setLanguage} from "../../shared/i18n";
 
 vi.mock("../workbench/context",()=>({useWorkbench:vi.fn()}));
 vi.stubGlobal("ResizeObserver",class{observe(){}unobserve(){}disconnect(){}});
@@ -26,4 +27,10 @@ it("offers HAR for import and export",()=>{
   vi.mocked(useWorkbench).mockReturnValue({...state,modal:"export",format:"har"} as unknown as ReturnType<typeof useWorkbench>);
   view.rerender(<Theme><InterchangeFields/></Theme>);
   expect(screen.getByText(/saved HTTP request templates|保存的 HTTP 请求模板/)).toBeTruthy();
+});
+it("warns that a default backup omits authored Mock scripts",async()=>{
+  await setLanguage("zh-CN");
+  vi.mocked(useWorkbench).mockReturnValue({modal:"export",format:"moleapi",includeSecrets:false,draft:{data:{collections:[{requests:[{examples:[{mock_script:"pm.mock.setBody('secret')"}]}]}]}},setFormat:vi.fn(),setIncludeSecrets:vi.fn()} as unknown as ReturnType<typeof useWorkbench>);
+  render(<Theme><InterchangeFields/></Theme>);
+  expect(screen.getByText("默认备份会移除 Mock 实现脚本；如需完整恢复，请选择包含密钥值。")).toBeTruthy();
 });

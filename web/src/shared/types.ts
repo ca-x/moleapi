@@ -109,6 +109,13 @@ export interface Example {
   status: number;
   headers: Pair[];
   body: string;
+  mock_script?: string;
+  mock_match?: {
+    priority: number;
+    query?: Pair[];
+    headers?: Pair[];
+    body?: string;
+  };
 }
 export interface RequestNetwork {
   http_mode: "http1" | "auto" | "http2_prior_knowledge";
@@ -174,6 +181,7 @@ export interface ScenarioStep {id:string;request_id:string;name:string;group:str
 export interface ScenarioParallel {id:string;name:string;step_ids:string[];concurrency:number}
 export interface Scenario {notification_ids?:string[];id:string;name:string;description:string;collection_id:string;steps:ScenarioStep[];parallel?:ScenarioParallel[]}
 export interface WorkspaceData {
+  script_mode?: "v1" | "v2";
   scenarios?:Scenario[];
   datasets?:SavedDataset[];
   auth?: Auth | null;
@@ -186,7 +194,8 @@ export interface WorkspaceData {
   environments: Environment[];
   active_environment_id: string | null;
 }
-export interface SavedDataset {id:string;name:string;description:string;secret:boolean;source?:{format:"csv"|"json";source:string};query?:{request_id:string}}
+export interface SavedDatasetView {id:string;name:string;sql?:string}
+export interface SavedDataset {id:string;name:string;table_name?:string;description:string;secret:boolean;source?:{format:"csv"|"json";source:string};query?:{request_id:string};views?:SavedDatasetView[]}
 export interface Workspace {
   id: string;
   name: string;

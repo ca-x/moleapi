@@ -1,5 +1,8 @@
-use moleapi_core::{RequestSpec, VariableScopes};
-use moleapi_script_runtime::{WORKER_DEADLINE, run_worker};
+use moleapi_core::{RequestSpec, SavedDataset, ScriptMode, VariableScopes};
+use moleapi_script_runtime::{
+    WORKER_DEADLINE, run_worker, run_worker_with_datasets, run_worker_with_live,
+    run_worker_with_mode,
+};
 use serde_json::json;
 use std::{
     path::Path,
@@ -51,6 +54,135 @@ async fn worker_returns_live_results_and_failed_phase_privacy_without_mutations(
     let failure=run_worker(executable(),vec!["pm.variables.set('issued','generated-private');throw new Error(pm.variables.get('issued'));".into()],&request(),None,&VariableScopes::default()).await.unwrap_err();
     assert!(failure.privacy_complete);
     assert!(failure.private_values.contains("generated-private"));
+}
+#[tokio::test]
+async fn versioned_worker_settles_await_and_rejects_detached_or_private_failures() {
+    let scopes = VariableScopes::default();
+    let script = "const value = await Promise.resolve('ready'); pm.variables.set('result', value);";
+    assert!(
+        run_worker(executable(), vec![script.into()], &request(), None, &scopes)
+            .await
+            .is_err()
+    );
+    let output = run_worker_with_mode(
+        executable(),
+        vec![script.into()],
+        &request(),
+        None,
+        &scopes,
+        ScriptMode::V2,
+    )
+    .await
+    .unwrap();
+    assert_eq!(output.updates[0].value.as_deref(), Some("ready"));
+    let failure = run_worker_with_mode(executable(), vec!["pm.variables.set('secret','private-value'); await Promise.reject(new Error(pm.variables.get('secret')));".into()], &request(), None, &scopes, ScriptMode::V2).await.unwrap_err();
+    assert!(failure.privacy_complete);
+    assert!(failure.private_values.contains("private-value"));
+    let detached = run_worker_with_mode(
+        executable(),
+        vec!["Promise.resolve().then(() => pm.variables.set('late','no'));".into()],
+        &request(),
+        None,
+        &scopes,
+        ScriptMode::V2,
+    )
+    .await
+    .unwrap();
+    assert_eq!(detached.updates[0].value.as_deref(), Some("no"));
+    assert!(
+        run_worker_with_mode(
+            executable(),
+            vec!["new Promise(() => {});".into()],
+            &request(),
+            None,
+            &scopes,
+            ScriptMode::V2
+        )
+        .await
+        .is_err()
+    );
+}
+#[tokio::test]
+async fn worker_queries_owned_literal_snapshot_without_exposing_source() {
+    let dataset: SavedDataset = serde_json::from_value(json!({"id":"d","name":"Private","source":{"format":"json","source":"[{\"token\":\"private-row\"}]"}})).unwrap();
+    let (snapshot, values) =
+        moleapi_script_runtime::dataset_query::snapshot_dataset(&dataset).unwrap();
+    let mut scopes = VariableScopes::default();
+    scopes.private_values.extend(values);
+    let output = run_worker_with_datasets(executable(), vec!["const result=await pm.datasets('d').executeQuery('SELECT token FROM data'); for await (const row of result.rows) { pm.test('row',()=>pm.expect(row.token).to.equal('private-row')); }".into()], &request(), None, &scopes, vec![snapshot.clone()]).await.unwrap();
+    assert!(output.tests[0].passed);
+    let failure = run_worker_with_datasets(executable(), vec!["const result=await pm.datasets('d').executeQuery('SELECT token FROM data'); for await (const row of result.rows) throw new Error(row.token);".into()], &request(), None, &scopes, vec![snapshot]).await.unwrap_err();
+    assert!(failure.private_values.contains("private-row"));
+}
+#[tokio::test]
+async fn live_worker_loads_only_referenced_dataset_and_caches_it_for_the_phase() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    let live: moleapi_core::SavedDataset =
+        serde_json::from_value(json!({"id":"live","name":"Live","query":{"request_id":"r"}}))
+            .unwrap();
+    let unused: moleapi_core::SavedDataset = serde_json::from_value(
+        json!({"id":"unused","name":"Unused","query":{"request_id":"other"}}),
+    )
+    .unwrap();
+    let literal: moleapi_core::SavedDataset = serde_json::from_value(json!({"id":"live","name":"Live","source":{"format":"json","source":"[{\"name\":\"fresh\"}]"}})).unwrap();
+    let snapshot = moleapi_script_runtime::dataset_query::snapshot_dataset(&literal).unwrap();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let counted = calls.clone();
+    let output = run_worker_with_live(executable(), vec!["for(let i=0;i<2;i++){const result=await pm.datasets('live').executeQuery('SELECT name FROM data'); for await(const row of result.rows) pm.variables.set('name',row.name);}".into()], &request(), None, &VariableScopes::default(), vec![moleapi_script_runtime::dataset_query::live_query_marker(&live),moleapi_script_runtime::dataset_query::live_query_marker(&unused)], move |id, _scopes, _deadline| {
+        let counted = counted.clone();
+        let value = snapshot.clone();
+        async move { assert_eq!(id,"live"); counted.fetch_add(1,Ordering::SeqCst); Ok(value) }
+    }).await.unwrap();
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        output
+            .updates
+            .last()
+            .and_then(|value| value.value.as_deref()),
+        Some("fresh")
+    );
+}
+#[tokio::test]
+async fn live_bridge_deadline_kills_a_worker_waiting_on_the_host() {
+    let live: moleapi_core::SavedDataset =
+        serde_json::from_value(json!({"id":"live","name":"Live","query":{"request_id":"r"}}))
+            .unwrap();
+    let start = Instant::now();
+    let failure = run_worker_with_live(
+        executable(),
+        vec!["await pm.datasets('live').executeQuery('SELECT 1');".into()],
+        &request(),
+        None,
+        &VariableScopes::default(),
+        vec![moleapi_script_runtime::dataset_query::live_query_marker(
+            &live,
+        )],
+        |_id, _scopes, _deadline| async {
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            anyhow::bail!("unreachable")
+        },
+    )
+    .await
+    .unwrap_err();
+    assert!(failure.message.contains("1 second deadline"), "{failure:?}");
+    assert!(!failure.privacy_complete);
+    assert!(start.elapsed() < Duration::from_secs(2));
+}
+#[tokio::test]
+async fn live_bridge_io_wait_does_not_consume_the_vm_cpu_budget() {
+    let live: moleapi_core::SavedDataset =
+        serde_json::from_value(json!({"id":"live","name":"Live","query":{"request_id":"r"}}))
+            .unwrap();
+    let literal: moleapi_core::SavedDataset = serde_json::from_value(json!({"id":"live","name":"Live","source":{"format":"json","source":"[{\"name\":\"fresh\"}]"}})).unwrap();
+    let snapshot = moleapi_script_runtime::dataset_query::snapshot_dataset(&literal).unwrap();
+    let output = run_worker_with_live(executable(), vec!["const result=await pm.datasets('live').executeQuery('SELECT name FROM data'); let count=0; for(let i=0;i<100000;i++) count+=i; for await(const row of result.rows) pm.variables.set('name',row.name);".into()], &request(), None, &VariableScopes::default(), vec![moleapi_script_runtime::dataset_query::live_query_marker(&live)], move |_id, _scopes, _deadline| {
+        let snapshot = snapshot.clone();
+        async move { tokio::time::sleep(Duration::from_millis(350)).await; Ok(snapshot) }
+    }).await.unwrap();
+    assert_eq!(output.updates[0].value.as_deref(), Some("fresh"));
 }
 #[cfg(unix)]
 fn fake_worker(directory: &Path, name: &str, source: &str) -> std::path::PathBuf {

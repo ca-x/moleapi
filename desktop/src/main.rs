@@ -20,6 +20,43 @@ struct ApiReply {
     status: u16,
     body: Value,
 }
+#[derive(Serialize)]
+struct MockPreviewReply {
+    status: u16,
+    body: String,
+}
+
+#[tauri::command]
+async fn preview_mock(
+    path: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<MockPreviewReply, String> {
+    if !path.starts_with("/api/mock/")
+        || path.len() > 8192
+        || path.split('/').any(|part| matches!(part, "." | ".."))
+        || path.contains('#')
+    {
+        return Err("Invalid Mock preview path".into());
+    }
+    let request = Request::builder()
+        .method("GET")
+        .uri(path)
+        .body(Body::empty())
+        .map_err(|_| "Invalid Mock preview request")?;
+    let response = state
+        .0
+        .clone()
+        .oneshot(request)
+        .await
+        .map_err(|_| "Mock preview unavailable")?;
+    let status = response.status().as_u16();
+    let bytes = to_bytes(response.into_body(), 5 * 1024 * 1024 + 8192)
+        .await
+        .map_err(|_| "Mock preview response exceeds limit")?;
+    let body =
+        String::from_utf8(bytes.to_vec()).map_err(|_| "Mock preview response is not UTF-8")?;
+    Ok(MockPreviewReply { status, body })
+}
 
 #[tauri::command]
 async fn api(
@@ -122,6 +159,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             api,
+            preview_mock,
             set_language,
             generation::select_java_runtime
         ])

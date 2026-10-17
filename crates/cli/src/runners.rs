@@ -264,7 +264,7 @@ async fn task(
     let path = ["workspaces", claim.workspace.id.as_str(), "run"];
     let run = local.request("POST", &path, &[], Some(body));
     tokio::pin!(run);
-    let live_dataset = selection.dataset_id.as_ref().is_some_and(|id| {
+    let selected_live_dataset = selection.dataset_id.as_ref().is_some_and(|id| {
         claim
             .workspace
             .data
@@ -272,12 +272,23 @@ async fn task(
             .iter()
             .any(|dataset| dataset.id == *id && dataset.query.is_some())
     });
-    let heartbeat_period = if live_dataset {
+    let script_live_dataset = claim.workspace.data.script_mode == moleapi_core::ScriptMode::V2
+        && claim
+            .workspace
+            .data
+            .datasets
+            .iter()
+            .any(|dataset| dataset.query.is_some());
+    let heartbeat_period = if script_live_dataset {
+        Duration::from_millis(200)
+    } else if selected_live_dataset {
         Duration::from_secs(1)
     } else {
         Duration::from_secs(20)
     };
-    let heartbeat_timeout = if live_dataset {
+    let heartbeat_timeout = if script_live_dataset {
+        Duration::from_secs(1)
+    } else if selected_live_dataset {
         Duration::from_secs(2)
     } else {
         Duration::from_secs(10)
