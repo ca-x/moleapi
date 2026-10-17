@@ -17,6 +17,7 @@ mod history;
 mod mock;
 mod mock_logs;
 mod mock_public;
+mod mock_public_listener;
 mod notifications;
 mod oauth1;
 mod oauth2;
@@ -77,6 +78,7 @@ struct AppState {
     script_slots: Arc<tokio::sync::Semaphore>,
     mock_delay_slots: Arc<tokio::sync::Semaphore>,
     public_mock_slots: Arc<tokio::sync::Semaphore>,
+    mock_public_listener: std::sync::Weak<mock_public_listener::Hub>,
     generation_slots: Arc<tokio::sync::Semaphore>,
     project_slots: Arc<tokio::sync::Semaphore>,
     project_jobs: Arc<generation_projects::Jobs>,
@@ -306,6 +308,7 @@ async fn build(
     let dubbo_runtime = dubbo_jar
         .map(|path| moleapi_protocols::dubbo::DubboRuntime::new(&path).map(Arc::new))
         .transpose()?;
+    let mock_listener_lifetime = Arc::new(mock_public_listener::Hub::default());
     let state = AppState {
         credential_revisions: Arc::new(tokio::sync::Mutex::new(credential_revisions)),
         history_clears: Arc::default(),
@@ -317,6 +320,7 @@ async fn build(
         mock_delay_slots: mock_delay_slots
             .unwrap_or_else(|| Arc::new(tokio::sync::Semaphore::new(32))),
         public_mock_slots: Arc::new(tokio::sync::Semaphore::new(32)),
+        mock_public_listener: Arc::downgrade(&mock_listener_lifetime),
         generation_slots: Arc::new(tokio::sync::Semaphore::new(4)),
         project_slots: Arc::new(tokio::sync::Semaphore::new(2)),
         project_jobs: Arc::default(),
@@ -440,6 +444,15 @@ async fn build(
         .route(
             "/workspaces/{id}/mock-shares/{share_id}/rotate",
             post(mock_public::rotate),
+        )
+        .route("/mock-public/listener", get(mock_public_listener::status))
+        .route(
+            "/mock-public/listener/start",
+            post(mock_public_listener::start),
+        )
+        .route(
+            "/mock-public/listener/stop",
+            post(mock_public_listener::stop),
         )
         .route(
             "/workspaces/{workspace}/reports",
@@ -626,14 +639,7 @@ async fn build(
     let protected =
         protected.route_layer(middleware::from_fn_with_state(state.clone(), auth::guard));
     let api = protected
-        .route(
-            "/public/mock/{token}/{example_id}",
-            get(mock_public::direct).options(mock_public::preflight),
-        )
-        .route(
-            "/public/mocks/{token}/{*path}",
-            axum::routing::any(mock_public::routed),
-        )
+        .merge(mock_public::routes())
         .route(
             "/health",
             get(|| async {
@@ -671,7 +677,8 @@ async fn build(
     Ok(router
         .layer(axum::Extension(schedule_lifetime))
         .layer(axum::Extension(notification_lifetime))
-        .layer(axum::Extension(credential_lifetime)))
+        .layer(axum::Extension(credential_lifetime))
+        .layer(axum::Extension(mock_listener_lifetime)))
 }
 #[cfg(feature = "web")]
 #[derive(rust_embed::RustEmbed)]

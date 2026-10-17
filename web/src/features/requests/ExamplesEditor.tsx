@@ -51,11 +51,11 @@ export default function ExamplesEditor({
   };
   return (
     <div className="example-list">
-      {workspaceId&&!native&&<Dialog.Root>
+      {workspaceId&&<Dialog.Root>
         <Dialog.Trigger><Button variant="soft" style={{minHeight:44}}>{t("管理公开 Mock")}</Button></Dialog.Trigger>
         <Dialog.Content maxWidth="min(560px, calc(100vw - 24px))" style={{maxHeight:"calc(100dvh - 24px)",overflowY:"auto"}}>
           <Dialog.Title>{t("公开 Mock")}</Dialog.Title>
-          <Dialog.Description>{t("默认仅工作区成员可访问。公开地址只分享当前请求；任何持有地址的人都可以调用。")}</Dialog.Description>
+          <Dialog.Description>{native?t("本地工作区默认不监听；启动后，任何持有公开地址的人都可以调用当前请求。"):t("默认仅工作区成员可访问。公开地址只分享当前请求；任何持有地址的人都可以调用。")}</Dialog.Description>
           <MockPublicShares workspaceId={workspaceId} requestId={request.id} examples={request.examples.map(example=>({id:example.id,name:example.name,dynamic:!!example.mock_script?.length}))} routePath={routePath} hasSavedQuery={routeHasQuery} dirty={dirty}/>
           <Flex justify="end" mt="4"><Dialog.Close><Button variant="soft">{t("完成")}</Button></Dialog.Close></Flex>
         </Dialog.Content>

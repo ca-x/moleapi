@@ -169,7 +169,7 @@ fn management(
     session: Option<Extension<SessionAuthentication>>,
 ) -> Result<(), ApiError> {
     if state.local {
-        return Err(ApiError::not_found());
+        return Ok(());
     }
     if session.is_none() {
         return Err(ApiError::forbidden(
@@ -177,6 +177,15 @@ fn management(
         ));
     }
     Ok(())
+}
+
+pub(crate) fn routes() -> axum::Router<AppState> {
+    axum::Router::new()
+        .route(
+            "/public/mock/{token}/{example_id}",
+            axum::routing::get(direct).options(preflight),
+        )
+        .route("/public/mocks/{token}/{*path}", axum::routing::any(routed))
 }
 
 fn new_token() -> (String, String) {
@@ -418,7 +427,7 @@ fn safe_uri(path: &str, original: &Uri) -> Result<Uri, ApiError> {
     .map_err(|_| ApiError::bad("Invalid public Mock path"))
 }
 
-fn public_response(result: Result<Response, ApiError>) -> Response {
+pub(crate) fn public_response(result: Result<Response, ApiError>) -> Response {
     let mut response = match result {
         Ok(response) => response,
         Err(error) => match error.status {
