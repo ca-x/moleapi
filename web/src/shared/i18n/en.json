@@ -838,6 +838,7 @@
   "导入 API 数据": "Import API data",
   "导出工作区": "Export workspace",
   "HAR 导出保存的 HTTP 请求模板，不包含实际流量、耗时或缓存；完整备份请使用 MoleAPI JSON。": "HAR exports saved HTTP request templates without captured traffic, timings, or cache data. Use MoleAPI JSON for a complete backup.",
+  "导入一个 Insomnia V4 HTTP 工作区；文件、脚本及不支持的资源会被拒绝，完整备份请使用 MoleAPI JSON。": "Imports one HTTP workspace from Insomnia V4 JSON. Files, scripts and unsupported resources are rejected; use MoleAPI JSON for a complete backup.",
   "本地工作区": "Local workspace",
   "服务器已连接": "Server connected",
   "有未保存修改": "Unsaved changes",

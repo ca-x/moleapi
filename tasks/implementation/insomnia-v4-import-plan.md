@@ -13,9 +13,9 @@
 
 ## Task 2: Hosted, CLI and editor entry points
 
-- [ ] Route `format=insomnia` through the existing hosted owner and standalone CLI imports. Add real process/router fixtures with save/reload, owner denial, default/full backup and one checked loopback request.
-- [ ] Add an Insomnia V4 JSON choice and bounded file handling to the bilingual import dialog; run focused frontend tests.
-- [ ] Run 390px English/Chinese import/save/reload/wire browser flow; commit.
+- [x] Route `format=insomnia` through the existing hosted owner and standalone CLI imports. Add real process/router fixtures with save/reload, owner denial, default/full backup and checked loopback requests.
+- [x] Add an Insomnia V4 JSON choice to the bilingual import dialog, reusing its bounded input path; run focused frontend tests.
+- [x] Run 390px English/Chinese paste/import/save/reload/wire browser flow; commit. The native file picker is a separate UI seam.
 
 ## Task 3: Final evidence and integration
 
