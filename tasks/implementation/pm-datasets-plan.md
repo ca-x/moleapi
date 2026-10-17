@@ -25,8 +25,8 @@
 
 ### 2. Read-only dataset query substrate
 
-- [ ] Add validated stable table names to saved datasets and host snapshot admission for literal CSV/JSON sources. No silent omissions or unowned references.
-- [ ] Add a pinned mature SQLite adapter with bound string parameters, one read-only statement, output/CPU limits and exact value conversion. Test actual CSV/JSON queries, injection, multi-statement/write rejection and bounds.
+- [x] Add validated stable table names to saved datasets and host snapshot admission for literal CSV/JSON sources. No silent omissions or unowned references.
+- [x] Add a pinned mature SQLite adapter with bound string parameters, one read-only statement, output/CPU limits and exact value conversion. Test actual CSV/JSON queries, injection, multi-statement/write rejection and bounds.
 - [ ] Wire `pm.datasets(id).executeQuery` into v2 and verify `for await...of result.rows`, pre/post phase errors and privacy in real hosted/native runs; commit.
 
 ### 3. Saved views and user flow
@@ -42,6 +42,8 @@
 - [ ] Run real owner/revocation/cancellation/privacy tests, full relevant suites, three-database CI, native packages and independent review. Update matrix/coverage claims only with exact evidence.
 
 **Checkpoint 2026-10-17:** commits `89c6d52` and `1e13d54` add the explicit v2 phase worker, settings control, stable table names and isolated SQLite adapter. The adapter passes direct tests, but workspace snapshot admission, `pm.datasets` binding, views and live/Mock bridges remain open; no Data matrix row is closed by these commits.
+
+**Query continuation:** Literal dataset snapshots now come from the owned workspace before each v2 script phase. `pm.datasets(id).executeQuery` returns async iterable rows; local and hosted real HTTP fixtures cover pre/post scripts, bound parameters, owner isolation, missing sources and history privacy. Mixed boolean/nonboolean source columns reject before execution because SQLite cannot faithfully recover both original types from one dynamic column. Current-head native UI/CLI/schedule/agent evidence and version-change races remain open, so the public matrix row remains open.
 
 ## Review focus
 

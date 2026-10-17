@@ -1,5 +1,7 @@
 use moleapi_core::{DatasetSource, SavedDataset};
-use moleapi_script_runtime::dataset_query::query_dataset;
+use moleapi_script_runtime::dataset_query::{
+    QuerySnapshot, query_dataset, query_snapshot, snapshot_dataset,
+};
 use serde_json::json;
 
 fn source(format: &str, text: &str) -> SavedDataset {
@@ -60,6 +62,35 @@ fn literal_dataset_sql_preserves_direct_boolean_null_and_decimal_text() {
 }
 
 #[test]
+fn host_snapshot_preserves_exact_numbers_and_private_values_across_ipc() {
+    let dataset = source(
+        "json",
+        r#"[{"price":12.3400,"secret":{"token":"nested-private","nested_price":1.2300}}]"#,
+    );
+    let (snapshot, private_values) = snapshot_dataset(&dataset).unwrap();
+    let restored: QuerySnapshot =
+        serde_json::from_slice(&serde_json::to_vec(&snapshot).unwrap()).unwrap();
+    assert_eq!(
+        query_snapshot(&restored, "SELECT price FROM orders", &[]).unwrap()[0]["price"],
+        "12.3400"
+    );
+    assert!(private_values.contains("nested-private"));
+    assert!(private_values.contains("12.3400"));
+    assert!(
+        query_snapshot(&restored, "SELECT secret FROM orders", &[]).unwrap()[0]["secret"]
+            .as_str()
+            .unwrap()
+            .contains("1.2300")
+    );
+}
+
+#[test]
+fn mixed_boolean_and_numeric_columns_reject_before_type_is_lost() {
+    let dataset = source("json", r#"[{"value":true},{"value":2}]"#);
+    assert!(snapshot_dataset(&dataset).is_err());
+}
+
+#[test]
 fn dataset_sql_rejects_writes_multiple_statements_and_runaway_queries() {
     let dataset = source("csv", "id,name\n1,A\n2,B\n");
     for sql in [
@@ -82,4 +113,7 @@ fn dataset_sql_rejects_writes_multiple_statements_and_runaway_queries() {
     assert!(query_dataset(&dataset, &format!("SELECT 1 {}", " ".repeat(65_536)), &[]).is_err());
     assert!(query_dataset(&dataset, "SELECT id AS same, name AS same FROM orders", &[]).is_err());
     assert!(query_dataset(&dataset, "SELECT name FROM sqlite_master", &[]).is_err());
+    let start = std::time::Instant::now();
+    assert!(query_dataset(&dataset, "WITH RECURSIVE sequence(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM sequence) SELECT max(n) FROM sequence", &[]).is_err());
+    assert!(start.elapsed() < std::time::Duration::from_secs(1));
 }

@@ -1,5 +1,7 @@
-use moleapi_core::{RequestSpec, ScriptMode, VariableScopes};
-use moleapi_script_runtime::{WORKER_DEADLINE, run_worker, run_worker_with_mode};
+use moleapi_core::{RequestSpec, SavedDataset, ScriptMode, VariableScopes};
+use moleapi_script_runtime::{
+    WORKER_DEADLINE, run_worker, run_worker_with_datasets, run_worker_with_mode,
+};
 use serde_json::json;
 use std::{
     path::Path,
@@ -86,6 +88,18 @@ async fn versioned_worker_settles_await_and_rejects_detached_or_private_failures
     .await
     .unwrap_err();
     assert!(detached.message.contains("Unsettled"));
+}
+#[tokio::test]
+async fn worker_queries_owned_literal_snapshot_without_exposing_source() {
+    let dataset: SavedDataset = serde_json::from_value(json!({"id":"d","name":"Private","source":{"format":"json","source":"[{\"token\":\"private-row\"}]"}})).unwrap();
+    let (snapshot, values) =
+        moleapi_script_runtime::dataset_query::snapshot_dataset(&dataset).unwrap();
+    let mut scopes = VariableScopes::default();
+    scopes.private_values.extend(values);
+    let output = run_worker_with_datasets(executable(), vec!["const result=await pm.datasets('d').executeQuery('SELECT token FROM data'); for await (const row of result.rows) { pm.test('row',()=>pm.expect(row.token).to.equal('private-row')); }".into()], &request(), None, &scopes, vec![snapshot.clone()]).await.unwrap();
+    assert!(output.tests[0].passed);
+    let failure = run_worker_with_datasets(executable(), vec!["const result=await pm.datasets('d').executeQuery('SELECT token FROM data'); for await (const row of result.rows) throw new Error(row.token);".into()], &request(), None, &scopes, vec![snapshot]).await.unwrap_err();
+    assert!(failure.private_values.contains("private-row"));
 }
 #[cfg(unix)]
 fn fake_worker(directory: &Path, name: &str, source: &str) -> std::path::PathBuf {

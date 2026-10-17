@@ -73,7 +73,7 @@ struct PhaseFailure {
 }
 async fn script_phase(
     s: &AppState,
-    mode: moleapi_core::ScriptMode,
+    data: &moleapi_core::WorkspaceData,
     scripts: Vec<String>,
     request: &RequestSpec,
     response: Option<&Response>,
@@ -91,19 +91,72 @@ async fn script_phase(
             private_values: scopes.private_values.clone(),
             privacy_complete: true,
         })?;
-    moleapi_script_runtime::run_worker_with_mode(
-        &s.script_worker,
-        scripts,
-        request,
-        response,
-        scopes,
-        mode,
-    )
-    .await
-    .map_err(|failure| PhaseFailure {
-        error: ApiError::bad(failure.message),
-        private_values: failure.private_values,
-        privacy_complete: failure.privacy_complete,
+    let mut snapshot_scopes = scopes.clone();
+    let mut datasets = Vec::new();
+    if data.script_mode == moleapi_core::ScriptMode::V2 {
+        for saved in &data.datasets {
+            let (snapshot, values) = moleapi_script_runtime::dataset_query::snapshot_dataset(saved)
+                .map_err(|_| PhaseFailure {
+                    error: ApiError::bad("Saved dataset snapshot unavailable"),
+                    private_values: snapshot_scopes.private_values.clone(),
+                    privacy_complete: false,
+                })?;
+            snapshot_scopes.private_values.extend(values);
+            datasets.push(snapshot);
+        }
+        snapshot_scopes.validate().map_err(|_| PhaseFailure {
+            error: ApiError::bad("Saved dataset privacy budget exceeded"),
+            private_values: snapshot_scopes.private_values.clone(),
+            privacy_complete: false,
+        })?;
+    }
+    let result = if data.script_mode == moleapi_core::ScriptMode::V2 {
+        moleapi_script_runtime::run_worker_with_datasets(
+            &s.script_worker,
+            scripts,
+            request,
+            response,
+            &snapshot_scopes,
+            datasets,
+        )
+        .await
+    } else {
+        moleapi_script_runtime::run_worker_with_mode(
+            &s.script_worker,
+            scripts,
+            request,
+            response,
+            scopes,
+            data.script_mode,
+        )
+        .await
+    };
+    result.map_err(|failure| {
+        if data.script_mode == moleapi_core::ScriptMode::V1 {
+            return PhaseFailure {
+                error: ApiError::bad(failure.message),
+                private_values: failure.private_values,
+                privacy_complete: failure.privacy_complete,
+            };
+        }
+        let mut message = serde_json::json!(failure.message);
+        if failure.privacy_complete {
+            match crate::privacy::Redactor::new(&failure.private_values) {
+                Ok(redactor) => redactor.scrub(&mut message),
+                Err(_) => {
+                    message = serde_json::json!("Script failed; privacy redaction unavailable")
+                }
+            }
+        } else {
+            message = serde_json::json!(
+                "Script failed; details withheld because privacy metadata is incomplete"
+            );
+        }
+        PhaseFailure {
+            error: ApiError::bad(message.as_str().unwrap_or("Script failed")),
+            private_values: failure.private_values,
+            privacy_complete: failure.privacy_complete,
+        }
     })
 }
 pub(crate) struct DeferredHistory {
@@ -194,7 +247,7 @@ pub(crate) async fn perform_deferred(
     let mut updates = vec![];
     let mut redact_failed_response = false;
     if pre.iter().any(|s| !s.trim().is_empty()) {
-        let output = script_phase(s, w.data.script_mode, pre, &request, None, scopes)
+        let output = script_phase(s, &w.data, pre, &request, None, scopes)
             .await
             .map_err(|failure| failure.error)?;
         scopes.execution = output.control;
@@ -372,16 +425,7 @@ pub(crate) async fn perform_deferred(
         }
     }
     if post.iter().any(|s| !s.trim().is_empty()) {
-        match script_phase(
-            s,
-            w.data.script_mode,
-            post,
-            &resolved,
-            Some(&response),
-            scopes,
-        )
-        .await
-        {
+        match script_phase(s, &w.data, post, &resolved, Some(&response), scopes).await {
             Ok(mut output) => {
                 if output.control.next_request.is_some() {
                     scopes.execution.next_request = output.control.next_request;
@@ -503,7 +547,7 @@ pub(crate) async fn prepare_live(
     let mut feedback = moleapi_protocols::PreparedFeedback::default();
     let mut updates = vec![];
     if scripts.iter().any(|s| !s.trim().is_empty()) {
-        let output = script_phase(s, w.data.script_mode, scripts, &request, None, scopes).await.map_err(|failure| {
+        let output = script_phase(s, &w.data, scripts, &request, None, scopes).await.map_err(|failure| {
             scopes.private_values.extend(failure.private_values);
             let mut message = serde_json::json!(failure.error.message);
             if failure.privacy_complete {
@@ -670,7 +714,7 @@ pub(crate) async fn postprocess_data(
         .chain(std::iter::once(w.data.post_response_script.clone()))
         .collect::<Vec<_>>();
     if post.iter().any(|script| !script.trim().is_empty()) {
-        match script_phase(s, w.data.script_mode, post, request, Some(response), scopes).await {
+        match script_phase(s, &w.data, post, request, Some(response), scopes).await {
             Ok(mut output) => {
                 scopes.private_values.extend(output.private_values);
                 scopes
@@ -723,7 +767,7 @@ pub(crate) struct PreparedDataQuery {
 
 pub(crate) async fn prepare_data_query(
     s: &AppState,
-    mode: moleapi_core::ScriptMode,
+    data: &moleapi_core::WorkspaceData,
     request: &RequestSpec,
     selected_sql: &str,
     read_only: bool,
@@ -737,7 +781,7 @@ pub(crate) async fn prepare_data_query(
     synthetic.url = "http://data.invalid/query".into();
     synthetic.body_kind = "text".into();
     synthetic.body = selected_sql.into();
-    let output = script_phase(s, mode, vec![config.query_pre_script.clone()], &synthetic, None, scopes)
+    let output = script_phase(s, data, vec![config.query_pre_script.clone()], &synthetic, None, scopes)
         .await.map_err(|failure| {
             scopes.private_values.extend(failure.private_values);
             if !failure.privacy_complete {

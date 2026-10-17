@@ -8,8 +8,10 @@ use rusqlite::{
     params_from_iter,
     types::Value as SqlValue,
 };
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, value::RawValue};
 use sqlparser::{ast::Statement, dialect::SQLiteDialect, parser::Parser};
+use std::collections::BTreeMap;
 use std::{
     sync::{
         Arc,
@@ -29,22 +31,132 @@ fn identifier(name: &str) -> String {
     format!("\"{}\"", name.replace('"', "\"\""))
 }
 
-fn sql_value(value: &Value, raw_number: Option<&RawValue>) -> Result<SqlValue> {
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct QuerySnapshot {
+    pub id: String,
+    pub table_name: String,
+    pub columns: Vec<String>,
+    pub rows: Vec<Vec<QueryCell>>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum QueryCell {
+    Null,
+    Boolean(bool),
+    Integer(i64),
+    Text(String),
+}
+
+fn query_cell(value: &Value, raw_value: Option<&RawValue>) -> Result<QueryCell> {
     Ok(match value {
-        Value::Null => SqlValue::Null,
-        Value::Bool(value) => SqlValue::Integer(i64::from(*value)),
+        Value::Null => QueryCell::Null,
+        Value::Bool(value) => QueryCell::Boolean(*value),
         Value::Number(value) => {
-            let exact = raw_number.map_or_else(|| value.to_string(), |raw| raw.get().to_owned());
+            let exact = raw_value.map_or_else(|| value.to_string(), |raw| raw.get().to_owned());
             exact
                 .parse::<i64>()
-                .map_or_else(|_| SqlValue::Text(exact), SqlValue::Integer)
+                .map_or_else(|_| QueryCell::Text(exact), QueryCell::Integer)
         }
-        Value::String(value) => SqlValue::Text(value.clone()),
-        value => SqlValue::Text(serde_json::to_string(value)?),
+        Value::String(value) => QueryCell::Text(value.clone()),
+        value => QueryCell::Text(match raw_value {
+            Some(raw) => raw.get().to_owned(),
+            None => serde_json::to_string(value)?,
+        }),
     })
 }
 
+pub fn snapshot_dataset(
+    dataset: &SavedDataset,
+) -> Result<(QuerySnapshot, std::collections::BTreeSet<String>)> {
+    let source = dataset
+        .source
+        .as_ref()
+        .context("Saved dataset source is missing")?;
+    let data = source.parse()?;
+    ensure!(
+        data.columns.iter().all(|name| !name.contains('\0')),
+        "Dataset SQL columns cannot contain NUL"
+    );
+    for name in &data.columns {
+        let values = data
+            .rows
+            .iter()
+            .filter_map(|row| row.get(name))
+            .filter(|value| !value.is_null())
+            .collect::<Vec<_>>();
+        ensure!(
+            !values.iter().any(|value| value.is_boolean())
+                || values.iter().all(|value| value.is_boolean()),
+            "Mixed boolean dataset columns cannot preserve SQL result types"
+        );
+    }
+    let mut private_values = moleapi_core::dataset_private_values(&data.rows)?;
+    let raw_rows = if source.format == "json" {
+        Some(serde_json::from_str::<Vec<BTreeMap<String, Box<RawValue>>>>(&source.source)?)
+    } else {
+        None
+    };
+    let rows = data
+        .rows
+        .iter()
+        .enumerate()
+        .map(|(row_index, row)| {
+            data.columns
+                .iter()
+                .map(|name| {
+                    let value = row.get(name).unwrap_or(&Value::Null);
+                    let raw = raw_rows
+                        .as_ref()
+                        .and_then(|rows| rows.get(row_index))
+                        .and_then(|row| row.get(name))
+                        .map(Box::as_ref);
+                    query_cell(value, raw)
+                })
+                .collect::<Result<Vec<_>>>()
+        })
+        .collect::<Result<Vec<_>>>()?;
+    for row in &rows {
+        for cell in row {
+            if let QueryCell::Text(value) = cell
+                && !value.is_empty()
+            {
+                private_values.insert(value.clone());
+            }
+        }
+    }
+    ensure!(
+        private_values.len() <= 5000
+            && private_values.iter().map(String::len).sum::<usize>()
+                <= 4 * moleapi_core::MAX_VARIABLE_BYTES,
+        "Dataset private values exceed execution limit"
+    );
+    Ok((
+        QuerySnapshot {
+            id: dataset.id.clone(),
+            table_name: dataset.table_name.clone(),
+            columns: data.columns,
+            rows,
+        },
+        private_values,
+    ))
+}
+
 pub fn query_dataset(dataset: &SavedDataset, sql: &str, params: &[String]) -> Result<Vec<Value>> {
+    query_snapshot(&snapshot_dataset(dataset)?.0, sql, params)
+}
+
+pub fn query_snapshot(dataset: &QuerySnapshot, sql: &str, params: &[String]) -> Result<Vec<Value>> {
+    ensure!(
+        !dataset.columns.is_empty()
+            && dataset.columns.len() <= MAX_COLUMNS
+            && !dataset.rows.is_empty()
+            && dataset.rows.len() <= MAX_ROWS
+            && dataset
+                .rows
+                .iter()
+                .all(|row| row.len() == dataset.columns.len()),
+        "Invalid dataset query snapshot"
+    );
     ensure!(
         !sql.trim().is_empty() && sql.len() <= MAX_SQL,
         "Invalid dataset SQL length"
@@ -58,32 +170,21 @@ pub fn query_dataset(dataset: &SavedDataset, sql: &str, params: &[String]) -> Re
         statements.len() == 1 && matches!(statements[0], Statement::Query(_)),
         "Dataset SQL must be one read-only SELECT or CTE"
     );
-    let source = dataset
-        .source
-        .as_ref()
-        .context("Saved dataset source is missing")?;
-    let data = source.parse()?;
-    let raw_rows = if source.format == "json" {
-        Some(serde_json::from_str::<
-            Vec<std::collections::BTreeMap<String, Box<RawValue>>>,
-        >(&source.source)?)
-    } else {
-        None
-    };
     let connection = Connection::open_in_memory()?;
     connection.set_limit(Limit::SQLITE_LIMIT_LENGTH, (MAX_RESULT_BYTES + 1) as i32);
     connection.set_limit(Limit::SQLITE_LIMIT_COLUMN, MAX_COLUMNS as i32);
     connection.execute_batch("PRAGMA temp_store=MEMORY")?;
-    let schema = data
+    let schema = dataset
         .columns
         .iter()
-        .map(|name| {
-            let is_boolean = data
+        .enumerate()
+        .map(|(index, name)| {
+            let is_boolean = dataset
                 .rows
                 .iter()
-                .filter_map(|row| row.get(name))
-                .filter(|value| !value.is_null())
-                .all(Value::is_boolean);
+                .filter_map(|row| row.get(index))
+                .filter(|value| !matches!(value, QueryCell::Null))
+                .all(|value| matches!(value, QueryCell::Boolean(_)));
             format!(
                 "{} {}",
                 identifier(name),
@@ -99,30 +200,22 @@ pub fn query_dataset(dataset: &SavedDataset, sql: &str, params: &[String]) -> Re
         ),
         [],
     )?;
-    let placeholders = vec!["?"; data.columns.len()].join(",");
+    let placeholders = vec!["?"; dataset.columns.len()].join(",");
     let insert = format!(
         "INSERT INTO {} VALUES ({placeholders})",
         identifier(&dataset.table_name)
     );
     let mut insert_stmt = connection.prepare(&insert)?;
-    for (row_index, row) in data.rows.iter().enumerate() {
-        let values = data
-            .columns
+    for row in &dataset.rows {
+        let values = row
             .iter()
-            .map(|name| {
-                let value = row.get(name).unwrap_or(&Value::Null);
-                let raw = if value.is_number() {
-                    raw_rows
-                        .as_ref()
-                        .and_then(|rows| rows.get(row_index))
-                        .and_then(|row| row.get(name))
-                        .map(Box::as_ref)
-                } else {
-                    None
-                };
-                sql_value(value, raw)
+            .map(|cell| match cell {
+                QueryCell::Null => SqlValue::Null,
+                QueryCell::Boolean(value) => SqlValue::Integer(i64::from(*value)),
+                QueryCell::Integer(value) => SqlValue::Integer(*value),
+                QueryCell::Text(value) => SqlValue::Text(value.clone()),
             })
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<Vec<_>>();
         insert_stmt.execute(params_from_iter(values))?;
     }
     drop(insert_stmt);

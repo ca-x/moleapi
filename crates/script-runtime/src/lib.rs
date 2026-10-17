@@ -1,6 +1,7 @@
 //! Bounded QuickJS runtime with the deliberately limited `moleapi-pm/1` API.
 //! No filesystem, native modules, timers, processes or independent networking.
 use anyhow::{Context as _, Result, ensure};
+use dataset_query::QuerySnapshot;
 use moleapi_core::{
     RequestSpec, Response, ScriptLog, ScriptMode, TestResult, VariableScopes, VariableUpdate,
 };
@@ -132,7 +133,24 @@ pub fn run_with_mode(
     scopes: &VariableScopes,
     mode: ScriptMode,
 ) -> Result<ScriptOutput> {
-    run_with_condition_mode(scripts, request, response, scopes, None, mode)
+    run_with_condition_mode(scripts, request, response, scopes, None, mode, &[])
+}
+pub fn run_with_datasets(
+    scripts: &[String],
+    request: &RequestSpec,
+    response: Option<&Response>,
+    scopes: &VariableScopes,
+    datasets: &[QuerySnapshot],
+) -> Result<ScriptOutput> {
+    run_with_condition_mode(
+        scripts,
+        request,
+        response,
+        scopes,
+        None,
+        ScriptMode::V2,
+        datasets,
+    )
 }
 pub(crate) fn run_with_condition_mode(
     scripts: &[String],
@@ -141,6 +159,7 @@ pub(crate) fn run_with_condition_mode(
     scopes: &VariableScopes,
     condition: Option<&str>,
     mode: ScriptMode,
+    datasets: &[QuerySnapshot],
 ) -> Result<ScriptOutput> {
     if let Some(expression) = condition {
         ensure!(
@@ -151,6 +170,7 @@ pub(crate) fn run_with_condition_mode(
     for script in scripts {
         moleapi_core::validate_script(script)?;
     }
+    ensure!(datasets.len() <= 20, "Too many script datasets");
     scopes.validate()?;
     let input = serde_json::to_string(&Input {
         request,
@@ -202,6 +222,31 @@ pub(crate) fn run_with_condition_mode(
                 Function::new(ctx.clone(), move || {
                     skip_flag.set(true);
                 })?,
+            )?;
+            let snapshots = datasets.to_vec();
+            ctx.globals().set(
+                "__moleapiQueryDataset",
+                Function::new(
+                    ctx.clone(),
+                    move |ctx: Ctx<'_>,
+                          id: String,
+                          sql: String,
+                          params: Vec<String>|
+                          -> rquickjs::Result<String> {
+                        let Some(dataset) = snapshots.iter().find(|dataset| dataset.id == id)
+                        else {
+                            return Err(Exception::throw_message(
+                                &ctx,
+                                "Saved dataset ID is unavailable",
+                            ));
+                        };
+                        let rows = dataset_query::query_snapshot(dataset, &sql, &params)
+                            .map_err(|error| Exception::throw_message(&ctx, &error.to_string()))?;
+                        serde_json::to_string(&rows).map_err(|_| {
+                            Exception::throw_message(&ctx, "Cannot encode dataset query rows")
+                        })
+                    },
+                )?,
             )?;
             let describe_error = |error: rquickjs::Error| {
                 let detail = if error.is_exception() {
@@ -329,6 +374,7 @@ pub(crate) fn run_with_condition_mode(
                 "__moleapiCaptureBegin",
                 "__moleapiCaptureEnd",
                 "__moleapiSkipRequest",
+                "__moleapiQueryDataset",
             ] {
                 ctx.globals().remove(name)?;
             }

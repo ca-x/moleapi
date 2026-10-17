@@ -17,6 +17,7 @@
   const logs = [], tests = [], updates = [];
   const control={next_request:null,skip_request:false};
   const skipRequest=__moleapiSkipRequest;
+  const queryDataset=__moleapiQueryDataset;
   const MAX_VALUE = 1024 * 1024, MAX_OUTPUT = 64 * 1024;
   let outputBytes = 0;
   const mode=input.mode === "v2" ? "v2" : "v1";
@@ -250,6 +251,20 @@
   };
   const pm = {
     compatibilityVersion: mode === "v2" ? "moleapi-pm/2" : "moleapi-pm/1",
+    datasets(id) {
+      if (mode !== "v2") return unsupported("datasets");
+      if (typeof id !== "string" || !id || id.length > 128) throw new Error("Dataset ID must be a nonempty string up to 128 characters");
+      return api(Object.freeze({
+        executeQuery(sql, params = []) {
+          return Promise.resolve().then(() => {
+            if (typeof sql !== "string" || !Array.isArray(params) || params.length > 64 || params.some(value => typeof value !== "string")) throw new Error("Dataset SQL requires up to 64 string parameters");
+            const values = parse(queryDataset(id, sql, params));
+            return Object.freeze({rows: Object.freeze({async *[Symbol.asyncIterator]() { for (const row of values) yield parse(stringify(row)); }})});
+          });
+        },
+        executeView: () => unsupported("datasets.executeView")
+      }), "datasets");
+    },
     variables: store("temporary",true),
     iterationData: iterationValues ? api({
       get:key=>has(iterationValues,String(key))?parse(stringify(iterationValues[String(key)])):undefined,

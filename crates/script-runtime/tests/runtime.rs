@@ -58,6 +58,25 @@ fn v2_detached_work_does_not_escape_a_phase() {
     assert!(evaluate_v2("new Promise(() => {}); 42;").is_err());
 }
 #[test]
+fn v2_dataset_query_uses_async_rows_and_rejects_unknown_ids() {
+    let dataset: SavedDataset = serde_json::from_value(json!({"id":"sales","name":"Sales","table_name":"orders","source":{"format":"json","source":"[{\"id\":1,\"name\":\"alpha\"},{\"id\":2,\"name\":\"beta\"}]"}})).unwrap();
+    let snapshot = moleapi_script_runtime::dataset_query::snapshot_dataset(&dataset)
+        .unwrap()
+        .0;
+    let output = moleapi_script_runtime::run_with_datasets(&["const result = await pm.datasets('sales').executeQuery('SELECT id, name FROM orders WHERE name = ?', ['beta']); for await (const row of result.rows) { pm.variables.set('answer', row.id + ':' + row.name); }".into()], &request(), None, &VariableScopes::default(), std::slice::from_ref(&snapshot)).unwrap();
+    assert_eq!(output.updates[0].value.as_deref(), Some("2:beta"));
+    assert!(
+        moleapi_script_runtime::run_with_datasets(
+            &["await pm.datasets('other').executeQuery('SELECT 1')".into()],
+            &request(),
+            None,
+            &VariableScopes::default(),
+            &[snapshot]
+        )
+        .is_err()
+    );
+}
+#[test]
 fn execution_flow_directives_are_typed_and_skip_short_circuits_phase_scripts() {
     let result =
         evaluate("pm.execution.setNextRequest('first');pm.execution.setNextRequest(null);")
