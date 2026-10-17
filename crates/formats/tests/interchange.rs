@@ -84,6 +84,212 @@ fn har_import_preserves_recorded_requests_examples_and_private_values() {
 }
 
 #[test]
+fn har_export_roundtrips_supported_requests_and_screens_recorded_secrets() {
+    let original = import("har", &har().to_string()).unwrap();
+    let saved = workspace(original.data.clone());
+    let full = export(&saved, "har", true).unwrap();
+    assert!(full.filename.ends_with(".har"));
+    let source: Value = serde_json::from_str(&full.content).unwrap();
+    assert_eq!(source["log"]["version"], "1.2");
+    assert_eq!(source["log"]["entries"].as_array().unwrap().len(), 3);
+    assert_eq!(source["log"]["entries"][0]["time"], -1);
+    let roundtrip = import("har", &full.content).unwrap();
+    let requests = &roundtrip.data.collections[0].requests;
+    let before = &original.data.collections[0].requests;
+    for (actual, expected) in requests.iter().zip(before) {
+        assert_eq!(actual.method, expected.method);
+        assert_eq!(actual.url, expected.url);
+        assert_eq!(actual.body_kind, expected.body_kind);
+        assert_eq!(actual.body, expected.body);
+        assert_eq!(
+            actual
+                .headers
+                .iter()
+                .map(|h| (&h.key, &h.value))
+                .collect::<Vec<_>>(),
+            expected
+                .headers
+                .iter()
+                .map(|h| (&h.key, &h.value))
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            actual
+                .examples
+                .iter()
+                .map(|e| (e.status, &e.body))
+                .collect::<Vec<_>>(),
+            expected
+                .examples
+                .iter()
+                .map(|e| (e.status, &e.body))
+                .collect::<Vec<_>>()
+        );
+    }
+    let safe = export(&saved, "har", false).unwrap();
+    assert!(!safe.content.contains("har-secret"));
+    assert!(!safe.content.contains("cookie-secret"));
+    assert!(!safe.content.contains("response-secret"));
+    let imported_safe = import("har", &safe.content).unwrap();
+    assert_eq!(imported_safe.data.collections[0].requests.len(), 3);
+}
+
+#[test]
+fn har_export_rejects_unrepresentable_wire_fields() {
+    let original = import("har", &har().to_string()).unwrap();
+    let mut saved = workspace(original.data);
+    saved.data.collections[0].requests[0].body_kind = "binary".into();
+    assert!(export(&saved, "har", true).is_err());
+    saved.data.collections[0].requests[0].body_kind = "none".into();
+    saved.data.collections[0].requests[0].url = "{{base_url}}/items".into();
+    assert!(export(&saved, "har", true).is_err());
+    saved.data.collections[0].requests[0].url = "https://api.example.test/items".into();
+    let extra = saved.data.collections[0].requests[0].examples[0].clone();
+    saved.data.collections[0].requests[0].examples.push(extra);
+    assert!(export(&saved, "har", true).is_err());
+}
+
+#[test]
+fn har_export_appends_only_enabled_query_pairs_and_filters_connection_headers() {
+    let original = import("har", &har().to_string()).unwrap();
+    let mut saved = workspace(original.data);
+    let request = &mut saved.data.collections[0].requests[0];
+    request.query.push(
+        serde_json::from_value(json!({"id":"extra","key":"tag","value":"three","enabled":true}))
+            .unwrap(),
+    );
+    request.query.push(
+        serde_json::from_value(
+            json!({"id":"disabled","key":"unused","value":"private-disabled","enabled":false}),
+        )
+        .unwrap(),
+    );
+    request.headers.push(
+        serde_json::from_value(
+            json!({"id":"connection","key":"Connection","value":"x-hop","enabled":true}),
+        )
+        .unwrap(),
+    );
+    request.headers.push(
+        serde_json::from_value(
+            json!({"id":"hop","key":"X-Hop","value":"private-hop","enabled":true}),
+        )
+        .unwrap(),
+    );
+    request.examples[0].headers.push(
+        serde_json::from_value(
+            json!({"id":"response-connection","key":"Connection","value":"X-Response-Hop","enabled":true}),
+        )
+        .unwrap(),
+    );
+    request.examples[0].headers.push(
+        serde_json::from_value(
+            json!({"id":"response-hop","key":"X-Response-Hop","value":"private-response-hop","enabled":true}),
+        )
+        .unwrap(),
+    );
+    let result = export(&saved, "har", true).unwrap();
+    assert!(!result.content.contains("private-disabled"));
+    assert!(!result.content.contains("private-hop"));
+    assert!(!result.content.contains("private-response-hop"));
+    assert!(
+        result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("X-Hop"))
+    );
+    assert!(
+        result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("X-Response-Hop"))
+    );
+    let source: Value = serde_json::from_str(&result.content).unwrap();
+    let query = &source["log"]["entries"][0]["request"]["queryString"];
+    assert_eq!(query.as_array().unwrap().len(), 3);
+    assert_eq!(query[2], json!({"name":"tag","value":"three"}));
+    let reimported = import("har", &result.content).unwrap();
+    assert_eq!(
+        reimported.data.collections[0].requests[0].url,
+        "https://api.example.test/items?tag=one&tag=two&tag=three"
+    );
+}
+
+#[test]
+fn har_export_stops_before_accumulating_more_than_twenty_megabytes() {
+    let original = import("har", &har().to_string()).unwrap();
+    let mut saved = workspace(original.data);
+    let mut request = saved.data.collections[0].requests[2].clone();
+    request.body_kind = "text".into();
+    request.body = "a".repeat(3 * 1024 * 1024);
+    request
+        .headers
+        .retain(|row| !row.key.eq_ignore_ascii_case("content-type"));
+    saved.data.collections[0].requests = (0..8)
+        .map(|index| {
+            let mut copy = request.clone();
+            copy.id = format!("large-{index}");
+            copy
+        })
+        .collect();
+    let error = export(&saved, "har", true)
+        .err()
+        .expect("large HAR must fail");
+    assert!(error.to_string().contains("20 MiB"), "{error}");
+}
+
+#[test]
+fn har_export_keeps_empty_query_keys_that_http_transport_sends() {
+    let original = import("har", &har().to_string()).unwrap();
+    let mut saved = workspace(original.data);
+    saved.data.collections[0].requests[0].query.push(
+        serde_json::from_value(json!({"id":"empty-key","key":"","value":"present","enabled":true}))
+            .unwrap(),
+    );
+    let exported = export(&saved, "har", true).unwrap();
+    let reimported = import("har", &exported.content).unwrap();
+    assert_eq!(
+        reimported.data.collections[0].requests[0].url,
+        "https://api.example.test/items?tag=one&tag=two&=present"
+    );
+}
+
+#[test]
+fn har_export_and_import_leave_text_content_type_absent_when_not_authored() {
+    let original = import("har", &har().to_string()).unwrap();
+    let mut saved = workspace(original.data);
+    let request = &mut saved.data.collections[0].requests[2];
+    request.body_kind = "text".into();
+    request.body = "plain body".into();
+    request
+        .headers
+        .retain(|row| !row.key.eq_ignore_ascii_case("content-type"));
+    let exported = export(&saved, "har", true).unwrap();
+    let source: Value = serde_json::from_str(&exported.content).unwrap();
+    assert_eq!(
+        source["log"]["entries"][2]["request"]["postData"]["mimeType"],
+        "text/plain"
+    );
+    assert!(
+        !source["log"]["entries"][2]["request"]["headers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|header| header["name"] == "Content-Type")
+    );
+    let reimported = import("har", &exported.content).unwrap();
+    let request = &reimported.data.collections[0].requests[2];
+    assert_eq!(request.body_kind, "text");
+    assert_eq!(request.body, "plain body");
+    assert!(
+        !request
+            .headers
+            .iter()
+            .any(|row| row.key.eq_ignore_ascii_case("content-type"))
+    );
+}
+
+#[test]
 fn har_import_rejects_ambiguous_or_unrepresentable_requests_atomically() {
     let mut source = har();
     source["log"]["version"] = json!("1.1");

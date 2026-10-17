@@ -37,11 +37,15 @@ export default function InterchangeFields() {
                   { value: "moleapi", label: "MoleAPI JSON" },
                   { value: "postman", label: "Postman Collection 2.1 JSON" },
                   { value: "openapi", label: "OpenAPI JSON" },
+                  { value: "har", label: "HAR 1.2 JSON" },
                 ]
           }
           label={t("导入导出格式")}
         />
       </Field>
+      {modal === "export" && format === "har" && (
+        <Text size="1" color="gray">{t("HAR 导出保存的 HTTP 请求模板，不包含实际流量、耗时或缓存；完整备份请使用 MoleAPI JSON。")}</Text>
+      )}
       {modal === "import" && (
         <>
           <Button
