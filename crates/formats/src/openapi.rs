@@ -158,6 +158,7 @@ pub(super) fn import(content: &str) -> Result<ImportResult> {
                                         .into(),
                                     status,
                                     mock_schema: String::new(),
+                                    mock_name_inference: false,
                                     mock_schema_link: None,
                                     headers: vec![pair("Content-Type", mime)],
                                     mock_script: String::new(),

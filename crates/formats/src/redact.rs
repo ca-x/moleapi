@@ -455,6 +455,7 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
                 example.mock_script.clear();
                 example.mock_schema.clear();
                 example.mock_schema_link = None;
+                example.mock_name_inference = false;
                 let private_match = example.mock_match.as_ref().is_some_and(|rule| {
                     rule.body.is_some()
                         || rule.query.iter().chain(&rule.headers).any(|row| {

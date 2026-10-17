@@ -8,10 +8,10 @@
 
 ## Task 1: Model and core generator
 
-- [ ] Add a default-false example flag and source-preserving validation/backups; old serialized examples remain unchanged.
-- [ ] Add failing core cases for aliases, precedence, optional fields, invalid suggestions, `$ref` name isolation and composition.
-- [ ] Thread a name context through the existing generator and cache, preserving all budgets and mature JSON Schema validation. Keep validator cache keyed only by original Schema node.
-- [ ] Run focused core/formats tests, strict Clippy and rustfmt; commit.
+- [x] Add a default-false example flag and source-preserving validation/backups; old serialized examples remain unchanged.
+- [x] Add core cases for aliases, precedence, optional fields, invalid suggestions, `$ref` name isolation and composition; the first public-generator and model cases failed before implementation.
+- [x] Thread a name context through the existing generator and cache, preserving all budgets and mature JSON Schema validation. Keep validator cache keyed only by original Schema node.
+- [x] Run focused core/formats tests, strict Clippy and rustfmt; commit.
 
 ## Task 2: Shared runtime and editor
 

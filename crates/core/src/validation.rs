@@ -360,8 +360,18 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
         );
         ensure!(example.body.len() <= MAX_BODY, "Example body exceeds 5 MiB");
         if !example.mock_schema.is_empty() {
-            crate::validate_mock_schema(&example.mock_schema)?;
+            if example.mock_name_inference {
+                crate::generate_mock_schema_with_names(&example.mock_schema)?;
+            } else {
+                crate::validate_mock_schema(&example.mock_schema)?;
+            }
         }
+        ensure!(
+            !example.mock_name_inference
+                || !example.mock_schema.is_empty()
+                || example.mock_schema_link.is_some(),
+            "Mock name inference requires a schema"
+        );
         ensure!(
             example.mock_schema.is_empty() || example.mock_schema_link.is_none(),
             "Inline and linked Mock schemas are mutually exclusive"
