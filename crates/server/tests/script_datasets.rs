@@ -1,4 +1,5 @@
 mod common;
+use base64::Engine;
 use common::*;
 
 #[tokio::test]
@@ -161,4 +162,54 @@ async fn dataset_script_snapshot_is_owned_and_missing_sources_fail_before_reques
         "{error}"
     );
     server.abort();
+}
+
+#[tokio::test]
+async fn v2_scripts_do_not_block_a_separate_query_backed_runner_dataset() {
+    let (url, fixture) = serve(Router::new().route(
+        "/",
+        axum::routing::get(
+            |axum::extract::Query(values): axum::extract::Query<
+                std::collections::HashMap<String, String>,
+            >| async move { axum::Json(json!(values)) },
+        ),
+    ))
+    .await;
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("mixed-sources.db")).await.unwrap();
+    let mut data = example_data();
+    data["script_mode"] = json!("v2");
+    data["collections"][0]["requests"][0]["url"] = json!(format!("{url}/?value={{{{value}}}}"));
+    data["collections"][0]["requests"][0]["pre_request_script"] =
+        json!("pm.test('v2',()=>pm.expect(pm.compatibilityVersion).to.equal('moleapi-pm/2'));");
+    let mut query = data["collections"][0]["requests"][0].clone();
+    query["id"] = json!("data-source");
+    query["url"] = json!("");
+    query["pre_request_script"] = json!("");
+    query["protocol"] = json!({"kind":"data","source":"local_file","file_name":"rows.csv","file_format":"csv","file_base64":base64::engine::general_purpose::STANDARD.encode(b"value\nfirst\nsecond\n"),"table_name":"data","sql":"SELECT value FROM data","read_only":true});
+    data["collections"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"id":"sources","name":"Sources","description":"","requests":[query]}));
+    data["datasets"] = json!([{"id":"live","name":"Live","query":{"request_id":"data-source"}}]);
+    let (status, result) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"w","name":"W","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{result}");
+    let (status, report) = call(
+        &router,
+        "POST",
+        "/api/workspaces/w/run",
+        None,
+        Some(json!({"collection_id":"c","dataset_id":"live"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{report}");
+    assert_eq!(report["passed"], 2, "{report}");
+    fixture.abort();
 }

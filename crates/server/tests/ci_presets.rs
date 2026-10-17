@@ -21,6 +21,18 @@ async fn owned_ci_presets_validate_revision_sources_selections_and_credentials()
     data["environments"] = json!([{"id":"dev","name":"Development","variables":[]}]);
     data["datasets"] =
         json!([{"id":"rows","name":"Rows","source":{"format":"csv","source":"value\none\n"}}]);
+    let mut query = data["collections"][0]["requests"][0].clone();
+    query["id"] = "data-source".into();
+    query["url"] = "https://api.example.com/data.csv".into();
+    query["protocol"] = json!({"kind":"data","source":"remote_file","file_name":"data.csv","file_format":"csv","table_name":"data","sql":"SELECT value FROM data","read_only":true});
+    data["collections"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"id":"sources","name":"Sources","description":"","requests":[query]}));
+    data["datasets"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"id":"live","name":"Live","query":{"request_id":"data-source"}}));
     let (status, workspace) = call(
         &router,
         "POST",
@@ -76,6 +88,37 @@ async fn owned_ci_presets_validate_revision_sources_selections_and_credentials()
             .unwrap()
             .iter()
             .any(|value| value == "--dataset=rows")
+    );
+    let mut live = payload.clone();
+    live["config"]["dataset"] = "live".into();
+    let (status, generated) = call(
+        &router,
+        "POST",
+        "/api/workspaces/w/ci-preset",
+        Some(&owner),
+        Some(live.clone()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{generated}");
+    assert!(
+        generated["command"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value == "--dataset=live")
+    );
+    live["config"]["source"] = json!({"kind":"file","path":"workspace.json","format":"moleapi"});
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces/w/ci-preset",
+            Some(&owner),
+            Some(live)
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
     );
     for (path, value, status) in [
         ("/expected_revision", json!(999), StatusCode::CONFLICT),

@@ -426,6 +426,56 @@ async fn real_agent_executes_private_local_request_and_returns_owned_redacted_re
         0,
     );
     assert_eq!(empty["claimed"], false);
+    let mut updated_data = after["data"].clone();
+    let mut query = updated_data["collections"][0]["requests"][0].clone();
+    query["id"] = "data-query".into();
+    query["url"] = "".into();
+    query["headers"] = json!([]);
+    query["post_response_script"] = "".into();
+    query["protocol"] = json!({"kind":"data","source":"local_file","file_name":"runner.csv","file_format":"csv","file_base64":"dmFsdWUKb25lCnR3bwo=","table_name":"data","sql":"SELECT value FROM data","read_only":true});
+    updated_data["collections"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"id":"sources","name":"Sources","description":"","requests":[query]}));
+    updated_data["datasets"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"id":"live","name":"Live","query":{"request_id":"data-query"}}));
+    let updated = api(&http,&server,Some(token),reqwest::Method::PUT,"workspaces/w",Some(json!({"name":"Hosted source","expected_revision":after["revision"],"data":updated_data}))).await;
+    let live_task = api(&http,&server,Some(token),reqwest::Method::POST,"workspaces/w/runner-tasks",Some(json!({"runner_id":id,"expected_revision":updated["revision"],"selection":{"collection_id":"c","environment_id":"dev","dataset_id":"live"}}))).await;
+    let live_agent = result(
+        cli(&[
+            agent_auth.as_slice(),
+            &[
+                "runner",
+                "agent",
+                "--id",
+                id,
+                "--once",
+                "--variables-file",
+                private.to_str().unwrap(),
+            ],
+        ]
+        .concat())
+        .await,
+        0,
+    );
+    assert_eq!(live_agent["task_id"], live_task["id"]);
+    assert_eq!(live_agent["status"], "completed");
+    let live_report = api(
+        &http,
+        &server,
+        Some(token),
+        reqwest::Method::GET,
+        &format!(
+            "workspaces/w/reports/{}",
+            live_agent["report_id"].as_str().unwrap()
+        ),
+        None,
+    )
+    .await;
+    assert_eq!(live_report["summary"]["passed"], 2, "{live_report}");
+    assert_eq!(live_report["summary"]["iteration_count"], 2);
     service.abort();
     fixture.abort();
 }
@@ -559,4 +609,238 @@ async fn interrupt_cancels_local_execution_and_persists_cancelled_hosted_task() 
     assert_eq!(tasks[0]["status"], "cancelled");
     service.abort();
     fixture.abort();
+}
+
+async fn query_dataset_agent_closes_source_after_invalidation(edit_workspace: bool) {
+    use std::{
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
+        time::Duration,
+    };
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let source_url = format!("http://{}", listener.local_addr().unwrap());
+    let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+    let (closed_tx, closed_rx) = tokio::sync::oneshot::channel();
+    let source_server = tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let mut bytes = [0u8; 4096];
+        let mut request = Vec::new();
+        loop {
+            let count = socket.read(&mut bytes).await.unwrap();
+            if count == 0 {
+                return;
+            }
+            request.extend_from_slice(&bytes[..count]);
+            if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                break;
+            }
+        }
+        socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/csv\r\nContent-Length: 1000000\r\n\r\nvalue\n").await.unwrap();
+        let _ = started_tx.send(());
+        loop {
+            match socket.read(&mut bytes).await {
+                Ok(0) | Err(_) => {
+                    let _ = closed_tx.send(());
+                    break;
+                }
+                Ok(_) => {}
+            }
+        }
+    });
+    let calls = Arc::new(AtomicUsize::new(0));
+    let counter = calls.clone();
+    let (endpoint, fixture) = serve(Router::new().route(
+        "/verify",
+        get(move || {
+            let counter = counter.clone();
+            async move {
+                counter.fetch_add(1, Ordering::SeqCst);
+                "unexpected"
+            }
+        }),
+    ))
+    .await;
+    let temporary = tempfile::tempdir().unwrap();
+    let hosted = moleapi_server::hosted_with_worker(
+        moleapi_server::Config {
+            database_url: format!(
+                "sqlite://{}?mode=rwc",
+                temporary.path().join("live-agent.db").display()
+            ),
+            setup_token: "live-agent-setup".into(),
+            allow_registration: true,
+            allow_private_network: true,
+        },
+        std::path::Path::new(env!("CARGO_BIN_EXE_moleapi-cli")),
+    )
+    .await
+    .unwrap();
+    let (server, service) = serve(hosted).await;
+    let http = reqwest::Client::new();
+    let registered = api(&http,&server,None,reqwest::Method::POST,"auth/register",Some(json!({"username":"liveagentowner","password":"fixture-password-123","setup_token":"live-agent-setup"}))).await;
+    let owner = registered["token"].as_str().unwrap();
+    let mut data = source(&endpoint)["data"].clone();
+    data["collections"][0]["requests"]
+        .as_array_mut()
+        .unwrap()
+        .truncate(1);
+    let request = &mut data["collections"][0]["requests"][0];
+    request["url"] = format!("{endpoint}/verify").into();
+    request["extractions"] = json!([]);
+    request["post_response_script"] = "".into();
+    let mut query = request.clone();
+    query["id"] = "live-query".into();
+    query["url"] = format!("{source_url}/source").into();
+    query["protocol"] = json!({"kind":"data","source":"remote_file","file_name":"live.csv","file_format":"csv","table_name":"data","sql":"SELECT value FROM data","read_only":true});
+    query["timeout_ms"] = 30000.into();
+    data["collections"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"id":"sources","name":"Sources","description":"","requests":[query]}));
+    data["datasets"] = json!([{"id":"live","name":"Live","query":{"request_id":"live-query"}}]);
+    data["scenarios"] = json!([]);
+    let workspace = api(
+        &http,
+        &server,
+        Some(owner),
+        reqwest::Method::POST,
+        "workspaces",
+        Some(json!({"id":"w","name":"Live","data":data})),
+    )
+    .await;
+    let runner = api(
+        &http,
+        &server,
+        Some(owner),
+        reqwest::Method::POST,
+        "runners",
+        Some(json!({"name":"Live worker"})),
+    )
+    .await;
+    let runner_id = runner["id"].as_str().unwrap();
+    let credential = api(
+        &http,
+        &server,
+        Some(owner),
+        reqwest::Method::POST,
+        &format!("runners/{runner_id}/credentials"),
+        Some(json!({"workspace_id":"w","name":"Live credential"})),
+    )
+    .await;
+    let task = api(&http,&server,Some(owner),reqwest::Method::POST,"workspaces/w/runner-tasks",Some(json!({"runner_id":runner_id,"expected_revision":workspace["revision"],"selection":{"collection_id":"c","dataset_id":"live"}}))).await;
+    let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_moleapi-cli"))
+        .args([
+            "--server",
+            &server,
+            "--token-env",
+            "MOLEAPI_AGENT_TOKEN",
+            "runner",
+            "agent",
+            "--id",
+            runner_id,
+            "--once",
+        ])
+        .env("MOLEAPI_AGENT_TOKEN", credential["token"].as_str().unwrap())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(8), started_rx)
+        .await
+        .unwrap()
+        .unwrap();
+    if edit_workspace {
+        let current = api(
+            &http,
+            &server,
+            Some(owner),
+            reqwest::Method::GET,
+            "workspaces/w",
+            None,
+        )
+        .await;
+        let mut changed = current["data"].clone();
+        changed["collections"][1]["requests"][0]["protocol"]["sql"] =
+            "SELECT changed_value FROM data".into();
+        let updated = api(
+            &http,
+            &server,
+            Some(owner),
+            reqwest::Method::PUT,
+            "workspaces/w",
+            Some(json!({"name":"Live","expected_revision":current["revision"],"data":changed})),
+        )
+        .await;
+        assert_ne!(updated["revision"], current["revision"]);
+    } else {
+        let revoked = api(
+            &http,
+            &server,
+            Some(owner),
+            reqwest::Method::DELETE,
+            &format!(
+                "runners/{runner_id}/credentials/{}",
+                credential["id"].as_str().unwrap()
+            ),
+            None,
+        )
+        .await;
+        assert_eq!(revoked["revoked"], true);
+    }
+    tokio::time::timeout(Duration::from_secs(6), closed_rx)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    if !edit_workspace {
+        let tasks = api(
+            &http,
+            &server,
+            Some(owner),
+            reqwest::Method::GET,
+            "workspaces/w/runner-tasks",
+            None,
+        )
+        .await;
+        assert!(
+            tasks
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|value| value["id"] == task["id"] && value["status"] == "cancelled")
+        );
+    } else {
+        let cancelled = api(
+            &http,
+            &server,
+            Some(owner),
+            reqwest::Method::POST,
+            &format!(
+                "workspaces/w/runner-tasks/{}/cancel",
+                task["id"].as_str().unwrap()
+            ),
+            None,
+        )
+        .await;
+        assert_eq!(cancelled["status"], "cancelled");
+    }
+    child.start_kill().unwrap();
+    let _ = child.wait().await;
+    source_server.abort();
+    service.abort();
+    fixture.abort();
+}
+
+#[tokio::test]
+async fn revoked_query_dataset_agent_closes_its_live_source_before_next_run_step() {
+    query_dataset_agent_closes_source_after_invalidation(false).await;
+}
+
+#[tokio::test]
+async fn edited_query_dataset_agent_closes_its_old_live_source_before_next_run_step() {
+    query_dataset_agent_closes_source_after_invalidation(true).await;
 }

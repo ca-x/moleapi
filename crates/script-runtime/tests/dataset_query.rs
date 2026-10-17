@@ -16,6 +16,7 @@ fn source(format: &str, text: &str) -> SavedDataset {
             source: text.into(),
         }),
         views: vec![],
+        query: None,
     }
 }
 

@@ -188,7 +188,7 @@ export interface WorkspaceData {
   active_environment_id: string | null;
 }
 export interface SavedDatasetView {id:string;name:string;sql?:string}
-export interface SavedDataset {id:string;name:string;table_name?:string;description:string;secret:boolean;source?:{format:"csv"|"json";source:string};views?:SavedDatasetView[]}
+export interface SavedDataset {id:string;name:string;table_name?:string;description:string;secret:boolean;source?:{format:"csv"|"json";source:string};query?:{request_id:string};views?:SavedDatasetView[]}
 export interface Workspace {
   id: string;
   name: string;

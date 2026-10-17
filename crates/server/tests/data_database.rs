@@ -120,6 +120,7 @@ pub async fn verify_configured_data_clients() {
                 value: "fixture".into()
             }
         );
+        verify_query_dataset_run(source, &url, &table).await;
         let (schema, _) = connection.schema().await.unwrap();
         assert!(
             schema
@@ -262,4 +263,87 @@ pub async fn verify_configured_data_clients() {
             .is_err()
         );
     }
+}
+
+async fn verify_query_dataset_run(source: DataSource, url: &str, table: &str) {
+    use axum::{Router, http::StatusCode};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let echo_url = format!("http://{}", listener.local_addr().unwrap());
+    let echo = Router::new().route(
+        "/",
+        axum::routing::get(
+            |axum::extract::Query(values): axum::extract::Query<
+                std::collections::HashMap<String, String>,
+            >| async move { axum::Json(json!(values)) },
+        ),
+    );
+    let fixture = tokio::spawn(async move { axum::serve(listener, echo).await.unwrap() });
+    let temp = tempfile::tempdir().unwrap();
+    let router = moleapi_server::local_with_worker(
+        &temp.path().join("live-dataset.db"),
+        std::path::Path::new(env!("CARGO_BIN_EXE_moleapi-server")),
+    )
+    .await
+    .unwrap();
+    let http = json!({"id":"r","name":"Echo","method":"GET","url":format!("{echo_url}/?id={{{{id}}}}&amount={{{{amount}}}}"),"description":"","query":[],"headers":[],"body_kind":"none","body":"","auth":{"kind":"none","token":"","username":"","password":""},"timeout_ms":5000,"follow_redirects":true,"verify_tls":true,"assertions":[],"examples":[]});
+    let mut workspace = json!({"schema_version":1,"collections":[{"id":"c","name":"Requests","description":"","requests":[http]}],"environments":[],"active_environment_id":null});
+    let mut request = workspace["collections"][0]["requests"][0].clone();
+    request["id"] = "database-source".into();
+    request["url"] = url.into();
+    request["protocol"] = serde_json::to_value(Protocol::Data {
+        config: Box::new(DataConfig {
+            source,
+            tls: false,
+            sql: format!("SELECT id,amount FROM {table}"),
+            read_only: true,
+            ..Default::default()
+        }),
+    })
+    .unwrap();
+    workspace["collections"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"id":"sources","name":"Sources","description":"","requests":[request]}));
+    workspace["datasets"] =
+        json!([{"id":"live","name":"Live database","query":{"request_id":"database-source"}}]);
+    let (status, saved) = dataset_call(
+        &router,
+        "/api/workspaces",
+        json!({"id":"w","name":"Database dataset","data":workspace}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    let (status, report) = dataset_call(
+        &router,
+        "/api/workspaces/w/run",
+        json!({"collection_id":"c","dataset_id":"live"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{report}");
+    assert_eq!(report["passed"], 1, "{report}");
+    let body: serde_json::Value =
+        serde_json::from_str(report["results"][0]["response"]["body"].as_str().unwrap()).unwrap();
+    assert_eq!(body["id"], "9007199254740993");
+    assert_eq!(body["amount"], "1.23000000000000000001");
+    fixture.abort();
+}
+
+async fn dataset_call(
+    router: &axum::Router,
+    path: &str,
+    body: serde_json::Value,
+) -> (axum::http::StatusCode, serde_json::Value) {
+    use tower::ServiceExt;
+    let request = axum::http::Request::builder()
+        .method("POST")
+        .uri(path)
+        .header("content-type", "application/json")
+        .body(axum::body::Body::from(body.to_string()))
+        .unwrap();
+    let response = router.clone().oneshot(request).await.unwrap();
+    let status = response.status();
+    let body = axum::body::to_bytes(response.into_body(), 8 * 1024 * 1024)
+        .await
+        .unwrap();
+    (status, serde_json::from_slice(&body).unwrap())
 }

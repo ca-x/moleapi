@@ -1,6 +1,8 @@
 //! Dedicated database/file SQL adapters; application storage is independent.
 mod models;
 pub use models::*;
+mod dataset;
+pub use dataset::dataset_source;
 mod query;
 pub use query::{quoted, statement};
 

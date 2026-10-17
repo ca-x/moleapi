@@ -38,6 +38,8 @@ pub struct QuerySnapshot {
     pub columns: Vec<String>,
     pub rows: Vec<Vec<QueryCell>>,
     pub views: Vec<QueryView>,
+    #[serde(default)]
+    pub live_query: bool,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct QueryView {
@@ -150,6 +152,7 @@ pub fn snapshot_dataset(
                     sql: view.sql.clone(),
                 })
                 .collect(),
+            live_query: false,
         },
         private_values,
     ))
@@ -172,7 +175,29 @@ pub fn query_view(dataset: &QuerySnapshot, view_id: &str, params: &[String]) -> 
     query_snapshot(dataset, sql, params)
 }
 
+pub fn live_query_marker(dataset: &SavedDataset) -> QuerySnapshot {
+    QuerySnapshot {
+        id: dataset.id.clone(),
+        table_name: dataset.table_name.clone(),
+        columns: vec![],
+        rows: vec![],
+        views: dataset
+            .views
+            .iter()
+            .map(|view| QueryView {
+                id: view.id.clone(),
+                sql: view.sql.clone(),
+            })
+            .collect(),
+        live_query: true,
+    }
+}
+
 pub fn query_snapshot(dataset: &QuerySnapshot, sql: &str, params: &[String]) -> Result<Vec<Value>> {
+    ensure!(
+        !dataset.live_query,
+        "Live query-backed datasets require an on-demand script bridge"
+    );
     ensure!(
         !dataset.columns.is_empty()
             && dataset.columns.len() <= MAX_COLUMNS

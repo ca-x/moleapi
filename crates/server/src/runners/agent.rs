@@ -187,7 +187,7 @@ async fn live<C: sea_orm::ConnectionTrait>(
         || task.credential_revision != crate::credential_revocations::current(db, owner).await?
         || store::get(db, owner, &task.summary.workspace_id)
             .await?
-            .is_none()
+            .is_none_or(|workspace| workspace.revision != task.summary.source_revision)
     {
         return Err(ApiError::conflict("Runner task is no longer active"));
     }

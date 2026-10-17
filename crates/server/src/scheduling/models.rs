@@ -138,18 +138,22 @@ impl Definition {
             return Err(ApiError::bad("Scheduled environment does not exist"));
         }
         if let Some(id) = &self.dataset_id {
-            let source = workspace
+            let saved = workspace
                 .data
                 .datasets
                 .iter()
                 .find(|dataset| dataset.id == *id)
-                .and_then(|dataset| dataset.source.as_ref())
                 .ok_or_else(|| ApiError::bad("Scheduled dataset source does not exist"))?;
-            let data = source
-                .parse()
-                .map_err(|_| ApiError::bad("Scheduled dataset is invalid"))?;
-            if self.iterations.is_some_and(|count| count > data.rows.len()) {
-                return Err(ApiError::bad("Scheduled iterations exceed dataset rows"));
+            if saved.query.is_none() {
+                let data = saved
+                    .source
+                    .as_ref()
+                    .ok_or_else(|| ApiError::bad("Scheduled dataset source does not exist"))?
+                    .parse()
+                    .map_err(|_| ApiError::bad("Scheduled dataset is invalid"))?;
+                if self.iterations.is_some_and(|count| count > data.rows.len()) {
+                    return Err(ApiError::bad("Scheduled iterations exceed dataset rows"));
+                }
             }
         }
         Ok(())

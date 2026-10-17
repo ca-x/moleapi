@@ -128,38 +128,10 @@ pub async fn run(
             "Select a saved dataset or supply temporary data, not both",
         ));
     }
-    let selected_source = if let Some(id) = &c.dataset_id {
-        Some(
-            w.data
-                .datasets
-                .iter()
-                .find(|dataset| dataset.id == *id)
-                .ok_or_else(ApiError::not_found)?
-                .source
-                .as_ref()
-                .ok_or_else(|| {
-                    ApiError::bad("Saved dataset source is missing; import its data again")
-                })?,
-        )
-    } else {
-        c.dataset.as_ref()
-    };
-    let dataset = selected_source
-        .map(DatasetSource::parse)
-        .transpose()
-        .map_err(|error| ApiError::bad(error.to_string()))?;
-    let count = c
-        .iterations
-        .unwrap_or_else(|| dataset.as_ref().map_or(1, |dataset| dataset.rows.len()));
-    if count == 0
-        || count > 100
-        || dataset
-            .as_ref()
-            .is_some_and(|dataset| count > dataset.rows.len())
+    if c.iterations
+        .is_some_and(|count| !(1..=100).contains(&count))
     {
-        return Err(ApiError::bad(
-            "Run requires 1 to 100 iterations, within supplied dataset rows",
-        ));
+        return Err(ApiError::bad("Run requires 1 to 100 iterations"));
     }
     let subtree = moleapi_core::collection_subtree(&w.data, collection)
         .map_err(|error| ApiError::bad(error.to_string()))?;
@@ -227,16 +199,19 @@ pub async fn run(
         }
         plan.retain(|(_, request, _)| selected.contains(&request.id));
     }
-    if plan
-        .iter()
-        .map(|(_, _, step)| step.map_or(1, |step| step.repeat))
-        .sum::<usize>()
-        .saturating_mul(count)
-        > 1000
-    {
-        return Err(ApiError::bad("Run exceeds 1000 request executions"));
-    }
-    let scenario_steps = plan.iter().map(|(_, _, step)| *step).collect::<Vec<_>>();
+    let _slot = s
+        .project_slots
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| ApiError::bad("Run execution capacity reached"))?;
+    let job_id = c
+        .job_id
+        .clone()
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let lease = s.project_jobs.start(&owner.0, &w.id, &job_id)?;
+    let started_at = crate::storage::now();
+    let start = std::time::Instant::now();
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(300);
     let mut scopes = variables(
         &s,
         &w,
@@ -246,6 +221,101 @@ pub async fn run(
         &c.variables,
         &c.locals,
     )?;
+    let selected = c
+        .dataset_id
+        .as_ref()
+        .map(|id| {
+            w.data
+                .datasets
+                .iter()
+                .find(|dataset| dataset.id == *id)
+                .ok_or_else(ApiError::not_found)
+        })
+        .transpose()?;
+    let mut preparation_failure = None;
+    let dataset = if let Some(query) = selected.and_then(|dataset| dataset.query.as_ref()) {
+        match crate::data_datasets::refresh(crate::data_datasets::Refresh {
+            state: &s,
+            owner: &owner.0,
+            workspace: &w,
+            query,
+            environment: e,
+            data: &c.data,
+            temporary: &c.variables,
+            locals: &c.locals,
+            cancel: &lease.cancel,
+            deadline,
+        })
+        .await
+        {
+            Ok(dataset) => Some(dataset),
+            Err(_) => {
+                preparation_failure = Some("dataset_refresh_failed");
+                None
+            }
+        }
+    } else {
+        selected
+            .map(|dataset| {
+                dataset.source.as_ref().ok_or_else(|| {
+                    ApiError::bad("Saved dataset source is missing; import its data again")
+                })
+            })
+            .transpose()?
+            .or(c.dataset.as_ref())
+            .map(DatasetSource::parse)
+            .transpose()
+            .map_err(|error| ApiError::bad(error.to_string()))?
+    };
+    let count = c
+        .iterations
+        .unwrap_or_else(|| dataset.as_ref().map_or(1, |dataset| dataset.rows.len()));
+    if preparation_failure.is_none()
+        && dataset
+            .as_ref()
+            .is_some_and(|dataset| count > dataset.rows.len())
+    {
+        return Err(ApiError::bad("Run iterations exceed selected dataset rows"));
+    }
+    if preparation_failure.is_none()
+        && plan
+            .iter()
+            .map(|(_, _, step)| step.map_or(1, |step| step.repeat))
+            .sum::<usize>()
+            .saturating_mul(count)
+            > 1000
+    {
+        if selected.is_some_and(|dataset| dataset.query.is_some()) {
+            preparation_failure = Some("dataset_execution_limit");
+        } else {
+            return Err(ApiError::bad("Run exceeds 1000 request executions"));
+        }
+    }
+    if let Some(reason) = preparation_failure {
+        let admission = gate.lock().await;
+        if *admission != epoch || owned(&s, &owner.0, &id).await.is_err() {
+            return Err(ApiError::unauthorized());
+        }
+        let mut report = json!({"results":[],"iterations":[],"iteration_count":0,"completed_iterations":0,"passed":0,"failed":1,"elapsed_ms":start.elapsed().as_millis() as u64,"cancelled":lease.cancel.is_cancelled(),"stopped_reason":reason,"omitted_responses":0,"job_id":job_id,"executed_steps":0,"skipped":0,"error":"Dataset preparation failed; no collection requests were executed"});
+        let source = crate::run_reports::Source {
+            workspace: &w,
+            collection,
+            scenario,
+            environment: e,
+            dataset: c.dataset_id.as_deref(),
+            started_at: &started_at,
+            scopes: &scopes,
+            notification_ids: notifications,
+            run_origin: &c.run_origin,
+        };
+        if let Ok(Some(report_id)) =
+            crate::run_reports::record(&s, &owner.0, &source, &report).await
+        {
+            report["report_id"] = report_id.into();
+        }
+        return Ok(Json(report));
+    }
+    let scenario_steps = plan.iter().map(|(_, _, step)| *step).collect::<Vec<_>>();
     if let Some(dataset) = &dataset {
         scopes.private_values.extend(
             moleapi_core::dataset_private_values(&dataset.rows)
@@ -266,19 +336,6 @@ pub async fn run(
             }
         }
     }
-    let _slot = s
-        .project_slots
-        .clone()
-        .try_acquire_owned()
-        .map_err(|_| ApiError::bad("Run execution capacity reached"))?;
-    let job_id = c
-        .job_id
-        .clone()
-        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-    let lease = s.project_jobs.start(&owner.0, &w.id, &job_id)?;
-    let started_at = crate::storage::now();
-    let start = std::time::Instant::now();
-    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(300);
     let mut results = vec![];
     let mut summaries = vec![];
     let (mut passed, mut failed, mut report_bytes, mut omitted) = (0usize, 0usize, 0usize, 0usize);

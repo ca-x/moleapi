@@ -293,6 +293,7 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
                 view.sql = None;
             }
         }
+        dataset.query = None;
     }
     if auth_private {
         result.data.pre_request_script = tcp_privacy.screen_bounded(

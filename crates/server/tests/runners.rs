@@ -62,6 +62,59 @@ async fn queue(
     assert_eq!(status, StatusCode::OK, "{task}");
     task
 }
+#[tokio::test]
+async fn leased_task_heartbeat_rejects_a_new_workspace_revision() {
+    let (_temp, _url, hosted, agent_host, owner, _stranger, runner, workspace) = setup().await;
+    let credential = runner_credential(&hosted, &owner, &runner, "w").await;
+    let queued = queue(&hosted, &owner, &runner, &workspace["revision"], 1).await;
+    let (_, claim) = call(
+        &agent_host,
+        "POST",
+        &format!("/api/runners/{runner}/claim"),
+        Some(&credential),
+        None,
+    )
+    .await;
+    assert_eq!(claim["task"]["id"], queued["id"]);
+    let heartbeat = format!(
+        "/api/runners/{runner}/tasks/{}/heartbeat",
+        queued["id"].as_str().unwrap()
+    );
+    let lease = json!({"lease_token":claim["lease_token"]});
+    assert_eq!(
+        call(
+            &agent_host,
+            "POST",
+            &heartbeat,
+            Some(&credential),
+            Some(lease.clone())
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let (status, edited) = call(
+        &hosted,
+        "PUT",
+        "/api/workspaces/w",
+        Some(&owner),
+        Some(json!({"name":"Updated source","data":workspace["data"],"expected_revision":workspace["revision"]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{edited}");
+    assert_eq!(
+        call(
+            &agent_host,
+            "POST",
+            &heartbeat,
+            Some(&credential),
+            Some(lease)
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+}
 async fn expire(db: &sea_orm::DatabaseConnection, id: &str) {
     let row = db
         .query_one(Statement::from_sql_and_values(

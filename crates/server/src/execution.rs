@@ -95,6 +95,12 @@ async fn script_phase(
     let mut datasets = Vec::new();
     if data.script_mode == moleapi_core::ScriptMode::V2 {
         for saved in &data.datasets {
+            if saved.query.is_some() {
+                datasets.push(moleapi_script_runtime::dataset_query::live_query_marker(
+                    saved,
+                ));
+                continue;
+            }
             let (snapshot, values) = moleapi_script_runtime::dataset_query::snapshot_dataset(saved)
                 .map_err(|_| PhaseFailure {
                     error: ApiError::bad("Saved dataset snapshot unavailable"),
