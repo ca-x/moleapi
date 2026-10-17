@@ -38,7 +38,7 @@
 ### 4. Live source and Mock completion
 
 - [x] Design and implement a checked on-demand host bridge for query-backed dataset IDs under the script phase deadline, without worker network access or eager refresh of unrelated sources.
-- [ ] Add a Mock implementation script contract and execute the same dataset handle from a bounded owner-scoped mock request.
+- [x] Add a Mock implementation script contract and execute the same dataset handle from a bounded owner-scoped mock request.
 - [ ] Run real owner/revocation/cancellation/privacy tests, full relevant suites, three-database CI, native packages and independent review. Update matrix/coverage claims only with exact evidence.
 
 **Checkpoint 2026-10-17:** commits `89c6d52` and `1e13d54` add the explicit v2 phase worker, settings control, stable table names and isolated SQLite adapter. The adapter passes direct tests, but workspace snapshot admission, `pm.datasets` binding, views and live/Mock bridges remain open; no Data matrix row is closed by these commits.
@@ -52,6 +52,8 @@
 **View acceptance:** A real offline CLI process, manually triggered schedule and self-hosted Agent all executed saved view queries. In a 390px hosted browser, the saved dataset/view IDs were read from the editor and used in a pre-request `executeView` script; the actual loopback GET and both assertions passed after save/reload in English and again in Chinese, with 390px document width. A red/green SQL regression corrected integer-column affinity so bound string parameters match exact integer values. The native Tauri UI and final platform/database gates remain open separately.
 
 **Live script bridge checkpoint:** A separate bounded line-framed worker mode requests only referenced query-backed dataset IDs through stdio. The host reuses the owned Data refresh path, limits work to the script deadline, caches each loaded dataset within a phase, forwards validated current in-script variable scopes and carries private values into failure/history redaction. Real local-file and remote-file fixtures, a slow-source timeout, a caught-error workspace-revision race, and self-hosted Agent baseline/revocation/edit runs pass. QuickJS now checks actual Promise states after draining jobs, allowing caught query errors while rejecting genuinely pending or unhandled work. SQL diagnostics from a failed script query are generic so authored private literals are not echoed. Native/three-database gates, wider lease/cancellation scenarios and Mock execution remain open before task 4 can close.
+
+**Mock continuation:** Saved examples now opt into v2 implementation scripts using `pm.mock` status/header/body setters and the same literal/live dataset handle. Static responses remain unchanged. Real local/hosted routes cover dynamic results, owner isolation, safe incoming fields, live Data rows and private failure output. The bilingual editor and authenticated preview ran at 390px in English and Chinese after save/reload with no document overflow. The native preview bridge is implemented, but current-head native package and three-database CI evidence remain open; broader Mock matching/logging rows are separate work.
 
 ## Review focus
 

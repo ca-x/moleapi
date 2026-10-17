@@ -439,6 +439,7 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
                 }
             }
             for example in &mut request.examples {
+                example.mock_script.clear();
                 for header in &mut example.headers {
                     if sensitive(&header.key) {
                         header.value.clear();

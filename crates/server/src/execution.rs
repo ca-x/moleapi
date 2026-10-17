@@ -73,15 +73,20 @@ struct PhaseFailure {
     private_values: std::collections::BTreeSet<String>,
     privacy_complete: bool,
 }
+struct PhaseMode<'a> {
+    response: Option<&'a Response>,
+    mock: Option<moleapi_script_runtime::MockResponseDraft>,
+}
 async fn script_phase(
     s: &AppState,
     owner: &str,
     w: &Workspace,
     scripts: Vec<String>,
     request: &RequestSpec,
-    response: Option<&Response>,
     scopes: &VariableScopes,
+    phase: PhaseMode<'_>,
 ) -> Result<moleapi_script_runtime::ScriptOutput, PhaseFailure> {
+    let PhaseMode { response, mock } = phase;
     let data = &w.data;
     let _permit = s
         .script_slots
@@ -131,72 +136,98 @@ async fn script_phase(
                 private_values: snapshot_scopes.private_values.clone(),
                 privacy_complete: true,
             })?;
-        moleapi_script_runtime::run_worker_with_live(
-            &s.script_worker,
-            scripts,
-            request,
-            response,
-            &snapshot_scopes,
-            datasets,
-            |id, live_scopes, deadline| {
-                let mut variable_pairs = live_scopes.effective().variables;
-                for pair in &mut variable_pairs {
-                    pair.secret = Some(true);
-                }
-                async move {
-                    let saved = w
-                        .data
-                        .datasets
-                        .iter()
-                        .find(|saved| saved.id == id)
-                        .ok_or_else(|| anyhow::anyhow!("Saved dataset ID is unavailable"))?;
-                    let query = saved
-                        .query
-                        .as_ref()
-                        .ok_or_else(|| anyhow::anyhow!("Saved dataset is not query-backed"))?;
-                    let cancel = CancellationToken::new();
-                    let refreshed = LIVE_DATASET_BRIDGE_ACTIVE
-                        .scope(
-                            (),
-                            Box::pin(crate::data_datasets::refresh(
-                                crate::data_datasets::Refresh {
-                                    state: s,
-                                    owner,
-                                    workspace: w,
-                                    query,
-                                    environment,
-                                    data: &[],
-                                    temporary: &variable_pairs,
-                                    locals: &[],
-                                    cancel: &cancel,
-                                    deadline,
-                                },
-                            )),
-                        )
-                        .await
-                        .map_err(|_| anyhow::anyhow!("Live dataset refresh failed"))?;
-                    let source = moleapi_core::DatasetSource {
-                        format: "json".into(),
-                        source: serde_json::to_string(&refreshed.rows)?,
-                    };
-                    let mut snapshot_dataset = saved.clone();
-                    snapshot_dataset.source = Some(source);
-                    snapshot_dataset.query = None;
-                    moleapi_script_runtime::dataset_query::snapshot_dataset(&snapshot_dataset)
-                }
-            },
-        )
-        .await
+        let resolve = |id, live_scopes: VariableScopes, deadline| {
+            let mut variable_pairs = live_scopes.effective().variables;
+            for pair in &mut variable_pairs {
+                pair.secret = Some(true);
+            }
+            async move {
+                let saved = w
+                    .data
+                    .datasets
+                    .iter()
+                    .find(|saved| saved.id == id)
+                    .ok_or_else(|| anyhow::anyhow!("Saved dataset ID is unavailable"))?;
+                let query = saved
+                    .query
+                    .as_ref()
+                    .ok_or_else(|| anyhow::anyhow!("Saved dataset is not query-backed"))?;
+                let cancel = CancellationToken::new();
+                let refreshed = LIVE_DATASET_BRIDGE_ACTIVE
+                    .scope(
+                        (),
+                        Box::pin(crate::data_datasets::refresh(
+                            crate::data_datasets::Refresh {
+                                state: s,
+                                owner,
+                                workspace: w,
+                                query,
+                                environment,
+                                data: &[],
+                                temporary: &variable_pairs,
+                                locals: &[],
+                                cancel: &cancel,
+                                deadline,
+                            },
+                        )),
+                    )
+                    .await
+                    .map_err(|_| anyhow::anyhow!("Live dataset refresh failed"))?;
+                let source = moleapi_core::DatasetSource {
+                    format: "json".into(),
+                    source: serde_json::to_string(&refreshed.rows)?,
+                };
+                let mut snapshot_dataset = saved.clone();
+                snapshot_dataset.source = Some(source);
+                snapshot_dataset.query = None;
+                moleapi_script_runtime::dataset_query::snapshot_dataset(&snapshot_dataset)
+            }
+        };
+        if let Some(seed) = mock {
+            moleapi_script_runtime::run_worker_with_live_mock(
+                &s.script_worker,
+                scripts,
+                request,
+                &snapshot_scopes,
+                datasets,
+                seed,
+                resolve,
+            )
+            .await
+        } else {
+            moleapi_script_runtime::run_worker_with_live(
+                &s.script_worker,
+                scripts,
+                request,
+                response,
+                &snapshot_scopes,
+                datasets,
+                resolve,
+            )
+            .await
+        }
     } else if data.script_mode == moleapi_core::ScriptMode::V2 {
-        moleapi_script_runtime::run_worker_with_datasets(
-            &s.script_worker,
-            scripts,
-            request,
-            response,
-            &snapshot_scopes,
-            datasets,
-        )
-        .await
+        if let Some(seed) = mock {
+            moleapi_script_runtime::run_worker_with_mock(
+                &s.script_worker,
+                scripts,
+                request,
+                &snapshot_scopes,
+                datasets,
+                seed,
+            )
+            .await
+        } else {
+            moleapi_script_runtime::run_worker_with_datasets(
+                &s.script_worker,
+                scripts,
+                request,
+                response,
+                &snapshot_scopes,
+                datasets,
+            )
+            .await
+        }
     } else {
         moleapi_script_runtime::run_worker_with_mode(
             &s.script_worker,
@@ -251,6 +282,41 @@ async fn script_phase(
             privacy_complete: failure.privacy_complete,
         }
     })
+}
+pub(crate) async fn run_mock_phase(
+    s: &AppState,
+    owner: &str,
+    w: &Workspace,
+    collection: &Collection,
+    request: &RequestSpec,
+    script: &str,
+    seed: moleapi_script_runtime::MockResponseDraft,
+) -> Result<moleapi_script_runtime::MockResponseDraft, ApiError> {
+    let selected_environment = environment(w, None)?;
+    let scopes = variables(s, w, Some(collection), selected_environment, &[], &[], &[])?;
+    let output = script_phase(
+        s,
+        owner,
+        w,
+        vec![script.into()],
+        request,
+        &scopes,
+        PhaseMode {
+            response: None,
+            mock: Some(seed),
+        },
+    )
+    .await
+    .map_err(|failure| failure.error)?;
+    if output.request != *request
+        || output.control.next_request.is_some()
+        || output.control.skip_request
+    {
+        return Err(ApiError::bad(
+            "Mock scripts cannot mutate the incoming request or execution flow",
+        ));
+    }
+    output.mock_response.ok_or_else(ApiError::internal)
 }
 pub(crate) struct DeferredHistory {
     pub request: RequestSpec,
@@ -340,9 +406,20 @@ pub(crate) async fn perform_deferred(
     let mut updates = vec![];
     let mut redact_failed_response = false;
     if pre.iter().any(|s| !s.trim().is_empty()) {
-        let output = script_phase(s, owner, w, pre, &request, None, scopes)
-            .await
-            .map_err(|failure| failure.error)?;
+        let output = script_phase(
+            s,
+            owner,
+            w,
+            pre,
+            &request,
+            scopes,
+            PhaseMode {
+                response: None,
+                mock: None,
+            },
+        )
+        .await
+        .map_err(|failure| failure.error)?;
         scopes.execution = output.control;
         scopes.private_values.extend(output.private_values);
         scopes
@@ -518,7 +595,20 @@ pub(crate) async fn perform_deferred(
         }
     }
     if post.iter().any(|s| !s.trim().is_empty()) {
-        match script_phase(s, owner, w, post, &resolved, Some(&response), scopes).await {
+        match script_phase(
+            s,
+            owner,
+            w,
+            post,
+            &resolved,
+            scopes,
+            PhaseMode {
+                response: Some(&response),
+                mock: None,
+            },
+        )
+        .await
+        {
             Ok(mut output) => {
                 if output.control.next_request.is_some() {
                     scopes.execution.next_request = output.control.next_request;
@@ -640,7 +730,7 @@ pub(crate) async fn prepare_live(
     let mut feedback = moleapi_protocols::PreparedFeedback::default();
     let mut updates = vec![];
     if scripts.iter().any(|s| !s.trim().is_empty()) {
-        let output = script_phase(s, owner, w, scripts, &request, None, scopes).await.map_err(|failure| {
+        let output = script_phase(s, owner, w, scripts, &request, scopes, PhaseMode { response: None, mock: None }).await.map_err(|failure| {
             scopes.private_values.extend(failure.private_values);
             let mut message = serde_json::json!(failure.error.message);
             if failure.privacy_complete {
@@ -808,7 +898,20 @@ pub(crate) async fn postprocess_data(
         .chain(std::iter::once(w.data.post_response_script.clone()))
         .collect::<Vec<_>>();
     if post.iter().any(|script| !script.trim().is_empty()) {
-        match script_phase(s, owner, w, post, request, Some(response), scopes).await {
+        match script_phase(
+            s,
+            owner,
+            w,
+            post,
+            request,
+            scopes,
+            PhaseMode {
+                response: Some(response),
+                mock: None,
+            },
+        )
+        .await
+        {
             Ok(mut output) => {
                 scopes.private_values.extend(output.private_values);
                 scopes
@@ -876,7 +979,7 @@ pub(crate) async fn prepare_data_query(
     synthetic.url = "http://data.invalid/query".into();
     synthetic.body_kind = "text".into();
     synthetic.body = selected_sql.into();
-    let output = script_phase(s, owner, w, vec![config.query_pre_script.clone()], &synthetic, None, scopes)
+    let output = script_phase(s, owner, w, vec![config.query_pre_script.clone()], &synthetic, scopes, PhaseMode { response: None, mock: None })
         .await.map_err(|failure| {
             scopes.private_values.extend(failure.private_values);
             if !failure.privacy_complete {

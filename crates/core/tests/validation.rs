@@ -70,6 +70,30 @@ fn compatibility_defaults_preserve_old_workspace_and_request_documents() {
     assert!(validate_workspace(&w).is_ok());
 }
 #[test]
+fn mock_implementation_scripts_require_explicit_v2_mode() {
+    let mut request = request();
+    request.examples.push(serde_json::from_value(json!({"id":"mock","name":"Dynamic","status":200,"headers":[],"body":"static","mock_script":"pm.mock.setBody('dynamic')"})).unwrap());
+    let mut workspace: WorkspaceData = serde_json::from_value(
+        json!({"schema_version":1,"collections":[],"environments":[],"active_environment_id":null}),
+    )
+    .unwrap();
+    workspace.collections.push(Collection {
+        id: "c".into(),
+        name: "C".into(),
+        description: String::new(),
+        parent_id: None,
+        variables_enabled: None,
+        auth: None,
+        variables: vec![],
+        pre_request_script: String::new(),
+        post_response_script: String::new(),
+        requests: vec![request],
+    });
+    assert!(validate_workspace(&workspace).is_err());
+    workspace.script_mode = ScriptMode::V2;
+    validate_workspace(&workspace).unwrap();
+}
+#[test]
 fn canonical_specification_references_and_size_are_checked() {
     let mut r = request();
     r.specification_id = Some("spec".into());

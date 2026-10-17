@@ -67,6 +67,22 @@ export async function api<T>(
   }
   return data as T;
 }
+export async function previewMock(path: string): Promise<{status:number;body:string}> {
+  if (!path.startsWith("/api/mock/")) throw new ApiError(message("Mock 地址无效"), 400);
+  if (native) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const preview = await invoke<{status:number;body:string}>("preview_mock",{path});
+    return preview;
+  }
+  const requestToken=token();
+  const response=await fetch(path,{headers:requestToken?{Authorization:`Bearer ${requestToken}`}:{}});
+  const body=await response.text();
+  if (response.status===401 && requestToken===token()) {
+    window.dispatchEvent(new Event("moleapi:unauthorized"));
+    throw new ApiError(message("Mock 预览失败 ({{value0}})",{value0:response.status}),response.status);
+  }
+  return {status:response.status,body};
+}
 export async function saveFile(file: ExportResult): Promise<void> {
   if (native) {
     const [{ save }, { writeTextFile }] = await Promise.all([

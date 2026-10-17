@@ -1,7 +1,7 @@
 //! Private stdin/stdout worker protocol; the host kills native work past its deadline.
 use crate::LiveLoader;
 use crate::dataset_query::QuerySnapshot;
-use crate::{ScriptFailure, ScriptOutput};
+use crate::{MockResponseDraft, ScriptFailure, ScriptOutput};
 use moleapi_core::{RequestSpec, Response, ScriptMode, VariableScopes};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -35,11 +35,21 @@ struct WorkerInput {
     response: Option<Response>,
     scopes: VariableScopes,
     private_values: BTreeSet<String>,
+    #[serde(default)]
+    mock: Option<MockResponseDraft>,
 }
 struct WorkerOptions {
     condition: Option<String>,
     mode: ScriptMode,
     datasets: Vec<QuerySnapshot>,
+    mock: Option<MockResponseDraft>,
+}
+struct LiveWorkerInput<'a> {
+    request: &'a RequestSpec,
+    response: Option<&'a Response>,
+    scopes: &'a VariableScopes,
+    datasets: Vec<QuerySnapshot>,
+    mock: Option<MockResponseDraft>,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
@@ -142,6 +152,7 @@ pub fn dispatch_worker() -> anyhow::Result<bool> {
             mode: input.mode,
             datasets: &input.datasets,
             loader,
+            mock: input.mock.as_ref(),
         },
     ) {
         Ok(output) => WorkerOutput::Success {
@@ -202,6 +213,7 @@ pub async fn run_worker_with_mode(
             condition: None,
             mode,
             datasets: vec![],
+            mock: None,
         },
     )
     .await
@@ -224,6 +236,30 @@ pub async fn run_worker_with_datasets(
             condition: None,
             mode: ScriptMode::V2,
             datasets,
+            mock: None,
+        },
+    )
+    .await
+}
+pub async fn run_worker_with_mock(
+    executable: &Path,
+    scripts: Vec<String>,
+    request: &RequestSpec,
+    scopes: &VariableScopes,
+    datasets: Vec<QuerySnapshot>,
+    mock: MockResponseDraft,
+) -> Result<ScriptOutput, ScriptFailure> {
+    run_worker_input(
+        executable,
+        scripts,
+        request,
+        None,
+        scopes,
+        WorkerOptions {
+            condition: None,
+            mode: ScriptMode::V2,
+            datasets,
+            mock: Some(mock),
         },
     )
     .await
@@ -245,6 +281,7 @@ pub async fn condition_worker(
             condition: Some(expression.into()),
             mode: ScriptMode::V1,
             datasets: vec![],
+            mock: None,
         },
     )
     .await
@@ -274,6 +311,7 @@ async fn run_worker_input(
         response: response.cloned(),
         scopes: scopes.clone(),
         private_values: scopes.private_values.clone(),
+        mock: options.mock,
     })
     .map_err(|_| failure("Cannot encode script worker input", scopes, true))?;
     if payload.len() > MAX_WORKER_INPUT {
@@ -372,12 +410,70 @@ pub async fn run_worker_with_live<F, Fut>(
     response: Option<&Response>,
     scopes: &VariableScopes,
     datasets: Vec<QuerySnapshot>,
+    resolve: F,
+) -> Result<ScriptOutput, ScriptFailure>
+where
+    F: FnMut(String, VariableScopes, tokio::time::Instant) -> Fut,
+    Fut: std::future::Future<Output = anyhow::Result<(QuerySnapshot, BTreeSet<String>)>>,
+{
+    run_worker_live_input(
+        executable,
+        scripts,
+        LiveWorkerInput {
+            request,
+            response,
+            scopes,
+            datasets,
+            mock: None,
+        },
+        resolve,
+    )
+    .await
+}
+pub async fn run_worker_with_live_mock<F, Fut>(
+    executable: &Path,
+    scripts: Vec<String>,
+    request: &RequestSpec,
+    scopes: &VariableScopes,
+    datasets: Vec<QuerySnapshot>,
+    mock: MockResponseDraft,
+    resolve: F,
+) -> Result<ScriptOutput, ScriptFailure>
+where
+    F: FnMut(String, VariableScopes, tokio::time::Instant) -> Fut,
+    Fut: std::future::Future<Output = anyhow::Result<(QuerySnapshot, BTreeSet<String>)>>,
+{
+    run_worker_live_input(
+        executable,
+        scripts,
+        LiveWorkerInput {
+            request,
+            response: None,
+            scopes,
+            datasets,
+            mock: Some(mock),
+        },
+        resolve,
+    )
+    .await
+}
+async fn run_worker_live_input<F, Fut>(
+    executable: &Path,
+    scripts: Vec<String>,
+    phase: LiveWorkerInput<'_>,
     mut resolve: F,
 ) -> Result<ScriptOutput, ScriptFailure>
 where
     F: FnMut(String, VariableScopes, tokio::time::Instant) -> Fut,
     Fut: std::future::Future<Output = anyhow::Result<(QuerySnapshot, BTreeSet<String>)>>,
 {
+    let LiveWorkerInput {
+        request,
+        response,
+        scopes,
+        datasets,
+        mock,
+    } = phase;
     let deadline = tokio::time::Instant::now() + WORKER_DEADLINE;
     if !executable.is_absolute() {
         return Err(failure(
@@ -400,6 +496,7 @@ where
         response: response.cloned(),
         scopes: scopes.clone(),
         private_values: scopes.private_values.clone(),
+        mock,
     })
     .map_err(|_| failure("Cannot encode script worker input", scopes, true))?;
     if payload.len() >= MAX_WORKER_INPUT {

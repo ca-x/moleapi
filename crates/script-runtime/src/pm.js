@@ -2,6 +2,7 @@
   "use strict";
   const stringify = JSON.stringify.bind(JSON), parse = JSON.parse.bind(JSON);
   const source = input.request, scopes = input.scopes;
+  const mock = input.mock ? parse(stringify(input.mock)) : null;
   const iterationInfo=scopes.iteration, iterationValues=scopes.iteration_data;
   const taint = __moleapiTaint;
   const uncertain = __moleapiPrivacyUncertain, privacyOverflow = __moleapiPrivacyOverflow, captureUrl = __moleapiCaptureUrl, captureQuery = __moleapiCaptureQuery;
@@ -312,6 +313,16 @@
       to: {have: {status: expected => expect(response.status).equal(expected)}, be: {get ok() { return expect(response.status >= 200 && response.status < 300).true; }}}
     },"response");
   } else Object.defineProperty(pm,"response",{get: () => { throw new Error("pm.response is only available after the network response"); }});
+  if (mock) pm.mock = api({
+    setStatus(status) { if (!Number.isInteger(status) || status < 200 || status > 599) throw new Error("Mock status must be 200–599"); mock.status = status; },
+    setHeader(key,value) {
+      if (typeof key !== "string" || !key || key.length > 256 || typeof value !== "string" || value.length > 8192 || /[\r\n]/.test(key+value)) throw new Error("Invalid Mock header");
+      const existing=mock.headers.find(row=>row.key.toLowerCase()===key.toLowerCase());
+      if (existing) {existing.value=value;existing.enabled=true;}
+      else {if(mock.headers.length>=100)throw new Error("Mock exceeds 100 headers");mock.headers.push({id:`mock-${mock.headers.length}`,key,value,enabled:true});}
+    },
+    setBody(value) { const body=typeof value==="string"?value:stringify(value);if(typeof body!=="string"||body.length>5*1024*1024)throw new Error("Mock body exceeds 5 MiB or is not serializable");mock.body=body; }
+  },"mock");
   Object.defineProperty(globalThis,"pm",{value:api(pm,"pm"),writable:false,configurable:false});
   Object.defineProperty(globalThis,"console",{value: Object.fromEntries(["log","info","warn","error","debug"].map(level => [level,(...args) => {
     if (logs.length >= 200) throw new Error("Script exceeds 200 log entries");
@@ -319,6 +330,6 @@
   }])),writable:false});
   for (const name of ["require","fetch","setTimeout","setInterval","queueMicrotask"]) globalThis[name] = () => unsupported(name);
   captureCurrentRequest();
-  const exportState = () => stringify({request:source,logs,tests,updates,control});
+  const exportState = () => stringify({request:source,logs,tests,updates,control,mock_response:mock});
   Object.defineProperty(globalThis,"__moleapiExport",{value:exportState,writable:false,configurable:false});
 })

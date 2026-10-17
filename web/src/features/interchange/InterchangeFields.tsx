@@ -16,6 +16,7 @@ export default function InterchangeFields() {
     content,
     setContent,
     setModalError,
+    draft,
   } = useWorkbench();
   return (
     <>
@@ -82,6 +83,7 @@ export default function InterchangeFields() {
           />
         </Field>
         {!includeSecrets && <Text size="1" color="gray"> {t("含私密值或无法安全处理的 XML 会留空。需要完整备份时请选择包含密钥值，并妥善保管文件。")} </Text>}
+        {!includeSecrets && format === "moleapi" && draft?.data.collections.some(collection=>collection.requests.some(request=>request.examples.some(example=>!!example.mock_script))) && <Text size="1" color="amber">{t("默认备份会移除 Mock 实现脚本；如需完整恢复，请选择包含密钥值。")}</Text>}
         </>
       )}
     </>

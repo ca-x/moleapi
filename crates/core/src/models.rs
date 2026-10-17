@@ -51,6 +51,8 @@ pub struct Example {
     pub status: u16,
     pub headers: Vec<Pair>,
     pub body: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub mock_script: String,
 }
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "lowercase")]

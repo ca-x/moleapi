@@ -3,7 +3,7 @@
 use anyhow::{Context as _, Result, ensure};
 use dataset_query::QuerySnapshot;
 use moleapi_core::{
-    RequestSpec, Response, ScriptLog, ScriptMode, TestResult, VariableScopes, VariableUpdate,
+    Pair, RequestSpec, Response, ScriptLog, ScriptMode, TestResult, VariableScopes, VariableUpdate,
 };
 use rquickjs::{
     Context, Ctx, Exception, Function, Persistent, Runtime, Value,
@@ -28,6 +28,13 @@ pub(crate) struct RuntimeOptions<'a> {
     pub mode: ScriptMode,
     pub datasets: &'a [QuerySnapshot],
     pub loader: Option<LiveLoader>,
+    pub mock: Option<&'a MockResponseDraft>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MockResponseDraft {
+    pub status: u16,
+    pub headers: Vec<Pair>,
+    pub body: String,
 }
 
 pub const MEMORY_LIMIT: usize = 64 * 1024 * 1024;
@@ -39,6 +46,7 @@ struct Input<'a> {
     response: Option<&'a Response>,
     scopes: &'a VariableScopes,
     mode: ScriptMode,
+    mock: Option<&'a MockResponseDraft>,
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ScriptOutput {
@@ -52,6 +60,8 @@ pub struct ScriptOutput {
     pub updates: Vec<VariableUpdate>,
     #[serde(default)]
     pub private_values: BTreeSet<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mock_response: Option<MockResponseDraft>,
 }
 
 fn capture_private(
@@ -154,6 +164,7 @@ pub fn run_with_mode(
             mode,
             datasets: &[],
             loader: None,
+            mock: None,
         },
     )
 }
@@ -174,6 +185,28 @@ pub fn run_with_datasets(
             mode: ScriptMode::V2,
             datasets,
             loader: None,
+            mock: None,
+        },
+    )
+}
+pub fn run_mock(
+    scripts: &[String],
+    request: &RequestSpec,
+    scopes: &VariableScopes,
+    datasets: &[QuerySnapshot],
+    mock: &MockResponseDraft,
+) -> Result<ScriptOutput> {
+    run_with_options(
+        scripts,
+        request,
+        None,
+        scopes,
+        RuntimeOptions {
+            condition: None,
+            mode: ScriptMode::V2,
+            datasets,
+            loader: None,
+            mock: Some(mock),
         },
     )
 }
@@ -189,6 +222,7 @@ pub(crate) fn run_with_options(
         mode,
         datasets,
         loader,
+        mock,
     } = options;
     if let Some(expression) = condition {
         ensure!(
@@ -206,6 +240,7 @@ pub(crate) fn run_with_options(
         response,
         scopes,
         mode,
+        mock,
     })?;
     ensure!(
         input.len() <= 16 * 1024 * 1024,
@@ -542,6 +577,18 @@ pub(crate) fn run_with_options(
             );
             let mut output: ScriptOutput =
                 serde_json::from_str(&output).context("Invalid JavaScript output")?;
+            if mock.is_some() {
+                let response = output
+                    .mock_response
+                    .as_ref()
+                    .context("Mock script did not export a response")?;
+                ensure!(
+                    (200..=599).contains(&response.status)
+                        && response.body.len() <= moleapi_core::MAX_BODY
+                        && response.headers.len() <= 100,
+                    "Mock response exceeds status, header or body limits"
+                );
+            }
             output.condition_result = condition_result;
             ensure!(
                 output.logs.len() <= 200

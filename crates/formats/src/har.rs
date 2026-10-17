@@ -373,6 +373,7 @@ fn import_example(
         id: uid(),
         name: format!("HAR {status}"),
         status: status as u16,
+        mock_script: String::new(),
         headers: response
             .headers
             .into_iter()

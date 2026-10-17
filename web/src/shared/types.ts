@@ -109,6 +109,7 @@ export interface Example {
   status: number;
   headers: Pair[];
   body: string;
+  mock_script?: string;
 }
 export interface RequestNetwork {
   http_mode: "http1" | "auto" | "http2_prior_knowledge";
