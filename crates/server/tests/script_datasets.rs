@@ -15,14 +15,14 @@ async fn v2_dataset_queries_wrap_real_request_and_keep_private_rows_out_of_histo
     .await;
     let mut data = example_data();
     data["script_mode"] = json!("v2");
-    data["datasets"] = json!([{"id":"saved","name":"Saved","table_name":"rows","secret":true,"source":{"format":"json","source":"[{\"token\":\"private-row\",\"flag\":true}]"}}]);
+    data["datasets"] = json!([{"id":"saved","name":"Saved","table_name":"rows","secret":true,"source":{"format":"json","source":"[{\"token\":\"private-row\",\"flag\":true}]"},"views":[{"id":"flags","name":"Flags","sql":"SELECT flag FROM rows WHERE token = ?"}]}]);
     let request = &mut data["collections"][0]["requests"][0];
     request["url"] = json!(format!("{url}/"));
     request["pre_request_script"] = json!(
         "const result=await pm.datasets('saved').executeQuery('SELECT token FROM rows WHERE flag = ?', ['1']); for await (const row of result.rows) pm.request.headers.upsert({key:'x-dataset',value:row.token});"
     );
     request["post_response_script"] = json!(
-        "const result=await pm.datasets('saved').executeQuery('SELECT flag FROM rows'); for await (const row of result.rows) pm.test('boolean row',()=>pm.expect(row.flag).to.equal(true));"
+        "const result=await pm.datasets('saved').executeView('flags',['private-row']); for await (const row of result.rows) pm.test('boolean row',()=>pm.expect(row.flag).to.equal(true));"
     );
     let request = request.clone();
     assert_eq!(

@@ -6677,6 +6677,7 @@ dependencies = [
  "serde_urlencoded",
  "sha1 0.10.7",
  "sha2 0.10.9",
+ "sqlparser 0.63.0",
  "sspi",
  "sxd-document",
  "sxd-xpath",

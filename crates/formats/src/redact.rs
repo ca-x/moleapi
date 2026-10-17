@@ -282,6 +282,17 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
         if dataset.secret || !safe {
             dataset.source = None;
         }
+        for view in &mut dataset.views {
+            view.name = data_privacy.screen_bounded(&view.name, 256);
+            if view.name.trim().is_empty() {
+                view.name = "[REDACTED]".into();
+            }
+            if let Some(sql) = &view.sql
+                && (dataset.secret || data_privacy.screen_bounded(sql, 64 * 1024) != *sql)
+            {
+                view.sql = None;
+            }
+        }
     }
     if auth_private {
         result.data.pre_request_script = tcp_privacy.screen_bounded(

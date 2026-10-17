@@ -14,15 +14,43 @@ it("validates source then explicitly saves a private dataset using workspace CAS
  expect(result.datasets[0].table_name).toBe("data");
 });
 it("preserves an existing SQL table name when the dataset is edited",async()=>{
- state.draft.data.datasets=[{id:"d",name:"Orders",table_name:"orders_2026",description:"",secret:true,source:{format:"json",source:'[{"id":1}]'}}];
+ state.draft.data.datasets=[{id:"d",name:"Orders",table_name:"orders_2026",description:"",secret:true,source:{format:"json",source:'[{"id":1}]'},views:[{id:"v",name:"Open",sql:"SELECT id FROM orders_2026"}]}];
  render(<Theme><SavedDatasets scope="owner-w-1" disabled={false}/></Theme>);
  fireEvent.click(screen.getByText("Workspace datasets (1)"));
  fireEvent.click(screen.getByRole("button",{name:"Edit dataset"}));
+ const identifier=screen.getByRole("textbox",{name:/^Script dataset ID/}) as HTMLInputElement;
+ expect(identifier.value).toBe("d");
+ fireEvent.focus(identifier);expect(identifier.selectionStart).toBe(0);expect(identifier.selectionEnd).toBe(1);
  expect((screen.getByRole("textbox",{name:/^SQL table name/}) as HTMLInputElement).value).toBe("orders_2026");
+ expect((screen.getByRole("textbox",{name:"View SQL"}) as HTMLTextAreaElement).value).toBe("SELECT id FROM orders_2026");
  fireEvent.click(screen.getByRole("button",{name:"Save dataset to workspace"}));
  await waitFor(()=>expect(state.updateData).toHaveBeenCalled());
  const result=state.updateData.mock.calls[0][0]({datasets:state.draft.data.datasets});
  expect(result.datasets[0].table_name).toBe("orders_2026");
+ expect(result.datasets[0].views[0].sql).toBe("SELECT id FROM orders_2026");
+});
+it("saves a named view with its SQL and rejects an unfinished view",async()=>{
+ render(<Theme><SavedDatasets scope="owner-w-1" disabled={false}/></Theme>);
+ fireEvent.click(screen.getByText("Workspace datasets (0)"));
+ fireEvent.change(screen.getByRole("textbox",{name:"Dataset name"}),{target:{value:"Cases"}});
+ fireEvent.change(screen.getByRole("textbox",{name:"dataset-source"}),{target:{value:'[{"id":1}]'}});
+ fireEvent.click(screen.getByRole("button",{name:"Add view"}));
+ fireEvent.click(screen.getByRole("button",{name:"Save dataset to workspace"}));
+ expect(state.updateData).not.toHaveBeenCalled();
+ fireEvent.change(screen.getByRole("textbox",{name:"View name"}),{target:{value:"Only IDs"}});
+ fireEvent.change(screen.getByRole("textbox",{name:"View SQL"}),{target:{value:"SELECT id FROM data"}});
+ fireEvent.click(screen.getByRole("button",{name:"Save dataset to workspace"}));
+ await waitFor(()=>expect(state.updateData).toHaveBeenCalled());
+ const result=state.updateData.mock.calls[0][0]({datasets:[]});
+ expect(result.datasets[0].views[0]).toEqual(expect.objectContaining({name:"Only IDs",sql:"SELECT id FROM data"}));
+});
+it("keeps view controls readable in Chinese",async()=>{
+ await setLanguage("zh-CN");
+ render(<Theme><SavedDatasets scope="owner-w-1" disabled={false}/></Theme>);
+ fireEvent.click(screen.getByText("工作区数据集 (0)"));
+ expect(screen.getByText("数据集保存视图")).toBeTruthy();
+ fireEvent.click(screen.getByRole("button",{name:"添加视图"}));
+ expect(screen.getByRole("textbox",{name:"视图 SQL"})).toBeTruthy();
 });
 it("does not commit a source validation finishing after its owner component closes",async()=>{
  let finish!:(value:unknown)=>void;api.mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));const view=render(<Theme><SavedDatasets scope="old-owner" disabled={false}/></Theme>);fireEvent.click(screen.getByText("Workspace datasets (0)"));fireEvent.change(screen.getByRole("textbox",{name:"Dataset name"}),{target:{value:"Private"}});fireEvent.change(screen.getByRole("textbox",{name:"dataset-source"}),{target:{value:'[{"id":1}]'}});fireEvent.click(screen.getByRole("button",{name:"Save dataset to workspace"}));await waitFor(()=>expect(finish).toBeTypeOf("function"));view.unmount();await act(async()=>finish({rows:[{id:1}]}));expect(state.updateData).not.toHaveBeenCalled();

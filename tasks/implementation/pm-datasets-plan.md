@@ -31,8 +31,8 @@
 
 ### 3. Saved views and user flow
 
-- [ ] Add bounded view ID/name/SQL metadata with old-workspace compatibility, CAS/owner validation and default/full backup projection.
-- [ ] Implement `executeView(viewId, params)` on the same query adapter. Add bilingual table/view editor controls with scope fences.
+- [x] Add bounded view ID/name/SQL metadata with old-workspace compatibility, CAS/owner validation and default/full backup projection.
+- [x] Implement `executeView(viewId, params)` on the same query adapter. Add bilingual table/view editor controls with scope fences.
 - [ ] Verify real CLI, scheduled and self-hosted agent runs plus 390px English/Chinese save/reload/query UI; commit.
 
 ### 4. Live source and Mock completion
@@ -44,6 +44,8 @@
 **Checkpoint 2026-10-17:** commits `89c6d52` and `1e13d54` add the explicit v2 phase worker, settings control, stable table names and isolated SQLite adapter. The adapter passes direct tests, but workspace snapshot admission, `pm.datasets` binding, views and live/Mock bridges remain open; no Data matrix row is closed by these commits.
 
 **Query continuation:** Literal dataset snapshots now come from the owned workspace before each v2 script phase. `pm.datasets(id).executeQuery` returns async iterable rows; local and hosted real HTTP fixtures cover pre/post scripts, bound parameters, owner isolation, missing sources and history privacy. Mixed boolean/nonboolean source columns reject before execution because SQLite cannot faithfully recover both original types from one dynamic column. Current-head native UI/CLI/schedule/agent evidence and version-change races remain open, so the public matrix row remains open.
+
+**View continuation:** Saved views use stable IDs and bounded read-only SQL. Private default backups omit view SQL; full backups restore it, and old-server sync that drops only `views` rejects. Actual CLI pre/post script execution and 390px English/Chinese browser save/reload are verified. Scheduled and self-hosted agent execution, concurrent revision changes and current-head platform/database gates remain open.
 
 ## Review focus
 

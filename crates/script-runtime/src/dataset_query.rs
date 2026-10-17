@@ -37,6 +37,12 @@ pub struct QuerySnapshot {
     pub table_name: String,
     pub columns: Vec<String>,
     pub rows: Vec<Vec<QueryCell>>,
+    pub views: Vec<QueryView>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct QueryView {
+    pub id: String,
+    pub sql: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -136,6 +142,14 @@ pub fn snapshot_dataset(
             table_name: dataset.table_name.clone(),
             columns: data.columns,
             rows,
+            views: dataset
+                .views
+                .iter()
+                .map(|view| QueryView {
+                    id: view.id.clone(),
+                    sql: view.sql.clone(),
+                })
+                .collect(),
         },
         private_values,
     ))
@@ -143,6 +157,19 @@ pub fn snapshot_dataset(
 
 pub fn query_dataset(dataset: &SavedDataset, sql: &str, params: &[String]) -> Result<Vec<Value>> {
     query_snapshot(&snapshot_dataset(dataset)?.0, sql, params)
+}
+
+pub fn query_view(dataset: &QuerySnapshot, view_id: &str, params: &[String]) -> Result<Vec<Value>> {
+    let view = dataset
+        .views
+        .iter()
+        .find(|view| view.id == view_id)
+        .context("Saved view ID is unavailable")?;
+    let sql = view
+        .sql
+        .as_deref()
+        .context("Saved view SQL is unavailable")?;
+    query_snapshot(dataset, sql, params)
 }
 
 pub fn query_snapshot(dataset: &QuerySnapshot, sql: &str, params: &[String]) -> Result<Vec<Value>> {

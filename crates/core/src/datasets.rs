@@ -3,6 +3,7 @@ use crate::Pair;
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sqlparser::{ast::Statement, dialect::SQLiteDialect, parser::Parser};
 use std::collections::{BTreeMap, BTreeSet};
 pub const DATASET_LIMIT: usize = 1024 * 1024;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -27,6 +28,16 @@ pub struct SavedDataset {
     pub secret: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<DatasetSource>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub views: Vec<SavedDatasetView>,
+}
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SavedDatasetView {
+    pub id: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sql: Option<String>,
 }
 fn dataset_secret() -> bool {
     true
@@ -74,6 +85,32 @@ pub fn validate_saved_datasets(datasets: &[SavedDataset]) -> Result<()> {
                 "Saved dataset sources exceed 4 MiB"
             );
             source.parse()?;
+        }
+        ensure!(dataset.views.len() <= 20, "Dataset exceeds 20 saved views");
+        let mut view_ids = BTreeSet::new();
+        let mut view_bytes = 0usize;
+        for view in &dataset.views {
+            ensure!(
+                !view.id.is_empty() && view.id.len() <= 128 && view_ids.insert(&view.id),
+                "Saved view IDs must be unique and nonempty"
+            );
+            ensure!(
+                !view.name.trim().is_empty() && view.name.len() <= 256,
+                "Invalid saved view name"
+            );
+            if let Some(sql) = &view.sql {
+                view_bytes = view_bytes.saturating_add(sql.len());
+                ensure!(
+                    !sql.trim().is_empty() && sql.len() <= 64 * 1024 && view_bytes <= DATASET_LIMIT,
+                    "Saved view SQL exceeds limit"
+                );
+                let statements = Parser::parse_sql(&SQLiteDialect {}, sql)
+                    .map_err(|_| anyhow::anyhow!("Invalid saved view SQL"))?;
+                ensure!(
+                    statements.len() == 1 && matches!(statements[0], Statement::Query(_)),
+                    "Saved view SQL must be one read-only SELECT or CTE"
+                );
+            }
         }
     }
     Ok(())
@@ -239,6 +276,7 @@ mod tests {
                 format: "csv".into(),
                 source: source.into(),
             }),
+            views: vec![],
         };
         validate_saved_datasets(std::slice::from_ref(&value)).unwrap();
         let restored: SavedDataset =
@@ -257,6 +295,26 @@ mod tests {
             dataset.table_name = invalid.into();
             assert!(validate_saved_datasets(std::slice::from_ref(&dataset)).is_err());
         }
+    }
+    #[test]
+    fn saved_views_are_bounded_and_backward_compatible() {
+        let mut dataset: SavedDataset =
+            serde_json::from_str(r#"{"id":"d","name":"Rows"}"#).unwrap();
+        assert!(dataset.views.is_empty());
+        dataset.views.push(SavedDatasetView {
+            id: "v".into(),
+            name: "Active".into(),
+            sql: Some("SELECT * FROM data".into()),
+        });
+        validate_saved_datasets(std::slice::from_ref(&dataset)).unwrap();
+        let restored: SavedDataset =
+            serde_json::from_str(&serde_json::to_string(&dataset).unwrap()).unwrap();
+        assert_eq!(restored.views, dataset.views);
+        dataset.views.push(dataset.views[0].clone());
+        assert!(validate_saved_datasets(std::slice::from_ref(&dataset)).is_err());
+        dataset.views.pop();
+        dataset.views[0].sql = Some("DELETE FROM data".into());
+        assert!(validate_saved_datasets(std::slice::from_ref(&dataset)).is_err());
     }
     #[test]
     fn datasets_parse_csv_quotes_and_typed_json() {

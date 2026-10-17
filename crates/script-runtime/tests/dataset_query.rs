@@ -1,6 +1,6 @@
-use moleapi_core::{DatasetSource, SavedDataset};
+use moleapi_core::{DatasetSource, SavedDataset, SavedDatasetView};
 use moleapi_script_runtime::dataset_query::{
-    QuerySnapshot, query_dataset, query_snapshot, snapshot_dataset,
+    QuerySnapshot, query_dataset, query_snapshot, query_view, snapshot_dataset,
 };
 use serde_json::json;
 
@@ -15,6 +15,7 @@ fn source(format: &str, text: &str) -> SavedDataset {
             format: format.into(),
             source: text.into(),
         }),
+        views: vec![],
     }
 }
 
@@ -81,6 +82,27 @@ fn host_snapshot_preserves_exact_numbers_and_private_values_across_ipc() {
             .as_str()
             .unwrap()
             .contains("1.2300")
+    );
+}
+
+#[test]
+fn saved_view_queries_share_bound_readonly_sql_rules() {
+    let mut dataset = source("csv", "id,name\n1,alpha\n2,beta\n");
+    dataset.views.push(SavedDatasetView {
+        id: "by-name".into(),
+        name: "By name".into(),
+        sql: Some("SELECT id FROM orders WHERE name = ?".into()),
+    });
+    let snapshot = snapshot_dataset(&dataset).unwrap().0;
+    assert_eq!(
+        query_view(&snapshot, "by-name", &["beta".into()]).unwrap(),
+        vec![json!({"id":"2"})]
+    );
+    assert!(query_view(&snapshot, "missing", &[]).is_err());
+    assert!(
+        query_view(&snapshot, "by-name", &["' OR 1=1 --".into()])
+            .unwrap()
+            .is_empty()
     );
 }
 

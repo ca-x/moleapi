@@ -231,7 +231,8 @@ pub(crate) fn run_with_condition_mode(
                     move |ctx: Ctx<'_>,
                           id: String,
                           sql: String,
-                          params: Vec<String>|
+                          params: Vec<String>,
+                          is_view: bool|
                           -> rquickjs::Result<String> {
                         let Some(dataset) = snapshots.iter().find(|dataset| dataset.id == id)
                         else {
@@ -240,8 +241,12 @@ pub(crate) fn run_with_condition_mode(
                                 "Saved dataset ID is unavailable",
                             ));
                         };
-                        let rows = dataset_query::query_snapshot(dataset, &sql, &params)
-                            .map_err(|error| Exception::throw_message(&ctx, &error.to_string()))?;
+                        let rows = if is_view {
+                            dataset_query::query_view(dataset, &sql, &params)
+                        } else {
+                            dataset_query::query_snapshot(dataset, &sql, &params)
+                        }
+                        .map_err(|error| Exception::throw_message(&ctx, &error.to_string()))?;
                         serde_json::to_string(&rows).map_err(|_| {
                             Exception::throw_message(&ctx, "Cannot encode dataset query rows")
                         })

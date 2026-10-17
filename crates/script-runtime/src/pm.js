@@ -254,15 +254,16 @@
     datasets(id) {
       if (mode !== "v2") return unsupported("datasets");
       if (typeof id !== "string" || !id || id.length > 128) throw new Error("Dataset ID must be a nonempty string up to 128 characters");
-      return api(Object.freeze({
-        executeQuery(sql, params = []) {
+      const execute = (sql, params, isView) => {
           return Promise.resolve().then(() => {
-            if (typeof sql !== "string" || !Array.isArray(params) || params.length > 64 || params.some(value => typeof value !== "string")) throw new Error("Dataset SQL requires up to 64 string parameters");
-            const values = parse(queryDataset(id, sql, params));
+            if (typeof sql !== "string" || !sql || !Array.isArray(params) || params.length > 64 || params.some(value => typeof value !== "string")) throw new Error("Dataset query requires a SQL statement or view ID and up to 64 string parameters");
+            const values = parse(queryDataset(id, sql, params, isView));
             return Object.freeze({rows: Object.freeze({async *[Symbol.asyncIterator]() { for (const row of values) yield parse(stringify(row)); }})});
           });
-        },
-        executeView: () => unsupported("datasets.executeView")
+      };
+      return api(Object.freeze({
+        executeQuery: (sql, params = []) => execute(sql, params, false),
+        executeView: (viewId, params = []) => execute(viewId, params, true)
       }), "datasets");
     },
     variables: store("temporary",true),

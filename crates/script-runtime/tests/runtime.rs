@@ -59,12 +59,14 @@ fn v2_detached_work_does_not_escape_a_phase() {
 }
 #[test]
 fn v2_dataset_query_uses_async_rows_and_rejects_unknown_ids() {
-    let dataset: SavedDataset = serde_json::from_value(json!({"id":"sales","name":"Sales","table_name":"orders","source":{"format":"json","source":"[{\"id\":1,\"name\":\"alpha\"},{\"id\":2,\"name\":\"beta\"}]"}})).unwrap();
+    let dataset: SavedDataset = serde_json::from_value(json!({"id":"sales","name":"Sales","table_name":"orders","source":{"format":"json","source":"[{\"id\":1,\"name\":\"alpha\"},{\"id\":2,\"name\":\"beta\"}]"},"views":[{"id":"by-name","name":"By name","sql":"SELECT id FROM orders WHERE name = ?"}]})).unwrap();
     let snapshot = moleapi_script_runtime::dataset_query::snapshot_dataset(&dataset)
         .unwrap()
         .0;
     let output = moleapi_script_runtime::run_with_datasets(&["const result = await pm.datasets('sales').executeQuery('SELECT id, name FROM orders WHERE name = ?', ['beta']); for await (const row of result.rows) { pm.variables.set('answer', row.id + ':' + row.name); }".into()], &request(), None, &VariableScopes::default(), std::slice::from_ref(&snapshot)).unwrap();
     assert_eq!(output.updates[0].value.as_deref(), Some("2:beta"));
+    let view_output = moleapi_script_runtime::run_with_datasets(&["const result=await pm.datasets('sales').executeView('by-name',['alpha']); for await (const row of result.rows) pm.variables.set('view',row.id);".into()], &request(), None, &VariableScopes::default(), std::slice::from_ref(&snapshot)).unwrap();
+    assert_eq!(view_output.updates[0].value.as_deref(), Some("1"));
     assert!(
         moleapi_script_runtime::run_with_datasets(
             &["await pm.datasets('other').executeQuery('SELECT 1')".into()],
