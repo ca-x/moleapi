@@ -7,8 +7,9 @@ import {newRequest} from "../../shared/model";
 import ExamplesEditor from "./ExamplesEditor";
 
 const previewMock=vi.hoisted(()=>vi.fn());
-vi.mock("../../shared/api",()=>({previewMock,token:()=>null}));
+vi.mock("../../shared/api",()=>({native:false,previewMock,token:()=>null}));
 vi.mock("./MockCallActivity",()=>({default:()=>null}));
+vi.mock("./MockPublicShares",()=>({default:()=>null}));
 
 vi.mock("../../shared/ui",()=>({
   Editor:({label,value,onChange}:{label?:string;value:string;onChange?:(value:string)=>void})=><textarea aria-label={label??"example-body"} value={value} readOnly={!onChange} onChange={event=>onChange?.(event.target.value)}/>,

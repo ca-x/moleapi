@@ -16,6 +16,7 @@ mod grpc;
 mod history;
 mod mock;
 mod mock_logs;
+mod mock_public;
 mod notifications;
 mod oauth1;
 mod oauth2;
@@ -75,6 +76,7 @@ struct AppState {
     sync_lock: Arc<tokio::sync::Mutex<()>>,
     script_slots: Arc<tokio::sync::Semaphore>,
     mock_delay_slots: Arc<tokio::sync::Semaphore>,
+    public_mock_slots: Arc<tokio::sync::Semaphore>,
     generation_slots: Arc<tokio::sync::Semaphore>,
     project_slots: Arc<tokio::sync::Semaphore>,
     project_jobs: Arc<generation_projects::Jobs>,
@@ -234,6 +236,24 @@ pub async fn hosted(config: Config) -> anyhow::Result<Router> {
 pub async fn hosted_with_worker(config: Config, worker: &Path) -> anyhow::Result<Router> {
     build(config, false, worker.to_owned(), true, None, None, None).await
 }
+/// Test harness entrypoint for observing delayed Mock admission across hosted instances.
+#[doc(hidden)]
+pub async fn hosted_with_mock_delay_slots_for_test(
+    config: Config,
+    worker: &Path,
+    slots: Arc<tokio::sync::Semaphore>,
+) -> anyhow::Result<Router> {
+    build(
+        config,
+        false,
+        worker.to_owned(),
+        true,
+        None,
+        None,
+        Some(slots),
+    )
+    .await
+}
 pub async fn setup_required(database_url: &str) -> anyhow::Result<bool> {
     use sea_orm::EntityTrait;
     Ok(entities::setting::Entity::find_by_id("registration")
@@ -296,6 +316,7 @@ async fn build(
         script_slots: Arc::new(tokio::sync::Semaphore::new(4)),
         mock_delay_slots: mock_delay_slots
             .unwrap_or_else(|| Arc::new(tokio::sync::Semaphore::new(32))),
+        public_mock_slots: Arc::new(tokio::sync::Semaphore::new(32)),
         generation_slots: Arc::new(tokio::sync::Semaphore::new(4)),
         project_slots: Arc::new(tokio::sync::Semaphore::new(2)),
         project_jobs: Arc::default(),
@@ -407,6 +428,18 @@ async fn build(
         .route(
             "/workspaces/{id}/mock-calls",
             get(mock_logs::list).delete(mock_logs::clear),
+        )
+        .route(
+            "/workspaces/{id}/mock-shares",
+            get(mock_public::list).post(mock_public::create),
+        )
+        .route(
+            "/workspaces/{id}/mock-shares/{share_id}",
+            axum::routing::delete(mock_public::revoke),
+        )
+        .route(
+            "/workspaces/{id}/mock-shares/{share_id}/rotate",
+            post(mock_public::rotate),
         )
         .route(
             "/workspaces/{workspace}/reports",
@@ -593,6 +626,14 @@ async fn build(
     let protected =
         protected.route_layer(middleware::from_fn_with_state(state.clone(), auth::guard));
     let api = protected
+        .route(
+            "/public/mock/{token}/{example_id}",
+            get(mock_public::direct).options(mock_public::preflight),
+        )
+        .route(
+            "/public/mocks/{token}/{*path}",
+            axum::routing::any(mock_public::routed),
+        )
         .route(
             "/health",
             get(|| async {

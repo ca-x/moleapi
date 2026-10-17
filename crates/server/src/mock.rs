@@ -1,4 +1,6 @@
-use crate::{ApiError, AppState, auth::Identity, execution, mock_logs, workspaces::owned};
+use crate::{
+    ApiError, AppState, auth::Identity, execution, mock_logs, mock_public, workspaces::owned,
+};
 use axum::{
     Extension,
     body::to_bytes,
@@ -18,7 +20,56 @@ pub async fn mock(
     OriginalUri(uri): OriginalUri,
     incoming_headers: HeaderMap,
 ) -> Result<axum::response::Response, ApiError> {
-    let w = owned(&s, &owner.0, &id).await?;
+    serve_direct(
+        &s,
+        &owner.0,
+        &id,
+        &request_id,
+        &example_id,
+        &uri,
+        &incoming_headers,
+        None,
+    )
+    .await
+}
+
+pub(crate) async fn mock_for(
+    s: &AppState,
+    grant: &mock_public::PublicGrant,
+    example_id: &str,
+    uri: &axum::http::Uri,
+    headers: &HeaderMap,
+) -> Result<axum::response::Response, ApiError> {
+    serve_direct(
+        s,
+        &grant.owner,
+        &grant.share.workspace_id,
+        &grant.share.request_id,
+        example_id,
+        uri,
+        headers,
+        Some(grant),
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn serve_direct(
+    s: &AppState,
+    owner: &str,
+    id: &str,
+    request_id: &str,
+    example_id: &str,
+    uri: &axum::http::Uri,
+    incoming_headers: &HeaderMap,
+    grant: Option<&mock_public::PublicGrant>,
+) -> Result<axum::response::Response, ApiError> {
+    let w = owned(s, owner, id).await?;
+    if let Some(grant) = grant
+        && !mock_public::request_matches(&w, &grant.share)?
+    {
+        return Err(ApiError::not_found());
+    }
     let started = std::time::Instant::now();
     let selected = w.data.collections.iter().find_map(|collection| {
         collection
@@ -32,10 +83,13 @@ pub async fn mock(
                     .map(|e| (collection, r, e))
             })
     });
+    let selected = selected.filter(|(_, _, example)| {
+        grant.is_none_or(|grant| grant.share.allow_dynamic || example.mock_script.is_empty())
+    });
     let Some((collection, request, e)) = selected else {
         mock_logs::record(
-            &s,
-            &owner.0,
+            s,
+            owner,
             &w,
             mock_logs::CallMeta {
                 method: "GET",
@@ -50,22 +104,25 @@ pub async fn mock(
         return Err(ApiError::not_found());
     };
     let result = serve_selected(
-        &s,
-        &owner.0,
+        s,
+        owner,
         &w,
         collection,
         request,
         e,
-        &uri,
-        &incoming_headers,
+        uri,
+        incoming_headers,
         &Method::GET,
         &[],
     )
     .await;
+    if let Some(grant) = grant {
+        mock_public::still_active(s, grant).await?;
+    }
     let (status, outcome) = outcome_meta(&result);
     record_outcome(
-        &s,
-        &owner.0,
+        s,
+        owner,
         &w,
         "GET",
         (request, e),
@@ -83,12 +140,49 @@ pub async fn dispatch(
     OriginalUri(uri): OriginalUri,
     incoming: Request,
 ) -> Result<axum::response::Response, ApiError> {
+    serve_routed(&s, &owner.0, &id, &path, &uri, incoming, None).await
+}
+
+pub(crate) async fn dispatch_for(
+    s: &AppState,
+    grant: &mock_public::PublicGrant,
+    path: &str,
+    uri: &axum::http::Uri,
+    incoming: Request,
+) -> Result<axum::response::Response, ApiError> {
+    serve_routed(
+        s,
+        &grant.owner,
+        &grant.share.workspace_id,
+        path,
+        uri,
+        incoming,
+        Some(grant),
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn serve_routed(
+    s: &AppState,
+    owner: &str,
+    id: &str,
+    path: &str,
+    uri: &axum::http::Uri,
+    incoming: Request,
+    grant: Option<&mock_public::PublicGrant>,
+) -> Result<axum::response::Response, ApiError> {
     let (parts, body) = incoming.into_parts();
-    check_uri_budget(&uri)?;
+    check_uri_budget(uri)?;
     let bytes = to_bytes(body, 1024 * 1024)
         .await
         .map_err(|_| ApiError::bad("Mock request body exceeds 1 MiB"))?;
-    let w = owned(&s, &owner.0, &id).await?;
+    let w = owned(s, owner, id).await?;
+    if let Some(grant) = grant
+        && !mock_public::request_matches(&w, &grant.share)?
+    {
+        return Err(ApiError::not_found());
+    }
     let started = std::time::Instant::now();
     let actual = format!("/{path}");
     let mut selected = None;
@@ -101,8 +195,8 @@ pub async fn dispatch(
             scanned_requests += 1;
             if scanned_requests > 10_000 {
                 return reject_after_owner(
-                    &s,
-                    &owner.0,
+                    s,
+                    owner,
                     &w,
                     parts.method.as_str(),
                     started,
@@ -112,6 +206,7 @@ pub async fn dispatch(
             }
             if request.protocol != moleapi_core::Protocol::Http
                 || request.method != parts.method.as_str()
+                || grant.is_some_and(|grant| request.id != grant.share.request_id)
             {
                 continue;
             }
@@ -126,13 +221,13 @@ pub async fn dispatch(
             };
             if snapshot.is_none() {
                 let incoming =
-                    safe_incoming_request(request, &uri, &parts.headers, &parts.method, &bytes);
+                    safe_incoming_request(request, uri, &parts.headers, &parts.method, &bytes);
                 snapshot = Some(match incoming {
                     Ok(incoming) => incoming,
                     Err(error) => {
                         mock_logs::record(
-                            &s,
-                            &owner.0,
+                            s,
+                            owner,
                             &w,
                             mock_logs::CallMeta {
                                 method: parts.method.as_str(),
@@ -176,14 +271,19 @@ pub async fn dispatch(
                 scanned_examples += 1;
                 if scanned_examples > 10_000 {
                     return reject_after_owner(
-                        &s,
-                        &owner.0,
+                        s,
+                        owner,
                         &w,
                         parts.method.as_str(),
                         started,
                         "Mock matching example budget exceeded",
                     )
                     .await;
+                }
+                if grant.is_some_and(|grant| !grant.share.allow_dynamic)
+                    && !example.mock_script.is_empty()
+                {
+                    continue;
                 }
                 let Some(condition_count) = example_matches(example, incoming) else {
                     continue;
@@ -203,8 +303,8 @@ pub async fn dispatch(
     }
     let Some((collection, request, example)) = selected else {
         mock_logs::record(
-            &s,
-            &owner.0,
+            s,
+            owner,
             &w,
             mock_logs::CallMeta {
                 method: parts.method.as_str(),
@@ -219,22 +319,25 @@ pub async fn dispatch(
         return Err(ApiError::not_found());
     };
     let result = serve_selected(
-        &s,
-        &owner.0,
+        s,
+        owner,
         &w,
         collection,
         request,
         example,
-        &uri,
+        uri,
         &parts.headers,
         &parts.method,
         &bytes,
     )
     .await;
+    if let Some(grant) = grant {
+        mock_public::still_active(s, grant).await?;
+    }
     let (status, outcome) = outcome_meta(&result);
     record_outcome(
-        &s,
-        &owner.0,
+        s,
+        owner,
         &w,
         parts.method.as_str(),
         (request, example),

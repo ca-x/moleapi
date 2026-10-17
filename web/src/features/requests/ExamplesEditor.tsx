@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { t, useLanguage } from "../../shared/i18n";
-import { Badge, Button, Card, Checkbox, Flex, Text, TextArea, TextField } from "@radix-ui/themes";
+import { Badge, Button, Card, Checkbox, Dialog, Flex, Text, TextArea, TextField } from "@radix-ui/themes";
 import { Trash2 } from "lucide-react";
-import { previewMock, token } from "../../shared/api";
+import { native, previewMock, token } from "../../shared/api";
 import { Editor, Field, PairEditor, ToolButton } from "../../shared/ui";
 import type { RequestSpec } from "../../shared/types";
 import MockCallActivity from "./MockCallActivity";
+import MockPublicShares from "./MockPublicShares";
 export default function ExamplesEditor({
   request,
   update,
@@ -30,8 +31,11 @@ export default function ExamplesEditor({
     update({examples:request.examples.map(item=>item.id===exampleId?{...item,...patch}:item)});
   };
   let routePath="";
+  let routeHasQuery=request.query.some(row=>row.enabled);
   try{
-    routePath=new URL(request.url).pathname.replace(/%7B/gi,"{").replace(/%7D/gi,"}");
+    const savedUrl=new URL(request.url);
+    routePath=savedUrl.pathname.replace(/%7B/gi,"{").replace(/%7D/gi,"}");
+    routeHasQuery=routeHasQuery||savedUrl.search!=="";
     if(routePath.split("/").some(segment=>/[{}]/.test(segment)&&!/^[{][A-Za-z_][A-Za-z0-9_]{0,63}[}]$/.test(segment)))routePath="";
   }catch{routePath="";}
   const previewExample=(exampleId:string)=>{
@@ -47,6 +51,15 @@ export default function ExamplesEditor({
   };
   return (
     <div className="example-list">
+      {workspaceId&&!native&&<Dialog.Root>
+        <Dialog.Trigger><Button variant="soft" style={{minHeight:44}}>{t("管理公开 Mock")}</Button></Dialog.Trigger>
+        <Dialog.Content maxWidth="min(560px, calc(100vw - 24px))" style={{maxHeight:"calc(100dvh - 24px)",overflowY:"auto"}}>
+          <Dialog.Title>{t("公开 Mock")}</Dialog.Title>
+          <Dialog.Description>{t("默认仅工作区成员可访问。公开地址只分享当前请求；任何持有地址的人都可以调用。")}</Dialog.Description>
+          <MockPublicShares workspaceId={workspaceId} requestId={request.id} examples={request.examples.map(example=>({id:example.id,name:example.name}))} routePath={routePath} hasSavedQuery={routeHasQuery} dirty={dirty}/>
+          <Flex justify="end" mt="4"><Dialog.Close><Button variant="soft">{t("完成")}</Button></Dialog.Close></Flex>
+        </Dialog.Content>
+      </Dialog.Root>}
       {request.examples.length === 0 && (
         <Text size="2" color="gray"> {t("发送请求后，点击响应面板的「保存示例」。")} </Text>
       )}
