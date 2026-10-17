@@ -25,3 +25,5 @@ Authority: `mock-002` in `docs/FEATURE-MATRIX.md`; saved examples, request match
 Build: `npm run build` in `web`, then `cargo build -p moleapi-server`. Test: `npm test -- --run` in `web`, `cargo test -p moleapi-core -p moleapi-formats -p moleapi-server` at root. Style: preserve additive `#[serde(default, skip_serializing_if = ...)]` fields and current Rust/TypeScript formatting. Always reject unsupported schema semantics explicitly and keep private schema errors out of public responses; do not add a runtime download, edit vendored code, or change the existing static path when the field is absent.
 
 The full `mock-002` row remains open until representative OpenAPI-linked response schemas, composition/union/tuple support, wider dialect coverage and platform gates have evidence. `mock-003` rule and field-name data generation remains a separate requirement.
+
+The later bounded composition extension is specified in [mock-schema-composition.md](mock-schema-composition.md). Its evidence is tracked separately; the first-profile exclusions above describe the original slice.
