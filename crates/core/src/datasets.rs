@@ -16,6 +16,11 @@ pub struct DatasetSource {
 pub struct SavedDataset {
     pub id: String,
     pub name: String,
+    #[serde(
+        default = "default_table_name",
+        skip_serializing_if = "is_default_table_name"
+    )]
+    pub table_name: String,
     #[serde(default)]
     pub description: String,
     #[serde(default = "dataset_secret")]
@@ -26,11 +31,32 @@ pub struct SavedDataset {
 fn dataset_secret() -> bool {
     true
 }
+fn default_table_name() -> String {
+    "data".into()
+}
+fn is_default_table_name(value: &str) -> bool {
+    value == "data"
+}
+fn valid_table_name(name: &str) -> bool {
+    name.len() <= 64
+        && name
+            .as_bytes()
+            .first()
+            .is_some_and(|byte| byte.is_ascii_alphabetic() || *byte == b'_')
+        && name
+            .as_bytes()
+            .iter()
+            .all(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
+}
 pub fn validate_saved_datasets(datasets: &[SavedDataset]) -> Result<()> {
     ensure!(datasets.len() <= 20, "Workspace exceeds 20 saved datasets");
     let mut ids = BTreeSet::new();
     let mut bytes = 0usize;
     for dataset in datasets {
+        ensure!(
+            valid_table_name(&dataset.table_name),
+            "Dataset table name must be an ASCII SQL identifier up to 64 bytes"
+        );
         ensure!(
             !dataset.id.is_empty() && dataset.id.len() <= 128 && ids.insert(&dataset.id),
             "Dataset IDs must be unique and nonempty"
@@ -199,12 +225,14 @@ mod tests {
         let value: SavedDataset =
             serde_json::from_str(r#"{"id":"d","name":"Missing source"}"#).unwrap();
         assert!(value.secret && value.source.is_none());
+        assert_eq!(value.table_name, "data");
         validate_saved_datasets(std::slice::from_ref(&value)).unwrap();
         assert!(validate_saved_datasets(&[value.clone(), value]).is_err());
         let source = "value\n\"line\nnext\"\n";
         let value = SavedDataset {
             id: "d".into(),
             name: "Source".into(),
+            table_name: "sales_2026".into(),
             description: String::new(),
             secret: false,
             source: Some(DatasetSource {
@@ -216,6 +244,19 @@ mod tests {
         let restored: SavedDataset =
             serde_json::from_str(&serde_json::to_string(&value).unwrap()).unwrap();
         assert_eq!(restored.source.unwrap().source, source);
+    }
+    #[test]
+    fn saved_dataset_table_names_are_explicit_and_bounded() {
+        let mut dataset: SavedDataset =
+            serde_json::from_str(r#"{"id":"d","name":"Rows"}"#).unwrap();
+        for valid in ["data", "_rows", "Sales_2026"] {
+            dataset.table_name = valid.into();
+            validate_saved_datasets(std::slice::from_ref(&dataset)).unwrap();
+        }
+        for invalid in ["", "2rows", "has space", "x;DROP", "表格"] {
+            dataset.table_name = invalid.into();
+            assert!(validate_saved_datasets(std::slice::from_ref(&dataset)).is_err());
+        }
     }
     #[test]
     fn datasets_parse_csv_quotes_and_typed_json() {

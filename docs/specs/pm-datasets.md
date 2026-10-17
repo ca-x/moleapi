@@ -22,6 +22,8 @@ Authority: `data-009` and `data-010` in `docs/FEATURE-MATRIX.md`, `docs/specs/sa
 
 Rust model/validation lives in `crates/core/src/datasets.rs`; the in-memory query adapter belongs in the existing data/script runtime packages, using a mature SQL engine rather than an application parser. QuickJS API lives in `crates/script-runtime/src/pm.js` and the worker protocol. Hosted/native/CLI execution uses the existing shared server path. The React saved-dataset editor owns table and view controls; bilingual catalog entries and 390px layouts are required.
 
+The SQL adapter pins `rusqlite 0.32.1` (MIT; [source](https://github.com/rusqlite/rusqlite), [crate](https://crates.io/crates/rusqlite/0.32.1)) with its bundled public-domain SQLite C library and `sqlparser 0.63.0` (Apache-2.0; [source](https://github.com/apache/datafusion-sqlparser-rs)). These are build-time dependencies; execution never downloads a SQL engine.
+
 Tests must cover v1 backward compatibility, v2 top-level await, settled/rejected/pending and detached promises, worker kill/reap, owner/revision changes, CSV/JSON typed rows, SQL injection attempts with bound parameters, readonly/multi-statement rejection, row/byte/CPU limits, async iteration, saved view CRUD, default/full backup privacy, real pre/post scripts against a loopback request, scheduled/CLI/agent runs, and 390px English/Chinese UI. Run focused Rust/frontend tests, strict Clippy and builds, then the configured three-database and native platform gates. The current static Mock route is not evidence of mock-script support.
 
 ## Implementation boundaries

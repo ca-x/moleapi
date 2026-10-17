@@ -12,6 +12,7 @@ use std::{
     rc::Rc,
     time::{Duration, Instant},
 };
+pub mod dataset_query;
 mod failure;
 mod worker;
 pub use failure::ScriptFailure;
@@ -415,7 +416,11 @@ pub(crate) fn run_with_condition_mode(
         );
         ensure!(
             !runtime.is_job_pending(),
-            "Asynchronous scripts are unsupported in pm compatibility v1"
+            if mode == ScriptMode::V1 {
+                "Asynchronous scripts are unsupported in pm compatibility v1"
+            } else {
+                "Detached asynchronous jobs are unsupported"
+            }
         );
         Ok(output)
     })();

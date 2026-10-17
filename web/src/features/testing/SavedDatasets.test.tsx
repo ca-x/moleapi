@@ -11,6 +11,18 @@ beforeEach(async()=>{await setLanguage("en");state.draft={id:"w",data:{datasets:
 it("validates source then explicitly saves a private dataset using workspace CAS",async()=>{
  render(<Theme><SavedDatasets scope="owner-w-1" disabled={false}/></Theme>);fireEvent.click(screen.getByText("Workspace datasets (0)"));fireEvent.change(screen.getByRole("textbox",{name:"Dataset name"}),{target:{value:"Cases"}});fireEvent.change(screen.getByRole("textbox",{name:"dataset-source"}),{target:{value:'[ {"id":1} ]'}});fireEvent.click(screen.getByRole("button",{name:"Save dataset to workspace"}));await waitFor(()=>expect(state.save).toHaveBeenCalledWith(true));
  expect(api).toHaveBeenCalledWith("/api/testing/dataset/preview","POST",{workspace_id:"w",dataset:{format:"json",source:'[ {"id":1} ]'}});const update=state.updateData.mock.calls[0][0];const result=update({datasets:[]});expect(result.datasets[0]).toEqual(expect.objectContaining({name:"Cases",secret:true,source:{format:"json",source:'[ {"id":1} ]'}}));
+ expect(result.datasets[0].table_name).toBe("data");
+});
+it("preserves an existing SQL table name when the dataset is edited",async()=>{
+ state.draft.data.datasets=[{id:"d",name:"Orders",table_name:"orders_2026",description:"",secret:true,source:{format:"json",source:'[{"id":1}]'}}];
+ render(<Theme><SavedDatasets scope="owner-w-1" disabled={false}/></Theme>);
+ fireEvent.click(screen.getByText("Workspace datasets (1)"));
+ fireEvent.click(screen.getByRole("button",{name:"Edit dataset"}));
+ expect((screen.getByRole("textbox",{name:/^SQL table name/}) as HTMLInputElement).value).toBe("orders_2026");
+ fireEvent.click(screen.getByRole("button",{name:"Save dataset to workspace"}));
+ await waitFor(()=>expect(state.updateData).toHaveBeenCalled());
+ const result=state.updateData.mock.calls[0][0]({datasets:state.draft.data.datasets});
+ expect(result.datasets[0].table_name).toBe("orders_2026");
 });
 it("does not commit a source validation finishing after its owner component closes",async()=>{
  let finish!:(value:unknown)=>void;api.mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));const view=render(<Theme><SavedDatasets scope="old-owner" disabled={false}/></Theme>);fireEvent.click(screen.getByText("Workspace datasets (0)"));fireEvent.change(screen.getByRole("textbox",{name:"Dataset name"}),{target:{value:"Private"}});fireEvent.change(screen.getByRole("textbox",{name:"dataset-source"}),{target:{value:'[{"id":1}]'}});fireEvent.click(screen.getByRole("button",{name:"Save dataset to workspace"}));await waitFor(()=>expect(finish).toBeTypeOf("function"));view.unmount();await act(async()=>finish({rows:[{id:1}]}));expect(state.updateData).not.toHaveBeenCalled();
