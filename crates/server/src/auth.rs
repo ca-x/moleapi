@@ -330,6 +330,7 @@ mod tests {
             sync_lock: std::sync::Arc::new(tokio::sync::Mutex::new(())),
             script_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
             mock_delay_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(32)),
+            public_mock_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(32)),
             generation_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(4)),
             project_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(2)),
             project_jobs: std::sync::Arc::default(),

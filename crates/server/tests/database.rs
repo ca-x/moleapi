@@ -301,6 +301,48 @@ async fn identical_storage_auth_cas_tests_on_every_configured_database() {
         .await;
         assert_eq!(status, StatusCode::OK);
         assert!(other_calls.as_array().unwrap().is_empty());
+        let shares = "/api/workspaces/shared-id/mock-shares";
+        let (status, public_share) = call(
+            &router,
+            "POST",
+            shares,
+            Some(&a),
+            Some(json!({"request_id":"r","expires_in_days":7})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{public_share}");
+        let original_public = format!(
+            "/api/public/mock/{}/e",
+            public_share["token"].as_str().unwrap()
+        );
+        assert_eq!(
+            call(&router_again, "GET", &original_public, None, None)
+                .await
+                .0,
+            StatusCode::CREATED
+        );
+        let (status, foreign_shares) = call(&router_again, "GET", shares, Some(&b), None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(foreign_shares.as_array().unwrap().is_empty());
+        let share_id = public_share["id"].as_str().unwrap();
+        let (status, rotated) = call(
+            &router_again,
+            "POST",
+            &format!("{shares}/{share_id}/rotate"),
+            Some(&a),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{rotated}");
+        let rotated_public = format!("/api/public/mock/{}/e", rotated["token"].as_str().unwrap());
+        assert_eq!(
+            call(&router, "GET", &original_public, None, None).await.0,
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            call(&router, "GET", &rotated_public, None, None).await.0,
+            StatusCode::CREATED
+        );
         assert_eq!(
             call(
                 &router,
@@ -327,6 +369,12 @@ async fn identical_storage_auth_cas_tests_on_every_configured_database() {
         );
         assert_eq!(
             call(&router, "GET", &capture_path, Some(&a), None).await.0,
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            call(&router_again, "GET", &rotated_public, None, None)
+                .await
+                .0,
             StatusCode::NOT_FOUND
         );
         assert_eq!(
