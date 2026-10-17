@@ -5,6 +5,7 @@ import { Trash2 } from "lucide-react";
 import { previewMock, token } from "../../shared/api";
 import { Editor, Field, PairEditor, ToolButton } from "../../shared/ui";
 import type { RequestSpec } from "../../shared/types";
+import MockCallActivity from "./MockCallActivity";
 export default function ExamplesEditor({
   request,
   update,
@@ -99,6 +100,7 @@ export default function ExamplesEditor({
           {asyncMock ? <Field label={t("Mock 实现脚本")} hint={t("使用 pm.mock 设置状态、响应头与正文；可通过 pm.datasets(ID) 查询工作区数据集。") }><Editor label={t("Mock 实现脚本")} value={example.mock_script??""} onChange={mock_script=>{setPreview(null);setError("");update({examples:request.examples.map(item=>item.id===example.id?{...item,mock_script}:item)});}} dark={dark} language="javascript" height="180px"/></Field> : <Text size="1" color="gray">{t("在工作区设置中启用 v2 脚本模式后可编辑动态 Mock。")}</Text>}
         </Card>
       ))}
+      {workspaceId&&!dirty&&<MockCallActivity workspaceId={workspaceId} requestId={request.id}/>}
     </div>
   );
 }

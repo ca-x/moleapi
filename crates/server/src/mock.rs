@@ -1,4 +1,4 @@
-use crate::{ApiError, AppState, auth::Identity, execution, workspaces::owned};
+use crate::{ApiError, AppState, auth::Identity, execution, mock_logs, workspaces::owned};
 use axum::{
     Extension,
     body::to_bytes,
@@ -19,24 +19,37 @@ pub async fn mock(
     incoming_headers: HeaderMap,
 ) -> Result<axum::response::Response, ApiError> {
     let w = owned(&s, &owner.0, &id).await?;
-    let (collection, request, e) = w
-        .data
-        .collections
-        .iter()
-        .find_map(|collection| {
-            collection
-                .requests
-                .iter()
-                .find(|r| r.id == request_id)
-                .and_then(|r| {
-                    r.examples
-                        .iter()
-                        .find(|e| e.id == example_id)
-                        .map(|e| (collection, r, e))
-                })
-        })
-        .ok_or_else(ApiError::not_found)?;
-    serve_selected(
+    let started = std::time::Instant::now();
+    let selected = w.data.collections.iter().find_map(|collection| {
+        collection
+            .requests
+            .iter()
+            .find(|r| r.id == request_id)
+            .and_then(|r| {
+                r.examples
+                    .iter()
+                    .find(|e| e.id == example_id)
+                    .map(|e| (collection, r, e))
+            })
+    });
+    let Some((collection, request, e)) = selected else {
+        mock_logs::record(
+            &s,
+            &owner.0,
+            &w,
+            mock_logs::CallMeta {
+                method: "GET",
+                request_id: None,
+                example_id: None,
+                status: StatusCode::NOT_FOUND,
+                outcome: "unmatched",
+                elapsed_ms: started.elapsed().as_millis() as u64,
+            },
+        )
+        .await?;
+        return Err(ApiError::not_found());
+    };
+    let result = serve_selected(
         &s,
         &owner.0,
         &w,
@@ -48,7 +61,19 @@ pub async fn mock(
         &Method::GET,
         &[],
     )
-    .await
+    .await;
+    let (status, outcome) = outcome_meta(&result);
+    record_outcome(
+        &s,
+        &owner.0,
+        &w,
+        "GET",
+        (request, e),
+        started,
+        (status, outcome),
+    )
+    .await?;
+    result
 }
 
 pub async fn dispatch(
@@ -64,6 +89,7 @@ pub async fn dispatch(
         .await
         .map_err(|_| ApiError::bad("Mock request body exceeds 1 MiB"))?;
     let w = owned(&s, &owner.0, &id).await?;
+    let started = std::time::Instant::now();
     let actual = format!("/{path}");
     let mut selected = None;
     let mut best_score = None;
@@ -74,7 +100,15 @@ pub async fn dispatch(
         for request in &collection.requests {
             scanned_requests += 1;
             if scanned_requests > 10_000 {
-                return Err(ApiError::bad("Mock matching request budget exceeded"));
+                return reject_after_owner(
+                    &s,
+                    &owner.0,
+                    &w,
+                    parts.method.as_str(),
+                    started,
+                    "Mock matching request budget exceeded",
+                )
+                .await;
             }
             if request.protocol != moleapi_core::Protocol::Http
                 || request.method != parts.method.as_str()
@@ -91,13 +125,28 @@ pub async fn dispatch(
                 continue;
             };
             if snapshot.is_none() {
-                snapshot = Some(safe_incoming_request(
-                    request,
-                    &uri,
-                    &parts.headers,
-                    &parts.method,
-                    &bytes,
-                )?);
+                let incoming =
+                    safe_incoming_request(request, &uri, &parts.headers, &parts.method, &bytes);
+                snapshot = Some(match incoming {
+                    Ok(incoming) => incoming,
+                    Err(error) => {
+                        mock_logs::record(
+                            &s,
+                            &owner.0,
+                            &w,
+                            mock_logs::CallMeta {
+                                method: parts.method.as_str(),
+                                request_id: None,
+                                example_id: None,
+                                status: error.status,
+                                outcome: "rejected",
+                                elapsed_ms: started.elapsed().as_millis() as u64,
+                            },
+                        )
+                        .await?;
+                        return Err(error);
+                    }
+                });
             }
             let incoming = snapshot.as_ref().expect("snapshot initialized");
             let mut saved_query: Vec<(String, String)> = saved_url
@@ -126,7 +175,15 @@ pub async fn dispatch(
             for example in &request.examples {
                 scanned_examples += 1;
                 if scanned_examples > 10_000 {
-                    return Err(ApiError::bad("Mock matching example budget exceeded"));
+                    return reject_after_owner(
+                        &s,
+                        &owner.0,
+                        &w,
+                        parts.method.as_str(),
+                        started,
+                        "Mock matching example budget exceeded",
+                    )
+                    .await;
                 }
                 let Some(condition_count) = example_matches(example, incoming) else {
                     continue;
@@ -144,8 +201,24 @@ pub async fn dispatch(
             }
         }
     }
-    let (collection, request, example) = selected.ok_or_else(ApiError::not_found)?;
-    serve_selected(
+    let Some((collection, request, example)) = selected else {
+        mock_logs::record(
+            &s,
+            &owner.0,
+            &w,
+            mock_logs::CallMeta {
+                method: parts.method.as_str(),
+                request_id: None,
+                example_id: None,
+                status: StatusCode::NOT_FOUND,
+                outcome: "unmatched",
+                elapsed_ms: started.elapsed().as_millis() as u64,
+            },
+        )
+        .await?;
+        return Err(ApiError::not_found());
+    };
+    let result = serve_selected(
         &s,
         &owner.0,
         &w,
@@ -157,7 +230,77 @@ pub async fn dispatch(
         &parts.method,
         &bytes,
     )
+    .await;
+    let (status, outcome) = outcome_meta(&result);
+    record_outcome(
+        &s,
+        &owner.0,
+        &w,
+        parts.method.as_str(),
+        (request, example),
+        started,
+        (status, outcome),
+    )
+    .await?;
+    result
+}
+
+async fn reject_after_owner(
+    s: &AppState,
+    owner: &str,
+    workspace: &moleapi_core::Workspace,
+    method: &str,
+    started: std::time::Instant,
+    message: &str,
+) -> Result<axum::response::Response, ApiError> {
+    let error = ApiError::bad(message);
+    mock_logs::record(
+        s,
+        owner,
+        workspace,
+        mock_logs::CallMeta {
+            method,
+            request_id: None,
+            example_id: None,
+            status: error.status,
+            outcome: "rejected",
+            elapsed_ms: started.elapsed().as_millis() as u64,
+        },
+    )
+    .await?;
+    Err(error)
+}
+
+async fn record_outcome(
+    s: &AppState,
+    owner: &str,
+    workspace: &moleapi_core::Workspace,
+    method: &str,
+    selected: (&moleapi_core::RequestSpec, &moleapi_core::Example),
+    started: std::time::Instant,
+    result: (StatusCode, &str),
+) -> Result<(), ApiError> {
+    mock_logs::record(
+        s,
+        owner,
+        workspace,
+        mock_logs::CallMeta {
+            method,
+            request_id: Some(&selected.0.id),
+            example_id: Some(&selected.1.id),
+            status: result.0,
+            outcome: result.1,
+            elapsed_ms: started.elapsed().as_millis() as u64,
+        },
+    )
     .await
+}
+
+fn outcome_meta(result: &Result<axum::response::Response, ApiError>) -> (StatusCode, &'static str) {
+    match result {
+        Ok(response) => (response.status(), "served"),
+        Err(error) => (error.status, "failed"),
+    }
 }
 
 fn path_match(saved: &str, actual: &str) -> Option<usize> {
