@@ -51,31 +51,6 @@ fn name_suggestion(name: &str, schema: &Map<String, Value>) -> Option<Value> {
     }
 }
 
-fn recognized_name(name: &str) -> bool {
-    let normalized: String = name
-        .bytes()
-        .filter(|byte| *byte != b'_' && *byte != b'-')
-        .map(|byte| byte.to_ascii_lowercase() as char)
-        .collect();
-    matches!(
-        normalized.as_str(),
-        "id" | "active"
-            | "enabled"
-            | "isactive"
-            | "name"
-            | "fullname"
-            | "firstname"
-            | "lastname"
-            | "email"
-            | "emailaddress"
-            | "phone"
-            | "phonenumber"
-            | "url"
-            | "website"
-            | "avatarurl"
-    )
-}
-
 struct NoResources;
 impl jsonschema::Retrieve for NoResources {
     fn retrieve(
@@ -303,6 +278,42 @@ fn has_authored_value(root: &Value, schema: &Value, depth: usize) -> Result<bool
         .any(|key| object.contains_key(*key)))
 }
 
+fn has_name_suggestion(
+    root: &Value,
+    schema: &Value,
+    name: &str,
+    depth: usize,
+    context: &mut GenerateContext,
+) -> Result<bool> {
+    context.nodes += 1;
+    ensure!(
+        depth <= MAX_DEPTH && context.nodes <= MAX_NODES,
+        "Mock schema name lookup budget exceeded"
+    );
+    let object = schema
+        .as_object()
+        .context("Mock schema node is not an object")?;
+    if let Some(pointer) = object.get("$ref").and_then(Value::as_str) {
+        let target = root
+            .pointer(&pointer[1..])
+            .context("Unresolved Mock schema reference")?;
+        return has_name_suggestion(root, target, name, depth + 1, context);
+    }
+    if name_suggestion(name, object).is_some() {
+        return Ok(true);
+    }
+    for key in ["oneOf", "anyOf", "allOf"] {
+        if let Some(branches) = object.get(key).and_then(Value::as_array) {
+            for branch in branches {
+                if has_name_suggestion(root, branch, name, depth + 1, context)? {
+                    return Ok(true);
+                }
+            }
+        }
+    }
+    Ok(false)
+}
+
 fn insert_bounded(
     values: &mut Map<String, Value>,
     name: &str,
@@ -522,7 +533,8 @@ fn synthesize(
                 for (name, child) in properties {
                     if !values.contains_key(name)
                         && (has_authored_value(root, child, depth + 1)?
-                            || (context.infer_names && recognized_name(name)))
+                            || (context.infer_names
+                                && has_name_suggestion(root, child, name, depth + 1, context)?))
                     {
                         insert_bounded(
                             &mut values,
@@ -816,12 +828,13 @@ mod tests {
     fn opted_in_names_suggest_schema_valid_values_without_changing_legacy_output() {
         let source = r#"{"type":"object","properties":{"id":{"type":"integer"},"fullName":{"type":"string"},"email_address":{"type":"string","format":"email"},"phone-number":{"type":"string"},"other":{"type":"string"}},"required":["id","fullName","email_address"]}"#;
         assert_eq!(
-            generate_mock_schema(source).unwrap(),
-            r#"{"email_address":"mock@example.test","fullName":"","id":0}"#
+            serde_json::from_str::<Value>(&generate_mock_schema(source).unwrap()).unwrap(),
+            serde_json::json!({"email_address":"mock@example.test","fullName":"","id":0})
         );
         assert_eq!(
-            generate_mock_schema_with_names(source).unwrap(),
-            r#"{"email_address":"ada@example.test","fullName":"Ada Lovelace","id":1,"phone-number":"+1-202-555-0147"}"#
+            serde_json::from_str::<Value>(&generate_mock_schema_with_names(source).unwrap())
+                .unwrap(),
+            serde_json::json!({"email_address":"ada@example.test","fullName":"Ada Lovelace","id":1,"phone-number":"+1-202-555-0147"})
         );
     }
 
@@ -829,13 +842,43 @@ mod tests {
     fn inferred_names_keep_reference_context_and_authored_precedence() {
         let source = r##"{"$defs":{"text":{"type":"string"}},"type":"object","properties":{"email":{"$ref":"#/$defs/text"},"name":{"$ref":"#/$defs/text"},"first_name":{"type":"string","default":"Grace"},"phone":{"type":"string","maxLength":2},"id":{"type":"integer","minimum":5},"is-active":{"type":"boolean"},"status":{"type":"string","enum":["pending","ready"]},"unknown":{"type":"string"}},"required":["email","name","first_name","id","status"]}"##;
         assert_eq!(
-            generate_mock_schema_with_names(source).unwrap(),
-            r#"{"email":"ada@example.test","first_name":"Grace","id":5,"is-active":true,"name":"Ada Lovelace","phone":"","status":"pending"}"#
+            serde_json::from_str::<Value>(&generate_mock_schema_with_names(source).unwrap())
+                .unwrap(),
+            serde_json::json!({"email":"ada@example.test","first_name":"Grace","id":5,"is-active":true,"name":"Ada Lovelace","phone":"","status":"pending"})
         );
         let composed = r#"{"type":"object","properties":{"email":{"oneOf":[{"type":"string","minLength":5},{"type":"integer"}]}},"required":["email"]}"#;
         assert_eq!(
             generate_mock_schema_with_names(composed).unwrap(),
             r#"{"email":"ada@example.test"}"#
         );
+    }
+
+    #[test]
+    fn optional_name_rules_require_a_compatible_schema_type() {
+        let source = r#"{"type":"object","properties":{"email":{"type":"integer"},"name":{"type":"string"},"unknown":{"type":"string"}}}"#;
+        assert_eq!(
+            serde_json::from_str::<Value>(&generate_mock_schema_with_names(source).unwrap())
+                .unwrap(),
+            serde_json::json!({"name":"Ada Lovelace"})
+        );
+    }
+
+    #[test]
+    fn optional_name_lookup_shares_the_global_node_budget() {
+        let mut deep = serde_json::json!({"type":"string"});
+        for _ in 0..50 {
+            deep = serde_json::json!({"oneOf":[deep]});
+        }
+        let mut properties = Map::new();
+        for index in 0..500 {
+            properties.insert(
+                format!("unknown{index}"),
+                serde_json::json!({"$ref":"#/$defs/deep"}),
+            );
+        }
+        let source =
+            serde_json::json!({"$defs":{"deep":deep},"type":"object","properties":properties})
+                .to_string();
+        assert!(generate_mock_schema_with_names(&source).is_err());
     }
 }

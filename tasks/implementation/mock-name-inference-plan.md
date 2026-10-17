@@ -21,6 +21,6 @@
 
 ## Task 3: Acceptance and integration
 
-- [ ] Run full relevant Rust and frontend suites, frontend then embedded build, strict Clippy, formatting and diff check. Document exact supported names and remaining `mock-003` scope.
+- [x] Run full relevant Rust and frontend suites, frontend then embedded build, strict Clippy, formatting and diff check. Document exact supported names and remaining `mock-003` scope.
 - [ ] Request independent read-only review, fix Critical/Important findings and re-review.
 - [ ] Push a draft PR stacked on the composed Mock batch; run exact-head three-database, Docker and native package CI and installed package smoke. Merge verified batches in dependency order.

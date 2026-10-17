@@ -188,6 +188,30 @@ async fn linked_composed_response_preserves_component_schema_on_real_calls() {
 }
 
 #[tokio::test]
+async fn linked_name_inference_rejects_conflicting_optional_values_at_save() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("linked-names-invalid.db"))
+        .await
+        .unwrap();
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["specification_id"] = json!("spec");
+    data["collections"][0]["requests"][0]["examples"][0]["status"] = json!(200);
+    data["collections"][0]["requests"][0]["examples"][0]["mock_schema_link"] = json!({"specification_id":"spec","pointer":"#/paths/~1items/get/responses/200/content/application~1json/schema"});
+    data["collections"][0]["requests"][0]["examples"][0]["mock_name_inference"] = json!(true);
+    let source = json!({"openapi":"3.1.0","paths":{"/items":{"get":{"responses":{"200":{"content":{"application/json":{"schema":{"allOf":[{"type":"object","properties":{"name":{"type":"string","const":"A"}}},{"type":"object","properties":{"name":{"type":"string"}}}]}}}}}}}}});
+    data["specifications"] = json!([{"id":"spec","name":"Spec","kind":"openapi","dialect":"3.1.0","source":source.to_string()}]);
+    let (status, body) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"w","name":"Invalid names","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+}
+
+#[tokio::test]
 async fn linked_openapi_schema_uses_current_saved_specification_for_direct_and_routed_calls() {
     let dir = tempfile::tempdir().unwrap();
     let router = local(&dir.path().join("linked-schema.db")).await.unwrap();
