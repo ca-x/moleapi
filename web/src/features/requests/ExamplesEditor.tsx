@@ -13,6 +13,21 @@ function invalidSchemaInput(source:string):boolean {
   try { const value=JSON.parse(source); return !value||typeof value!=="object"||Array.isArray(value); }
   catch { return true; }
 }
+
+function SchemaEditorDialog({schema,dark,onCommit}:{schema:string;dark:boolean;onCommit:(schema:string)=>void}) {
+  const [open,setOpen]=useState(false);
+  const [draft,setDraft]=useState(schema);
+  return <Dialog.Root open={open} onOpenChange={next=>{if(next)setDraft(schema);setOpen(next);}}>
+    <Dialog.Trigger><Button variant="soft">{t("编辑 Mock JSON Schema")}</Button></Dialog.Trigger>
+    <Dialog.Content maxWidth="min(720px, calc(100vw - 24px))" style={{maxHeight:"calc(100dvh - 24px)",overflowY:"auto"}}>
+      <Dialog.Title>{t("Mock JSON Schema")}</Dialog.Title>
+      <Dialog.Description>{t("保存后使用下方预览；支持基本类型、属性、数组和本地 $defs 引用。原静态正文保留。")}</Dialog.Description>
+      <Editor label={t("Mock JSON Schema")} value={draft} onChange={setDraft} dark={dark} language="json" height="320px" />
+      {invalidSchemaInput(draft) && <Text role="alert" size="1" color="red">{t("Schema 必须是 256 KiB 内的 JSON 对象；保存时会检查支持的规则。")}</Text>}
+      <Flex justify="end" mt="4"><Dialog.Close><Button variant="soft" color="gray" disabled={invalidSchemaInput(draft)} onClick={()=>onCommit(draft)}>{t("完成")}</Button></Dialog.Close></Flex>
+    </Dialog.Content>
+  </Dialog.Root>;
+}
 export default function ExamplesEditor({
   request,
   update,
@@ -105,16 +120,7 @@ export default function ExamplesEditor({
           }}/></Field>
           <Editor value={example.body} readOnly dark={dark} height="150px" />
           <Text as="label" size="2"><Checkbox checked={!!example.mock_schema} onCheckedChange={checked=>patchExample(example.id,{mock_schema:checked===true?'{"type":"object","properties":{}}':""})}/> {t("根据 JSON Schema 生成 Mock 正文")}</Text>
-          {!!example.mock_schema && <Dialog.Root>
-            <Dialog.Trigger><Button variant="soft">{t("编辑 Mock JSON Schema")}</Button></Dialog.Trigger>
-            <Dialog.Content maxWidth="min(720px, calc(100vw - 24px))" style={{maxHeight:"calc(100dvh - 24px)",overflowY:"auto"}}>
-              <Dialog.Title>{t("Mock JSON Schema")}</Dialog.Title>
-              <Dialog.Description>{t("保存后使用下方预览；支持基本类型、属性、数组和本地 $defs 引用。原静态正文保留。")}</Dialog.Description>
-              <Editor label={t("Mock JSON Schema")} value={example.mock_schema} onChange={mock_schema=>patchExample(example.id,{mock_schema})} dark={dark} language="json" height="320px" />
-              {invalidSchemaInput(example.mock_schema) && <Text role="alert" size="1" color="red">{t("Schema 必须是 256 KiB 内的 JSON 对象；保存时会检查支持的规则。")}</Text>}
-              <Flex justify="end" mt="4"><Dialog.Close><Button variant="soft" color="gray">{t("完成")}</Button></Dialog.Close></Flex>
-            </Dialog.Content>
-          </Dialog.Root>}
+          {!!example.mock_schema && <SchemaEditorDialog schema={example.mock_schema} dark={dark} onCommit={mock_schema=>patchExample(example.id,{mock_schema})}/>}
           {workspaceId && <Text as="p" size="1" color="gray" style={{overflowWrap:"anywhere"}}>{t("Mock 地址")}: <code>{`/api/mock/${encodeURIComponent(workspaceId)}/${encodeURIComponent(request.id)}/${encodeURIComponent(example.id)}`}</code></Text>}
           {workspaceId && routePath && <Text as="p" size="1" color="gray" style={{overflowWrap:"anywhere"}}>{t("匹配路由")}: <code>{`${request.method} /api/mocks/${encodeURIComponent(workspaceId)}${routePath}`}</code></Text>}
           {workspaceId && !routePath && <Text size="1" color="gray">{t("Mock 匹配路由需要字面量 HTTP URL；路径变量使用单层 {name}。")}</Text>}

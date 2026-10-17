@@ -10,7 +10,7 @@
 
 **Spec:** `docs/specs/mock-schema-response.md`.
 
-**Constraints:** No network/file schema resolution; 256 KiB input, depth 64, 10,000 visited nodes, 1 MiB generated output. Existing examples with no schema retain exact bytes. Do not mark `mock-002` or `mock-003` complete from this slice.
+**Constraints:** No network/file schema resolution; 256 KiB input, depth 64, 10,000 visited nodes, 128 values per enum/examples list, 256 candidate checks, 1 MiB generated output. Existing examples with no schema retain exact bytes. Do not mark `mock-002` or `mock-003` complete from this slice.
 
 ## Review focus
 

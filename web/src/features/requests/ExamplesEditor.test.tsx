@@ -49,13 +49,17 @@ it("keeps the static body while editing an explicit Mock JSON Schema",async()=>{
   request.examples=[{...request.examples[0],mock_schema:update.mock.lastCall?.[0].examples[0].mock_schema}];
   page.rerender(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
   fireEvent.click(screen.getByRole("button",{name:"Edit Mock JSON Schema"}));
-  fireEvent.change(screen.getByRole("textbox",{name:"Mock JSON Schema"}),{target:{value:"{"}});
-  request.examples=[{...request.examples[0],mock_schema:"{"}];
-  page.rerender(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
+  fireEvent.change(screen.getByRole("textbox",{name:"Mock JSON Schema"}),{target:{value:""}});
+  expect(screen.getByRole("textbox",{name:"Mock JSON Schema"})).toBeTruthy();
   expect(screen.getByRole("alert").textContent).toContain("Schema must be a JSON object");
+  expect(screen.getByRole("button",{name:"Done"})).toHaveProperty("disabled",true);
+  const revised='{"type":"object","properties":{"id":{"const":3}},"required":["id"]}';
+  fireEvent.change(screen.getByRole("textbox",{name:"Mock JSON Schema"}),{target:{value:revised}});
+  fireEvent.click(screen.getByRole("button",{name:"Done"}));
+  expect(update.mock.lastCall?.[0].examples[0].mock_schema).toBe(revised);
   expect(update.mock.lastCall?.[0].examples[0].body).toBe("static");
   await setLanguage("zh-CN");
-  expect(screen.getByRole("textbox",{name:"Mock JSON Schema"})).toBeTruthy();
+  expect(screen.getByRole("button",{name:"编辑 Mock JSON Schema"})).toBeTruthy();
 });
 
 it("shows the mock editor in Chinese",async()=>{

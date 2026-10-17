@@ -1,11 +1,21 @@
 //! Deterministic, bounded generation for the explicit saved Mock schema profile.
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Map, Number, Value};
+use std::collections::{HashMap, hash_map::Entry};
 
 const MAX_SCHEMA: usize = 256 * 1024;
 const MAX_OUTPUT: usize = 1024 * 1024;
 const MAX_DEPTH: usize = 64;
 const MAX_NODES: usize = 10_000;
+const MAX_CANDIDATES: usize = 256;
+
+#[derive(Default)]
+struct GenerateContext {
+    nodes: usize,
+    candidates: usize,
+    validators: HashMap<usize, jsonschema::Validator>,
+    values: HashMap<usize, Value>,
+}
 
 struct NoResources;
 impl jsonschema::Retrieve for NoResources {
@@ -38,6 +48,10 @@ fn scan(schema: &Value, path: &str, depth: usize, nodes: &mut usize) -> Result<(
         let field = format!("{path}/{key}");
         match key.as_str() {
             "$defs" | "properties" => {
+                ensure!(
+                    key != "$defs" || path == "#",
+                    "Nested Mock schema $defs are unsupported at {field}"
+                );
                 let values = value
                     .as_object()
                     .with_context(|| format!("Mock schema {field} must be an object"))?;
@@ -66,8 +80,10 @@ fn scan(schema: &Value, path: &str, depth: usize, nodes: &mut usize) -> Result<(
                 "Mock schema {field} must be a string array"
             ),
             "enum" | "examples" => ensure!(
-                value.as_array().is_some_and(|a| !a.is_empty()),
-                "Mock schema {field} must be a nonempty array"
+                value
+                    .as_array()
+                    .is_some_and(|a| !a.is_empty() && a.len() <= 128),
+                "Mock schema {field} must contain 1–128 values"
             ),
             "minimum" | "maximum" => ensure!(
                 value.as_f64().is_some_and(f64::is_finite),
@@ -93,14 +109,47 @@ fn parse(source: &str) -> Result<Value> {
     Ok(root)
 }
 
-fn valid_candidate(root: &Value, schema: &Value, candidate: &Value) -> bool {
-    let mut scoped = schema.clone();
-    if let Some(defs) = root.get("$defs")
-        && let Some(object) = scoped.as_object_mut()
-    {
-        object.entry("$defs").or_insert_with(|| defs.clone());
+fn valid_candidate(
+    root: &Value,
+    schema: &Value,
+    candidate: &Value,
+    context: &mut GenerateContext,
+) -> Result<bool> {
+    context.candidates += 1;
+    ensure!(
+        context.candidates <= MAX_CANDIDATES,
+        "Mock schema candidate budget exceeded"
+    );
+    let key = schema as *const Value as usize;
+    let check = match context.validators.entry(key) {
+        Entry::Occupied(entry) => entry.into_mut(),
+        Entry::Vacant(entry) => {
+            let mut scoped = schema.clone();
+            if let Some(defs) = root.get("$defs")
+                && let Some(object) = scoped.as_object_mut()
+            {
+                object.entry("$defs").or_insert_with(|| defs.clone());
+            }
+            entry.insert(validator(&scoped)?)
+        }
+    };
+    Ok(check.is_valid(candidate))
+}
+
+fn has_authored_value(root: &Value, schema: &Value, depth: usize) -> Result<bool> {
+    ensure!(depth <= MAX_DEPTH, "Mock schema reference depth exceeded");
+    let object = schema
+        .as_object()
+        .context("Mock schema node is not an object")?;
+    if let Some(pointer) = object.get("$ref").and_then(Value::as_str) {
+        let target = root
+            .pointer(&pointer[1..])
+            .context("Unresolved Mock schema reference")?;
+        return has_authored_value(root, target, depth + 1);
     }
-    validator(&scoped).is_ok_and(|check| check.is_valid(candidate))
+    Ok(["const", "examples", "default"]
+        .iter()
+        .any(|key| object.contains_key(*key)))
 }
 
 fn insert_bounded(
@@ -120,14 +169,18 @@ fn synthesize(
     root: &Value,
     schema: &Value,
     depth: usize,
-    nodes: &mut usize,
     refs: &mut Vec<String>,
+    context: &mut GenerateContext,
 ) -> Result<Value> {
-    *nodes += 1;
+    context.nodes += 1;
     ensure!(
-        depth <= MAX_DEPTH && *nodes <= MAX_NODES,
+        depth <= MAX_DEPTH && context.nodes <= MAX_NODES,
         "Mock schema generation budget exceeded"
     );
+    let schema_key = schema as *const Value as usize;
+    if let Some(value) = context.values.get(&schema_key) {
+        return Ok(value.clone());
+    }
     let object = schema
         .as_object()
         .context("Mock schema node is not an object")?;
@@ -146,8 +199,11 @@ fn synthesize(
             .pointer(&pointer[1..])
             .context("Unresolved Mock schema reference")?;
         refs.push(pointer.to_owned());
-        let value = synthesize(root, target, depth + 1, nodes, refs);
+        let value = synthesize(root, target, depth + 1, refs, context);
         refs.pop();
+        if let Ok(value) = &value {
+            context.values.insert(schema_key, value.clone());
+        }
         return value;
     }
     for key in ["const", "examples", "default", "enum"] {
@@ -156,11 +212,11 @@ fn synthesize(
             (_, Some(value)) => vec![value],
             _ => Vec::new(),
         };
-        if let Some(value) = candidates
-            .into_iter()
-            .find(|value| valid_candidate(root, schema, value))
-        {
-            return Ok(value.clone());
+        for value in candidates {
+            if valid_candidate(root, schema, value, context)? {
+                context.values.insert(schema_key, value.clone());
+                return Ok(value.clone());
+            }
         }
         if object.contains_key(key) && matches!(key, "const" | "enum") {
             bail!("Unsatisfiable Mock schema {key}");
@@ -222,24 +278,18 @@ fn synthesize(
                     insert_bounded(
                         &mut values,
                         name,
-                        synthesize(root, child, depth + 1, nodes, refs)?,
+                        synthesize(root, child, depth + 1, refs, context)?,
                         &mut size,
                     )?;
                 }
             }
             if let Some(properties) = properties {
                 for (name, child) in properties {
-                    if !values.contains_key(name)
-                        && child.as_object().is_some_and(|o| {
-                            ["const", "examples", "default"]
-                                .iter()
-                                .any(|key| o.contains_key(*key))
-                        })
-                    {
+                    if !values.contains_key(name) && has_authored_value(root, child, depth + 1)? {
                         insert_bounded(
                             &mut values,
                             name,
-                            synthesize(root, child, depth + 1, nodes, refs)?,
+                            synthesize(root, child, depth + 1, refs, context)?,
                             &mut size,
                         )?;
                     }
@@ -266,8 +316,8 @@ fn synthesize(
                     root,
                     item.context("Missing Mock schema items")?,
                     depth + 1,
-                    nodes,
                     refs,
+                    context,
                 )?;
                 size = size.saturating_add(serde_json::to_vec(&value)?.len() + 1);
                 ensure!(size <= MAX_OUTPUT, "Generated Mock body exceeds 1 MiB");
@@ -277,13 +327,19 @@ fn synthesize(
         }
         _ => bail!("Unsupported Mock schema type"),
     };
+    context.values.insert(schema_key, result.clone());
     Ok(result)
 }
 
 pub fn generate_mock_schema(source: &str) -> Result<String> {
     let root = parse(source)?;
-    let mut nodes = 0;
-    let value = synthesize(&root, &root, 0, &mut nodes, &mut Vec::new())?;
+    let value = synthesize(
+        &root,
+        &root,
+        0,
+        &mut Vec::new(),
+        &mut GenerateContext::default(),
+    )?;
     ensure!(
         validator(&root)?.is_valid(&value),
         "Mock schema generated an invalid value"
@@ -344,6 +400,43 @@ mod tests {
                 .unwrap()
                 .get("mock_schema")
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn referenced_optional_defaults_are_included() {
+        let source = r##"{"type":"object","$defs":{"label":{"type":"string","default":"Ada"}},"properties":{"label":{"$ref":"#/$defs/label"}}}"##;
+        assert_eq!(generate_mock_schema(source).unwrap(), r#"{"label":"Ada"}"#);
+    }
+
+    #[test]
+    fn nested_candidates_use_top_level_definitions() {
+        let source = r##"{"type":"object","$defs":{"n":{"type":"integer","minimum":5}},"properties":{"nested":{"type":"object","properties":{"n":{"$ref":"#/$defs/n"}},"required":["n"],"examples":[{"n":3},{"n":5}]}},"required":["nested"]}"##;
+        assert_eq!(
+            generate_mock_schema(source).unwrap(),
+            r#"{"nested":{"n":5}}"#
+        );
+        assert!(validate_mock_schema(r##"{"type":"object","properties":{"x":{"$defs":{"n":{"type":"integer"}},"$ref":"#/$defs/n"}}}"##).is_err());
+    }
+
+    #[test]
+    fn repeated_array_items_reuse_compiled_candidates_and_candidate_work_is_capped() {
+        let source = r#"{"type":"array","minItems":500,"items":{"type":"string","minLength":2,"examples":["x"],"enum":["ok"]}}"#;
+        let generated = generate_mock_schema(source).unwrap();
+        assert_eq!(
+            serde_json::from_str::<Vec<String>>(&generated).unwrap(),
+            vec!["ok"; 500]
+        );
+        let schema = serde_json::json!({"type":"string"});
+        let mut context = GenerateContext::default();
+        for _ in 0..MAX_CANDIDATES {
+            assert!(
+                valid_candidate(&schema, &schema, &Value::String("ok".into()), &mut context)
+                    .unwrap()
+            );
+        }
+        assert!(
+            valid_candidate(&schema, &schema, &Value::String("ok".into()), &mut context).is_err()
         );
     }
 }
