@@ -116,6 +116,7 @@ export interface Example {
     headers?: Pair[];
     body?: string;
   };
+  delay_ms?: number;
 }
 export interface RequestNetwork {
   http_mode: "http1" | "auto" | "http2_prior_knowledge";

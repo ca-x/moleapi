@@ -66,6 +66,11 @@ pub struct Example {
     pub mock_script: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mock_match: Option<MockMatch>,
+    #[serde(default, skip_serializing_if = "is_zero_delay")]
+    pub delay_ms: u64,
+}
+fn is_zero_delay(value: &u64) -> bool {
+    *value == 0
 }
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "lowercase")]

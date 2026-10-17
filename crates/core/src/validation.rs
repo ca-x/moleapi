@@ -351,6 +351,10 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
     }
     for example in &r.examples {
         ensure!(
+            example.delay_ms <= 30_000,
+            "Mock delay must be at most 30000 ms"
+        );
+        ensure!(
             (200..=599).contains(&example.status),
             "Example status must be 200–599"
         );

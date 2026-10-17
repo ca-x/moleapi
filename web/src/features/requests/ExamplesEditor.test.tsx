@@ -79,3 +79,18 @@ it("does not advertise nested URL templates as routed Mock paths",async()=>{
   expect(screen.getByText(/single \{name\} segment/)).toBeTruthy();
   expect(screen.queryByText(/\/api\/mocks\/w\/v1/)).toBeNull();
 });
+
+it("edits and reloads a bounded saved Mock delay in both languages",async()=>{
+  await setLanguage("en");
+  const request=newRequest("R","https://example.test/items");
+  request.examples=[{id:"e",name:"Example",status:200,headers:[],body:"static"}];
+  const update=vi.fn();
+  const page=render(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
+  fireEvent.change(screen.getByRole("spinbutton",{name:"Mock delay (ms)"}),{target:{value:"120"}});
+  expect(update.mock.lastCall?.[0].examples[0].delay_ms).toBe(120);
+  request.examples=[{...request.examples[0],delay_ms:120}];
+  page.rerender(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
+  expect(screen.getByRole("spinbutton",{name:"Mock delay (ms)"})).toHaveProperty("value","120");
+  await setLanguage("zh-CN");
+  expect(screen.getByRole("spinbutton",{name:"Mock 延迟（毫秒）"})).toBeTruthy();
+});

@@ -579,3 +579,145 @@ async fn routed_mock_rejects_nested_template_segments_and_large_uri_components()
         StatusCode::BAD_REQUEST
     );
 }
+
+#[tokio::test]
+async fn saved_mock_delay_applies_after_static_or_dynamic_response_construction_and_is_logged() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("delay.db")).await.unwrap();
+    let mut data = example_data();
+    data["script_mode"] = json!("v2");
+    data["collections"][0]["requests"][0]["url"] = json!("https://example.test/items");
+    data["collections"][0]["requests"][0]["examples"][0]["delay_ms"] = json!(120);
+    let (status, saved) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"w","name":"W","data":data.clone()})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    let started = std::time::Instant::now();
+    let (status, response) = call(&router, "GET", "/api/mock/w/r/e", None, None).await;
+    assert_eq!(status, StatusCode::CREATED, "{response}");
+    assert!(started.elapsed() >= std::time::Duration::from_millis(100));
+    let (_, logs) = call(&router, "GET", "/api/workspaces/w/mock-calls", None, None).await;
+    assert!(logs[0]["elapsed_ms"].as_u64().unwrap() >= 100);
+    data["collections"][0]["requests"][0]["examples"][0]["mock_script"] =
+        json!("pm.mock.setBody('dynamic')");
+    assert_eq!(
+        call(
+            &router,
+            "PUT",
+            "/api/workspaces/w",
+            None,
+            Some(json!({"name":"W","expected_revision":saved["revision"],"data":data}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let started = std::time::Instant::now();
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/mocks/w/items")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    assert_eq!(
+        to_bytes(response.into_body(), 100).await.unwrap().as_ref(),
+        b"dynamic"
+    );
+    assert!(started.elapsed() >= std::time::Duration::from_millis(100));
+}
+
+#[tokio::test]
+async fn delayed_mock_admission_is_bounded() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("delay-capacity.db")).await.unwrap();
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["examples"][0]["delay_ms"] = json!(2_000);
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            None,
+            Some(json!({"id":"w","name":"W","data":data}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let mut calls = tokio::task::JoinSet::new();
+    for _ in 0..48 {
+        let router = router.clone();
+        calls.spawn(async move { call(&router, "GET", "/api/mock/w/r/e", None, None).await.0 });
+    }
+    let mut served = 0;
+    let mut limited = 0;
+    while let Some(result) = calls.join_next().await {
+        match result.unwrap() {
+            StatusCode::CREATED => served += 1,
+            StatusCode::TOO_MANY_REQUESTS => limited += 1,
+            other => panic!("unexpected Mock delay status: {other}"),
+        }
+    }
+    assert!(served <= 32, "served {served} delayed requests");
+    assert!(limited >= 16, "limited only {limited} delayed requests");
+    let (status, logs) = call(&router, "GET", "/api/workspaces/w/mock-calls", None, None).await;
+    assert_eq!(status, StatusCode::OK, "{logs}");
+    assert_eq!(logs.as_array().unwrap().len(), 48);
+    assert_eq!(
+        logs.as_array()
+            .unwrap()
+            .iter()
+            .filter(|row| row["response_status"] == 429)
+            .count(),
+        limited
+    );
+}
+
+#[tokio::test]
+async fn edited_workspace_cannot_serve_a_delayed_static_mock() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("delay-revision.db")).await.unwrap();
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["examples"][0]["delay_ms"] = json!(800);
+    let (status, saved) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"w","name":"W","data":data.clone()})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    let running_router = router.clone();
+    let running =
+        tokio::spawn(
+            async move { call(&running_router, "GET", "/api/mock/w/r/e", None, None).await },
+        );
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    data["collections"][0]["requests"][0]["examples"][0]["body"] = json!("updated");
+    assert_eq!(
+        call(
+            &router,
+            "PUT",
+            "/api/workspaces/w",
+            None,
+            Some(json!({"name":"W","expected_revision":saved["revision"],"data":data}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let (status, body) = running.await.unwrap();
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert!(!body.to_string().contains("example body"));
+}
