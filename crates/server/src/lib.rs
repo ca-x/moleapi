@@ -5,6 +5,7 @@ mod ci;
 mod cookies;
 mod credential_revocations;
 mod data_datasets;
+mod doc_publications;
 mod dubbo;
 mod entities;
 mod execution;
@@ -659,6 +660,7 @@ async fn build(
         protected.route_layer(middleware::from_fn_with_state(state.clone(), auth::guard));
     let api = protected
         .merge(mock_public::routes())
+        .route("/public/docs/{id}", get(doc_publications::public_get))
         .route(
             "/health",
             get(|| async {
@@ -683,8 +685,10 @@ async fn build(
         .merge(oauth1::callbacks::router())
         .merge(receiver)
         .nest("/api", api)
-        .layer(DefaultBodyLimit::max(25 * 1024 * 1024))
-        .with_state(state);
+        .layer(DefaultBodyLimit::max(25 * 1024 * 1024));
+    #[cfg(feature = "web")]
+    let router = router.route("/docs/{id}", get(public_doc_page));
+    let router = router.with_state(state);
     #[cfg(feature = "web")]
     let router = if !local {
         router.fallback(static_asset)
@@ -709,6 +713,8 @@ async fn static_asset(uri: axum::http::Uri, method: axum::http::Method) -> Respo
     if method != axum::http::Method::GET && method != axum::http::Method::HEAD
         || uri.path() == "/api"
         || uri.path().starts_with("/api/")
+        || uri.path() == "/docs"
+        || uri.path().starts_with("/docs/")
     {
         return ApiError::not_found().into_response();
     }
@@ -726,6 +732,40 @@ async fn static_asset(uri: axum::http::Uri, method: axum::http::Method) -> Respo
         return ApiError::not_found().into_response();
     };
     ([("content-type", mime)], file.data.into_owned()).into_response()
+}
+#[cfg(feature = "web")]
+async fn public_doc_page(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Response {
+    if let Err(error) = doc_publications::read_snapshot(&state, &id).await {
+        return error.into_response();
+    }
+    let Some(file) = Assets::get("index.html") else {
+        return ApiError::not_found().into_response();
+    };
+    let mut response = (
+        [("content-type", "text/html; charset=utf-8")],
+        file.data.into_owned(),
+    )
+        .into_response();
+    use axum::http::{HeaderValue, header};
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response.headers_mut().insert(
+        header::REFERRER_POLICY,
+        HeaderValue::from_static("no-referrer"),
+    );
+    response.headers_mut().insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    response.headers_mut().insert(
+        header::CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'"),
+    );
+    response
 }
 
 async fn json_errors(request: axum::extract::Request, next: middleware::Next) -> Response {
