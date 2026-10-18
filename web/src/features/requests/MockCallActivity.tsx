@@ -52,7 +52,7 @@ export default function MockCallActivity({workspaceId,requestId}:{workspaceId:st
     {calls===null&&!currentError&&<Text size="1" color="gray">{t("正在读取日志…")}</Text>}
     {calls?.length===0&&<Text size="1" color="gray">{t("暂无 Mock 调用")}</Text>}
     {calls&&calls.length>0&&<ul className="mock-call-list">{calls.map(call=><li key={call.id}>
-      <Text size="1">{call.method} · {call.response_status} · {call.outcome==="served"?t("已响应"):call.outcome==="unmatched"?t("未匹配"):call.outcome==="simulated_failure"?t("模拟故障"):t("失败")} · {call.elapsed_ms} ms</Text>
+      <Text size="1">{call.method} · {call.response_status} · {call.outcome==="served"?t("已响应"):call.outcome==="unmatched"?t("未匹配"):call.outcome==="simulated_failure"?t("模拟故障"):call.outcome==="rate_limited"?t("已限流"):t("失败")} · {call.elapsed_ms} ms</Text>
       <Text size="1" color="gray">{call.example_id??"—"} · {new Date(call.at).toLocaleString()}</Text>
     </li>)}</ul>}
   </section>;

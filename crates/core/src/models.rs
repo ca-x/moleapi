@@ -81,6 +81,8 @@ pub struct Example {
         skip_serializing_if = "is_default_fault_status"
     )]
     pub fault_status: u16,
+    #[serde(default, skip_serializing_if = "is_zero_rate_limit")]
+    pub rate_limit_per_minute: u16,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MockSchemaLink {
@@ -91,6 +93,9 @@ fn is_zero_delay(value: &u64) -> bool {
     *value == 0
 }
 fn is_zero_rate(value: &u8) -> bool {
+    *value == 0
+}
+fn is_zero_rate_limit(value: &u16) -> bool {
     *value == 0
 }
 fn default_fault_status() -> u16 {

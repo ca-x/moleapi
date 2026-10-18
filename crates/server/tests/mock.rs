@@ -96,6 +96,235 @@ async fn selected_mock_fault_rate_changes_direct_and_routed_wire_and_logs() {
 }
 
 #[tokio::test]
+async fn selected_mock_rate_limit_applies_before_fault_and_delay_and_resets_on_save() {
+    use sea_orm::{ConnectionTrait, Database, Statement};
+    let dir = tempfile::tempdir().unwrap();
+    let database_path = dir.path().join("rate.db");
+    let router = local(&database_path).await.unwrap();
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["url"] = json!("https://example.test/items");
+    let example = &mut data["collections"][0]["requests"][0]["examples"][0];
+    example["rate_limit_per_minute"] = json!(2);
+    example["fault_rate_percent"] = json!(100);
+    example["fault_status"] = json!(502);
+    example["delay_ms"] = json!(100);
+    let (status, saved) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"w","name":"Rate","data":data.clone()})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    for path in ["/api/mock/w/r/e", "/api/mocks/w/items"] {
+        assert_eq!(
+            call(&router, "GET", path, None, None).await.0,
+            StatusCode::BAD_GATEWAY
+        );
+    }
+    let started = std::time::Instant::now();
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/mock/w/r/e")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert!(started.elapsed() < std::time::Duration::from_millis(80));
+    assert!(
+        response
+            .headers()
+            .get("retry-after")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .parse::<u64>()
+            .unwrap()
+            >= 1
+    );
+    let body = to_bytes(response.into_body(), 128).await.unwrap();
+    assert_eq!(body.as_ref(), b"Simulated Mock rate limit");
+    let (_, logs) = call(&router, "GET", "/api/workspaces/w/mock-calls", None, None).await;
+    assert_eq!(logs[0]["outcome"], "rate_limited");
+    assert_eq!(logs[0]["response_status"], 429);
+    let (status, updated) = call(
+        &router,
+        "PUT",
+        "/api/workspaces/w",
+        None,
+        Some(json!({"name":"Rate","expected_revision":saved["revision"],"data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{updated}");
+    assert_eq!(
+        call(&router, "GET", "/api/mock/w/r/e", None, None).await.0,
+        StatusCode::BAD_GATEWAY
+    );
+    assert_eq!(
+        call(
+            &router,
+            "DELETE",
+            "/api/workspaces/w",
+            None,
+            Some(json!({"expected_revision":updated["revision"]}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let db = Database::connect(moleapi_server::sqlite_database_url(&database_path).unwrap())
+        .await
+        .unwrap();
+    let count = db
+        .query_one(Statement::from_string(
+            sea_orm::DatabaseBackend::Sqlite,
+            "SELECT COUNT(*) AS count FROM documents WHERE kind = 'mock-rate' AND ref_id = 'w'",
+        ))
+        .await
+        .unwrap()
+        .unwrap()
+        .try_get::<i64>("", "count")
+        .unwrap();
+    assert_eq!(count, 0);
+}
+
+#[tokio::test]
+async fn mock_rate_admission_is_shared_across_instances_and_isolated_by_owner() {
+    let dir = tempfile::tempdir().unwrap();
+    let database_url =
+        moleapi_server::sqlite_database_url(&dir.path().join("shared-rate.db")).unwrap();
+    let first = hosted(config(database_url.clone(), true)).await.unwrap();
+    let second = hosted(config(database_url, true)).await.unwrap();
+    let alice = register(&first, "ratealice").await;
+    let bob = register(&second, "ratebob").await;
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["examples"][0]["rate_limit_per_minute"] = json!(1);
+    for (router, token) in [(&first, &alice), (&second, &bob)] {
+        let (status, result) = call(
+            router,
+            "POST",
+            "/api/workspaces",
+            Some(token),
+            Some(json!({"id":"w","name":"Rate","data":data.clone()})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{result}");
+    }
+    let (one, two) = tokio::join!(
+        call(&first, "GET", "/api/mock/w/r/e", Some(&alice), None),
+        call(&second, "GET", "/api/mock/w/r/e", Some(&alice), None)
+    );
+    assert_eq!(
+        [one.0, two.0]
+            .iter()
+            .filter(|status| **status == StatusCode::CREATED)
+            .count(),
+        1
+    );
+    assert_eq!(
+        [one.0, two.0]
+            .iter()
+            .filter(|status| **status == StatusCode::TOO_MANY_REQUESTS)
+            .count(),
+        1
+    );
+    assert_eq!(
+        call(&second, "GET", "/api/mock/w/r/e", Some(&bob), None)
+            .await
+            .0,
+        StatusCode::CREATED
+    );
+}
+
+#[tokio::test]
+async fn corrupt_mock_rate_state_fails_closed_without_saved_response_data() {
+    use sea_orm::{ConnectionTrait, Database};
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("corrupt-rate.db");
+    let router = local(&path).await.unwrap();
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["examples"][0]["rate_limit_per_minute"] = json!(1);
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            None,
+            Some(json!({"id":"w","name":"Rate","data":data}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        call(&router, "GET", "/api/mock/w/r/e", None, None).await.0,
+        StatusCode::CREATED
+    );
+    let db = Database::connect(moleapi_server::sqlite_database_url(&path).unwrap())
+        .await
+        .unwrap();
+    db.execute_unprepared("UPDATE documents SET payload = 'not-json' WHERE kind = 'mock-rate'")
+        .await
+        .unwrap();
+    let (status, body) = call(&router, "GET", "/api/mock/w/r/e", None, None).await;
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert!(!body.to_string().contains("example body"));
+}
+
+#[tokio::test]
+async fn cancelled_admitted_mock_attempt_still_uses_its_rate_quota() {
+    let dir = tempfile::tempdir().unwrap();
+    let slots = std::sync::Arc::new(tokio::sync::Semaphore::new(32));
+    let router = moleapi_server::local_with_mock_delay_slots_for_test(
+        &dir.path().join("cancelled-rate.db"),
+        std::path::Path::new(env!("CARGO_BIN_EXE_moleapi-server")),
+        slots.clone(),
+    )
+    .await
+    .unwrap();
+    let mut data = example_data();
+    let example = &mut data["collections"][0]["requests"][0]["examples"][0];
+    example["rate_limit_per_minute"] = json!(1);
+    example["delay_ms"] = json!(5_000);
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            None,
+            Some(json!({"id":"w","name":"Rate","data":data}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let running = {
+        let router = router.clone();
+        tokio::spawn(async move { call(&router, "GET", "/api/mock/w/r/e", None, None).await })
+    };
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        while slots.available_permits() != 31 {
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("admitted Mock never entered its delay");
+    running.abort();
+    let _ = running.await;
+    let started = std::time::Instant::now();
+    assert_eq!(
+        call(&router, "GET", "/api/mock/w/r/e", None, None).await.0,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    assert!(started.elapsed() < std::time::Duration::from_millis(250));
+}
+
+#[tokio::test]
 async fn saved_schema_generates_direct_and_routed_json_before_optional_script() {
     let dir = tempfile::tempdir().unwrap();
     let router = local(&dir.path().join("schema.db")).await.unwrap();

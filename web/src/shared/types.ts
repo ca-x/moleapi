@@ -122,6 +122,7 @@ export interface Example {
   delay_ms?: number;
   fault_rate_percent?: number;
   fault_status?: number;
+  rate_limit_per_minute?: number;
 }
 export interface RequestNetwork {
   http_mode: "http1" | "auto" | "http2_prior_knowledge";

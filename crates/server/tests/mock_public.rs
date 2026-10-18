@@ -15,6 +15,7 @@ async fn public_mock_fault_returns_fixed_body_and_respects_share_revocation() {
     let example = &mut data["collections"][0]["requests"][0]["examples"][0];
     example["fault_rate_percent"] = json!(100);
     example["fault_status"] = json!(503);
+    example["rate_limit_per_minute"] = json!(1);
     example["body"] = json!("private-public-body");
     let (status, saved) = call(
         &router,
@@ -37,6 +38,9 @@ async fn public_mock_fault_returns_fixed_body_and_respects_share_revocation() {
     let (status, body) = call(&router, "GET", &path, None, None).await;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     assert!(!body.to_string().contains("private-public-body"));
+    let (limited, limited_body) = call(&router, "GET", &path, None, None).await;
+    assert_eq!(limited, StatusCode::TOO_MANY_REQUESTS);
+    assert!(!limited_body.to_string().contains("private-public-body"));
     let (_, logs) = call(
         &router,
         "GET",
@@ -45,7 +49,8 @@ async fn public_mock_fault_returns_fixed_body_and_respects_share_revocation() {
         None,
     )
     .await;
-    assert_eq!(logs[0]["outcome"], "simulated_failure");
+    assert_eq!(logs[0]["outcome"], "rate_limited");
+    assert_eq!(logs[1]["outcome"], "simulated_failure");
     let id = share["id"].as_str().unwrap();
     assert_eq!(
         call(

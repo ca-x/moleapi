@@ -671,6 +671,7 @@ fn import_example(
         delay_ms: 0,
         fault_rate_percent: 0,
         fault_status: 503,
+        rate_limit_per_minute: 0,
         headers: response
             .headers
             .into_iter()
