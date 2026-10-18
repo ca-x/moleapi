@@ -22,6 +22,7 @@ async fn identical_storage_auth_cas_tests_on_every_configured_database() {
         }
     }
     for url in urls {
+        let backend = url.split("://").next().unwrap_or("unknown").to_owned();
         let router = common::hosted(config(url.clone(), true)).await.unwrap();
         if call(&router, "GET", "/api/auth/status", None, None).await.1["setup_required"] == true {
             let closed = common::hosted(config(url.clone(), false)).await.unwrap();
@@ -358,7 +359,7 @@ async fn identical_storage_auth_cas_tests_on_every_configured_database() {
             .0,
             StatusCode::NOT_FOUND
         );
-        verify_workspace_restore(&router, &router_again, &a, &b, &prefix).await;
+        verify_workspace_restore(&router, &router_again, &a, &b, &prefix, &backend).await;
         let rate_id = format!("rate-{prefix}");
         let mut rate_data = example_data();
         rate_data["collections"][0]["requests"][0]["examples"][0]["rate_limit_per_minute"] =
@@ -815,6 +816,7 @@ async fn verify_workspace_restore(
     owner: &str,
     foreign: &str,
     suffix: &str,
+    backend: &str,
 ) {
     let id = format!("restore-{suffix}");
     let path = format!("/api/workspaces/{id}");
@@ -924,7 +926,7 @@ async fn verify_workspace_restore(
     assert!(
         (first.0 == StatusCode::OK && second.0 == StatusCode::CONFLICT)
             || (second.0 == StatusCode::OK && first.0 == StatusCode::CONFLICT),
-        "{first:?} {second:?}"
+        "{backend}: {first:?} {second:?}"
     );
     let (status, latest) = call(other_instance, "GET", &path, Some(owner), None).await;
     assert_eq!(status, StatusCode::OK, "{latest}");
