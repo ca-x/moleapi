@@ -1,4 +1,7 @@
 {
+  "搜索公开文档": "Search published docs",
+  "找到 {{value0}} 篇公开文档。": "Found {{value0}} published documents.",
+  "没有匹配的公开文档。": "No published documents match your search.",
   "文档发布": "Publish documents",
   "已撤销": "Revoked",
   "只发布明确选中的非私密 Markdown。公开版本固定不变，可随时撤销。": "Publish only the nonprivate Markdown documents you select. Each public version stays fixed and can be revoked.",

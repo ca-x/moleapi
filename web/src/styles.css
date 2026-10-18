@@ -55,7 +55,9 @@ a:focus-visible {
   padding: clamp(20px, 3vw, 48px);
 }
 .published-docs-header {padding-bottom: 24px;border-bottom: 1px solid var(--gray-5);}
+.published-docs-header-top {display: flex;align-items: center;justify-content: space-between;gap: 12px;min-height: 44px;}
 .published-docs-header h1 {overflow-wrap: anywhere;}
+.published-docs-search {display: flex;flex-direction: column;gap: 8px;max-width: 520px;padding-top: 22px;}
 .published-docs-layout {display: grid;grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);gap: clamp(24px, 4vw, 64px);padding-top: 28px;}
 .published-docs-nav {display: flex;flex-direction: column;align-items: stretch;gap: 4px;min-width: 0;}
 .published-docs-nav button {height: auto;min-height: 44px;justify-content: flex-start;text-align: left;white-space: normal;padding: 10px 12px;}
