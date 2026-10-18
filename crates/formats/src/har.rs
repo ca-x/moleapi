@@ -664,10 +664,14 @@ fn import_example(
         name: format!("HAR {status}"),
         status: status as u16,
         mock_schema: String::new(),
+        mock_name_inference: false,
         mock_schema_link: None,
         mock_script: String::new(),
         mock_match: None,
         delay_ms: 0,
+        fault_rate_percent: 0,
+        fault_status: 503,
+        rate_limit_per_minute: 0,
         headers: response
             .headers
             .into_iter()

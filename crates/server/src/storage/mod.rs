@@ -119,6 +119,7 @@ pub async fn replace_in<C: ConnectionTrait>(
         return Ok(None);
     }
     crate::mock_public::revoke_removed_requests(tx, owner, &previous, &next).await?;
+    crate::mock_rate::clear_workspace(tx, owner, &next.id).await?;
     insert_doc(
         tx,
         uuid::Uuid::new_v4().to_string(),

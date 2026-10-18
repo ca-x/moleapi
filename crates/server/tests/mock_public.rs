@@ -2,6 +2,185 @@ mod common;
 use common::*;
 
 #[tokio::test]
+async fn public_mock_fault_returns_fixed_body_and_respects_share_revocation() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = hosted(config(
+        moleapi_server::sqlite_database_url(&dir.path().join("fault-share.db")).unwrap(),
+        true,
+    ))
+    .await
+    .unwrap();
+    let owner = register(&router, "faultshareowner").await;
+    let mut data = example_data();
+    let example = &mut data["collections"][0]["requests"][0]["examples"][0];
+    example["fault_rate_percent"] = json!(100);
+    example["fault_status"] = json!(503);
+    example["rate_limit_per_minute"] = json!(1);
+    example["body"] = json!("private-public-body");
+    let (status, saved) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        Some(&owner),
+        Some(json!({"id":"w","name":"W","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    let (_, share) = call(
+        &router,
+        "POST",
+        "/api/workspaces/w/mock-shares",
+        Some(&owner),
+        Some(json!({"request_id":"r","expires_in_days":1})),
+    )
+    .await;
+    let path = format!("/api/public/mock/{}/e", share["token"].as_str().unwrap());
+    let (status, body) = call(&router, "GET", &path, None, None).await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert!(!body.to_string().contains("private-public-body"));
+    let (limited, limited_body) = call(&router, "GET", &path, None, None).await;
+    assert_eq!(limited, StatusCode::TOO_MANY_REQUESTS);
+    assert!(!limited_body.to_string().contains("private-public-body"));
+    let (_, logs) = call(
+        &router,
+        "GET",
+        "/api/workspaces/w/mock-calls",
+        Some(&owner),
+        None,
+    )
+    .await;
+    assert_eq!(logs[0]["outcome"], "rate_limited");
+    assert_eq!(logs[1]["outcome"], "simulated_failure");
+    let id = share["id"].as_str().unwrap();
+    assert_eq!(
+        call(
+            &router,
+            "DELETE",
+            &format!("/api/workspaces/w/mock-shares/{id}"),
+            Some(&owner),
+            None
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        call(&router, "GET", &path, None, None).await.0,
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[tokio::test]
+async fn public_mock_uses_saved_name_inference_without_exposing_schema_settings() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = hosted(config(
+        moleapi_server::sqlite_database_url(&dir.path().join("named-share.db")).unwrap(),
+        true,
+    ))
+    .await
+    .unwrap();
+    let owner = register(&router, "namedshareowner").await;
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["examples"][0]["mock_schema"] =
+        json!(r#"{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}"#);
+    data["collections"][0]["requests"][0]["examples"][0]["mock_name_inference"] = json!(true);
+    let (status, body) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        Some(&owner),
+        Some(json!({"id":"w","name":"W","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, share) = call(
+        &router,
+        "POST",
+        "/api/workspaces/w/mock-shares",
+        Some(&owner),
+        Some(json!({"request_id":"r","expires_in_days":1})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{share}");
+    let path = format!("/api/public/mock/{}/e", share["token"].as_str().unwrap());
+    assert_eq!(
+        call(&router, "GET", &path, None, None).await,
+        (StatusCode::CREATED, json!({"name":"Ada Lovelace"}))
+    );
+    let (_, mut saved) = call(&router, "GET", "/api/workspaces/w", Some(&owner), None).await;
+    saved["data"]["collections"][0]["requests"][0]["examples"][0]["mock_name_inference"] =
+        json!(false);
+    let (status, body) = call(
+        &router,
+        "PUT",
+        "/api/workspaces/w",
+        Some(&owner),
+        Some(json!({"name":"W","expected_revision":saved["revision"],"data":saved["data"]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        call(&router, "GET", &path, None, None).await.0,
+        StatusCode::NOT_FOUND
+    );
+    let (_, rotated) = call(
+        &router,
+        "POST",
+        &format!(
+            "/api/workspaces/w/mock-shares/{}/rotate",
+            share["id"].as_str().unwrap()
+        ),
+        Some(&owner),
+        None,
+    )
+    .await;
+    let next_path = format!("/api/public/mock/{}/e", rotated["token"].as_str().unwrap());
+    assert_eq!(
+        call(&router, "GET", &next_path, None, None).await,
+        (StatusCode::CREATED, json!({"name":""}))
+    );
+}
+
+#[tokio::test]
+async fn public_composed_mock_uses_bounded_schema_generation() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = hosted(config(
+        moleapi_server::sqlite_database_url(&dir.path().join("composed-share.db")).unwrap(),
+        true,
+    ))
+    .await
+    .unwrap();
+    let owner = register(&router, "composedshareowner").await;
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["examples"][0]["mock_schema"] = json!(
+        r#"{"anyOf":[{"type":"string","minLength":2,"maxLength":1},{"type":"object","properties":{"ok":{"type":"boolean","const":true}},"required":["ok"]}]}"#
+    );
+    let (status, body) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        Some(&owner),
+        Some(json!({"id":"w","name":"W","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, share) = call(
+        &router,
+        "POST",
+        "/api/workspaces/w/mock-shares",
+        Some(&owner),
+        Some(json!({"request_id":"r","expires_in_days":1})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{share}");
+    let path = format!("/api/public/mock/{}/e", share["token"].as_str().unwrap());
+    assert_eq!(
+        call(&router, "GET", &path, None, None).await,
+        (StatusCode::CREATED, json!({"ok":true}))
+    );
+}
+
+#[tokio::test]
 async fn linked_openapi_source_edit_stales_public_mock_until_rotation() {
     let dir = tempfile::tempdir().unwrap();
     let router = hosted(config(
@@ -12,7 +191,7 @@ async fn linked_openapi_source_edit_stales_public_mock_until_rotation() {
     .unwrap();
     let owner = register(&router, "linkedsharealice").await;
     let source = |id: u64| {
-        json!({"openapi":"3.1.0","paths":{"/items":{"get":{"responses":{"201":{"content":{"application/json":{"schema":{"type":"object","properties":{"id":{"const":id}},"required":["id"]}}}}}}}}}).to_string()
+        json!({"openapi":"3.1.0","paths":{"/items":{"get":{"responses":{"201":{"content":{"application/json":{"schema":{"allOf":[{"type":"object","properties":{"id":{"const":id}},"required":["id"]},{"type":"object","properties":{"name":{"const":"Ada"}},"required":["name"]}]}}}}}}}}}).to_string()
     };
     let mut data = example_data();
     data["collections"][0]["requests"][0]["specification_id"] = json!("spec");
@@ -42,7 +221,7 @@ async fn linked_openapi_source_edit_stales_public_mock_until_rotation() {
     let old = format!("/api/public/mock/{}/e", share["token"].as_str().unwrap());
     assert_eq!(
         call(&router, "GET", &old, None, None).await,
-        (StatusCode::CREATED, json!({"id":1}))
+        (StatusCode::CREATED, json!({"id":1,"name":"Ada"}))
     );
     let (_, mut saved) = call(&router, "GET", "/api/workspaces/w", Some(&owner), None).await;
     saved["data"]["specifications"][0]["source"] = json!(source(2));
@@ -73,7 +252,7 @@ async fn linked_openapi_source_edit_stales_public_mock_until_rotation() {
     let new = format!("/api/public/mock/{}/e", rotated["token"].as_str().unwrap());
     assert_eq!(
         call(&router, "GET", &new, None, None).await,
-        (StatusCode::CREATED, json!({"id":2}))
+        (StatusCode::CREATED, json!({"id":2,"name":"Ada"}))
     );
 }
 

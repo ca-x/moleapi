@@ -111,6 +111,7 @@ export interface Example {
   body: string;
   mock_schema?: string;
   mock_schema_link?: { specification_id: string; pointer: string };
+  mock_name_inference?: boolean;
   mock_script?: string;
   mock_match?: {
     priority: number;
@@ -119,6 +120,9 @@ export interface Example {
     body?: string;
   };
   delay_ms?: number;
+  fault_rate_percent?: number;
+  fault_status?: number;
+  rate_limit_per_minute?: number;
 }
 export interface RequestNetwork {
   http_mode: "http1" | "auto" | "http2_prior_knowledge";

@@ -66,12 +66,23 @@ pub struct Example {
     pub mock_schema_link: Option<MockSchemaLink>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub mock_schema: String,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub mock_name_inference: bool,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub mock_script: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mock_match: Option<MockMatch>,
     #[serde(default, skip_serializing_if = "is_zero_delay")]
     pub delay_ms: u64,
+    #[serde(default, skip_serializing_if = "is_zero_rate")]
+    pub fault_rate_percent: u8,
+    #[serde(
+        default = "default_fault_status",
+        skip_serializing_if = "is_default_fault_status"
+    )]
+    pub fault_status: u16,
+    #[serde(default, skip_serializing_if = "is_zero_rate_limit")]
+    pub rate_limit_per_minute: u16,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MockSchemaLink {
@@ -80,6 +91,21 @@ pub struct MockSchemaLink {
 }
 fn is_zero_delay(value: &u64) -> bool {
     *value == 0
+}
+fn is_zero_rate(value: &u8) -> bool {
+    *value == 0
+}
+fn is_zero_rate_limit(value: &u16) -> bool {
+    *value == 0
+}
+fn default_fault_status() -> u16 {
+    503
+}
+fn is_default_fault_status(value: &u16) -> bool {
+    *value == default_fault_status()
+}
+fn is_false(value: &bool) -> bool {
+    !value
 }
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "lowercase")]

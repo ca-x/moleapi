@@ -355,13 +355,35 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
             "Mock delay must be at most 30000 ms"
         );
         ensure!(
+            example.fault_rate_percent <= 100,
+            "Mock fault rate must be at most 100 percent"
+        );
+        ensure!(
+            (500..=599).contains(&example.fault_status),
+            "Mock fault status must be 500–599"
+        );
+        ensure!(
+            example.rate_limit_per_minute <= 1_000,
+            "Mock rate limit must be at most 1000 requests per minute"
+        );
+        ensure!(
             (200..=599).contains(&example.status),
             "Example status must be 200–599"
         );
         ensure!(example.body.len() <= MAX_BODY, "Example body exceeds 5 MiB");
         if !example.mock_schema.is_empty() {
-            crate::validate_mock_schema(&example.mock_schema)?;
+            if example.mock_name_inference {
+                crate::generate_mock_schema_with_names(&example.mock_schema)?;
+            } else {
+                crate::validate_mock_schema(&example.mock_schema)?;
+            }
         }
+        ensure!(
+            !example.mock_name_inference
+                || !example.mock_schema.is_empty()
+                || example.mock_schema_link.is_some(),
+            "Mock name inference requires a schema"
+        );
         ensure!(
             example.mock_schema.is_empty() || example.mock_schema_link.is_none(),
             "Inline and linked Mock schemas are mutually exclusive"
@@ -481,6 +503,7 @@ pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
     }
     let mut linked_indexes: HashMap<&str, OpenapiMockIndex> = HashMap::new();
     let mut linked_responses: HashMap<(&str, &str), OpenapiMockResponse> = HashMap::new();
+    let mut linked_name_checked: HashSet<(&str, &str)> = HashSet::new();
     let mut linked_examples = 0usize;
     let mut collections = HashSet::new();
     let mut requests = HashSet::new();
@@ -567,6 +590,11 @@ pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
                                 .eq_ignore_ascii_case(media)),
                         "Linked Mock Content-Type differs from selected response media"
                     );
+                    if e.mock_name_inference
+                        && linked_name_checked.insert((spec.id.as_str(), link.pointer.as_str()))
+                    {
+                        crate::generate_mock_schema_with_names(&selected.schema)?;
+                    }
                 }
                 ensure!(
                     e.mock_script.is_empty() || data.script_mode == crate::ScriptMode::V2,

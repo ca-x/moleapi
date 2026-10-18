@@ -70,7 +70,9 @@ mod variables;
 pub use assertions::*;
 pub use interpolation::{resolve_grpc_source, resolve_mqtt_source, resolve_request, resolve_value};
 pub use mock_openapi_schema::{OpenapiMockIndex, OpenapiMockResponse};
-pub use mock_schema::{generate_mock_schema, validate_mock_schema};
+pub use mock_schema::{
+    generate_mock_schema, generate_mock_schema_with_names, validate_mock_schema,
+};
 pub use models::*;
 pub use policy::*;
 pub use redaction::*;

@@ -63,6 +63,24 @@ it("keeps the static body while editing an explicit Mock JSON Schema",async()=>{
   expect(screen.getByRole("button",{name:"编辑 Mock JSON Schema"})).toBeTruthy();
 });
 
+it("shows name inference only for a selected Schema and clears it with the source",async()=>{
+  await setLanguage("en");
+  const request=newRequest("R","https://example.test/items");
+  request.examples=[{id:"e",name:"Example",status:200,headers:[],body:"static"}];
+  const update=vi.fn();
+  const page=render(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
+  expect(screen.queryByRole("checkbox",{name:"Use field names for Mock values"})).toBeNull();
+  request.examples=[{...request.examples[0],mock_schema:'{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}'}];
+  page.rerender(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
+  fireEvent.click(screen.getByRole("checkbox",{name:"Use field names for Mock values"}));
+  expect(update.mock.lastCall?.[0].examples[0]).toMatchObject({mock_name_inference:true,body:"static"});
+  request.examples=[update.mock.lastCall?.[0].examples[0]];
+  page.rerender(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
+  fireEvent.click(screen.getByRole("checkbox",{name:"Generate Mock body from JSON Schema"}));
+  expect(update.mock.lastCall?.[0].examples[0]).toMatchObject({body:"static"});
+  expect(update.mock.lastCall?.[0].examples[0].mock_name_inference).toBeFalsy();
+});
+
 it("selects a saved OpenAPI response without an operationId and keeps the static body",async()=>{
   vi.stubGlobal("ResizeObserver",class {observe(){} unobserve(){} disconnect(){}});
   HTMLElement.prototype.scrollIntoView=()=>{};
@@ -206,4 +224,42 @@ it("edits and reloads a bounded saved Mock delay in both languages",async()=>{
   expect(screen.getByRole("spinbutton",{name:"Mock delay (ms)"})).toHaveProperty("value","120");
   await setLanguage("zh-CN");
   expect(screen.getByRole("spinbutton",{name:"Mock 延迟（毫秒）"})).toBeTruthy();
+});
+
+it("edits and reloads bounded Mock fault controls in both languages",async()=>{
+  await setLanguage("en");
+  const request=newRequest("R","https://example.test/items");
+  request.examples=[{id:"e",name:"Example",status:200,headers:[],body:"static"}];
+  const update=vi.fn();
+  const page=render(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
+  expect(screen.getByRole("spinbutton",{name:"Failure status (5xx)"})).toHaveProperty("value","503");
+  fireEvent.change(screen.getByRole("spinbutton",{name:"Failure rate (%)"}),{target:{value:"120"}});
+  expect(update.mock.lastCall?.[0].examples[0].fault_rate_percent).toBe(100);
+  request.examples=[{...request.examples[0],fault_rate_percent:100,fault_status:503}];
+  page.rerender(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
+  fireEvent.change(screen.getByRole("spinbutton",{name:"Failure status (5xx)"}),{target:{value:"502"}});
+  expect(update.mock.lastCall?.[0].examples[0].fault_status).toBe(502);
+  request.examples=[{...request.examples[0],fault_rate_percent:0,fault_status:502}];
+  page.rerender(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
+  expect(screen.getByRole("spinbutton",{name:"Failure status (5xx)"})).toHaveProperty("value","502");
+  await setLanguage("zh-CN");
+  expect(screen.getByRole("spinbutton",{name:"故障比例（%）"})).toBeTruthy();
+  expect(screen.getByRole("spinbutton",{name:"故障状态码（5xx）"})).toBeTruthy();
+});
+
+it("edits and reloads the per-minute Mock limit in both languages",async()=>{
+  await setLanguage("en");
+  const request=newRequest("R","https://example.test/items");
+  request.examples=[{id:"e",name:"Example",status:200,headers:[],body:"static"}];
+  const update=vi.fn();
+  const page=render(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
+  const control=()=>screen.getByRole("spinbutton",{name:"Request limit per minute"});
+  expect(control()).toHaveProperty("value","0");
+  fireEvent.change(control(),{target:{value:"1200"}});
+  expect(update.mock.lastCall?.[0].examples[0].rate_limit_per_minute).toBe(1000);
+  request.examples=[{...request.examples[0],rate_limit_per_minute:2}];
+  page.rerender(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
+  expect(control()).toHaveProperty("value","2");
+  await setLanguage("zh-CN");
+  expect(screen.getByRole("spinbutton",{name:"每分钟请求上限"})).toBeTruthy();
 });
