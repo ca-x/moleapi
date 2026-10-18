@@ -20,6 +20,14 @@ export default function DocumentsPage() {
   useEffect(()=>{setSelectedId("");setMode("preview");setSection("markdown");},[accountId,draft?.id]);
   if(!draft)return null;
   const documents=draft.data.documents??[];
+  const requestIds=new Set(draft.data.collections.flatMap(collection=>collection.requests.map(request=>request.id)));
+  const openRequest=(requestId:string)=>{
+    const latest=state.stateRef.current.draft;
+    if(state.accountRef.current!==accountId||latest?.id!==draft.id||!latest.data.collections.some(collection=>collection.requests.some(request=>request.id===requestId)))return;
+    state.setRequestId(requestId);
+    state.setView("requests");
+    state.setSidebar(false);
+  };
   const current=documents.find(document=>document.id===selectedId)??documents[0];
   const selected=current?.id;
   const updateDocument=(patch:Partial<MarkdownDocument>)=>{
@@ -68,12 +76,12 @@ export default function DocumentsPage() {
         <Tabs.Root value={mode} onValueChange={setMode}>
           <Tabs.List><Tabs.Trigger value="edit">{t("编辑")}</Tabs.Trigger><Tabs.Trigger value="preview">{t("预览")}</Tabs.Trigger></Tabs.List>
           <Tabs.Content value="edit"><Editor label={t("Markdown 正文")} value={current.source} onChange={source=>updateDocument({source})} dark={dark} language="markdown" height="420px"/></Tabs.Content>
-          <Tabs.Content value="preview"><MarkdownPreview source={current.source}/></Tabs.Content>
+          <Tabs.Content value="preview"><MarkdownPreview source={current.source} requestIds={requestIds} onOpenRequest={openRequest}/></Tabs.Content>
         </Tabs.Root>
       </Card>:<Card className="document-editor-card"><Text color="gray">{t("选择文档，或新建一篇说明。")}</Text></Card>}
     </div>
       </Tabs.Content>
-      <Tabs.Content value="api"><ApiReference data={draft.data} scopeKey={`${accountId}/${draft.id}`}/></Tabs.Content>
+      <Tabs.Content value="api"><ApiReference data={draft.data} scopeKey={`${accountId}/${draft.id}`} onOpenRequest={openRequest}/></Tabs.Content>
     </Tabs.Root>
   </div>;
 }
