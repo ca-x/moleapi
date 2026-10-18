@@ -232,12 +232,16 @@ it("edits and reloads bounded Mock fault controls in both languages",async()=>{
   request.examples=[{id:"e",name:"Example",status:200,headers:[],body:"static"}];
   const update=vi.fn();
   const page=render(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
+  expect(screen.getByRole("spinbutton",{name:"Failure status (5xx)"})).toHaveProperty("value","503");
   fireEvent.change(screen.getByRole("spinbutton",{name:"Failure rate (%)"}),{target:{value:"120"}});
   expect(update.mock.lastCall?.[0].examples[0].fault_rate_percent).toBe(100);
   request.examples=[{...request.examples[0],fault_rate_percent:100,fault_status:503}];
   page.rerender(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
   fireEvent.change(screen.getByRole("spinbutton",{name:"Failure status (5xx)"}),{target:{value:"502"}});
   expect(update.mock.lastCall?.[0].examples[0].fault_status).toBe(502);
+  request.examples=[{...request.examples[0],fault_rate_percent:0,fault_status:502}];
+  page.rerender(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
+  expect(screen.getByRole("spinbutton",{name:"Failure status (5xx)"})).toHaveProperty("value","502");
   await setLanguage("zh-CN");
   expect(screen.getByRole("spinbutton",{name:"故障比例（%）"})).toBeTruthy();
   expect(screen.getByRole("spinbutton",{name:"故障状态码（5xx）"})).toBeTruthy();

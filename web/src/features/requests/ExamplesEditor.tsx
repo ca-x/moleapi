@@ -144,12 +144,12 @@ export default function ExamplesEditor({
               if(Number.isFinite(value))patchExample(example.id,{fault_rate_percent:Math.min(100,Math.max(0,Math.round(value)))});
             }}/>
           </Field>
-          {(example.fault_rate_percent??0)>0 && <Field label={t("故障状态码（5xx）")} hint={t("仅用于模拟故障；响应正文固定且不包含保存的示例数据。")}>
+          <Field label={t("故障状态码（5xx）")} hint={t("仅用于模拟故障；响应正文固定且不包含保存的示例数据。")}>
             <TextField.Root type="number" min="500" max="599" step="1" value={example.fault_status??503} onChange={event=>{
               const value=Number(event.target.value);
               if(Number.isFinite(value))patchExample(example.id,{fault_status:Math.min(599,Math.max(500,Math.round(value)))});
             }}/>
-          </Field>}
+          </Field>
           <Editor value={example.body} readOnly dark={dark} height="150px" />
           {linkedSpec ? <Field label={t("Mock 正文来源")} hint={t("来源规范：{{name}}",{name:linkedSpec.name})}>
             <Select.Root value={example.mock_schema_link?(validLink(example)?example.mock_schema_link.pointer:"stale"):(example.mock_schema?"inline":"static")} onValueChange={value=>{
