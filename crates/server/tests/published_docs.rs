@@ -76,6 +76,11 @@ async fn publication_is_explicit_immutable_owned_and_revocable() {
     assert_eq!(id.len(), 32);
     assert_eq!(publication["public_url"], format!("/docs/{id}"));
     let public_path = format!("/api/public/docs/{id}");
+    let html_path = format!("/docs/{id}");
+    assert_eq!(
+        call(&router, "GET", &html_path, None, None).await.0,
+        StatusCode::OK
+    );
     let (status, snapshot) = call(&router, "GET", &public_path, None, None).await;
     assert_eq!(status, StatusCode::OK, "{snapshot}");
     assert_eq!(snapshot["title"], "Reference");
@@ -159,6 +164,10 @@ async fn publication_is_explicit_immutable_owned_and_revocable() {
     );
     assert_eq!(
         call(&router, "GET", &public_path, None, None).await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        call(&router, "GET", &html_path, None, None).await.0,
         StatusCode::NOT_FOUND
     );
     assert_eq!(
@@ -251,4 +260,10 @@ async fn publication_fails_closed_on_workspace_deletion_and_invalid_ids() {
             .0,
         StatusCode::NOT_FOUND
     );
+    for path in ["/docs/not-an-id", "/docs/unknown/extra", "/docs"] {
+        assert_eq!(
+            call(&router, "GET", path, None, None).await.0,
+            StatusCode::NOT_FOUND
+        );
+    }
 }

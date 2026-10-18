@@ -115,6 +115,119 @@ async fn identical_storage_auth_cas_tests_on_every_configured_database() {
             call(&router, "GET", &public_path, None, None).await.0,
             StatusCode::NOT_FOUND
         );
+        let mut active_publications = Vec::new();
+        for index in 0..19 {
+            let (status, item) = call(
+                &router,
+                "POST",
+                &publications_path,
+                Some(&a),
+                Some(json!({"title":"Public guides","expected_revision":published_workspace["revision"],"document_ids":["guide"],"idempotency_key":format!("limit-{index}")})),
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK, "{item}");
+            active_publications.push(item["id"].as_str().unwrap().to_owned());
+        }
+        let (last, over_limit) = tokio::join!(
+            call(
+                &router,
+                "POST",
+                &publications_path,
+                Some(&a),
+                Some(
+                    json!({"title":"Public guides","expected_revision":published_workspace["revision"],"document_ids":["guide"],"idempotency_key":"limit-19"})
+                ),
+            ),
+            call(
+                &router_again,
+                "POST",
+                &publications_path,
+                Some(&a),
+                Some(
+                    json!({"title":"Public guides","expected_revision":published_workspace["revision"],"document_ids":["guide"],"idempotency_key":"limit-20"})
+                ),
+            )
+        );
+        let raced = [last, over_limit];
+        assert_eq!(
+            raced
+                .iter()
+                .filter(|reply| reply.0 == StatusCode::OK)
+                .count(),
+            1,
+            "{raced:?}"
+        );
+        assert_eq!(
+            raced
+                .iter()
+                .filter(|reply| reply.0 == StatusCode::BAD_REQUEST)
+                .count(),
+            1,
+            "{raced:?}"
+        );
+        active_publications.push(
+            raced
+                .iter()
+                .find(|reply| reply.0 == StatusCode::OK)
+                .unwrap()
+                .1["id"]
+                .as_str()
+                .unwrap()
+                .to_owned(),
+        );
+        for id in active_publications {
+            let (status, body) = call(
+                &router,
+                "DELETE",
+                &format!("{publications_path}/{id}"),
+                Some(&a),
+                None,
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK, "{body}");
+        }
+        for index in 21..256 {
+            let (status, item) = call(
+                &router,
+                "POST",
+                &publications_path,
+                Some(&a),
+                Some(json!({"title":"Public guides","expected_revision":published_workspace["revision"],"document_ids":["guide"],"idempotency_key":format!("limit-{index}")})),
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK, "{item}");
+            let (status, body) = call(
+                &router,
+                "DELETE",
+                &format!("{publications_path}/{}", item["id"].as_str().unwrap()),
+                Some(&a),
+                None,
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK, "{body}");
+        }
+        let (_, publication_history) =
+            call(&router_again, "GET", &publications_path, Some(&a), None).await;
+        assert_eq!(publication_history.as_array().unwrap().len(), 256);
+        assert!(
+            publication_history
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|item| item["revoked"] == true)
+        );
+        assert_eq!(
+            call(
+                &router,
+                "POST",
+                &publications_path,
+                Some(&a),
+                Some(json!({"title":"Public guides","expected_revision":published_workspace["revision"],"document_ids":["guide"],"idempotency_key":"limit-256"})),
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
         let rate_id = format!("rate-{prefix}");
         let mut rate_data = example_data();
         rate_data["collections"][0]["requests"][0]["examples"][0]["rate_limit_per_minute"] =

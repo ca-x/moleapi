@@ -370,11 +370,8 @@ fn valid_id(id: &str) -> bool {
     id.len() == 32 && id.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
-pub async fn public_get(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Result<Response, ApiError> {
-    if !valid_id(&id) || state.local {
+pub(crate) async fn read_snapshot(state: &AppState, id: &str) -> Result<PublicSnapshot, ApiError> {
+    if !valid_id(id) || state.local {
         return Err(ApiError::not_found());
     }
     let row = document::Entity::find_by_id(format!("dp_{id}"))
@@ -396,6 +393,14 @@ pub async fn public_get(
     {
         return Err(ApiError::not_found());
     }
+    Ok(publication.snapshot)
+}
+
+pub async fn public_get(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Response, ApiError> {
+    let snapshot = read_snapshot(&state, &id).await?;
     Ok((
         [
             (header::CACHE_CONTROL, "no-store"),
@@ -406,7 +411,7 @@ pub async fn public_get(
                 "default-src 'none'; frame-ancestors 'none'",
             ),
         ],
-        Json(publication.snapshot),
+        Json(snapshot),
     )
         .into_response())
 }
