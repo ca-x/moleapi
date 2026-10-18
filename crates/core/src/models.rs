@@ -66,6 +66,8 @@ pub struct Example {
     pub mock_schema_link: Option<MockSchemaLink>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub mock_schema: String,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub mock_name_inference: bool,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub mock_script: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -80,6 +82,9 @@ pub struct MockSchemaLink {
 }
 fn is_zero_delay(value: &u64) -> bool {
     *value == 0
+}
+fn is_false(value: &bool) -> bool {
+    !value
 }
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "lowercase")]

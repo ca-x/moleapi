@@ -63,6 +63,24 @@ it("keeps the static body while editing an explicit Mock JSON Schema",async()=>{
   expect(screen.getByRole("button",{name:"编辑 Mock JSON Schema"})).toBeTruthy();
 });
 
+it("shows name inference only for a selected Schema and clears it with the source",async()=>{
+  await setLanguage("en");
+  const request=newRequest("R","https://example.test/items");
+  request.examples=[{id:"e",name:"Example",status:200,headers:[],body:"static"}];
+  const update=vi.fn();
+  const page=render(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
+  expect(screen.queryByRole("checkbox",{name:"Use field names for Mock values"})).toBeNull();
+  request.examples=[{...request.examples[0],mock_schema:'{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}'}];
+  page.rerender(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
+  fireEvent.click(screen.getByRole("checkbox",{name:"Use field names for Mock values"}));
+  expect(update.mock.lastCall?.[0].examples[0]).toMatchObject({mock_name_inference:true,body:"static"});
+  request.examples=[update.mock.lastCall?.[0].examples[0]];
+  page.rerender(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
+  fireEvent.click(screen.getByRole("checkbox",{name:"Generate Mock body from JSON Schema"}));
+  expect(update.mock.lastCall?.[0].examples[0]).toMatchObject({body:"static"});
+  expect(update.mock.lastCall?.[0].examples[0].mock_name_inference).toBeFalsy();
+});
+
 it("selects a saved OpenAPI response without an operationId and keeps the static body",async()=>{
   vi.stubGlobal("ResizeObserver",class {observe(){} unobserve(){} disconnect(){}});
   HTMLElement.prototype.scrollIntoView=()=>{};

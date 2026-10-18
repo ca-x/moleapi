@@ -20,7 +20,7 @@ function SchemaEditorDialog({schema,dark,onCommit}:{schema:string;dark:boolean;o
   const [open,setOpen]=useState(false);
   const [draft,setDraft]=useState(schema);
   return <Dialog.Root open={open} onOpenChange={next=>{if(next)setDraft(schema);setOpen(next);}}>
-    <Dialog.Trigger><Button variant="soft">{t("编辑 Mock JSON Schema")}</Button></Dialog.Trigger>
+    <Dialog.Trigger><Button variant="soft" color="gray">{t("编辑 Mock JSON Schema")}</Button></Dialog.Trigger>
     <Dialog.Content maxWidth="min(720px, calc(100vw - 24px))" style={{maxHeight:"calc(100dvh - 24px)",overflowY:"auto"}}>
       <Dialog.Title>{t("Mock JSON Schema")}</Dialog.Title>
       <Dialog.Description>{t("保存后预览；支持基本类型、oneOf/anyOf、对象 allOf、可空类型、元组和本地 $defs 引用。静态正文保留。")}</Dialog.Description>
@@ -64,7 +64,12 @@ export default function ExamplesEditor({
   const validLink=(example:RequestSpec["examples"][number])=>!!linkedSpec&&example.mock_schema_link?.specification_id===linkedSpec.id&&linkedChoices.some(choice=>choice.pointer===example.mock_schema_link?.pointer);
   const patchExample=(exampleId:string,patch:Partial<RequestSpec["examples"][number]>)=>{
     setPreview(null);setError("");
-    update({examples:latestRequest.current.examples.map(item=>item.id===exampleId?{...item,...patch}:item)});
+    update({examples:latestRequest.current.examples.map(item=>{
+      if(item.id!==exampleId)return item;
+      const merged={...item,...patch};
+      if(!merged.mock_schema&&!merged.mock_schema_link)merged.mock_name_inference=undefined;
+      return merged;
+    })});
   };
   let routePath="";
   let routeHasQuery=request.query.some(row=>row.enabled);
@@ -88,12 +93,12 @@ export default function ExamplesEditor({
   return (
     <div className="example-list">
       {workspaceId&&<Dialog.Root>
-        <Dialog.Trigger><Button variant="soft" style={{minHeight:44}}>{t("管理公开 Mock")}</Button></Dialog.Trigger>
+        <Dialog.Trigger><Button variant="soft" color="gray" style={{minHeight:44}}>{t("管理公开 Mock")}</Button></Dialog.Trigger>
         <Dialog.Content maxWidth="min(560px, calc(100vw - 24px))" style={{maxHeight:"calc(100dvh - 24px)",overflowY:"auto"}}>
           <Dialog.Title>{t("公开 Mock")}</Dialog.Title>
           <Dialog.Description>{native?t("本地工作区默认不监听；启动后，任何持有公开地址的人都可以调用当前请求。"):t("默认仅工作区成员可访问。公开地址只分享当前请求；任何持有地址的人都可以调用。")}</Dialog.Description>
           <MockPublicShares workspaceId={workspaceId} requestId={request.id} examples={request.examples.map(example=>({id:example.id,name:example.name,dynamic:!!example.mock_script?.length}))} routePath={routePath} hasSavedQuery={routeHasQuery} dirty={dirty}/>
-          <Flex justify="end" mt="4"><Dialog.Close><Button variant="soft">{t("完成")}</Button></Dialog.Close></Flex>
+          <Flex justify="end" mt="4"><Dialog.Close><Button variant="soft" color="gray">{t("完成")}</Button></Dialog.Close></Flex>
         </Dialog.Content>
       </Dialog.Root>}
       {request.examples.length === 0 && (
@@ -166,14 +171,15 @@ export default function ExamplesEditor({
           {selectionBusy===example.id&&<Text size="1" color="gray">{t("正在校验关联响应…")}</Text>}
           {selectionError?.id===example.id&&<Text role="alert" size="1" color="red">{selectionError.message}</Text>}
           {!!example.mock_schema && <SchemaEditorDialog schema={example.mock_schema} dark={dark} onCommit={mock_schema=>patchExample(example.id,{mock_schema})}/>}
+          {(!!example.mock_schema||!!example.mock_schema_link) && <Text as="label" size="2"><Checkbox checked={!!example.mock_name_inference} onCheckedChange={checked=>patchExample(example.id,{mock_name_inference:checked===true})}/> {t("根据字段名生成 Mock 值")}</Text>}
           {workspaceId && <Text as="p" size="1" color="gray" style={{overflowWrap:"anywhere"}}>{t("Mock 地址")}: <code>{`/api/mock/${encodeURIComponent(workspaceId)}/${encodeURIComponent(request.id)}/${encodeURIComponent(example.id)}`}</code></Text>}
           {workspaceId && routePath && <Text as="p" size="1" color="gray" style={{overflowWrap:"anywhere"}}>{t("匹配路由")}: <code>{`${request.method} /api/mocks/${encodeURIComponent(workspaceId)}${routePath}`}</code></Text>}
           {workspaceId && !routePath && <Text size="1" color="gray">{t("Mock 匹配路由需要字面量 HTTP URL；路径变量使用单层 {name}。")}</Text>}
-          {workspaceId && <Button variant="soft" disabled={dirty||busy!==""} loading={busy===`${workspaceId}/${request.id}/${example.id}`} onClick={()=>previewExample(example.id)}>{t("预览 Mock")}</Button>}
+          {workspaceId && <Button variant="soft" color="gray" disabled={dirty||busy!==""} loading={busy===`${workspaceId}/${request.id}/${example.id}`} onClick={()=>previewExample(example.id)}>{t("预览 Mock")}</Button>}
           {dirty && <Text size="1" color="gray">{t("先保存工作区，再预览 Mock。")}</Text>}
           {error===`${workspaceId}/${request.id}/${example.id}` && <Text role="alert" size="1" color="red">{t("Mock 预览失败，请检查脚本与数据源。")}</Text>}
           {!dirty && preview?.scope===`${workspaceId}/${request.id}/${example.id}` && preview.fingerprint===JSON.stringify(example) && <Field label={t("Mock 预览结果")} hint={`${t("状态码")}: ${preview.status}`}><TextArea readOnly rows={5} value={preview.body.slice(0,64*1024)} /></Field>}
-          {!example.mock_match ? <Button variant="soft" onClick={()=>patchExample(example.id,{mock_match:{priority:0,query:[],headers:[],body:""}})}>{t("添加 Mock 匹配条件")}</Button> : <div>
+          {!example.mock_match ? <Button variant="soft" color="gray" onClick={()=>patchExample(example.id,{mock_match:{priority:0,query:[],headers:[],body:""}})}>{t("添加 Mock 匹配条件")}</Button> : <div>
             <Text size="1" color="gray">{t("匹配条件全部满足时选中此示例；空正文只匹配无正文请求。")}</Text>
             <Field label={t("匹配优先级")}><TextField.Root type="number" min="0" max="100" value={example.mock_match.priority} onChange={event=>patchExample(example.id,{mock_match:{...example.mock_match!,priority:Number(event.target.value)}})}/></Field>
             <Field label={t("查询参数条件")}><PairEditor rows={example.mock_match.query??[]} onChange={query=>patchExample(example.id,{mock_match:{...example.mock_match!,query}})} keyLabel={t("参数名")} valueLabel={t("参数值")} secrets/></Field>

@@ -44,7 +44,7 @@ export default function MockCallActivity({workspaceId,requestId}:{workspaceId:st
   return <section aria-label={t("Mock 调用日志")}>
     <Flex gap="2" align="center" wrap="wrap">
       <Text size="2" weight="medium">{t("Mock 调用日志")}</Text>
-      <Button size="2" style={{minHeight:44}} variant="soft" onClick={()=>setRefresh(value=>value+1)}>{t("刷新日志")}</Button>
+      <Button size="2" style={{minHeight:44}} variant="soft" color="gray" onClick={()=>setRefresh(value=>value+1)}>{t("刷新日志")}</Button>
       <Button size="2" style={{minHeight:44}} variant="ghost" color="red" disabled={clearing} onClick={()=>void clear()}>{confirmClear?t("确认清空工作区日志"):t("清空工作区日志")}</Button>
     </Flex>
     <Text as="p" size="1" color="gray">{t("仅保存匹配结果、状态和耗时；不保存请求内容。显示当前请求与未匹配调用。")}</Text>

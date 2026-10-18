@@ -16,7 +16,39 @@ struct GenerateContext {
     nodes: usize,
     candidates: usize,
     validators: HashMap<usize, jsonschema::Validator>,
-    values: HashMap<usize, Value>,
+    values: HashMap<(usize, Option<String>), Value>,
+    infer_names: bool,
+}
+
+fn name_suggestion(name: &str, schema: &Map<String, Value>) -> Option<Value> {
+    let normalized: String = name
+        .bytes()
+        .filter(|byte| *byte != b'_' && *byte != b'-')
+        .map(|byte| byte.to_ascii_lowercase() as char)
+        .collect();
+    let kind = schema.get("type").and_then(|value| {
+        value.as_str().or_else(|| {
+            value.as_array().and_then(|types| {
+                types
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .find(|kind| *kind != "null")
+            })
+        })
+    })?;
+    match (kind, normalized.as_str()) {
+        ("integer", "id") => Some(Value::Number(Number::from(1))),
+        ("boolean", "active" | "enabled" | "isactive") => Some(Value::Bool(true)),
+        ("string", "name" | "fullname") => Some(Value::String("Ada Lovelace".into())),
+        ("string", "firstname") => Some(Value::String("Ada".into())),
+        ("string", "lastname") => Some(Value::String("Lovelace".into())),
+        ("string", "email" | "emailaddress") => Some(Value::String("ada@example.test".into())),
+        ("string", "phone" | "phonenumber") => Some(Value::String("+1-202-555-0147".into())),
+        ("string", "url" | "website" | "avatarurl") => {
+            Some(Value::String("https://example.test/mock".into()))
+        }
+        _ => None,
+    }
 }
 
 struct NoResources;
@@ -246,6 +278,135 @@ fn has_authored_value(root: &Value, schema: &Value, depth: usize) -> Result<bool
         .any(|key| object.contains_key(*key)))
 }
 
+fn has_name_suggestion(
+    root: &Value,
+    schema: &Value,
+    name: &str,
+    depth: usize,
+    context: &mut GenerateContext,
+) -> Result<bool> {
+    context.nodes += 1;
+    ensure!(
+        depth <= MAX_DEPTH && context.nodes <= MAX_NODES,
+        "Mock schema name lookup budget exceeded"
+    );
+    let object = schema
+        .as_object()
+        .context("Mock schema node is not an object")?;
+    if let Some(pointer) = object.get("$ref").and_then(Value::as_str) {
+        let target = root
+            .pointer(&pointer[1..])
+            .context("Unresolved Mock schema reference")?;
+        return has_name_suggestion(root, target, name, depth + 1, context);
+    }
+    if name_suggestion(name, object).is_some() {
+        return Ok(true);
+    }
+    for key in ["oneOf", "anyOf", "allOf"] {
+        if let Some(branches) = object.get(key).and_then(Value::as_array) {
+            for branch in branches {
+                if has_name_suggestion(root, branch, name, depth + 1, context)? {
+                    return Ok(true);
+                }
+            }
+        }
+    }
+    Ok(false)
+}
+
+fn union_authored_candidate(
+    root: &Value,
+    origin: &Value,
+    schema: &Value,
+    composed: &Value,
+    depth: usize,
+    context: &mut GenerateContext,
+) -> Result<Option<Value>> {
+    context.nodes += 1;
+    ensure!(
+        depth <= MAX_DEPTH && context.nodes <= MAX_NODES,
+        "Mock schema union search budget exceeded"
+    );
+    let object = schema
+        .as_object()
+        .context("Mock schema node is not an object")?;
+    if let Some(pointer) = object.get("$ref").and_then(Value::as_str) {
+        let target = root
+            .pointer(&pointer[1..])
+            .context("Unresolved Mock schema reference")?;
+        return union_authored_candidate(root, origin, target, composed, depth + 1, context);
+    }
+    for key in ["const", "examples", "default", "enum"] {
+        let candidates: Vec<&Value> = match (key, object.get(key)) {
+            ("examples" | "enum", Some(Value::Array(values))) => values.iter().collect(),
+            (_, Some(value)) => vec![value],
+            _ => Vec::new(),
+        };
+        for candidate in candidates {
+            if valid_candidate(root, origin, candidate, context)?
+                && valid_candidate(root, composed, candidate, context)?
+            {
+                return Ok(Some(candidate.clone()));
+            }
+        }
+    }
+    for key in ["oneOf", "anyOf"] {
+        if let Some(branches) = object.get(key).and_then(Value::as_array) {
+            for branch in branches {
+                if let Some(value) =
+                    union_authored_candidate(root, origin, branch, composed, depth + 1, context)?
+                {
+                    return Ok(Some(value));
+                }
+            }
+        }
+    }
+    Ok(None)
+}
+
+fn union_name_candidate(
+    root: &Value,
+    origin: &Value,
+    schema: &Value,
+    composed: &Value,
+    name: &str,
+    depth: usize,
+    context: &mut GenerateContext,
+) -> Result<Option<Value>> {
+    context.nodes += 1;
+    ensure!(
+        depth <= MAX_DEPTH && context.nodes <= MAX_NODES,
+        "Mock schema union search budget exceeded"
+    );
+    let object = schema
+        .as_object()
+        .context("Mock schema node is not an object")?;
+    if let Some(pointer) = object.get("$ref").and_then(Value::as_str) {
+        let target = root
+            .pointer(&pointer[1..])
+            .context("Unresolved Mock schema reference")?;
+        return union_name_candidate(root, origin, target, composed, name, depth + 1, context);
+    }
+    if let Some(value) = name_suggestion(name, object)
+        && valid_candidate(root, origin, &value, context)?
+        && valid_candidate(root, composed, &value, context)?
+    {
+        return Ok(Some(value));
+    }
+    for key in ["oneOf", "anyOf"] {
+        if let Some(branches) = object.get(key).and_then(Value::as_array) {
+            for branch in branches {
+                if let Some(value) =
+                    union_name_candidate(root, origin, branch, composed, name, depth + 1, context)?
+                {
+                    return Ok(Some(value));
+                }
+            }
+        }
+    }
+    Ok(None)
+}
+
 fn insert_bounded(
     values: &mut Map<String, Value>,
     name: &str,
@@ -262,6 +423,7 @@ fn insert_bounded(
 fn synthesize(
     root: &Value,
     schema: &Value,
+    name: Option<&str>,
     depth: usize,
     refs: &mut Vec<String>,
     context: &mut GenerateContext,
@@ -271,7 +433,14 @@ fn synthesize(
         depth <= MAX_DEPTH && context.nodes <= MAX_NODES,
         "Mock schema generation budget exceeded"
     );
-    let schema_key = schema as *const Value as usize;
+    let schema_key = (
+        schema as *const Value as usize,
+        if context.infer_names {
+            name.map(str::to_owned)
+        } else {
+            None
+        },
+    );
     if let Some(value) = context.values.get(&schema_key) {
         return Ok(value.clone());
     }
@@ -293,7 +462,7 @@ fn synthesize(
             .pointer(&pointer[1..])
             .context("Unresolved Mock schema reference")?;
         refs.push(pointer.to_owned());
-        let value = synthesize(root, target, depth + 1, refs, context);
+        let value = synthesize(root, target, name, depth + 1, refs, context);
         refs.pop();
         if let Ok(value) = &value {
             context.values.insert(schema_key, value.clone());
@@ -322,8 +491,34 @@ fn synthesize(
         .and_then(Value::as_array)
     {
         ensure!(depth < MAX_DEPTH, "Mock schema generation depth exceeded");
+        if context.infer_names {
+            for branch in branches {
+                if let Some(value) =
+                    union_authored_candidate(root, branch, branch, schema, depth + 1, context)?
+                {
+                    context.values.insert(schema_key, value.clone());
+                    return Ok(value);
+                }
+            }
+            if let Some(name) = name {
+                for branch in branches {
+                    if let Some(value) = union_name_candidate(
+                        root,
+                        branch,
+                        branch,
+                        schema,
+                        name,
+                        depth + 1,
+                        context,
+                    )? {
+                        context.values.insert(schema_key, value.clone());
+                        return Ok(value);
+                    }
+                }
+            }
+        }
         for branch in branches {
-            let candidate = synthesize(root, branch, depth + 1, refs, context);
+            let candidate = synthesize(root, branch, name, depth + 1, refs, context);
             ensure!(
                 context.nodes <= MAX_NODES && context.candidates <= MAX_CANDIDATES,
                 "Mock schema generation budget exceeded"
@@ -340,7 +535,7 @@ fn synthesize(
     if let Some(branches) = object.get("allOf").and_then(Value::as_array) {
         let mut merged = Map::new();
         for branch in branches {
-            let value = synthesize(root, branch, depth + 1, refs, context)?;
+            let value = synthesize(root, branch, name, depth + 1, refs, context)?;
             let fields = value
                 .as_object()
                 .context("Mock schema allOf supports object branches only")?;
@@ -378,6 +573,13 @@ fn synthesize(
             })
         })
         .context("Mock schema node needs a supported type or authored value")?;
+    if context.infer_names
+        && let Some(value) = name.and_then(|name| name_suggestion(name, object))
+        && valid_candidate(root, schema, &value, context)?
+    {
+        context.values.insert(schema_key, value.clone());
+        return Ok(value);
+    }
     let result = match kind {
         "null" => Value::Null,
         "boolean" => Value::Bool(false),
@@ -441,18 +643,22 @@ fn synthesize(
                     insert_bounded(
                         &mut values,
                         name,
-                        synthesize(root, child, depth + 1, refs, context)?,
+                        synthesize(root, child, Some(name), depth + 1, refs, context)?,
                         &mut size,
                     )?;
                 }
             }
             if let Some(properties) = properties {
                 for (name, child) in properties {
-                    if !values.contains_key(name) && has_authored_value(root, child, depth + 1)? {
+                    if !values.contains_key(name)
+                        && (has_authored_value(root, child, depth + 1)?
+                            || (context.infer_names
+                                && has_name_suggestion(root, child, name, depth + 1, context)?))
+                    {
                         insert_bounded(
                             &mut values,
                             name,
-                            synthesize(root, child, depth + 1, refs, context)?,
+                            synthesize(root, child, Some(name), depth + 1, refs, context)?,
                             &mut size,
                         )?;
                     }
@@ -494,7 +700,7 @@ fn synthesize(
                 let value = match child {
                     Some(Value::Bool(true)) => Value::Null,
                     Some(Value::Bool(false)) => bail!("Unsatisfiable Mock schema tuple length"),
-                    Some(child) => synthesize(root, child, depth + 1, refs, context)?,
+                    Some(child) => synthesize(root, child, None, depth + 1, refs, context)?,
                     None if prefix.is_some() => Value::Null,
                     None => bail!("Missing Mock schema items"),
                 };
@@ -511,14 +717,20 @@ fn synthesize(
 }
 
 pub fn generate_mock_schema(source: &str) -> Result<String> {
+    generate(source, false)
+}
+
+pub fn generate_mock_schema_with_names(source: &str) -> Result<String> {
+    generate(source, true)
+}
+
+fn generate(source: &str, infer_names: bool) -> Result<String> {
     let root = parse(source)?;
-    let value = synthesize(
-        &root,
-        &root,
-        0,
-        &mut Vec::new(),
-        &mut GenerateContext::default(),
-    )?;
+    let mut context = GenerateContext {
+        infer_names,
+        ..GenerateContext::default()
+    };
+    let value = synthesize(&root, &root, None, 0, &mut Vec::new(), &mut context)?;
     ensure!(
         validator(&root)?.is_valid(&value),
         "Mock schema generated an invalid value"
@@ -574,12 +786,10 @@ mod tests {
         }))
         .unwrap();
         assert!(example.mock_schema.is_empty());
-        assert!(
-            serde_json::to_value(example)
-                .unwrap()
-                .get("mock_schema")
-                .is_none()
-        );
+        assert!(!example.mock_name_inference);
+        let encoded = serde_json::to_value(example).unwrap();
+        assert!(encoded.get("mock_schema").is_none());
+        assert!(encoded.get("mock_name_inference").is_none());
     }
 
     #[test]
@@ -731,5 +941,99 @@ mod tests {
             nested = serde_json::json!({"anyOf":[nested]});
         }
         assert!(validate_mock_schema(&nested.to_string()).is_err());
+    }
+
+    #[test]
+    fn opted_in_names_suggest_schema_valid_values_without_changing_legacy_output() {
+        let source = r#"{"type":"object","properties":{"id":{"type":"integer"},"fullName":{"type":"string"},"email_address":{"type":"string","format":"email"},"phone-number":{"type":"string"},"other":{"type":"string"}},"required":["id","fullName","email_address"]}"#;
+        assert_eq!(
+            serde_json::from_str::<Value>(&generate_mock_schema(source).unwrap()).unwrap(),
+            serde_json::json!({"email_address":"mock@example.test","fullName":"","id":0})
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(&generate_mock_schema_with_names(source).unwrap())
+                .unwrap(),
+            serde_json::json!({"email_address":"ada@example.test","fullName":"Ada Lovelace","id":1,"phone-number":"+1-202-555-0147"})
+        );
+    }
+
+    #[test]
+    fn inferred_names_keep_reference_context_and_authored_precedence() {
+        let source = r##"{"$defs":{"text":{"type":"string"}},"type":"object","properties":{"email":{"$ref":"#/$defs/text"},"name":{"$ref":"#/$defs/text"},"first_name":{"type":"string","default":"Grace"},"phone":{"type":"string","maxLength":2},"id":{"type":"integer","minimum":5},"is-active":{"type":"boolean"},"status":{"type":"string","enum":["pending","ready"]},"unknown":{"type":"string"}},"required":["email","name","first_name","id","status"]}"##;
+        assert_eq!(
+            serde_json::from_str::<Value>(&generate_mock_schema_with_names(source).unwrap())
+                .unwrap(),
+            serde_json::json!({"email":"ada@example.test","first_name":"Grace","id":5,"is-active":true,"name":"Ada Lovelace","phone":"","status":"pending"})
+        );
+        let composed = r#"{"type":"object","properties":{"email":{"oneOf":[{"type":"string","minLength":5},{"type":"integer"}]}},"required":["email"]}"#;
+        assert_eq!(
+            generate_mock_schema_with_names(composed).unwrap(),
+            r#"{"email":"ada@example.test"}"#
+        );
+    }
+
+    #[test]
+    fn optional_name_rules_require_a_compatible_schema_type() {
+        let source = r#"{"type":"object","properties":{"email":{"type":"integer"},"name":{"type":"string"},"unknown":{"type":"string"}}}"#;
+        assert_eq!(
+            serde_json::from_str::<Value>(&generate_mock_schema_with_names(source).unwrap())
+                .unwrap(),
+            serde_json::json!({"name":"Ada Lovelace"})
+        );
+    }
+
+    #[test]
+    fn optional_name_lookup_shares_the_global_node_budget() {
+        let mut deep = serde_json::json!({"type":"string"});
+        for _ in 0..50 {
+            deep = serde_json::json!({"oneOf":[deep]});
+        }
+        let mut properties = Map::new();
+        for index in 0..500 {
+            properties.insert(
+                format!("unknown{index}"),
+                serde_json::json!({"$ref":"#/$defs/deep"}),
+            );
+        }
+        let source =
+            serde_json::json!({"$defs":{"deep":deep},"type":"object","properties":properties})
+                .to_string();
+        assert!(generate_mock_schema_with_names(&source).is_err());
+    }
+
+    #[test]
+    fn union_names_beat_earlier_generic_branches_but_not_authored_values() {
+        for keyword in ["oneOf", "anyOf"] {
+            for branches in [
+                serde_json::json!([{"type":"integer"},{"type":"string"}]),
+                serde_json::json!([{"type":"string"},{"type":"integer"}]),
+            ] {
+                let mut union = Map::new();
+                union.insert(keyword.into(), branches);
+                let schema = serde_json::json!({"type":"object","properties":{"email":Value::Object(union)},"required":["email"]});
+                assert_eq!(
+                    serde_json::from_str::<Value>(
+                        &generate_mock_schema_with_names(&schema.to_string()).unwrap()
+                    )
+                    .unwrap(),
+                    serde_json::json!({"email":"ada@example.test"}),
+                    "{keyword}"
+                );
+            }
+        }
+        let authored = r#"{"type":"object","properties":{"email":{"oneOf":[{"type":"integer","const":7},{"type":"string"}]}},"required":["email"]}"#;
+        assert_eq!(
+            serde_json::from_str::<Value>(&generate_mock_schema_with_names(authored).unwrap())
+                .unwrap(),
+            serde_json::json!({"email":7})
+        );
+        let authored_later = r#"{"type":"object","properties":{"email":{"oneOf":[{"type":"integer"},{"type":"string","default":"saved@example.test"}]}},"required":["email"]}"#;
+        assert_eq!(
+            serde_json::from_str::<Value>(
+                &generate_mock_schema_with_names(authored_later).unwrap()
+            )
+            .unwrap(),
+            serde_json::json!({"email":"saved@example.test"})
+        );
     }
 }
