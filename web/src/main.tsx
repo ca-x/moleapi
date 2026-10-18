@@ -8,6 +8,7 @@ import "@fontsource/ibm-plex-sans/500.css";
 import "@fontsource/ibm-plex-sans/600.css";
 import "@fontsource/jetbrains-mono/400.css";
 import App from "./App";
+import PublicDocsPage from "./features/documents/PublicDocsPage";
 import "./styles.css";
 const client = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -15,7 +16,7 @@ const client = new QueryClient({
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={client}>
-      <App />
+      {window.location.pathname.startsWith("/docs/")?<PublicDocsPage id={window.location.pathname.slice("/docs/".length)}/>:<App />}
     </QueryClientProvider>
   </React.StrictMode>,
 );

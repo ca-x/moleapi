@@ -10,6 +10,8 @@ import {validateMarkdownDocuments} from "./validation";
 import MarkdownPreview from "./MarkdownPreview";
 import ApiReference from "./ApiReference";
 import {searchWorkspace} from "./search";
+import {native} from "../../shared/api";
+import DocumentPublications from "./DocumentPublications";
 import type {SearchResult} from "./search";
 
 export default function DocumentsPage() {
@@ -60,7 +62,7 @@ export default function DocumentsPage() {
   };
   const create=()=>{
     if(documents.length>=256)return;
-    const next:MarkdownDocument={id:id(),name:t("新建文档"),collection_id:null,source:"",secret:true};
+    const next:MarkdownDocument={id:id(),name:t("新建文档"),source:"",secret:true};
     updateData(data=>({...data,documents:[...(data.documents??[]),next]}));
     setSelectedId(next.id);setMode("edit");
   };
@@ -98,7 +100,7 @@ export default function DocumentsPage() {
     {invalidSourceDocument&&<Text role="alert" color="red" size="2">{t("文档「{{value0}}」的 Markdown 正文不能超过 256 KiB。",{value0:invalidSourceDocument.name})}</Text>}
     {invalidTotalSource&&<Text role="alert" color="red" size="2">{t("工作区 Markdown 正文合计不能超过 2 MiB。")}</Text>}
     <Tabs.Root value={section} onValueChange={setSection} className="documents-sections">
-      <Tabs.List><Tabs.Trigger value="markdown">{t("Markdown")}</Tabs.Trigger><Tabs.Trigger value="api">{t("API 参考")}</Tabs.Trigger></Tabs.List>
+      <Tabs.List><Tabs.Trigger value="markdown">{t("Markdown")}</Tabs.Trigger><Tabs.Trigger value="api">{t("API 参考")}</Tabs.Trigger>{!native&&<Tabs.Trigger value="publish">{t("发布")}</Tabs.Trigger>}</Tabs.List>
       <Tabs.Content value="markdown">
     <div className="documents-layout">
       <nav className="documents-list" aria-label={t("文档列表")}>
@@ -110,7 +112,7 @@ export default function DocumentsPage() {
         <Flex justify="between" align="center" gap="3" wrap="wrap"><Heading as="h2" ref={documentHeadingRef} tabIndex={-1} size="3">{current.name}</Heading><Button variant="ghost" color="red" onClick={remove} aria-label={t("删除文档")}><Trash2 size={16}/>{t("删除")}</Button></Flex>
         <div className="document-fields">
           <Field label={t("文档标题")}><TextField.Root value={current.name} maxLength={128} onChange={event=>updateDocument({name:event.target.value})}/></Field>
-          <Choice label={t("所在目录")} value={current.collection_id??"none"} onChange={value=>updateDocument({collection_id:value==="none"?null:value})} options={[{value:"none",label:t("工作区根目录")},...draft.data.collections.map(collection=>({value:collection.id,label:collection.name}))]}/>
+          <Choice label={t("所在目录")} value={current.collection_id??"none"} onChange={value=>updateDocument({collection_id:value==="none"?undefined:value})} options={[{value:"none",label:t("工作区根目录")},...draft.data.collections.map(collection=>({value:collection.id,label:collection.name}))]}/>
           <label className="document-private"><Checkbox checked={current.secret??true} onCheckedChange={value=>updateDocument({secret:value===true})}/><span>{t("私密文档")}</span></label>
         </div>
         <Text size="1" color="gray">{t("私密文档的正文不进入默认备份；完整备份会保留原文。")}</Text>
@@ -123,6 +125,7 @@ export default function DocumentsPage() {
     </div>
       </Tabs.Content>
       <Tabs.Content value="api"><ApiReference data={draft.data} scopeKey={`${accountId}/${draft.id}`} onOpenRequest={openRequest}/></Tabs.Content>
+      {!native&&<Tabs.Content value="publish"><DocumentPublications key={`${accountId}/${draft.id}`}/></Tabs.Content>}
     </Tabs.Root>
   </div>;
 }
