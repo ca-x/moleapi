@@ -28,6 +28,23 @@ it("offers HAR for import and export",()=>{
   view.rerender(<Theme><InterchangeFields/></Theme>);
   expect(screen.getByText(/saved HTTP request templates|保存的 HTTP 请求模板/)).toBeTruthy();
 });
+it("offers Insomnia V4 only for import and explains the supported scope",async()=>{
+  await setLanguage("en");
+  const setFormat=vi.fn();
+  const state={modal:"import",format:"openapi",setFormat,includeSecrets:false,setIncludeSecrets:vi.fn(),content:"",setContent:vi.fn(),setModalError:vi.fn()};
+  vi.mocked(useWorkbench).mockReturnValue(state as unknown as ReturnType<typeof useWorkbench>);
+  const view=render(<Theme><InterchangeFields/></Theme>);
+  fireEvent.click(screen.getByRole("combobox",{name:"Import/export format"}));
+  fireEvent.click(screen.getByRole("option",{name:"Insomnia V4 JSON"}));
+  expect(setFormat).toHaveBeenCalledWith("insomnia");
+  vi.mocked(useWorkbench).mockReturnValue({...state,format:"insomnia"} as unknown as ReturnType<typeof useWorkbench>);
+  view.rerender(<Theme><InterchangeFields/></Theme>);
+  expect(screen.getByText(/one HTTP workspace/)).toBeTruthy();
+  vi.mocked(useWorkbench).mockReturnValue({...state,modal:"export",format:"moleapi"} as unknown as ReturnType<typeof useWorkbench>);
+  view.rerender(<Theme><InterchangeFields/></Theme>);
+  fireEvent.click(screen.getByRole("combobox",{name:"Import/export format"}));
+  expect(screen.queryByRole("option",{name:"Insomnia V4 JSON"})).toBeNull();
+});
 it("warns that a default backup omits authored Mock scripts",async()=>{
   await setLanguage("zh-CN");
   vi.mocked(useWorkbench).mockReturnValue({modal:"export",format:"moleapi",includeSecrets:false,draft:{data:{collections:[{requests:[{examples:[{mock_script:"pm.mock.setBody('secret')"}]}]}]}},setFormat:vi.fn(),setIncludeSecrets:vi.fn()} as unknown as ReturnType<typeof useWorkbench>);

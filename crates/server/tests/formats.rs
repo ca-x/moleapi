@@ -413,6 +413,134 @@ async fn imported_har_requests_replay_the_recorded_query_headers_and_form_body()
 }
 
 #[tokio::test]
+async fn hosted_insomnia_v4_import_preserves_owner_privacy_and_real_http_calls() {
+    let (url, fixture) = serve(
+        Router::new()
+            .route(
+                "/items",
+                axum::routing::get(
+                    |query: axum::extract::RawQuery, headers: axum::http::HeaderMap| async move {
+                        assert_eq!(query.0.as_deref(), Some("tag=a&tag=b"));
+                        assert_eq!(headers["authorization"], "Basic YWRhOmJhc2ljLXNlY3JldA==");
+                        assert_eq!(headers["x-trace"], "fixture");
+                        axum::Json(json!({"received":"items"}))
+                    },
+                ),
+            )
+            .route(
+                "/form",
+                axum::routing::post(
+                    |headers: axum::http::HeaderMap, body: axum::body::Bytes| async move {
+                        assert_eq!(headers["authorization"], "Bearer bearer-secret");
+                        assert_eq!(body.as_ref(), b"color=red&color=blue");
+                        axum::Json(json!({"received":"form"}))
+                    },
+                ),
+            ),
+    )
+    .await;
+    let dir = tempfile::tempdir().unwrap();
+    let mut settings = config(
+        moleapi_server::sqlite_database_url(&dir.path().join("insomnia.db")).unwrap(),
+        true,
+    );
+    settings.allow_private_network = true;
+    let router = hosted(settings).await.unwrap();
+    let owner = register(&router, "insomnia-owner").await;
+    let other = register(&router, "insomnia-other").await;
+    let mut source: Value = serde_json::from_str(include_str!(
+        "../../formats/tests/fixtures/insomnia_v4.json"
+    ))
+    .unwrap();
+    source["resources"][1]["data"]["base_url"] = json!(url);
+    source["resources"][6]["url"] = json!(format!("{url}/form"));
+    let original = source.to_string();
+    let (status, imported) = call(
+        &router,
+        "POST",
+        "/api/import",
+        Some(&owner),
+        Some(json!({"format":"insomnia","content":original})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{imported}");
+    assert_eq!(imported["data"]["specifications"][0]["source"], original);
+    let (status, saved) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        Some(&owner),
+        Some(json!({"id":"insomnia-owned","name":imported["name"],"data":imported["data"]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    let collections = imported["data"]["collections"].as_array().unwrap();
+    let nested = collections.iter().find(|c| c["name"] == "Nested").unwrap();
+    let catalog = collections.iter().find(|c| c["name"] == "Catalog").unwrap();
+    for (request, expected) in [
+        (&nested["requests"][0], "items"),
+        (&catalog["requests"][0], "form"),
+    ] {
+        let (status, result) = call(
+            &router,
+            "POST",
+            "/api/execute",
+            Some(&owner),
+            Some(json!({"workspace_id":"insomnia-owned","request":request})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{result}");
+        assert!(result["body"].as_str().unwrap().contains(expected));
+    }
+    let (status, safe) = call(
+        &router,
+        "POST",
+        "/api/workspaces/insomnia-owned/export",
+        Some(&owner),
+        Some(json!({"format":"moleapi","include_secrets":false})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{safe}");
+    let safe_source = safe["content"].as_str().unwrap();
+    assert!(
+        !safe_source.contains("basic-secret")
+            && !safe_source.contains("bearer-secret")
+            && !safe_source.contains("insomnia-secret")
+    );
+    assert_eq!(
+        moleapi_formats::import("moleapi", safe_source)
+            .unwrap()
+            .data
+            .specifications[0]
+            .source,
+        ""
+    );
+    let (status, full) = call(
+        &router,
+        "POST",
+        "/api/workspaces/insomnia-owned/export",
+        Some(&owner),
+        Some(json!({"format":"moleapi","include_secrets":true})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{full}");
+    assert!(full["content"].as_str().unwrap().contains("basic-secret"));
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces/insomnia-owned/export",
+            Some(&other),
+            Some(json!({"format":"moleapi","include_secrets":true}))
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    fixture.abort();
+}
+
+#[tokio::test]
 async fn hosted_postman20_import_preserves_object_auth_and_owner_private_source() {
     let (url, fixture) = serve(
         Router::new()

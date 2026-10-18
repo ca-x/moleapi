@@ -3,6 +3,7 @@ mod run_reports;
 pub use run_reports::{RunReportPrivacy, export_run_report};
 mod curl;
 mod har;
+mod insomnia;
 mod openapi;
 mod postman;
 mod redact;
@@ -37,6 +38,7 @@ pub fn import(format: &str, content: &str) -> Result<ImportResult> {
         "postman" => postman::import(content)?,
         "curl" => curl::import(content)?,
         "har" => har::import(content)?,
+        "insomnia" => insomnia::import(content)?,
         "moleapi" => {
             let value: serde_json::Value =
                 serde_json::from_str(content).context("无效 MoleAPI JSON")?;
@@ -60,6 +62,15 @@ pub fn import(format: &str, content: &str) -> Result<ImportResult> {
 }
 
 pub fn export(workspace: &Workspace, format: &str, include_secrets: bool) -> Result<ExportResult> {
+    if format != "moleapi"
+        && workspace
+            .data
+            .specifications
+            .iter()
+            .any(|spec| spec.kind == "insomnia")
+    {
+        bail!("Insomnia source requires MoleAPI backup until external mappings are verified");
+    }
     if format != "moleapi"
         && workspace
             .data
