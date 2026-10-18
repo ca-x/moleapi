@@ -10,6 +10,7 @@ import StatusBar from "./features/workbench/StatusBar";
 import WorkbenchDialogs from "./features/workbench/WorkbenchDialogs";
 import GuardDialog from "./features/workspaces/GuardDialog";
 import SaveConflictDialog from "./features/workspaces/SaveConflictDialog";
+import RequestVersionDialog from "./features/requests/RequestVersionDialog";
 import SyncConflictDialog from "./features/sync/SyncConflictDialog";
 import { WorkbenchContext } from "./features/workbench/context";
 import { useWorkbenchController } from "./features/workbench/useWorkbenchController";
@@ -58,6 +59,7 @@ export default function App() {
           <WorkbenchDialogs />
           <GuardDialog />
           <SaveConflictDialog />
+          <RequestVersionDialog />
           <SyncConflictDialog />
         </WorkbenchContext.Provider>
       )}

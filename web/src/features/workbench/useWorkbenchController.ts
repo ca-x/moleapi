@@ -48,11 +48,13 @@ export function useWorkbenchController() {
   const [sidebar, setSidebar] = useState(false);
   const [guard, setGuard] = useState<Guard | null>(null);
   const [modal, setModal] = useState<Modal>(null);
+  const [versionRequestId, setVersionRequestId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [modalError, setModalError] = useState<ErrorCopy>("");
   const [modalBusy, setModalBusy] = useState(false);
   useEffect(() => {
     setModal(null);
+    setVersionRequestId(null);
     setGuard(null);
     setFilter("");
   }, [auth.accountId]);
@@ -114,6 +116,7 @@ export function useWorkbenchController() {
       workspace.setDraft(null);
       workspace.setSaved(null);
       workspace.setSelectedId(value);
+      setVersionRequestId(null);
       setView("requests");
     };
     if (workspace.dirty)
@@ -245,6 +248,8 @@ export function useWorkbenchController() {
     setGuard,
     modal,
     setModal,
+    versionRequestId,
+    setVersionRequestId,
     name,
     setName,
     modalError: translateCopy(modalError),

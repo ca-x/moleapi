@@ -35,6 +35,7 @@ export default function WorkbenchMain() {
     openModal,
     updateData,
     installWorkspace,
+    setVersionRequestId,
   } = useWorkbench();
   return (
     <main className="main-workspace">
@@ -104,6 +105,7 @@ export default function WorkbenchMain() {
                 workspaceData={draft.data}
                 workspaceRevision={draft.revision}
                 onWorkspaceImported={installWorkspace}
+                openVersions={() => setVersionRequestId(request.id)}
                 cookieWorkspace={draft.id}
                 bodyScope={JSON.stringify([accountId,draft.id,draft.data.active_environment_id])}
                 protocolConnected={

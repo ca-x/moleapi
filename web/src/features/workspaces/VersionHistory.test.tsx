@@ -17,8 +17,10 @@ vi.mock("../../shared/api", async (original) => ({
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 afterEach(() => { cleanup(); vi.mocked(api).mockReset(); });
 
-function setup(dirty = false) {
-  const current: Workspace = { id: "workspace-a", name: "Current", revision: 2, updated_at: "2026-10-18T10:00:00Z", data: initialData() };
+function setup(dirty = false, historicalRequests = 0) {
+  const data = initialData();
+  if (historicalRequests) data.collections[0].requests = Array.from({ length: historicalRequests }, (_, index) => ({ ...data.collections[0].requests[0], id: `history-${index}`, name: `History ${index}` }));
+  const current: Workspace = { id: "workspace-a", name: "Current", revision: 2, updated_at: "2026-10-18T10:00:00Z", data };
   const prior: Workspace = { ...current, name: "Prior", revision: 1, updated_at: "2026-10-17T10:00:00Z" };
   const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
   client.setQueryData(["workspace-versions", "local", current.id], [prior]);
@@ -35,6 +37,7 @@ function setup(dirty = false) {
     setResponse: vi.fn(),
     setSaveConflict: vi.fn(),
     setModal: vi.fn(),
+    setVersionRequestId: vi.fn(),
     setGuard: vi.fn(),
   };
   render(<QueryClientProvider client={client}><Theme><WorkbenchContext.Provider value={state as unknown as ReturnType<typeof useWorkbenchController>}><VersionHistory /></WorkbenchContext.Provider></Theme></QueryClientProvider>);
@@ -52,6 +55,14 @@ it("restores a selected archived revision with the current CAS revision", async 
   expect(state.setResponse).toHaveBeenCalledOnce();
   expect(state.setRequestId).toHaveBeenCalledWith(restored.data.collections.flatMap((collection) => collection.requests)[0]?.id ?? "");
   expect(state.setModal).toHaveBeenCalledWith(null);
+});
+
+it("finds a historical request beyond the initial preview", () => {
+  const { state } = setup(false, 25);
+  fireEvent.change(screen.getByRole("textbox", { name: "查找历史请求" }), { target: { value: "history-24" } });
+  fireEvent.click(screen.getByRole("button", { name: "History 24" }));
+  expect(state.setModal).toHaveBeenCalledWith(null);
+  expect(state.setVersionRequestId).toHaveBeenCalledWith("history-24");
 });
 
 it("guards an unsaved draft and keeps it on a stale restore conflict", async () => {

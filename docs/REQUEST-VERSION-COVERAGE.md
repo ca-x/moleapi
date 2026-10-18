@@ -1,0 +1,13 @@
+# Request version history and restore coverage
+
+Scope: request-resource part of `versioning-006`, specified in [request-version-history.md](specs/request-version-history.md). This batch extends the whole-workspace restore already on `main`. It derives request history from existing archived workspace revisions; no new authoritative copy or migration is introduced.
+
+| Behavior | Evidence |
+| --- | --- |
+| Change timeline | Owner-scoped GET scans at most 32 archived rows per page through a database stream, comparing each state with its newer revision. It returns at most 20 metadata entries and an exclusive cursor; unchanged workspace saves are omitted. List JSON excludes request body, headers and credentials. A separate owner-scoped detail route loads one selected request state. |
+| Request-only restore | POST restores one archived request, recreates a deleted request in an existing collection, or removes it when the historical state is absent. It validates the complete resulting workspace and uses the shared CAS replacement, session reconciliation, hosted local-value scrub and public Mock share revocation. Missing destinations, invalid linked specifications, no-op states and stale revisions reject without writing. |
+| Browser workflow | The request editor opens a paged history dialog. Workspace history searches all request names/IDs in the selected snapshot, with only 20 results rendered at once, so a deleted request remains discoverable. A guarded confirmation names the revision and any deletion; conflicts preserve drafts. Successful restore clears a prior response and repairs request selection. |
+
+Local evidence: three SQLite request-version route tests plus the two existing database tests pass, covering changes/unchanged/deletion, a 32-row page boundary, owner privacy, restore side effects, invalid dependencies and concurrent CAS. The focused frontend tests cover pagination, delete confirmation, destination selection, account switch and historical request search. The full 389-case frontend suite, strict server all-target Clippy after a stable frontend build, scoped rustfmt, production frontend and embedded server builds pass. Actual hosted 390px English change→restore→reload and Chinese delete→old-snapshot discovery→recreate→reload flows passed; the final searchable snapshot preview retained 390px document width and reported 0 WCAG A/AA violations, with two incomplete checks on Radix focus guards/background and contrast.
+
+Remaining versioning scope: other resource types, richer field diffs, branch/merge review, Git synchronization and history retention. PostgreSQL/MySQL and fixed-head CI remain pending for this branch.
