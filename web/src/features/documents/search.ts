@@ -6,12 +6,30 @@ const RESULT_LIMIT=100;
 const QUERY_LIMIT=128;
 const EXCERPT_LIMIT=160;
 
+function searchableUrl(raw:string):string {
+  const [beforeHash]=raw.split("#");
+  const [base,...query]=beforeHash.split("?");
+  const scheme=base.indexOf("://");
+  const start=scheme>=0?scheme+3:base.startsWith("//")?2:0;
+  const slash=base.indexOf("/",start);
+  const end=slash>=0?slash:base.length;
+  const authority=base.slice(start,end);
+  const safeBase=`${base.slice(0,start)}${authority.slice(authority.lastIndexOf("@")+1)}${base.slice(end)}`;
+  const keys=query.join("?").split("&").filter(Boolean).map(part=>part.split("=",1)[0]);
+  return `${safeBase}${keys.length?`?${keys.join("&")}`:""}`;
+}
+
 function excerpt(source:string,term:string):string {
   const text=source.replace(/\s+/g," ").trim();
   const chars=Array.from(text);
   if(chars.length<=EXCERPT_LIMIT)return text;
   const match=text.toLowerCase().indexOf(term);
-  const position=match<0?0:Array.from(text.slice(0,match)).length;
+  let position=0,foldedOffset=0;
+  if(match>=0)for(const char of chars){
+    const length=char.toLowerCase().length;
+    if(foldedOffset+length>match)break;
+    foldedOffset+=length;position++;
+  }
   const start=Math.max(0,Math.min(position-40,chars.length-(EXCERPT_LIMIT-2)));
   const length=EXCERPT_LIMIT-(start>0?1:0)-(start+EXCERPT_LIMIT-2<chars.length?1:0);
   return `${start>0?"…":""}${chars.slice(start,start+length).join("")}${start+length<chars.length?"…":""}`;
@@ -37,7 +55,7 @@ export function searchWorkspace(data:WorkspaceData,raw:string):SearchResponse {
     add("document",document.id,document.name,context,[document.source]);
   }
   for(const collection of data.collections)for(const request of collection.requests) {
-    const fields=[request.method,request.url,request.description,
+    const fields=[request.method,searchableUrl(request.url),request.description,
       ...(["json","text","form"].includes(request.body_kind)?[request.body]:[]),
       ...request.query.filter(row=>row.enabled).map(row=>row.key),
       ...request.headers.filter(row=>row.enabled).map(row=>row.key),

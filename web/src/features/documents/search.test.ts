@@ -30,13 +30,29 @@ it("ranks title matches before source matches while preserving original order",(
 
 it("matches literal Unicode and AND terms across documented fields, excluding credentials and disabled rows",()=>{
   const data=fixture();
+  data.collections[0].requests[0].url="https://user:private-url-password@example.test/animals?token=inline-secret&visible=yes#fragment-secret";
   expect(searchWorkspace(data,"猫 care").results.map(item=>item.id)).toEqual(["d1"]);
   expect(searchWorkspace(data,"[x]?").results.map(item=>item.id)).toEqual(["d1"]);
   expect(searchWorkspace(data,"post animals").results.map(item=>item.id)).toEqual(["r1"]);
   expect(searchWorkspace(data,"species").results.map(item=>item.id)).toEqual(["r1"]);
   expect(searchWorkspace(data,"Ada").results.map(item=>item.id)).toEqual(["r1"]);
-  for(const secret of ["credential-never-index","secret-query-value","secret-header-value","hidden-key"]) {
+  for(const secret of ["credential-never-index","secret-query-value","secret-header-value","hidden-key","private-url-password","inline-secret","fragment-secret"]) {
     expect(searchWorkspace(data,secret).results).toEqual([]);
+  }
+  const urlMatch=searchWorkspace(data,"example.test").results[0];
+  expect(urlMatch.id).toBe("r1");
+  expect(urlMatch.excerpt).not.toContain("private-url-password");
+  expect(urlMatch.excerpt).not.toContain("inline-secret");
+  data.collections[0].requests[0].url="{{base_url}}/animals?api_key=template-secret#frag-secret";
+  expect(searchWorkspace(data,"animals").results.map(item=>item.id)).toEqual(["r1"]);
+  expect(searchWorkspace(data,"template-secret").results).toEqual([]);
+  expect(searchWorkspace(data,"frag-secret").results).toEqual([]);
+  for(const url of ["{{scheme}}://user:templated-password@example.test/animals","//user:templated-password@example.test/animals"]) {
+    data.collections[0].requests[0].url=url;
+    expect(searchWorkspace(data,"templated-password").results).toEqual([]);
+    const matching=searchWorkspace(data,"example.test").results;
+    expect(matching.map(item=>item.id)).toContain("r1");
+    expect(matching.find(item=>item.id==="r1")?.excerpt).not.toContain("templated-password");
   }
   expect(searchWorkspace(data,"Pets").results).toEqual([]);
 });
@@ -52,4 +68,11 @@ it("bounds snippets, query length and rendered results without losing total coun
   expect([...result.results[0].excerpt].length).toBeLessThanOrEqual(160);
   expect(searchWorkspace(data," ").results).toEqual([]);
   expect(searchWorkspace(data,"x".repeat(129)).results).toEqual([]);
+  data.documents=[{id:"unicode",name:"Unicode",source:`${"İ".repeat(220)} needle ${"y".repeat(220)}`,collection_id:null,secret:true}];
+  const unicode=searchWorkspace(data,"needle").results[0];
+  expect(unicode.excerpt).toContain("needle");
+  expect([...unicode.excerpt].length).toBeLessThanOrEqual(160);
+  data.documents=[{id:"greek",name:"Greek",source:`${"x".repeat(220)} ΟΣ ${"y".repeat(220)}`,collection_id:null,secret:true}];
+  const greek=searchWorkspace(data,"ος").results[0];
+  expect(greek.excerpt.toLowerCase()).toContain("ος");
 });

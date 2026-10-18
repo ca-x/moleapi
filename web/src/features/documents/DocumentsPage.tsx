@@ -79,7 +79,7 @@ export default function DocumentsPage() {
     </div>
     <div className="documents-search">
       <TextField.Root aria-label={t("搜索文档与接口")} placeholder={t("搜索文档与接口")} value={query} maxLength={128} onChange={event=>setQuery(event.target.value)}/>
-      <Text size="1" color="gray">{t("仅搜索当前工作区；私密文档正文可能出现在结果中。")}</Text>
+      <Text size="1" color="gray">{t("仅搜索当前工作区；私密文档和请求内容可能出现在结果中。")}</Text>
     </div>
     {query.trim()&&<Card className="documents-search-results">
       <Flex justify="between" align="center" gap="2" wrap="wrap"><Text role="status" size="2">{search.total===1?t("找到 1 项结果。"):t("找到 {{value0}} 项结果。",{value0:search.total})}</Text><Button size="1" variant="ghost" color="gray" onClick={()=>setQuery("")}>{t("清除搜索")}</Button></Flex>
