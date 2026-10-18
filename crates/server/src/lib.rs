@@ -25,6 +25,7 @@ mod oauth2;
 mod privacy;
 mod protocol_admission;
 mod protocols;
+mod request_versions;
 mod run_reports;
 mod runner;
 mod runner_credentials;
@@ -427,6 +428,18 @@ async fn build(
                 .delete(workspaces::delete),
         )
         .route("/workspaces/{id}/versions", get(workspaces::versions))
+        .route(
+            "/workspaces/{id}/requests/{request}/versions",
+            get(request_versions::list),
+        )
+        .route(
+            "/workspaces/{id}/requests/{request}/versions/{revision}",
+            get(request_versions::detail),
+        )
+        .route(
+            "/workspaces/{id}/requests/{request}/versions/{revision}/restore",
+            post(request_versions::restore),
+        )
         .route(
             "/workspaces/{id}/versions/{revision}/restore",
             post(workspaces::restore_version),
