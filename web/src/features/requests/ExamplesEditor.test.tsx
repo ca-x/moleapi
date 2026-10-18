@@ -225,3 +225,20 @@ it("edits and reloads a bounded saved Mock delay in both languages",async()=>{
   await setLanguage("zh-CN");
   expect(screen.getByRole("spinbutton",{name:"Mock 延迟（毫秒）"})).toBeTruthy();
 });
+
+it("edits and reloads bounded Mock fault controls in both languages",async()=>{
+  await setLanguage("en");
+  const request=newRequest("R","https://example.test/items");
+  request.examples=[{id:"e",name:"Example",status:200,headers:[],body:"static"}];
+  const update=vi.fn();
+  const page=render(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
+  fireEvent.change(screen.getByRole("spinbutton",{name:"Failure rate (%)"}),{target:{value:"120"}});
+  expect(update.mock.lastCall?.[0].examples[0].fault_rate_percent).toBe(100);
+  request.examples=[{...request.examples[0],fault_rate_percent:100,fault_status:503}];
+  page.rerender(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
+  fireEvent.change(screen.getByRole("spinbutton",{name:"Failure status (5xx)"}),{target:{value:"502"}});
+  expect(update.mock.lastCall?.[0].examples[0].fault_status).toBe(502);
+  await setLanguage("zh-CN");
+  expect(screen.getByRole("spinbutton",{name:"故障比例（%）"})).toBeTruthy();
+  expect(screen.getByRole("spinbutton",{name:"故障状态码（5xx）"})).toBeTruthy();
+});
