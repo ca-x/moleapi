@@ -524,6 +524,15 @@ kbd {
   align-self: start;
 }
 .documents-page { min-width: 0; }
+.documents-search { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin-bottom: 16px; }
+.documents-search .rt-TextFieldRoot { max-width: 480px; }
+.documents-search-results { min-width: 0; margin-bottom: 16px; }
+.documents-search-results nav { display: flex; flex-direction: column; gap: 4px; max-height: 360px; overflow-y: auto; margin-top: 10px; }
+.documents-search-results nav button { display: flex; flex-direction: column; gap: 3px; width: 100%; padding: 9px 10px; border: 0; border-radius: var(--radius-2); background: transparent; text-align: start; cursor: pointer; }
+.documents-search-results nav button:hover { background: var(--gray-a3); }
+.documents-search-results nav button:focus-visible { outline: 2px solid var(--accent-9); outline-offset: -2px; }
+.documents-search-results nav button :is(strong,small,span) { max-width: 100%; overflow-wrap: anywhere; }
+.documents-search-results nav button small { color: var(--gray-11); }
 .documents-sections, .documents-sections > .rt-TabsContent, .api-reference { min-width: 0; width: 100%; }
 .documents-sections > .rt-TabsContent { padding-top: 16px; }
 .documents-layout { display: grid; grid-template-columns: minmax(180px, 240px) minmax(0, 1fr); gap: 18px; min-width: 0; }
