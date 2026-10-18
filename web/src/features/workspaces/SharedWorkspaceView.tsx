@@ -5,7 +5,7 @@ import { api, token } from "../../shared/api";
 import { t, useLanguage } from "../../shared/i18n";
 import { liveError } from "../../shared/i18n/errors";
 import { id } from "../../shared/model";
-import type { HistoryEntry, RequestSpec, RunReportPage, SharedWorkspaceSummary, Workspace } from "../../shared/types";
+import type { ApiResponse, HistoryEntry, RequestSpec, RunReportPage, SharedWorkspaceSummary, Workspace } from "../../shared/types";
 import { Choice, Field } from "../../shared/ui";
 import { hasChanges } from "./draft";
 
@@ -31,6 +31,10 @@ export default function SharedWorkspaceView({ accountId, selected, onClose, onDi
   const [requestId, setRequestId] = useState("");
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
+  const runGeneration = useRef(0);
+  const [sending, setSending] = useState(false);
+  const sendGeneration = useRef(0);
+  const [requestResponse, setRequestResponse] = useState<ApiResponse | null>(null);
   const [error, setError] = useState<ReturnType<typeof liveError>>("");
   const [runResult, setRunResult] = useState<RunResult | null>(null);
   const mounted = useRef(true);
@@ -38,7 +42,7 @@ export default function SharedWorkspaceView({ accountId, selected, onClose, onDi
   const latest = useRef(scope);
   latest.current = scope;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  useEffect(() => { setDraft(null); setSaved(null); setLoadedScope(""); setConflict(null); setCollectionId(""); setRequestId(""); setTab("resources"); setError(""); setRunResult(null); setSaving(false); setRunning(false); }, [scope]);
+  useEffect(() => { setDraft(null); setSaved(null); setLoadedScope(""); setConflict(null); setCollectionId(""); setRequestId(""); setTab("resources"); setError(""); setRunResult(null); setRequestResponse(null); setSaving(false); setRunning(false); setSending(false); }, [scope]);
   const current = (origin: string) => mounted.current && latest.current === origin && token() === credential;
   const workspace = useQuery({
     queryKey: ["shared-workspace", accountId, owner, workspaceId, selected.role, epoch],
@@ -47,11 +51,11 @@ export default function SharedWorkspaceView({ accountId, selected, onClose, onDi
   const history = useQuery({ queryKey: ["shared-history", accountId, owner, workspaceId, epoch], queryFn: () => api<HistoryEntry[]>(`${base}/history`), enabled: !!credential && selected.role !== "viewer" && tab === "history" && !workspace.error, retry: false });
   const reports = useQuery({ queryKey: ["shared-reports", accountId, owner, workspaceId, epoch], queryFn: () => api<RunReportPage>(`${base}/reports`), enabled: !!credential && selected.role !== "viewer" && tab === "reports" && !workspace.error, retry: false });
   useEffect(() => {
-    if (workspace.error || !workspace.data) { if (workspace.error) { setDraft(null); setSaved(null); setLoadedScope(""); setRunResult(null); } return; }
+    if (workspace.error || !workspace.data) { if (workspace.error) { sendGeneration.current += 1; runGeneration.current += 1; setSending(false); setRunning(false); setDraft(null); setSaved(null); setLoadedScope(""); setRunResult(null); setRequestResponse(null); } return; }
     if (!saved) { setDraft(workspace.data); setSaved(workspace.data); setLoadedScope(scope); return; }
     if (workspace.data.revision !== saved.revision) {
       if (hasChanges({ draft, saved })) setConflict(workspace.data);
-      else { setDraft(workspace.data); setSaved(workspace.data); setConflict(null); }
+      else { sendGeneration.current += 1; runGeneration.current += 1; setSending(false); setRunning(false); setRequestResponse(null); setRunResult(null); setDraft(workspace.data); setSaved(workspace.data); setConflict(null); }
     }
   }, [workspace.data, workspace.error, draft, saved, scope]);
   const canEdit = selected.role !== "viewer";
@@ -60,8 +64,16 @@ export default function SharedWorkspaceView({ accountId, selected, onClose, onDi
   useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
   const collection = draft?.data.collections.find((item) => item.id === collectionId) ?? draft?.data.collections[0];
   const request = collection?.requests.find((item) => item.id === requestId) ?? collection?.requests[0];
+  useEffect(() => { runGeneration.current += 1; setRunning(false); setRunResult(null); }, [collection?.id]);
+  useEffect(() => { sendGeneration.current += 1; setSending(false); setRequestResponse(null); }, [collection?.id, request?.id]);
   function updateRequest(change: (request: RequestSpec) => RequestSpec) {
     if (!canEdit || !collection || !request) return;
+    sendGeneration.current += 1;
+    setSending(false);
+    setRequestResponse(null);
+    runGeneration.current += 1;
+    setRunning(false);
+    setRunResult(null);
     setDraft((currentDraft) => currentDraft ? ({ ...currentDraft, data: { ...currentDraft.data, collections: currentDraft.data.collections.map((item) => item.id === collection.id ? { ...item, requests: item.requests.map((entry) => entry.id === request.id ? change(entry) : entry) } : item) } }) : null);
   }
   async function save() {
@@ -79,12 +91,25 @@ export default function SharedWorkspaceView({ accountId, selected, onClose, onDi
   async function runCollection() {
     if (!canEdit || !collection || running || dirty || !current(scope)) return;
     const origin = scope;
+    const generation = ++runGeneration.current;
     setRunning(true); setError(""); setRunResult(null);
     try {
       const result = await api<RunResult>(`${base}/run`, "POST", { collection_id: collection.id, job_id: id() });
-      if (current(origin)) { setRunResult(result); void client.invalidateQueries({ queryKey: ["shared-history", accountId, owner, workspaceId] }); void client.invalidateQueries({ queryKey: ["shared-reports", accountId, owner, workspaceId] }); }
-    } catch (cause) { if (current(origin)) setError(liveError(cause)); }
-    finally { if (current(origin)) setRunning(false); }
+      if (current(origin) && runGeneration.current === generation) { setRunResult(result); void client.invalidateQueries({ queryKey: ["shared-history", accountId, owner, workspaceId] }); void client.invalidateQueries({ queryKey: ["shared-reports", accountId, owner, workspaceId] }); }
+    } catch (cause) { if (current(origin) && runGeneration.current === generation) setError(liveError(cause)); }
+    finally { if (current(origin) && runGeneration.current === generation) setRunning(false); }
+  }
+  async function sendSavedRequest() {
+    if (!canEdit || !request || sending || dirty || !current(scope)) return;
+    const origin = scope;
+    const requestId = request.id;
+    const generation = ++sendGeneration.current;
+    setSending(true); setError(""); setRequestResponse(null);
+    try {
+      const response = await api<ApiResponse>(`${base}/requests/${encodeURIComponent(requestId)}/execute`, "POST", {});
+      if (current(origin) && sendGeneration.current === generation) { setRequestResponse(response); void client.invalidateQueries({ queryKey: ["shared-history", accountId, owner, workspaceId] }); }
+    } catch (cause) { if (current(origin) && sendGeneration.current === generation) setError(liveError(cause)); }
+    finally { if (current(origin) && sendGeneration.current === generation) setSending(false); }
   }
   return <main className="main-workspace shared-workspace" aria-label={t("共享工作区")}>
     <Flex align="center" justify="between" gap="3" wrap="wrap"><Flex direction="column" gap="1"><Heading size="5">{selected.workspace_name}</Heading><Text size="2" color="gray">{t("所有者")}: {selected.owner_username} · {selected.role === "viewer" ? t("查看者") : selected.role === "admin" ? t("管理员") : t("编辑者")}</Text></Flex><Button variant="soft" color="gray" onClick={onClose}>{t("返回我的工作区")}</Button></Flex>
@@ -102,6 +127,10 @@ export default function SharedWorkspaceView({ accountId, selected, onClose, onDi
           {canEdit && dirty && <Text size="1" color="gray">{t("先保存修改，再运行集合。")}</Text>}
           {runResult && <Text role="status" size="2">{t("通过")}: {runResult.passed} · {t("失败")}: {runResult.failed}</Text>}
           {collection && collection.requests.length > 0 && <><Choice label={t("请求")} value={request?.id ?? ""} onChange={setRequestId} options={collection.requests.map((item) => ({ value: item.id, label: `${item.method} ${item.name}` }))} />{request && (canEdit ? <Flex direction="column" gap="3"><Field label={t("请求名称")}><TextField.Root value={request.name} onChange={(event) => updateRequest((item) => ({ ...item, name: event.target.value }))} /></Field><Flex className="shared-request-line" gap="2" wrap="wrap"><Choice label={t("方法")} value={request.method} onChange={(value) => updateRequest((item) => ({ ...item, method: value }))} options={["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].map((value) => ({ value, label: value }))} /><Field label={t("请求地址")}><TextField.Root value={request.url} onChange={(event) => updateRequest((item) => ({ ...item, url: event.target.value }))} /></Field></Flex><Field label={t("描述")}><TextArea value={request.description} onChange={(event) => updateRequest((item) => ({ ...item, description: event.target.value }))} /></Field></Flex> : <Flex direction="column" gap="1"><Text weight="medium">{request.method} {request.name}</Text><Text size="2" style={{ overflowWrap: "anywhere" }}>{request.url}</Text><Text size="2" color="gray">{request.description}</Text></Flex>)}</>}
+          {canEdit && request && <Flex direction="column" gap="2">
+            <Button loading={sending} disabled={sending || dirty} onClick={() => void sendSavedRequest()}>{t("发送已保存请求")}</Button>
+            {requestResponse && <><Text role="status" size="2">{requestResponse.status} {requestResponse.status_text} · {requestResponse.elapsed_ms} ms</Text><TextArea aria-label={t("响应正文预览")} readOnly value={requestResponse.body.slice(0, 16 * 1024)} />{requestResponse.body.length > 16 * 1024 && <Text size="1" color="gray">{t("仅显示响应正文前 16 KiB。")}</Text>}</>}
+          </Flex>}
         </>}
         {conflict && <Callout.Root color="amber" role="alert"><Callout.Text>{t("共享工作区已被其他成员更新。选择要保留的版本。")}</Callout.Text><Flex gap="2" wrap="wrap" mt="2"><Button variant="soft" onClick={() => { setDraft(conflict); setSaved(conflict); setConflict(null); setError(""); }}>{t("使用服务器版本")}</Button><Button variant="soft" onClick={() => { setSaved(conflict); setDraft((currentDraft) => currentDraft ? { ...currentDraft, revision: conflict.revision } : null); setConflict(null); setError(""); }}>{t("保留我的修改")}</Button></Flex></Callout.Root>}
         {canEdit && <Button loading={saving} disabled={!dirty || saving || !!conflict} onClick={() => void save()}>{t("保存共享工作区")}</Button>}

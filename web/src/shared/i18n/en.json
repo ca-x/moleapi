@@ -2220,5 +2220,8 @@
   "共享工作区尚未加载，请稍后重试。": "Shared workspaces have not loaded yet. Try again shortly.",
   "离开共享工作区": "Leave shared workspace",
   "共享工作区有未保存的修改。离开会放弃这些修改。": "This shared workspace has unsaved changes. Leaving will discard them.",
-  "工作区尚未加载，请稍后重试。": "Workspaces have not loaded yet. Try again shortly."
+  "工作区尚未加载，请稍后重试。": "Workspaces have not loaded yet. Try again shortly.",
+  "发送已保存请求": "Send saved request",
+  "响应正文预览": "Response body preview",
+  "仅显示响应正文前 16 KiB。": "Showing only the first 16 KiB of the response body."
 }

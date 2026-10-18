@@ -339,6 +339,70 @@ pub async fn shared_run(
     result
 }
 
+pub async fn shared_execute(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Identity>,
+    Path((owner, workspace, request_id)): Path<(String, String, String)>,
+    Json(input): Json<crate::execution::ExecuteSaved>,
+) -> Result<Json<moleapi_core::Response>, ApiError> {
+    if state.local {
+        return Err(ApiError::not_found());
+    }
+    let tx = state.db.begin().await?;
+    let canonical = lock_workspace(&tx, &owner, &workspace).await?;
+    let (_, admission) = access(&tx, &actor.0, &owner, &workspace).await?;
+    if admission.role == Role::Viewer {
+        return Err(ApiError::forbidden("Viewer cannot execute this workspace"));
+    }
+    let request = canonical
+        .data
+        .collections
+        .iter()
+        .flat_map(|collection| &collection.requests)
+        .find(|request| request.id == request_id)
+        .cloned()
+        .ok_or_else(ApiError::not_found)?;
+    record_event_result(
+        &tx,
+        &owner,
+        &workspace,
+        &actor.0,
+        "request.execute",
+        Some(&request_id),
+        "started",
+    )
+    .await?;
+    tx.commit().await?;
+    let run = crate::execution::execute(
+        State(state.clone()),
+        Extension(Identity(owner.clone())),
+        Json(input.into_execute(workspace.clone(), request, canonical.revision)),
+    );
+    let watch = async {
+        let mut check = tokio::time::interval(std::time::Duration::from_millis(200));
+        check.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            check.tick().await;
+            let current = access(&state.db, &actor.0, &owner, &workspace).await;
+            if !matches!(current, Ok((_, current)) if current == admission) {
+                break;
+            }
+        }
+    };
+    tokio::pin!(run);
+    tokio::pin!(watch);
+    let result = tokio::select! {
+        biased;
+        _ = &mut watch => return Err(ApiError::not_found()),
+        result = &mut run => result,
+    };
+    let (_, current) = access(&state.db, &actor.0, &owner, &workspace).await?;
+    if current != admission {
+        return Err(ApiError::not_found());
+    }
+    result
+}
+
 async fn editor_read<T>(
     state: &AppState,
     actor: &str,

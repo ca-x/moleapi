@@ -856,6 +856,7 @@ async fn editor_run_is_audited_and_cross_instance_removal_withholds_its_result()
     let member_id = accepted["member_id"].as_str().unwrap();
     let shared_path = format!("/api/owners/{owner_id}/workspaces/w");
     let run_path = format!("{shared_path}/run");
+    let execute_path = format!("{shared_path}/requests/fast/execute");
     let history_path = format!("{shared_path}/history");
     let reports_path = format!("{shared_path}/reports");
     assert_eq!(
@@ -865,6 +866,18 @@ async fn editor_run_is_audited_and_cross_instance_removal_withholds_its_result()
             &run_path,
             Some(&member),
             Some(json!({"collection_id":"c","request_ids":["fast"]}))
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        call(
+            &first,
+            "POST",
+            &execute_path,
+            Some(&member),
+            Some(json!({}))
         )
         .await
         .0,
@@ -915,6 +928,40 @@ async fn editor_run_is_audited_and_cross_instance_removal_withholds_its_result()
     let (status, saved_response) = call(&first, "GET", &response_path, Some(&member), None).await;
     assert_eq!(status, StatusCode::OK, "{saved_response}");
     assert_eq!(saved_response["response"]["status"], 200);
+    let (status, direct) = call(
+        &first,
+        "POST",
+        &execute_path,
+        Some(&member),
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{direct}");
+    assert_eq!(direct["status"], 200);
+    assert_eq!(
+        call(
+            &first,
+            "POST",
+            &execute_path,
+            Some(&member),
+            Some(json!({"request":{"url":"http://attacker.invalid"}}))
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        call(
+            &first,
+            "POST",
+            &format!("{shared_path}/requests/missing/execute"),
+            Some(&member),
+            Some(json!({}))
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
     let first_for_run = first.clone();
     let member_for_run = member.clone();
     let run_path_for_task = run_path.clone();
@@ -943,6 +990,18 @@ async fn editor_run_is_audited_and_cross_instance_removal_withholds_its_result()
         .unwrap();
     assert_eq!(status, StatusCode::NOT_FOUND, "{withheld}");
     assert!(!withheld.to_string().contains("slow-private-response"));
+    assert_eq!(
+        call(
+            &first,
+            "POST",
+            &execute_path,
+            Some(&member),
+            Some(json!({}))
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
     for path in [&history_path, &reports_path, &detail_path, &response_path] {
         assert_eq!(
             call(&first, "GET", path, Some(&member), None).await.0,
@@ -963,12 +1022,17 @@ async fn editor_run_is_audited_and_cross_instance_removal_withholds_its_result()
             && event["subject_id"] == "slow-job"
             && event["result"] == "started"
     }));
+    assert!(audit.as_array().unwrap().iter().any(|event| {
+        event["actor_id"] == member_id
+            && event["action"] == "request.execute"
+            && event["subject_id"] == "fast"
+    }));
     release.notify_one();
     server.abort();
 }
 
 #[tokio::test]
-async fn rejoining_with_same_role_cannot_restore_an_in_flight_run() {
+async fn rejoining_with_same_role_cannot_restore_an_in_flight_request() {
     use std::sync::Arc;
     let dir = tempfile::tempdir().unwrap();
     let mut settings = config(
@@ -1029,7 +1093,7 @@ async fn rejoining_with_same_role_cannot_restore_an_in_flight_run() {
     .await;
     let owner_id = accepted["owner_id"].as_str().unwrap().to_owned();
     let member_id = accepted["member_id"].as_str().unwrap().to_owned();
-    let run_path = format!("/api/owners/{owner_id}/workspaces/w/run");
+    let run_path = format!("/api/owners/{owner_id}/workspaces/w/requests/r/execute");
     let first_for_run = first.clone();
     let member_for_run = member.clone();
     let running = tokio::spawn(async move {
@@ -1038,7 +1102,7 @@ async fn rejoining_with_same_role_cannot_restore_an_in_flight_run() {
             "POST",
             &run_path,
             Some(&member_for_run),
-            Some(json!({"collection_id":"c","job_id":"aba-run"})),
+            Some(json!({})),
         )
         .await
     });

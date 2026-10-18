@@ -13,11 +13,42 @@ pub struct Execute {
     request: RequestSpec,
     environment_id: Option<String>,
     #[serde(default)]
+    expected_workspace_revision: Option<i64>,
+    #[serde(default)]
     variables: Vec<Pair>,
     #[serde(default)]
     data: Vec<Pair>,
     #[serde(default)]
     locals: Vec<VariableUpdate>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExecuteSaved {
+    environment_id: Option<String>,
+    #[serde(default)]
+    variables: Vec<Pair>,
+    #[serde(default)]
+    data: Vec<Pair>,
+    #[serde(default)]
+    locals: Vec<VariableUpdate>,
+}
+impl ExecuteSaved {
+    pub(crate) fn into_execute(
+        self,
+        workspace_id: String,
+        request: RequestSpec,
+        revision: i64,
+    ) -> Execute {
+        Execute {
+            workspace_id,
+            request,
+            environment_id: self.environment_id,
+            expected_workspace_revision: Some(revision),
+            variables: self.variables,
+            data: self.data,
+            locals: self.locals,
+        }
+    }
 }
 pub(crate) fn environment<'a>(
     w: &'a Workspace,
@@ -702,6 +733,11 @@ pub async fn execute(
     Json(c): Json<Execute>,
 ) -> Result<Json<Response>, ApiError> {
     let w = owned(&s, &owner.0, &c.workspace_id).await?;
+    if c.expected_workspace_revision
+        .is_some_and(|revision| revision != w.revision)
+    {
+        return Err(ApiError::conflict("Workspace revision changed"));
+    }
     if c.request.protocol.is_graphql()
         && let Some(id) = &c.request.specification_id
         && !w.data.specifications.iter().any(|s| &s.id == id)
