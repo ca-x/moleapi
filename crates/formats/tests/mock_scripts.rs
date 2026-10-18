@@ -87,3 +87,37 @@ fn mock_schema_is_private_in_default_backup_and_exact_in_full_backup() {
         assert!(export(&workspace, format, true).is_err(), "{format}");
     }
 }
+
+#[test]
+fn linked_mock_schema_and_private_spec_source_survive_only_full_backup() {
+    let specification = json!({"openapi":"3.1.0","paths":{"/items":{"get":{"responses":{"200":{"content":{"application/json":{"schema":{"type":"string","const":"private-linked-example"}}}}}}}}}).to_string();
+    let source = json!({"id":"w","name":"Linked","revision":1,"updated_at":"now","data":{"schema_version":1,"specifications":[{"id":"spec","name":"Spec","kind":"openapi","dialect":"3.1.0","source":specification}],"collections":[{"id":"c","name":"C","description":"","requests":[{"id":"r","name":"R","method":"GET","url":"https://example.test/items","specification_id":"spec","description":"","query":[],"headers":[],"body_kind":"none","body":"","auth":{"kind":"none","token":"","username":"","password":""},"timeout_ms":1000,"follow_redirects":true,"verify_tls":true,"assertions":[],"examples":[{"id":"e","name":"Linked","status":200,"headers":[],"body":"static","mock_schema_link":{"specification_id":"spec","pointer":"#/paths/~1items/get/responses/200/content/application~1json/schema"}}]}]}],"environments":[],"active_environment_id":null}});
+    let workspace: Workspace = serde_json::from_value(source).unwrap();
+    validate_workspace(&workspace.data).unwrap();
+    let safe = export(&workspace, "moleapi", false).unwrap();
+    assert!(!safe.content.contains("private-linked-example"));
+    let restored = import("moleapi", &safe.content).unwrap();
+    assert!(
+        restored.data.collections[0].requests[0].examples[0]
+            .mock_schema_link
+            .is_none()
+    );
+    let full = export(&workspace, "moleapi", true).unwrap();
+    let restored = import("moleapi", &full.content).unwrap();
+    assert_eq!(
+        restored.data.collections[0].requests[0].examples[0]
+            .mock_schema_link
+            .as_ref()
+            .unwrap()
+            .specification_id,
+        "spec"
+    );
+    assert!(
+        restored.data.specifications[0]
+            .source
+            .contains("private-linked-example")
+    );
+    for format in ["postman", "openapi", "har"] {
+        assert!(export(&workspace, format, true).is_err(), "{format}");
+    }
+}

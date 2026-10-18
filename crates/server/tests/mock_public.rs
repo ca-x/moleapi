@@ -2,6 +2,161 @@ mod common;
 use common::*;
 
 #[tokio::test]
+async fn linked_openapi_source_edit_stales_public_mock_until_rotation() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = hosted(config(
+        moleapi_server::sqlite_database_url(&dir.path().join("linked-share.db")).unwrap(),
+        true,
+    ))
+    .await
+    .unwrap();
+    let owner = register(&router, "linkedsharealice").await;
+    let source = |id: u64| {
+        json!({"openapi":"3.1.0","paths":{"/items":{"get":{"responses":{"201":{"content":{"application/json":{"schema":{"type":"object","properties":{"id":{"const":id}},"required":["id"]}}}}}}}}}).to_string()
+    };
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["specification_id"] = json!("spec");
+    data["collections"][0]["requests"][0]["examples"][0]["mock_schema_link"] = json!({"specification_id":"spec","pointer":"#/paths/~1items/get/responses/201/content/application~1json/schema"});
+    data["specifications"] =
+        json!([{"id":"spec","name":"Spec","kind":"openapi","dialect":"3.1.0","source":source(1)}]);
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            Some(&owner),
+            Some(json!({"id":"w","name":"W","data":data}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let (_, share) = call(
+        &router,
+        "POST",
+        "/api/workspaces/w/mock-shares",
+        Some(&owner),
+        Some(json!({"request_id":"r","expires_in_days":1})),
+    )
+    .await;
+    let old = format!("/api/public/mock/{}/e", share["token"].as_str().unwrap());
+    assert_eq!(
+        call(&router, "GET", &old, None, None).await,
+        (StatusCode::CREATED, json!({"id":1}))
+    );
+    let (_, mut saved) = call(&router, "GET", "/api/workspaces/w", Some(&owner), None).await;
+    saved["data"]["specifications"][0]["source"] = json!(source(2));
+    let (status, updated) = call(
+        &router,
+        "PUT",
+        "/api/workspaces/w",
+        Some(&owner),
+        Some(json!({"name":"W","expected_revision":saved["revision"],"data":saved["data"]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{updated}");
+    assert_eq!(
+        call(&router, "GET", &old, None, None).await.0,
+        StatusCode::NOT_FOUND
+    );
+    let (_, rotated) = call(
+        &router,
+        "POST",
+        &format!(
+            "/api/workspaces/w/mock-shares/{}/rotate",
+            share["id"].as_str().unwrap()
+        ),
+        Some(&owner),
+        None,
+    )
+    .await;
+    let new = format!("/api/public/mock/{}/e", rotated["token"].as_str().unwrap());
+    assert_eq!(
+        call(&router, "GET", &new, None, None).await,
+        (StatusCode::CREATED, json!({"id":2}))
+    );
+}
+
+#[tokio::test]
+async fn linked_openapi_edit_on_another_instance_fences_delayed_public_body() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = config(
+        moleapi_server::sqlite_database_url(&dir.path().join("linked-delay.db")).unwrap(),
+        true,
+    );
+    let owner_router = hosted(config.clone()).await.unwrap();
+    let slots = std::sync::Arc::new(tokio::sync::Semaphore::new(32));
+    let public_router = moleapi_server::hosted_with_mock_delay_slots_for_test(
+        config,
+        std::path::Path::new(env!("CARGO_BIN_EXE_moleapi-server")),
+        slots.clone(),
+    )
+    .await
+    .unwrap();
+    let owner = register(&owner_router, "linkedfencealice").await;
+    let source = |id: u64| {
+        json!({"openapi":"3.1.0","paths":{"/items":{"get":{"responses":{"201":{"content":{"application/json":{"schema":{"type":"object","properties":{"id":{"const":id}},"required":["id"]}}}}}}}}}).to_string()
+    };
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["specification_id"] = json!("spec");
+    data["collections"][0]["requests"][0]["examples"][0]["mock_schema_link"] = json!({"specification_id":"spec","pointer":"#/paths/~1items/get/responses/201/content/application~1json/schema"});
+    data["collections"][0]["requests"][0]["examples"][0]["delay_ms"] = json!(1_000);
+    data["specifications"] =
+        json!([{"id":"spec","name":"Spec","kind":"openapi","dialect":"3.1.0","source":source(1)}]);
+    assert_eq!(
+        call(
+            &owner_router,
+            "POST",
+            "/api/workspaces",
+            Some(&owner),
+            Some(json!({"id":"w","name":"W","data":data}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let (_, share) = call(
+        &owner_router,
+        "POST",
+        "/api/workspaces/w/mock-shares",
+        Some(&owner),
+        Some(json!({"request_id":"r","expires_in_days":1})),
+    )
+    .await;
+    let path = format!("/api/public/mock/{}/e", share["token"].as_str().unwrap());
+    let running = tokio::spawn(async move { call(&public_router, "GET", &path, None, None).await });
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        while slots.available_permits() != 31 {
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("linked public Mock did not enter delay");
+    let (_, mut saved) = call(
+        &owner_router,
+        "GET",
+        "/api/workspaces/w",
+        Some(&owner),
+        None,
+    )
+    .await;
+    saved["data"]["specifications"][0]["source"] = json!(source(2));
+    assert_eq!(
+        call(
+            &owner_router,
+            "PUT",
+            "/api/workspaces/w",
+            Some(&owner),
+            Some(json!({"name":"W","expected_revision":saved["revision"],"data":saved["data"]}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert_eq!(running.await.unwrap().0, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
 async fn public_schema_mock_requires_rotation_after_schema_change() {
     let dir = tempfile::tempdir().unwrap();
     let router = hosted(config(

@@ -74,9 +74,34 @@ fn view(share: &MockShare, stale: bool) -> ShareView {
     }
 }
 
-fn request_digest(request: &moleapi_core::RequestSpec) -> Result<String, ApiError> {
+fn request_digest(
+    workspace: &moleapi_core::Workspace,
+    request: &moleapi_core::RequestSpec,
+) -> Result<String, ApiError> {
     let bytes = serde_json::to_vec(request).map_err(|_| ApiError::internal())?;
-    Ok(hex::encode(Sha256::digest(bytes)))
+    let mut digest = Sha256::new();
+    digest.update(bytes);
+    let linked: std::collections::BTreeSet<&str> = request
+        .examples
+        .iter()
+        .filter_map(|example| {
+            example
+                .mock_schema_link
+                .as_ref()
+                .map(|link| link.specification_id.as_str())
+        })
+        .collect();
+    for id in linked {
+        let spec = workspace
+            .data
+            .specifications
+            .iter()
+            .find(|spec| spec.id == id)
+            .ok_or_else(ApiError::not_found)?;
+        let source = serde_json::to_vec(&(id, &spec.source)).map_err(|_| ApiError::internal())?;
+        digest.update(source);
+    }
+    Ok(hex::encode(digest.finalize()))
 }
 
 fn validate_target(
@@ -118,7 +143,9 @@ pub(crate) fn request_matches(
     share: &MockShare,
 ) -> Result<bool, ApiError> {
     bound_request(workspace, share)
-        .map(|request| request_digest(request).map(|digest| digest == share.request_digest))
+        .map(|request| {
+            request_digest(workspace, request).map(|digest| digest == share.request_digest)
+        })
         .transpose()
         .map(|result| result.unwrap_or(false))
 }
@@ -301,7 +328,7 @@ pub async fn create(
         created_at: now,
         expires_at: now + i64::from(input.expires_in_days) * 86_400,
         allow_dynamic: input.allow_dynamic,
-        request_digest: request_digest(request)?,
+        request_digest: request_digest(&source, request)?,
     };
     storage::insert_doc(&tx, key, &owner.0, KIND, &workspace, 1, &share).await?;
     tx.commit().await?;
@@ -353,7 +380,7 @@ pub async fn rotate(
         .ok_or_else(ApiError::not_found)?;
     let request = bound_request(&current, &share).ok_or_else(ApiError::not_found)?;
     validate_target(request, share.allow_dynamic)?;
-    share.request_digest = request_digest(request)?;
+    share.request_digest = request_digest(&current, request)?;
     let (token, key) = new_token();
     document::Entity::delete_by_id(old_key).exec(&tx).await?;
     storage::insert_doc(&tx, key, &owner.0, KIND, &workspace, 1, &share).await?;

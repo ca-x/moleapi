@@ -192,6 +192,19 @@ fn redact_auth(auth: &mut moleapi_core::Auth, privacy: &ExportPrivacy) {
     auth.password.clear();
 }
 pub(super) fn workspace(source: &Workspace) -> Workspace {
+    let linked_specifications: std::collections::HashSet<String> = source
+        .data
+        .collections
+        .iter()
+        .flat_map(|collection| &collection.requests)
+        .flat_map(|request| &request.examples)
+        .filter_map(|example| {
+            example
+                .mock_schema_link
+                .as_ref()
+                .map(|link| link.specification_id.clone())
+        })
+        .collect();
     let privacy = ExportPrivacy::new(source);
     let tcp_privacy = ExportPrivacy::from_workspace(source, true);
     let data_privacy = &tcp_privacy;
@@ -441,6 +454,7 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
             for example in &mut request.examples {
                 example.mock_script.clear();
                 example.mock_schema.clear();
+                example.mock_schema_link = None;
                 let private_match = example.mock_match.as_ref().is_some_and(|rule| {
                     rule.body.is_some()
                         || rule.query.iter().chain(&rule.headers).any(|row| {
@@ -747,7 +761,7 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
         }
     }
     for specification in &mut result.data.specifications {
-        if specification.kind == "insomnia" {
+        if specification.kind == "insomnia" || linked_specifications.contains(&specification.id) {
             specification.source.clear();
             continue;
         }

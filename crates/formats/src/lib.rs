@@ -82,6 +82,7 @@ pub fn export(workspace: &Workspace, format: &str, include_secrets: bool) -> Res
                 example.mock_match.is_some()
                     || example.delay_ms > 0
                     || !example.mock_schema.is_empty()
+                    || example.mock_schema_link.is_some()
             })
     {
         bail!(

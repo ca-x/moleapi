@@ -110,6 +110,7 @@ export interface Example {
   headers: Pair[];
   body: string;
   mock_schema?: string;
+  mock_schema_link?: { specification_id: string; pointer: string };
   mock_script?: string;
   mock_match?: {
     priority: number;
