@@ -22,11 +22,11 @@ def main(bundle_directory: Path, environment=None) -> None:
     package = packages[0].resolve(strict=True)
     metadata = subprocess.run(['dpkg-deb', '--field', str(package), 'Package'],
                               capture_output=True, text=True, check=True, timeout=15)
-    if metadata.stdout.strip() != 'moleapi':
-        raise ValueError('Expected the MoleAPI deb package before installation')
+    if metadata.stdout.strip() != 'mole-api':
+        raise ValueError('Expected the mole-api deb package before installation')
     subprocess.run(['sudo', 'apt-get', 'install', '-y', '--no-install-recommends', str(package)],
                    check=True, timeout=300)
-    status = subprocess.run(['dpkg-query', '-W', '-f=${Status}', 'moleapi'],
+    status = subprocess.run(['dpkg-query', '-W', '-f=${Status}', 'mole-api'],
                             capture_output=True, text=True, check=True, timeout=15)
     if status.stdout.strip() != 'install ok installed':
         raise RuntimeError('MoleAPI deb is not installed')

@@ -69,6 +69,13 @@ CI 为无 FUSE 环境全局设置 `APPIMAGE_EXTRACT_AND_RUN=1`。修复脚本读
 actionlint 仅需忽略其不认识的现有 GitHub `macos-15-intel` 标签。真实安装仍待本分支固定提交
 的 Linux 原生 CI，图形界面启动、macOS/Windows 安装与签名门禁仍独立开放。
 
+固定提交 `75f0dc7` 的原生 run `39101519571` 在 Linux 已通过实际 deb/RPM/AppImage
+解包、脚本 worker、原始 JRE 和 Dubbo 检查，但真实安装步骤在 apt 执行前被检查脚本
+拦下：脚本误认为 deb 的 `Package` 字段为 `moleapi`。此前同配置构建的原始 deb 控制文件
+实为 `Package: mole-api`，而其安装后可执行文件仍为 `/usr/bin/moleapi`。检查脚本和
+合成测试现分别使用包管理器名称与可执行文件路径；修正后的固定提交原生安装仍需重跑
+并检查 apt 与已安装资源的完整日志，不能把本次失败记作安装通过。
+
 
 2026-10-15 容器原生结果：main ea34ce1 的 Docker run38698102016 已完成 linux/amd64、
 linux/arm64 和 manifest。两个原生镜像均通过固定 JRE21.0.12.1+1 启动及真实归属 API
