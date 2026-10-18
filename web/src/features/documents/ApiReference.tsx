@@ -1,8 +1,10 @@
 import {useEffect,useState} from "react";
-import {Badge,Card,Flex,Heading,Text} from "@radix-ui/themes";
+import {Badge,Button,Card,Flex,Heading,Text} from "@radix-ui/themes";
+import {Copy} from "lucide-react";
 import {t,useLanguage} from "../../shared/i18n";
 import type {Auth,Pair,WorkspaceData} from "../../shared/types";
 import MarkdownPreview from "./MarkdownPreview";
+import {formatRequestLink} from "./internalLinks";
 
 function authLabel(kind:Auth["kind"]):string {
   const labels:Record<Auth["kind"],string>={inherit:t("继承父级鉴权"),none:"No Auth",bearer:"Bearer Token",basic:"Basic Auth",apikey:"API Key",jwt:"JWT",digest:"Digest Auth",oauth2:"OAuth 2.0",aws:"AWS Signature V4",hawk:"Hawk",oauth1:"OAuth 1.0",ntlm:"NTLM",edgegrid:"Akamai EdgeGrid",asap:"Atlassian ASAP"};
@@ -21,9 +23,10 @@ function PairTable({rows,label,nested=false}:{rows:Pair[];label:string;nested?:b
   </section>;
 }
 
-export default function ApiReference({data,scopeKey}:{data:WorkspaceData;scopeKey:string}) {
+export default function ApiReference({data,scopeKey,onOpenRequest}:{data:WorkspaceData;scopeKey:string;onOpenRequest?:(id:string)=>void}) {
   useLanguage();
   const [selection,setSelection]=useState({scopeKey,id:"",index:0});
+  const [copyState,setCopyState]=useState<{scopeKey:string;id:string;status:"success"|"error"}|null>(null);
   const groups=data.collections.map(collection=>({collection,requests:collection.requests.filter(request=>!request.protocol||request.protocol.kind==="http")}));
   const entries=groups.flatMap(group=>group.requests.map(request=>({collection:group.collection,request})));
   const omitted=data.collections.reduce((count,collection)=>count+collection.requests.length,0)-entries.length;
@@ -31,11 +34,21 @@ export default function ApiReference({data,scopeKey}:{data:WorkspaceData;scopeKe
   const currentIndex=entries.findIndex(entry=>entry.request.id===active.id);
   const resolvedIndex=currentIndex>=0?currentIndex:Math.min(active.index,entries.length-1);
   const selected=entries[resolvedIndex];
+  const requestIds=new Set(data.collections.flatMap(collection=>collection.requests.map(request=>request.id)));
   useEffect(()=>{
     const id=selected?.request.id??"";
     if(selection.scopeKey!==scopeKey||selection.id!==id||selection.index!==Math.max(0,resolvedIndex))setSelection({scopeKey,id,index:Math.max(0,resolvedIndex)});
   },[scopeKey,selection,selected?.request.id,resolvedIndex]);
   const request=selected?.request;
+  const copyRequestLink=async()=>{
+    if(!request)return;
+    const id=request.id;
+    try {
+      if(!navigator.clipboard?.writeText)throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(formatRequestLink(id));
+      setCopyState({scopeKey,id,status:"success"});
+    } catch {setCopyState({scopeKey,id,status:"error"});}
+  };
   return <div className="api-reference">
     <div className="api-reference-intro">
       <Heading as="h2" size="4">{t("自动生成的 API 文档")}</Heading>
@@ -53,10 +66,11 @@ export default function ApiReference({data,scopeKey}:{data:WorkspaceData;scopeKe
       </nav>
       {request?<Card className="document-editor-card api-reference-article">
         <article>
-          <Flex gap="2" align="center" wrap="wrap"><Badge color="gray">{request.method}</Badge><Heading as="h2" size="4">{request.name}</Heading></Flex>
+          <Flex gap="2" align="center" justify="between" wrap="wrap"><Flex gap="2" align="center" wrap="wrap"><Badge color="gray">{request.method}</Badge><Heading as="h2" size="4">{request.name}</Heading></Flex><Button size="1" variant="soft" onClick={()=>void copyRequestLink()}><Copy size={14}/>{t("复制请求链接")}</Button></Flex>
+          {copyState?.scopeKey===scopeKey&&copyState.id===request.id&&(copyState.status==="success"?<Text role="status" size="2" color="green">{t("请求链接已复制。")}</Text>:<Text role="alert" size="2" color="red">{t("无法复制请求链接。")}</Text>)}
           <Text size="1" color="gray">{selected.collection.name}</Text>
           <pre className="api-reference-source">{request.url}</pre>
-          {request.description&&<section className="api-reference-section"><Heading as="h3" size="3">{t("说明")}</Heading><MarkdownPreview source={request.description} nested/></section>}
+          {request.description&&<section className="api-reference-section"><Heading as="h3" size="3">{t("说明")}</Heading><MarkdownPreview source={request.description} nested requestIds={requestIds} onOpenRequest={onOpenRequest}/></section>}
           <PairTable rows={request.query} label={t("查询参数")}/>
           <PairTable rows={request.headers} label={t("请求头")}/>
           <section className="api-reference-section"><Heading as="h3" size="3">{t("鉴权")}</Heading><Text>{authLabel(request.auth.kind)}</Text></section>

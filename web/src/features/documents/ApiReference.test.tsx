@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
-import {cleanup,fireEvent,render,screen} from "@testing-library/react";
+import {cleanup,fireEvent,render,screen,waitFor} from "@testing-library/react";
 import {Theme} from "@radix-ui/themes";
-import {afterEach,expect,it} from "vitest";
+import {afterEach,expect,it,vi} from "vitest";
 import {setLanguage} from "../../shared/i18n";
 import {newRequest} from "../../shared/model";
 import type {WorkspaceData} from "../../shared/types";
 import ApiReference from "./ApiReference";
 
-afterEach(cleanup);
+afterEach(()=>{cleanup();vi.unstubAllGlobals();});
 
 function fixture():WorkspaceData {
   const first=newRequest("First","https://example.test/items?token=owner-only");
@@ -92,4 +92,26 @@ it("selects the next HTTP request after a selected request is deleted or changes
   const changed={...data,collections:data.collections.map(collection=>({...collection,requests:collection.requests.map(request=>request.id==="second"?{...request,protocol:{kind:"sse" as const}}:request)}))};
   page.rerender(<Theme><ApiReference data={changed} scopeKey="owner/other"/></Theme>);
   expect(screen.getByRole("heading",{name:"Third"})).toBeTruthy();
+});
+
+it("copies only the selected request URI without changing the draft",async()=>{
+  await setLanguage("en");
+  const writeText=vi.fn().mockResolvedValue(undefined);
+  vi.stubGlobal("navigator",Object.assign(Object.create(navigator),{clipboard:{writeText}}));
+  const data=fixture();
+  const original=JSON.stringify(data);
+  render(<Theme><ApiReference data={data} scopeKey="owner/workspace"/></Theme>);
+  fireEvent.click(screen.getByRole("button",{name:"Copy request link"}));
+  await waitFor(()=>expect(writeText).toHaveBeenCalledExactlyOnceWith("moleapi://request/first"));
+  expect(screen.getByRole("status").textContent).toBe("Request link copied.");
+  expect(JSON.stringify(data)).toBe(original);
+});
+
+it("reports clipboard failure without navigating or changing the draft",async()=>{
+  await setLanguage("en");
+  const writeText=vi.fn().mockRejectedValue(new Error("denied"));
+  vi.stubGlobal("navigator",Object.assign(Object.create(navigator),{clipboard:{writeText}}));
+  render(<Theme><ApiReference data={fixture()} scopeKey="owner/workspace"/></Theme>);
+  fireEvent.click(screen.getByRole("button",{name:"Copy request link"}));
+  await waitFor(()=>expect(screen.getByRole("alert").textContent).toBe("Could not copy the request link."));
 });

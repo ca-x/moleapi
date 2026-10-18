@@ -561,6 +561,8 @@ kbd {
 .markdown-preview blockquote { margin-inline-start: 0; padding-inline-start: 12px; border-inline-start: 2px solid var(--gray-8); color: var(--gray-11); }
 .markdown-preview th, .markdown-preview td { padding: 6px 10px; border: 1px solid var(--gray-6); text-align: start; }
 .markdown-preview a { color: var(--accent-11); text-decoration: underline; }
+.markdown-internal-link { padding: 0; border: 0; color: var(--accent-11); background: none; font: inherit; text-decoration: underline; cursor: pointer; }
+.markdown-internal-link:focus-visible { outline: 2px solid var(--accent-9); outline-offset: 2px; }
 .page-panel .response-pane {
   margin: 0;
 }

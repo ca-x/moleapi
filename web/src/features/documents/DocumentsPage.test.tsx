@@ -21,7 +21,8 @@ function setup(source="# Guide\n\n[Safe](https://example.test) [Unsafe](javascri
   const updateData=vi.fn();
   const save=vi.fn();
   const setGuard=vi.fn();
-  const context={accountId:"owner",draft:{id:"w",name:"W",revision:1,data},updateData,save,setGuard,dirty:true,saving:false,dark:false};
+  const draft={id:"w",name:"W",revision:1,data};
+  const context={accountId:"owner",draft,stateRef:{current:{draft}},accountRef:{current:"owner"},setRequestId:vi.fn(),setView:vi.fn(),setSidebar:vi.fn(),updateData,save,setGuard,dirty:true,saving:false,dark:false};
   vi.mocked(useWorkbench).mockReturnValue(context as never);
   return {data,updateData,save,setGuard,context};
 }
@@ -115,4 +116,27 @@ it("switches to live generated API docs without changing the workspace draft",as
   expect(screen.getByRole("heading",{name:"List animals"})).toBeTruthy();
   fireEvent.mouseDown(screen.getByRole("tab",{name:/Markdown/}),{button:0});
   expect(screen.getAllByRole("heading",{name:"Guide"}).length).toBeGreaterThan(0);
+});
+
+it("opens only a current-workspace request and refuses stale or foreign references",async()=>{
+  await setLanguage("en");
+  const {data,context,updateData}=setup("[Open](moleapi://request/owned) [Missing](moleapi://request/foreign)");
+  const request=newRequest("Owned","https://example.test");
+  request.id="owned";
+  data.collections[0].requests.push(request);
+  render(<Theme><DocumentsPage/></Theme>);
+  fireEvent.click(screen.getByRole("button",{name:"Open"}));
+  expect(context.setRequestId).toHaveBeenCalledExactlyOnceWith("owned");
+  expect(context.setView).toHaveBeenCalledExactlyOnceWith("requests");
+  expect(context.setSidebar).toHaveBeenCalledExactlyOnceWith(false);
+  expect(screen.queryByRole("button",{name:"Missing"})).toBeNull();
+  expect(updateData).not.toHaveBeenCalled();
+  vi.clearAllMocks();
+  context.stateRef.current.draft={...context.draft,id:"another"};
+  fireEvent.click(screen.getByRole("button",{name:"Open"}));
+  expect(context.setRequestId).not.toHaveBeenCalled();
+  context.stateRef.current.draft=context.draft;
+  context.accountRef.current="other";
+  fireEvent.click(screen.getByRole("button",{name:"Open"}));
+  expect(context.setRequestId).not.toHaveBeenCalled();
 });
