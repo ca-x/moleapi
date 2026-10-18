@@ -246,3 +246,20 @@ it("edits and reloads bounded Mock fault controls in both languages",async()=>{
   expect(screen.getByRole("spinbutton",{name:"故障比例（%）"})).toBeTruthy();
   expect(screen.getByRole("spinbutton",{name:"故障状态码（5xx）"})).toBeTruthy();
 });
+
+it("edits and reloads the per-minute Mock limit in both languages",async()=>{
+  await setLanguage("en");
+  const request=newRequest("R","https://example.test/items");
+  request.examples=[{id:"e",name:"Example",status:200,headers:[],body:"static"}];
+  const update=vi.fn();
+  const page=render(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
+  const control=()=>screen.getByRole("spinbutton",{name:"Request limit per minute"});
+  expect(control()).toHaveProperty("value","0");
+  fireEvent.change(control(),{target:{value:"1200"}});
+  expect(update.mock.lastCall?.[0].examples[0].rate_limit_per_minute).toBe(1000);
+  request.examples=[{...request.examples[0],rate_limit_per_minute:2}];
+  page.rerender(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w"/></Theme>);
+  expect(control()).toHaveProperty("value","2");
+  await setLanguage("zh-CN");
+  expect(screen.getByRole("spinbutton",{name:"每分钟请求上限"})).toBeTruthy();
+});

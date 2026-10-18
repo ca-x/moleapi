@@ -381,6 +381,7 @@ fn walk(
                     delay_ms: 0,
                     fault_rate_percent: 0,
                     fault_status: 503,
+                    rate_limit_per_minute: 0,
                 });
             }
         }

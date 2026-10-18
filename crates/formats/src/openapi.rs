@@ -166,6 +166,7 @@ pub(super) fn import(content: &str) -> Result<ImportResult> {
                                     delay_ms: 0,
                                     fault_rate_percent: 0,
                                     fault_status: 503,
+                                    rate_limit_per_minute: 0,
                                     body: if mime.contains("json") {
                                         serde_json::to_string_pretty(example)?
                                     } else {
