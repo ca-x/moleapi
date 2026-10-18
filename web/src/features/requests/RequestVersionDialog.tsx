@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { AlertDialog, Button, Callout, Dialog, Flex, Heading, ScrollArea, Text } from "@radix-ui/themes";
 import { toast } from "sonner";
 import { api, ApiError } from "../../shared/api";
@@ -27,6 +28,7 @@ type VersionDetail = {
 
 export default function RequestVersionDialog() {
   const { language } = useLanguage();
+  const client = useQueryClient();
   const state = useWorkbench();
   const requestId = state.versionRequestId;
   const workspace = state.saved;
@@ -50,6 +52,9 @@ export default function RequestVersionDialog() {
   const nextBefore = pages.at(-1)?.next_before;
   const currentRequest = workspace?.data.collections.flatMap((collection) => collection.requests)
     .find((request) => request.id === requestId);
+  const historicalCollectionExists = !!detail?.collection_id && !!workspace?.data.collections
+    .some((collection) => collection.id === detail.collection_id);
+  const needsDestination = !currentRequest && !!detail?.request && !historicalCollectionExists;
 
   useEffect(() => {
     setPages([]);
@@ -81,13 +86,12 @@ export default function RequestVersionDialog() {
   }, [base, selectedRevision, account]);
 
   useEffect(() => {
-    if (!workspace || !detail?.request || currentRequest) {
+    if (!workspace || !needsDestination) {
       setDestination("");
       return;
     }
-    const historical = workspace.data.collections.find((collection) => collection.id === detail.collection_id);
-    setDestination(historical?.id ?? workspace.data.collections[0]?.id ?? "");
-  }, [workspace, detail, currentRequest]);
+    setDestination(workspace.data.collections[0]?.id ?? "");
+  }, [workspace, needsDestination]);
 
   async function loadMore() {
     if (!base || !workspace || !requestId || nextBefore == null || loading) return;
@@ -104,9 +108,22 @@ export default function RequestVersionDialog() {
     } finally { if (originRef.current === source) setLoading(false); }
   }
 
-  async function applyRestore(revision: number, sourceAccount: string, sourceWorkspace: string, sourceRequest: string, destinationId: string | null) {
+  async function applyRestore(revision: number, sourceAccount: string, sourceWorkspace: string, sourceRequest: string, selectedDestination: string | null, historicalCollectionId: string | null, targetExists: boolean) {
     const current = state.stateRef.current.saved;
     if (state.accountRef.current !== sourceAccount || current?.id !== sourceWorkspace) return;
+    const liveRequest = current.data.collections.some((collection) => collection.requests.some((request) => request.id === sourceRequest));
+    const historicalExists = current.data.collections.some((collection) => collection.id === historicalCollectionId);
+    const requiresDestination = targetExists && !liveRequest && !historicalExists;
+    const destinationId = requiresDestination && selectedDestination && current.data.collections.some((collection) => collection.id === selectedDestination)
+      ? selectedDestination : null;
+    if (requiresDestination && !destinationId) {
+      toast.error(liveTranslation("目标集合已变更，请重新选择后恢复。"));
+      return;
+    }
+    if (!targetExists && !liveRequest) {
+      toast.error(liveTranslation("当前请求已不存在。"));
+      return;
+    }
     setRestoring(true);
     try {
       const restored = await api<Workspace>(
@@ -121,6 +138,7 @@ export default function RequestVersionDialog() {
       state.setRequestId(requests.some((request) => request.id === sourceRequest)
         ? sourceRequest : (requests[0]?.id ?? ""));
       state.setVersionRequestId(null);
+      void client.invalidateQueries({ queryKey: ["workspace-versions", sourceAccount, sourceWorkspace] });
       toast.success(liveTranslation("已恢复请求版本"));
     } catch (error) {
       if (state.accountRef.current !== sourceAccount || state.stateRef.current.saved?.id !== sourceWorkspace) return;
@@ -138,21 +156,23 @@ export default function RequestVersionDialog() {
   function requestRestore() {
     if (!workspace || !requestId || !detail || restoring || detailLoading) return;
     if (!currentRequest && !detail.request) return;
-    if (!currentRequest && detail.request && !destination) return;
+    if (needsDestination && !destination) return;
     const revision = detail.revision;
     const sourceAccount = account;
     const sourceWorkspace = workspace.id;
     const sourceRequest = requestId;
-    const destinationId = !currentRequest && detail.request ? destination : null;
+    const destinationId = needsDestination ? destination : null;
+    const historicalCollectionId = detail.collection_id;
+    const targetExists = !!detail.request;
     setConfirming(false);
     if (state.dirty) {
       state.setGuard({
         title: message("恢复请求版本"),
         description: message("当前工作区有未保存修改。可以保存后恢复请求，或放弃修改后恢复。"),
         saveFirst: true,
-        action: () => applyRestore(revision, sourceAccount, sourceWorkspace, sourceRequest, destinationId),
+        action: () => applyRestore(revision, sourceAccount, sourceWorkspace, sourceRequest, destinationId, historicalCollectionId, targetExists),
       });
-    } else void applyRestore(revision, sourceAccount, sourceWorkspace, sourceRequest, destinationId);
+    } else void applyRestore(revision, sourceAccount, sourceWorkspace, sourceRequest, destinationId, historicalCollectionId, targetExists);
   }
 
   return <Dialog.Root open={!!requestId && !!workspace} onOpenChange={(open) => { if (!open && !restoring) state.setVersionRequestId(null); }}>
@@ -183,10 +203,10 @@ export default function RequestVersionDialog() {
                 {detail.request.description && <Text size="2">{detail.request.description}</Text>}
                 {detail.request.body && <ScrollArea style={{ maxHeight: 110 }}><pre style={{ margin: 0, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{detail.request.body.slice(0, 2000)}{detail.request.body.length > 2000 ? "…" : ""}</pre></ScrollArea>}
               </> : <Text color="gray">{t("此版本中请求不存在；恢复将删除当前请求。")}</Text>}
-              {!currentRequest && detail.request && workspace && workspace.data.collections.length > 0 && <Choice value={destination} onChange={setDestination} label={t("恢复到集合")} options={workspace.data.collections.map((collection) => ({ value: collection.id, label: collection.name }))} />}
-              {!currentRequest && detail.request && workspace?.data.collections.length === 0 && <Text color="red">{t("先创建集合，再恢复已删除的请求。")}</Text>}
+              {needsDestination && workspace && workspace.data.collections.length > 0 && <Choice value={destination} onChange={setDestination} label={t("恢复到集合")} options={workspace.data.collections.map((collection) => ({ value: collection.id, label: collection.name }))} />}
+              {needsDestination && workspace?.data.collections.length === 0 && <Text color="red">{t("先创建集合，再恢复已删除的请求。")}</Text>}
               <AlertDialog.Root open={confirming} onOpenChange={setConfirming}>
-                <AlertDialog.Trigger><Button type="button" color="gray" highContrast disabled={restoring || (!currentRequest && !!detail.request && !destination) || (!currentRequest && !detail.request)}>{t("恢复此请求版本")}</Button></AlertDialog.Trigger>
+                <AlertDialog.Trigger><Button type="button" color="gray" highContrast disabled={restoring || (needsDestination && !destination) || (!currentRequest && !detail.request)}>{t("恢复此请求版本")}</Button></AlertDialog.Trigger>
                 <AlertDialog.Content maxWidth="440px">
                   <AlertDialog.Title>{t("恢复请求版本")}</AlertDialog.Title>
                   <AlertDialog.Description>{detail.request

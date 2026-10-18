@@ -11,7 +11,7 @@
 ## Global constraints
 
 - Owner check precedes every history lookup; default list omits request payloads and credentials.
-- At most 32 archived rows are scanned per list page and only one full snapshot is held at a time.
+- At most 32 archived rows are scanned per list page. Only one archived row is processed at a time; its raw JSON and decoded workspace coexist briefly during parsing, while the live workspace is reduced to the selected request state before the scan.
 - Request-only restore retains unrelated current workspace state and existing CAS/revocation side effects.
 - Desktop local and hosted modes use the same route and current validator.
 

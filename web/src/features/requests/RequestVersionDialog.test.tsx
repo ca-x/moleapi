@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Theme } from "@radix-ui/themes";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, expect, it, vi } from "vitest";
 import { api } from "../../shared/api";
 import { t } from "../../shared/i18n";
@@ -38,12 +39,14 @@ function setup(dirty = false, deleted = false) {
     setSaveConflict: vi.fn(),
   };
   const base = `/api/workspaces/workspace-a/requests/${encodeURIComponent(request.id)}/versions`;
-  const show = () => render(<Theme><WorkbenchContext.Provider value={state as unknown as ReturnType<typeof useWorkbenchController>}><RequestVersionDialog /></WorkbenchContext.Provider></Theme>);
-  return { state, workspace, request, base, show };
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client.setQueryData(["workspace-versions", "local", workspace.id], [{ revision: 1 }]);
+  const show = () => render(<QueryClientProvider client={client}><Theme><WorkbenchContext.Provider value={state as unknown as ReturnType<typeof useWorkbenchController>}><RequestVersionDialog /></WorkbenchContext.Provider></Theme></QueryClientProvider>);
+  return { state, workspace, request, base, client, show };
 }
 
 it("loads paged request history and restores only the selected request", async () => {
-  const { state, workspace, request, base, show } = setup();
+  const { state, workspace, request, base, client, show } = setup();
   const old = { ...request, name: "Old request" };
   const restored = { ...workspace, revision: 3, data: { ...workspace.data, collections: [{ ...workspace.data.collections[0], requests: [old] }] } };
   vi.mocked(api).mockImplementation(async (path, method) => {
@@ -61,6 +64,24 @@ it("loads paged request history and restores only the selected request", async (
   await waitFor(() => expect(state.installWorkspace).toHaveBeenCalledWith(restored));
   expect(state.setResponse).toHaveBeenCalledOnce();
   expect(state.setRequestId).toHaveBeenCalledWith(request.id);
+  expect(client.getQueryState(["workspace-versions", "local", workspace.id])?.isInvalidated).toBe(true);
+});
+
+it("uses the historical collection when it still exists", async () => {
+  const { state, workspace, request, base, show } = setup(false, true);
+  const historical = workspace.data.collections[0].id;
+  vi.mocked(api).mockImplementation(async (path, method) => {
+    if (method === "POST") return { ...workspace, revision: 3 };
+    if (path === base) return { versions: [{ revision: 1, updated_at: "2026-10-17T10:00:00Z", collection_id: historical, name: request.name, method: request.method, exists: true }], next_before: null };
+    if (path === `${base}/1`) return { revision: 1, updated_at: "2026-10-17T10:00:00Z", collection_id: historical, request };
+    throw new Error(`Unexpected API path ${path}`);
+  });
+  show();
+  fireEvent.click(await screen.findByRole("button", { name: t("恢复此请求版本") }));
+  expect(screen.queryByRole("combobox", { name: t("恢复到集合") })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: t("确认恢复") }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/1/restore`, "POST", { expected_revision: 2 }));
+  expect(state.setVersionRequestId).toHaveBeenCalledWith(null);
 });
 
 it("guards unsaved changes before restoring historical request absence", async () => {
@@ -89,8 +110,8 @@ it("selects a live collection when restoring a deleted request", async () => {
   const restored = { ...workspace, revision: 3, data: { ...workspace.data, collections: [{ ...workspace.data.collections[0], requests: [request] }] } };
   vi.mocked(api).mockImplementation(async (path, method) => {
     if (method === "POST") return restored;
-    if (path === base) return { versions: [{ revision: 1, updated_at: "2026-10-17T10:00:00Z", collection_id: collectionId, name: request.name, method: request.method, exists: true }], next_before: null };
-    if (path === `${base}/1`) return { revision: 1, updated_at: "2026-10-17T10:00:00Z", collection_id: collectionId, request };
+    if (path === base) return { versions: [{ revision: 1, updated_at: "2026-10-17T10:00:00Z", collection_id: "old-collection", name: request.name, method: request.method, exists: true }], next_before: null };
+    if (path === `${base}/1`) return { revision: 1, updated_at: "2026-10-17T10:00:00Z", collection_id: "old-collection", request };
     throw new Error(`Unexpected API path ${path}`);
   });
   show();
@@ -98,6 +119,23 @@ it("selects a live collection when restoring a deleted request", async () => {
   fireEvent.click(screen.getByRole("button", { name: t("确认恢复") }));
   await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/1/restore`, "POST", { expected_revision: 2, destination_collection_id: collectionId }));
   await waitFor(() => expect(state.installWorkspace).toHaveBeenCalledWith(restored));
+});
+
+it("rechecks the saved workspace after the guard saves a recreated request", async () => {
+  const { state, workspace, request, base, show } = setup(true, true);
+  vi.mocked(api).mockImplementation(async (path, method) => {
+    if (method === "POST") return { ...workspace, revision: 4 };
+    if (path === base) return { versions: [{ revision: 1, updated_at: "2026-10-17T10:00:00Z", collection_id: "old-collection", name: request.name, method: request.method, exists: true }], next_before: null };
+    if (path === `${base}/1`) return { revision: 1, updated_at: "2026-10-17T10:00:00Z", collection_id: "old-collection", request: { ...request, name: "Historical" } };
+    throw new Error(`Unexpected API path ${path}`);
+  });
+  show();
+  fireEvent.click(await screen.findByRole("button", { name: t("恢复此请求版本") }));
+  fireEvent.click(screen.getByRole("button", { name: t("确认恢复") }));
+  const guard = state.setGuard.mock.calls[0][0];
+  state.stateRef.current.saved = { ...workspace, revision: 3, data: { ...workspace.data, collections: [{ ...workspace.data.collections[0], requests: [request] }] } };
+  await guard.action();
+  await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/1/restore`, "POST", { expected_revision: 3 }));
 });
 
 it("ignores a restore response after an account switch", async () => {

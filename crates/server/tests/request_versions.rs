@@ -48,6 +48,10 @@ async fn request_history_finds_changes_without_exposing_unchanged_or_foreign_sna
     .await;
     assert_eq!(status, StatusCode::OK, "{unchanged}");
     changed["collections"][0]["requests"] = json!([]);
+    changed["collections"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"id":"d","name":"Other","description":"","requests":[]}));
     let (status, deleted) = call(
         &router,
         "PUT",
@@ -92,6 +96,18 @@ async fn request_history_finds_changes_without_exposing_unchanged_or_foreign_sna
         .0,
         StatusCode::NOT_FOUND
     );
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            &restore,
+            Some(&owner),
+            Some(json!({"expected_revision":4,"destination_collection_id":"d"}))
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
     let (status, restored) = call(
         &router,
         "POST",
@@ -107,6 +123,10 @@ async fn request_history_finds_changes_without_exposing_unchanged_or_foreign_sna
         restored["data"]["collections"][0]["requests"][0]["name"],
         "Beta"
     );
+    let (status, after_recreation) = call(&router, "GET", list, Some(&owner), None).await;
+    assert_eq!(status, StatusCode::OK, "{after_recreation}");
+    assert_eq!(after_recreation["versions"][0]["revision"], 4);
+    assert_eq!(after_recreation["versions"][0]["exists"], false);
     assert_eq!(
         call(
             &router,
@@ -316,4 +336,49 @@ async fn restoring_deleted_request_needs_a_live_destination_and_valid_dependenci
     assert_eq!(restored["name"], "Current");
     assert_eq!(restored["data"]["collections"][0]["id"], "d");
     assert_eq!(restored["data"]["collections"][0]["requests"][0]["id"], "r");
+}
+
+#[tokio::test]
+async fn large_archived_payload_stays_out_of_the_history_list() {
+    let directory = tempfile::tempdir().unwrap();
+    let router = local(&directory.path().join("large-history.db"))
+        .await
+        .unwrap();
+    let mut original = example_data();
+    original["collections"][0]["requests"][0]["examples"][0]["body"] =
+        json!("private-historical-body-".repeat(45_000));
+    let (status, created) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"large-w","name":"Large","data":original.clone()})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{created}");
+    let mut current = original;
+    current["collections"][0]["requests"][0]["name"] = json!("Changed");
+    let (status, updated) = call(
+        &router,
+        "PUT",
+        "/api/workspaces/large-w",
+        None,
+        Some(json!({"name":"Large","data":current,"expected_revision":1})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{updated}");
+    let path = "/api/workspaces/large-w/requests/r/versions";
+    let (status, list) = call(&router, "GET", path, None, None).await;
+    assert_eq!(status, StatusCode::OK, "{list}");
+    assert!(list.to_string().len() < 1000);
+    assert!(!list.to_string().contains("private-historical-body"));
+    let (status, detail) = call(&router, "GET", &format!("{path}/1"), None, None).await;
+    assert_eq!(status, StatusCode::OK, "{detail}");
+    assert!(
+        detail["request"]["examples"][0]["body"]
+            .as_str()
+            .unwrap()
+            .len()
+            > 1_000_000
+    );
 }

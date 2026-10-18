@@ -68,7 +68,7 @@ fn state_at(workspace: &Workspace, request_id: &str) -> RequestState {
     }
 }
 
-fn parse_snapshot(row: &document::Model, workspace_id: &str) -> Result<Workspace, ApiError> {
+fn parse_snapshot(row: document::Model, workspace_id: &str) -> Result<Workspace, ApiError> {
     let snapshot: Workspace =
         serde_json::from_str(&row.payload).map_err(|_| ApiError::internal())?;
     if snapshot.id != workspace_id || snapshot.revision != row.revision {
@@ -103,16 +103,18 @@ pub async fn list(
     Query(query): Query<PageQuery>,
 ) -> Result<Json<VersionPage>, ApiError> {
     let current = workspaces::owned(&state, &owner.0, &workspace_id).await?;
+    let current_request = state_at(&current, &request_id);
+    drop(current);
     let mut newer = if let Some(before) = query.before {
         state_at(
             &parse_snapshot(
-                &archived(&state, &owner.0, &workspace_id, before).await?,
+                archived(&state, &owner.0, &workspace_id, before).await?,
                 &workspace_id,
             )?,
             &request_id,
         )
     } else {
-        state_at(&current, &request_id)
+        current_request
     };
     let mut rows = document::Entity::find()
         .filter(document::Column::Owner.eq(&owner.0))
@@ -129,12 +131,13 @@ pub async fn list(
     let mut versions = Vec::new();
     let mut last_revision = None;
     while let Some(row) = stream.try_next().await? {
-        let snapshot = parse_snapshot(&row, &workspace_id)?;
+        let revision = row.revision;
+        let snapshot = parse_snapshot(row, &workspace_id)?;
         let prior = state_at(&snapshot, &request_id);
-        last_revision = Some(row.revision);
+        last_revision = Some(revision);
         if prior != newer {
             versions.push(VersionSummary {
-                revision: row.revision,
+                revision,
                 updated_at: snapshot.updated_at,
                 collection_id: prior.collection_id.clone(),
                 name: prior.request.as_ref().map(|request| request.name.clone()),
@@ -176,7 +179,7 @@ pub async fn detail(
 ) -> Result<Json<VersionDetail>, ApiError> {
     workspaces::owned(&state, &owner.0, &workspace_id).await?;
     let row = archived(&state, &owner.0, &workspace_id, revision).await?;
-    let snapshot = parse_snapshot(&row, &workspace_id)?;
+    let snapshot = parse_snapshot(row, &workspace_id)?;
     let request_state = state_at(&snapshot, &request_id);
     Ok(Json(VersionDetail {
         revision,
@@ -197,7 +200,7 @@ pub async fn restore(
     }
     let mut current = workspaces::owned(&state, &owner.0, &workspace_id).await?;
     let row = archived(&state, &owner.0, &workspace_id, revision).await?;
-    let snapshot = parse_snapshot(&row, &workspace_id)?;
+    let snapshot = parse_snapshot(row, &workspace_id)?;
     let target = state_at(&snapshot, &request_id);
     let existing = state_at(&current, &request_id);
     if existing.request == target.request {
@@ -227,10 +230,27 @@ pub async fn restore(
         let Some(request) = target.request else {
             return Err(ApiError::conflict("Request already matches this version"));
         };
-        let destination = input
-            .destination_collection_id
-            .or(target.collection_id)
-            .ok_or_else(|| ApiError::bad("Destination collection is required"))?;
+        let historical = target.collection_id.filter(|historical| {
+            current
+                .data
+                .collections
+                .iter()
+                .any(|collection| collection.id == *historical)
+        });
+        let destination = if let Some(historical) = historical {
+            if input
+                .destination_collection_id
+                .as_ref()
+                .is_some_and(|selected| selected != &historical)
+            {
+                return Err(ApiError::bad("Historical collection still exists"));
+            }
+            historical
+        } else {
+            input
+                .destination_collection_id
+                .ok_or_else(|| ApiError::bad("Destination collection is required"))?
+        };
         let collection = current
             .data
             .collections

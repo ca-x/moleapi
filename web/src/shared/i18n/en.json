@@ -16,6 +16,8 @@
   "版本 {{revision}} 中没有此请求。恢复将删除当前请求。": "The request was absent in revision {{revision}}. Restoring will delete the current request.",
   "当前工作区有未保存修改。可以保存后恢复请求，或放弃修改后恢复。": "This workspace has unsaved changes. Save or discard them before restoring the request.",
   "已恢复请求版本": "Request revision restored",
+  "目标集合已变更，请重新选择后恢复。": "The destination collection changed. Choose it again before restoring.",
+  "当前请求已不存在。": "The current request no longer exists.",
   "查找历史请求": "Find a historical request",
   "按请求名称或 ID 查找": "Search by request name or ID",
   "匹配结果较多，请缩小搜索范围。": "More matches exist. Narrow your search.",
