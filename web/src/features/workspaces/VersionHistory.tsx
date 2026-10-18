@@ -37,10 +37,14 @@ export default function VersionHistory() {
       );
       if (state.accountRef.current !== originAccount || state.stateRef.current.saved?.id !== origin) return;
       state.installWorkspace(restored);
-      await client.invalidateQueries({ queryKey: ["workspace-versions", originAccount, origin] });
+      const requests = restored.data.collections.flatMap((collection) => collection.requests);
+      state.setRequestId(requests.some((request) => request.id === state.requestId)
+        ? state.requestId : (requests[0]?.id ?? ""));
+      void client.invalidateQueries({ queryKey: ["workspace-versions", originAccount, origin] });
       state.setModal(null);
       toast.success(liveTranslation("已恢复工作区版本"));
     } catch (error) {
+      if (state.accountRef.current !== originAccount || state.stateRef.current.saved?.id !== origin) return;
       if (error instanceof ApiError && error.status === 409 && state.accountRef.current === originAccount) {
         try {
           const remote = await api<Workspace>(`/api/workspaces/${encodeURIComponent(origin)}`);
