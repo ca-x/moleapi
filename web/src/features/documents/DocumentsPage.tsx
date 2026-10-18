@@ -1,6 +1,4 @@
 import {useEffect,useState} from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import {Button,Card,Checkbox,Flex,Heading,Tabs,Text,TextField} from "@radix-ui/themes";
 import {FilePlus2,Trash2} from "lucide-react";
 import {t,useLanguage,message} from "../../shared/i18n";
@@ -9,26 +7,8 @@ import {Choice,Editor,Field} from "../../shared/ui";
 import type {MarkdownDocument} from "../../shared/types";
 import {useWorkbench} from "../workbench/context";
 import {validateMarkdownDocuments} from "./validation";
-
-function safeLink(raw?:string):string {
-  if(!raw)return "";
-  try {
-    const url=new URL(raw);
-    return ["https:","http:","mailto:"].includes(url.protocol)?url.href:"";
-  } catch {return "";}
-}
-
-export function MarkdownPreview({source}:{source:string}) {
-  return <div className="markdown-preview">
-    <ReactMarkdown skipHtml remarkPlugins={[remarkGfm]} components={{
-      a:({href,children})=>{
-        const safe=safeLink(href);
-        return safe?<a href={safe} target="_blank" rel="noopener noreferrer">{children}</a>:<span>{children}</span>;
-      },
-      img:({alt})=><span>{alt||t("图片已省略")}</span>
-    }}>{source}</ReactMarkdown>
-  </div>;
-}
+import MarkdownPreview from "./MarkdownPreview";
+import ApiReference from "./ApiReference";
 
 export default function DocumentsPage() {
   useLanguage();
@@ -36,7 +16,8 @@ export default function DocumentsPage() {
   const {draft,updateData,save,setGuard,dirty,saving,dark,accountId}=state;
   const [selectedId,setSelectedId]=useState("");
   const [mode,setMode]=useState("preview");
-  useEffect(()=>{setSelectedId("");setMode("preview");},[accountId,draft?.id]);
+  const [section,setSection]=useState("markdown");
+  useEffect(()=>{setSelectedId("");setMode("preview");setSection("markdown");},[accountId,draft?.id]);
   if(!draft)return null;
   const documents=draft.data.documents??[];
   const current=documents.find(document=>document.id===selectedId)??documents[0];
@@ -61,12 +42,15 @@ export default function DocumentsPage() {
   const {invalidTitleDocument,invalidSourceDocument,invalidTotalSource}=validateMarkdownDocuments(documents);
   return <div className="page-panel documents-page">
     <div className="page-heading">
-      <div><Heading size="5">{t("Markdown 文档")}</Heading><Text size="2" color="gray">{t("为工作区编写说明，并在保存前预览。")}</Text></div>
-      <Flex gap="2" wrap="wrap"><Button variant="soft" color="gray" onClick={create} disabled={documents.length>=256}><FilePlus2 size={16}/>{t("新建文档")}</Button><Button variant={dirty?"solid":"soft"} color={dirty?undefined:"gray"} onClick={()=>void save()} disabled={!dirty||saving||!!invalidTitleDocument||!!invalidSourceDocument||invalidTotalSource} loading={saving}>{t("保存工作区")}</Button></Flex>
+      <div><Heading size="5">{t("工作区文档")}</Heading><Text size="2" color="gray">{t("为工作区编写说明，并在保存前预览。")}</Text></div>
+      <Flex gap="2" wrap="wrap">{section==="markdown"&&<Button variant="soft" color="gray" onClick={create} disabled={documents.length>=256}><FilePlus2 size={16}/>{t("新建文档")}</Button>}<Button variant={dirty?"solid":"soft"} color={dirty?undefined:"gray"} onClick={()=>void save()} disabled={!dirty||saving||!!invalidTitleDocument||!!invalidSourceDocument||invalidTotalSource} loading={saving}>{t("保存工作区")}</Button></Flex>
     </div>
     {invalidTitleDocument&&<Text role="alert" color="red" size="2">{t("文档「{{value0}}」的标题须为 1–128 个字符，不能含首尾空格或控制字符。",{value0:invalidTitleDocument.name})}</Text>}
     {invalidSourceDocument&&<Text role="alert" color="red" size="2">{t("文档「{{value0}}」的 Markdown 正文不能超过 256 KiB。",{value0:invalidSourceDocument.name})}</Text>}
     {invalidTotalSource&&<Text role="alert" color="red" size="2">{t("工作区 Markdown 正文合计不能超过 2 MiB。")}</Text>}
+    <Tabs.Root value={section} onValueChange={setSection} className="documents-sections">
+      <Tabs.List><Tabs.Trigger value="markdown">{t("Markdown")}</Tabs.Trigger><Tabs.Trigger value="api">{t("API 参考")}</Tabs.Trigger></Tabs.List>
+      <Tabs.Content value="markdown">
     <div className="documents-layout">
       <nav className="documents-list" aria-label={t("文档列表")}>
         {documents.length?documents.map(document=><button type="button" key={document.id} className={document.id===selected?"selected":""} onClick={()=>{setSelectedId(document.id);setMode("preview");}}>
@@ -74,7 +58,7 @@ export default function DocumentsPage() {
         </button>):<Text size="2" color="gray">{t("还没有 Markdown 文档。")}</Text>}
       </nav>
       {current?<Card className="document-editor-card">
-        <Flex justify="between" align="center" gap="3" wrap="wrap"><Heading size="3">{current.name}</Heading><Button variant="ghost" color="red" onClick={remove} aria-label={t("删除文档")}><Trash2 size={16}/>{t("删除")}</Button></Flex>
+        <Flex justify="between" align="center" gap="3" wrap="wrap"><Heading as="h2" size="3">{current.name}</Heading><Button variant="ghost" color="red" onClick={remove} aria-label={t("删除文档")}><Trash2 size={16}/>{t("删除")}</Button></Flex>
         <div className="document-fields">
           <Field label={t("文档标题")}><TextField.Root value={current.name} maxLength={128} onChange={event=>updateDocument({name:event.target.value})}/></Field>
           <Choice label={t("所在目录")} value={current.collection_id??"none"} onChange={value=>updateDocument({collection_id:value==="none"?null:value})} options={[{value:"none",label:t("工作区根目录")},...draft.data.collections.map(collection=>({value:collection.id,label:collection.name}))]}/>
@@ -88,5 +72,8 @@ export default function DocumentsPage() {
         </Tabs.Root>
       </Card>:<Card className="document-editor-card"><Text color="gray">{t("选择文档，或新建一篇说明。")}</Text></Card>}
     </div>
+      </Tabs.Content>
+      <Tabs.Content value="api"><ApiReference data={draft.data} scopeKey={`${accountId}/${draft.id}`}/></Tabs.Content>
+    </Tabs.Root>
   </div>;
 }

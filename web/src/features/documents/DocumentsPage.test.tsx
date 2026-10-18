@@ -3,6 +3,8 @@ import {cleanup,fireEvent,render,screen} from "@testing-library/react";
 import {Theme} from "@radix-ui/themes";
 import {afterEach,beforeEach,expect,it,vi} from "vitest";
 import {setLanguage} from "../../shared/i18n";
+import {newRequest} from "../../shared/model";
+import type {WorkspaceData} from "../../shared/types";
 import {useWorkbench} from "../workbench/context";
 import DocumentsPage from "./DocumentsPage";
 
@@ -15,7 +17,7 @@ beforeEach(()=>vi.stubGlobal("ResizeObserver",class {observe(){} unobserve(){} d
 afterEach(()=>{cleanup();vi.clearAllMocks();});
 
 function setup(source="# Guide\n\n[Safe](https://example.test) [Unsafe](javascript:alert(1)) ![Remote](https://evil.test/x.png)\n\n<script>alert(1)</script>") {
-  const data={schema_version:1 as const,collections:[{id:"c",name:"Folder",description:"",requests:[]}],environments:[],active_environment_id:null,documents:[{id:"d",name:"Guide",collection_id:"c",source,secret:false}]};
+  const data:WorkspaceData={schema_version:1,collections:[{id:"c",name:"Folder",description:"",requests:[]}],environments:[],active_environment_id:null,documents:[{id:"d",name:"Guide",collection_id:"c",source,secret:false}]};
   const updateData=vi.fn();
   const save=vi.fn();
   const setGuard=vi.fn();
@@ -72,7 +74,7 @@ it("requires confirmation before removing a document from the draft",async()=>{
 it("keeps save disabled when a different document has an invalid title or oversized source",async()=>{
   await setLanguage("en");
   const {data,context,save}=setup("# Guide");
-  const invalid={...data,documents:[...data.documents,{id:"other",name:"Bad ",collection_id:null,source:"x".repeat(256*1024+1),secret:true}]};
+  const invalid={...data,documents:[...(data.documents??[]),{id:"other",name:"Bad ",collection_id:null,source:"x".repeat(256*1024+1),secret:true}]};
   vi.mocked(useWorkbench).mockReturnValue({...context,draft:{...context.draft,data:invalid}} as never);
   render(<Theme><DocumentsPage/></Theme>);
   fireEvent.click(screen.getByRole("button",{name:/Bad/}));
@@ -88,9 +90,29 @@ it("blocks save when valid documents exceed the aggregate Markdown limit",async(
   await setLanguage("en");
   const {data,context,save}=setup("");
   const largeDocuments=Array.from({length:9},(_,index)=>({id:`large-${index}`,name:`Part ${index}`,collection_id:null,source:"x".repeat(256*1024),secret:true}));
-  vi.mocked(useWorkbench).mockReturnValue({...context,draft:{...context.draft,data:{...data,documents:[...data.documents,...largeDocuments]}}} as never);
+  vi.mocked(useWorkbench).mockReturnValue({...context,draft:{...context.draft,data:{...data,documents:[...(data.documents??[]),...largeDocuments]}}} as never);
   render(<Theme><DocumentsPage/></Theme>);
   expect(screen.getByRole("button",{name:"Save workspace"}).hasAttribute("disabled")).toBe(true);
   expect(screen.getByText("Workspace Markdown content must total at most 2 MiB.")).toBeTruthy();
   expect(save).not.toHaveBeenCalled();
+});
+
+it("switches to live generated API docs without changing the workspace draft",async()=>{
+  await setLanguage("en");
+  const {data,context,updateData}=setup("# Guide");
+  const request=newRequest("List pets","https://example.test/pets");
+  request.id="pets";
+  data.collections[0].requests.push(request);
+  const page=render(<Theme><DocumentsPage/></Theme>);
+  fireEvent.mouseDown(screen.getByRole("tab",{name:/API reference/}),{button:0});
+  expect(screen.getByRole("tab",{name:/API reference/}).getAttribute("aria-selected")).toBe("true");
+  expect(screen.getByRole("button",{name:"Save workspace"})).toBeTruthy();
+  expect(screen.getByRole("heading",{name:"List pets"})).toBeTruthy();
+  expect(updateData).not.toHaveBeenCalled();
+  const changed={...data,collections:data.collections.map(collection=>({...collection,requests:collection.requests.map(item=>({...item,name:"List animals"}))}))};
+  vi.mocked(useWorkbench).mockReturnValue({...context,draft:{...context.draft,data:changed}} as never);
+  page.rerender(<Theme><DocumentsPage/></Theme>);
+  expect(screen.getByRole("heading",{name:"List animals"})).toBeTruthy();
+  fireEvent.mouseDown(screen.getByRole("tab",{name:/Markdown/}),{button:0});
+  expect(screen.getAllByRole("heading",{name:"Guide"}).length).toBeGreaterThan(0);
 });
