@@ -64,24 +64,82 @@ fn mock_delay_survives_native_backup_but_external_formats_reject_it() {
 }
 
 #[test]
+fn mock_simulation_settings_validate_and_roundtrip_only_in_native_backup() {
+    let mut source = json!({"id":"w","name":"Fault","revision":1,"updated_at":"now","data":{"schema_version":1,"collections":[{"id":"c","name":"C","description":"","requests":[{"id":"r","name":"R","method":"GET","url":"https://example.test/","description":"","query":[],"headers":[],"body_kind":"none","body":"","auth":{"kind":"none","token":"","username":"","password":""},"timeout_ms":1000,"follow_redirects":true,"verify_tls":true,"assertions":[],"examples":[{"id":"e","name":"Fault","status":200,"headers":[],"body":"ok"}]}]}],"environments":[],"active_environment_id":null}});
+    let old: Workspace = serde_json::from_value(source.clone()).unwrap();
+    let old_example = &old.data.collections[0].requests[0].examples[0];
+    assert_eq!(old_example.fault_rate_percent, 0);
+    assert_eq!(old_example.fault_status, 503);
+    assert_eq!(old_example.rate_limit_per_minute, 0);
+    let serialized = serde_json::to_value(old_example).unwrap();
+    assert!(serialized.get("fault_rate_percent").is_none());
+    assert!(serialized.get("fault_status").is_none());
+    assert!(serialized.get("rate_limit_per_minute").is_none());
+
+    let example = &mut source["data"]["collections"][0]["requests"][0]["examples"][0];
+    example["fault_rate_percent"] = json!(100);
+    example["fault_status"] = json!(502);
+    example["rate_limit_per_minute"] = json!(3);
+    let workspace: Workspace = serde_json::from_value(source.clone()).unwrap();
+    validate_workspace(&workspace.data).unwrap();
+    for private in [false, true] {
+        let exported = export(&workspace, "moleapi", private).unwrap();
+        let imported = import("moleapi", &exported.content).unwrap();
+        let restored = &imported.data.collections[0].requests[0].examples[0];
+        assert_eq!(
+            (restored.fault_rate_percent, restored.fault_status),
+            (100, 502)
+        );
+        assert_eq!(restored.rate_limit_per_minute, 3);
+    }
+    for format in ["postman", "openapi", "har"] {
+        assert!(export(&workspace, format, true).is_err(), "{format}");
+    }
+    for (rate, status) in [(101, 503), (1, 499), (1, 600), (0, 499)] {
+        source["data"]["collections"][0]["requests"][0]["examples"][0]["fault_rate_percent"] =
+            json!(rate);
+        source["data"]["collections"][0]["requests"][0]["examples"][0]["fault_status"] =
+            json!(status);
+        let workspace: Workspace = serde_json::from_value(source.clone()).unwrap();
+        assert!(validate_workspace(&workspace.data).is_err());
+    }
+    source["data"]["collections"][0]["requests"][0]["examples"][0]["fault_rate_percent"] = json!(0);
+    source["data"]["collections"][0]["requests"][0]["examples"][0]["fault_status"] = json!(503);
+    source["data"]["collections"][0]["requests"][0]["examples"][0]["rate_limit_per_minute"] =
+        json!(1001);
+    let workspace: Workspace = serde_json::from_value(source).unwrap();
+    assert!(validate_workspace(&workspace.data).is_err());
+}
+
+#[test]
 fn mock_schema_is_private_in_default_backup_and_exact_in_full_backup() {
     let schema = r#"{"type":"string","default":"private-schema-example"}"#;
     let mut source = json!({"id":"w","name":"Schema","revision":1,"updated_at":"now","data":{"schema_version":1,"collections":[{"id":"c","name":"C","description":"","requests":[{"id":"r","name":"R","method":"GET","url":"https://example.test/","description":"","query":[],"headers":[],"body_kind":"none","body":"","auth":{"kind":"none","token":"","username":"","password":""},"timeout_ms":1000,"follow_redirects":true,"verify_tls":true,"assertions":[],"examples":[{"id":"e","name":"Schema","status":200,"headers":[],"body":"static"}]}]}],"environments":[],"active_environment_id":null}});
     source["data"]["collections"][0]["requests"][0]["examples"][0]["mock_schema"] = json!(schema);
+    source["data"]["collections"][0]["requests"][0]["examples"][0]["mock_name_inference"] =
+        json!(true);
     let workspace: Workspace = serde_json::from_value(source).unwrap();
     validate_workspace(&workspace.data).unwrap();
+    let mut missing_source = workspace.data.clone();
+    missing_source.collections[0].requests[0].examples[0]
+        .mock_schema
+        .clear();
+    assert!(validate_workspace(&missing_source).is_err());
     let safe = export(&workspace, "moleapi", false).unwrap();
     assert!(!safe.content.contains("private-schema-example"));
-    assert!(
-        import("moleapi", &safe.content).unwrap().data.collections[0].requests[0].examples[0]
-            .mock_schema
-            .is_empty()
-    );
+    let safe_example =
+        &import("moleapi", &safe.content).unwrap().data.collections[0].requests[0].examples[0];
+    assert!(safe_example.mock_schema.is_empty());
+    assert!(!safe_example.mock_name_inference);
     let full = export(&workspace, "moleapi", true).unwrap();
     assert_eq!(
         import("moleapi", &full.content).unwrap().data.collections[0].requests[0].examples[0]
             .mock_schema,
         schema
+    );
+    assert!(
+        import("moleapi", &full.content).unwrap().data.collections[0].requests[0].examples[0]
+            .mock_name_inference
     );
     for format in ["postman", "openapi", "har"] {
         assert!(export(&workspace, format, true).is_err(), "{format}");

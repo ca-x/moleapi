@@ -247,23 +247,27 @@ impl<'a> Resolver<'a> {
                     output.insert(key.clone(), Value::Object(mapped));
                 }
                 "items" => {
-                    output.insert(key.clone(), self.normalize(value, depth + 1)?);
+                    output.insert(
+                        key.clone(),
+                        if value.is_boolean() {
+                            value.clone()
+                        } else {
+                            self.normalize(value, depth + 1)?
+                        },
+                    );
+                }
+                "prefixItems" | "oneOf" | "anyOf" | "allOf" => {
+                    let branches = value
+                        .as_array()
+                        .with_context(|| format!("Linked Mock {key} must be an array"))?;
+                    let mut mapped = Vec::with_capacity(branches.len());
+                    for branch in branches {
+                        mapped.push(self.normalize(branch, depth + 1)?);
+                    }
+                    output.insert(key.clone(), Value::Array(mapped));
                 }
                 "type" => {
-                    let normalized = if let Some(values) = value.as_array() {
-                        ensure!(
-                            values.len() == 2 && values.iter().any(|v| v == "null"),
-                            "Linked Mock type unions are unsupported"
-                        );
-                        values
-                            .iter()
-                            .find(|v| *v != "null")
-                            .cloned()
-                            .context("Linked Mock type is missing")?
-                    } else {
-                        value.clone()
-                    };
-                    output.insert(key.clone(), normalized);
+                    output.insert(key.clone(), value.clone());
                 }
                 "format" => {
                     let format = value.as_str().context("Invalid linked Mock format")?;
@@ -426,5 +430,22 @@ components:
                 .schema(pointer)
                 .is_err()
         );
+    }
+
+    #[test]
+    fn linked_composition_and_tuple_preserve_component_references() {
+        let source = serde_json::json!({"openapi":"3.1.0","paths":{"/items":{"get":{"responses":{"200":{"content":{"application/json":{"schema":{"type":"array","prefixItems":[{"oneOf":[{"$ref":"#/components/schemas/Name"},{"type":"integer","minimum":5}]}],"items":false,"minItems":1}}}}}}}},"components":{"schemas":{"Name":{"type":["null","string"],"minLength":2}}}});
+        let spec = Specification {
+            id: "s".into(),
+            name: "S".into(),
+            kind: "openapi".into(),
+            source: source.to_string(),
+            dialect: "3.1.0".into(),
+        };
+        let selected = OpenapiMockIndex::parse(&spec)
+            .unwrap()
+            .schema("#/paths/~1items/get/responses/200/content/application~1json/schema")
+            .unwrap();
+        assert_eq!(generate_mock_schema(&selected).unwrap(), r#"["xx"]"#);
     }
 }

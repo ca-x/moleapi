@@ -52,6 +52,51 @@ async fn identical_storage_auth_cas_tests_on_every_configured_database() {
         let username = format!("user_{prefix}");
         let a = register(&router, &username).await;
         let b = register(&router, &format!("other_{prefix}")).await;
+        let rate_id = format!("rate-{prefix}");
+        let mut rate_data = example_data();
+        rate_data["collections"][0]["requests"][0]["examples"][0]["rate_limit_per_minute"] =
+            json!(1);
+        let (status, created) = call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            Some(&a),
+            Some(json!({"id":rate_id,"name":"Rate","data":rate_data.clone()})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{created}");
+        let path = format!("/api/mock/{rate_id}/r/e");
+        let (one, two) = tokio::join!(
+            call(&router, "GET", &path, Some(&a), None),
+            call(&router_again, "GET", &path, Some(&a), None)
+        );
+        assert_eq!(
+            [one.0, two.0]
+                .iter()
+                .filter(|status| **status == StatusCode::CREATED)
+                .count(),
+            1
+        );
+        assert_eq!(
+            [one.0, two.0]
+                .iter()
+                .filter(|status| **status == StatusCode::TOO_MANY_REQUESTS)
+                .count(),
+            1
+        );
+        let (status, updated) = call(
+            &router,
+            "PUT",
+            &format!("/api/workspaces/{rate_id}"),
+            Some(&a),
+            Some(json!({"name":"Rate","expected_revision":created["revision"],"data":rate_data})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{updated}");
+        assert_eq!(
+            call(&router_again, "GET", &path, Some(&a), None).await.0,
+            StatusCode::CREATED
+        );
         let (status, _) = call(
             &router,
             "POST",

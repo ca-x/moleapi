@@ -46,7 +46,7 @@ fn sequence_id(owner: &str, workspace: &str) -> String {
     )
 }
 
-async fn lock_workspace<C: sea_orm::ConnectionTrait>(
+pub(crate) async fn lock_workspace<C: sea_orm::ConnectionTrait>(
     db: &C,
     owner: &str,
     workspace: &str,
