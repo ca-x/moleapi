@@ -95,6 +95,71 @@ fn mock_implementation_scripts_require_explicit_v2_mode() {
 }
 
 #[test]
+fn linked_mock_schema_requires_matching_saved_operation_status_and_media() {
+    let source = json!({"openapi":"3.1.0","paths":{"/items":{"get":{"responses":{"200":{"content":{"application/json":{"schema":{"type":"string","example":"linked"}}}}}}}}}).to_string();
+    let mut request = request();
+    request.specification_id = Some("spec".into());
+    request.examples.push(serde_json::from_value(json!({"id":"e","name":"Linked","status":200,"headers":[],"body":"static","mock_schema_link":{"specification_id":"spec","pointer":"#/paths/~1items/get/responses/200/content/application~1json/schema"}})).unwrap());
+    let mut workspace: WorkspaceData = serde_json::from_value(
+        json!({"schema_version":1,"collections":[],"environments":[],"active_environment_id":null}),
+    )
+    .unwrap();
+    workspace.specifications.push(Specification {
+        id: "spec".into(),
+        name: "Spec".into(),
+        kind: "openapi".into(),
+        source,
+        dialect: "3.1.0".into(),
+    });
+    workspace.collections.push(Collection {
+        id: "c".into(),
+        name: "C".into(),
+        description: String::new(),
+        parent_id: None,
+        variables_enabled: None,
+        auth: None,
+        variables: vec![],
+        pre_request_script: String::new(),
+        post_response_script: String::new(),
+        requests: vec![request],
+    });
+    assert!(validate_workspace(&workspace).is_ok());
+    let example = &mut workspace.collections[0].requests[0].examples[0];
+    example.status = 201;
+    assert!(validate_workspace(&workspace).is_err());
+    workspace.collections[0].requests[0].examples[0].status = 200;
+    workspace.collections[0].requests[0].method = "POST".into();
+    assert!(validate_workspace(&workspace).is_err());
+    workspace.collections[0].requests[0].method = "GET".into();
+    workspace.collections[0].requests[0].examples[0].mock_schema = r#"{"type":"string"}"#.into();
+    assert!(validate_workspace(&workspace).is_err());
+    workspace.collections[0].requests[0].examples[0]
+        .mock_schema
+        .clear();
+    workspace.collections[0].requests[0].examples[0]
+        .headers
+        .push(Pair {
+            id: "h".into(),
+            key: "Content-Type".into(),
+            value: "text/plain".into(),
+            enabled: true,
+            secret: None,
+            local_value: None,
+        });
+    assert!(validate_workspace(&workspace).is_err());
+    workspace.collections[0].requests[0].examples[0]
+        .headers
+        .clear();
+    let original = workspace.collections[0].requests[0].examples[0].clone();
+    for index in 1..=256 {
+        let mut extra = original.clone();
+        extra.id = format!("linked-{index}");
+        workspace.collections[0].requests[0].examples.push(extra);
+    }
+    assert!(validate_workspace(&workspace).is_err());
+}
+
+#[test]
 fn mock_match_rules_are_additive_and_bounded() {
     let mut request = request();
     request.examples.push(serde_json::from_value(json!({"id":"e","name":"Matched","status":200,"headers":[],"body":"ok","mock_match":{"priority":7,"query":[{"id":"q","key":"mode","value":"fast","enabled":true}],"headers":[],"body":"exact"}})).unwrap());

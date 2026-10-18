@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import {cleanup,fireEvent,render,screen} from "@testing-library/react";
+import {act,cleanup,fireEvent,render,screen,waitFor} from "@testing-library/react";
 import {Theme} from "@radix-ui/themes";
 import {afterEach,expect,it,vi} from "vitest";
 import {setLanguage} from "../../shared/i18n";
@@ -7,7 +7,8 @@ import {newRequest} from "../../shared/model";
 import ExamplesEditor from "./ExamplesEditor";
 
 const previewMock=vi.hoisted(()=>vi.fn());
-vi.mock("../../shared/api",()=>({native:false,previewMock,token:()=>null}));
+const api=vi.hoisted(()=>vi.fn());
+vi.mock("../../shared/api",()=>({api,native:false,previewMock,token:()=>null}));
 vi.mock("./MockCallActivity",()=>({default:()=>null}));
 vi.mock("./MockPublicShares",()=>({default:()=>null}));
 
@@ -17,7 +18,7 @@ vi.mock("../../shared/ui",()=>({
   PairEditor:({rows}:{rows:unknown[]})=><div data-testid="match-pairs">{rows.length}</div>,
   ToolButton:({label,onClick,children}:{label:string;onClick:()=>void;children:React.ReactNode})=><button aria-label={label} onClick={onClick}>{children}</button>
 }));
-afterEach(cleanup);
+afterEach(()=>{cleanup();api.mockReset();vi.unstubAllGlobals();Reflect.deleteProperty(HTMLElement.prototype,"scrollIntoView");});
 
 it("edits an opt-in mock implementation without replacing the saved example",async()=>{
   await setLanguage("en");
@@ -60,6 +61,89 @@ it("keeps the static body while editing an explicit Mock JSON Schema",async()=>{
   expect(update.mock.lastCall?.[0].examples[0].body).toBe("static");
   await setLanguage("zh-CN");
   expect(screen.getByRole("button",{name:"编辑 Mock JSON Schema"})).toBeTruthy();
+});
+
+it("selects a saved OpenAPI response without an operationId and keeps the static body",async()=>{
+  vi.stubGlobal("ResizeObserver",class {observe(){} unobserve(){} disconnect(){}});
+  HTMLElement.prototype.scrollIntoView=()=>{};
+  await setLanguage("en");
+  const request=newRequest("R","https://example.test/items");
+  request.specification_id="spec";
+  request.examples=[{id:"e",name:"Example",status:201,headers:[{id:"h",key:"Content-Type",value:"text/plain",enabled:true}],body:"static"}];
+  const source=JSON.stringify({openapi:"3.1.0",paths:{"/items":{get:{responses:{"200":{content:{"application/json":{schema:{type:"string",example:"linked"}}}}}}}}});
+  const specifications=[{id:"spec",name:"Pet API",kind:"openapi",source,dialect:"3.1.0"}];
+  const update=vi.fn();
+  api.mockResolvedValue({method:"GET",status:200,media_type:"application/json"});
+  render(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w" workspaceRevision={1} specifications={specifications}/></Theme>);
+  fireEvent.click(screen.getByRole("combobox",{name:"Mock body source"}));
+  fireEvent.click(screen.getByRole("option",{name:/GET \/items · 200 application\/json/}));
+  await waitFor(()=>expect(update).toHaveBeenCalled());
+  expect(api).toHaveBeenCalledWith("/api/workspaces/w/mock-schema/validate","POST",{request_id:request.id,specification_id:"spec",pointer:"#/paths/~1items/get/responses/200/content/application~1json/schema",expected_revision:1});
+  expect(update.mock.lastCall?.[0].examples[0]).toMatchObject({status:200,headers:[{value:"application/json"}],body:"static",mock_schema_link:{specification_id:"spec",pointer:"#/paths/~1items/get/responses/200/content/application~1json/schema"}});
+  expect(JSON.stringify(update.mock.lastCall?.[0].examples[0])).not.toContain("mock_schema\":\"\"");
+});
+
+it("rejects unsupported linked choices before changing the saved example",async()=>{
+  vi.stubGlobal("ResizeObserver",class {observe(){} unobserve(){} disconnect(){}});
+  HTMLElement.prototype.scrollIntoView=()=>{};
+  await setLanguage("en");
+  const request=newRequest("R","https://example.test/items");
+  request.specification_id="spec";
+  request.examples=[{id:"e",name:"Example",status:200,headers:[],body:"static"}];
+  const source=JSON.stringify({openapi:"3.1.0",paths:{"/items":{get:{responses:{"200":{content:{"application/json":{schema:{type:"string",pattern:".*"}}}}}}}}});
+  const update=vi.fn();
+  api.mockRejectedValueOnce(new Error("Unsupported linked Mock schema keyword pattern"));
+  render(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w" workspaceRevision={1} specifications={[{id:"spec",name:"Spec",kind:"openapi",source,dialect:"3.1.0"}]}/></Theme>);
+  fireEvent.click(screen.getByRole("combobox",{name:"Mock body source"}));
+  fireEvent.click(screen.getByRole("option",{name:/GET \/items · 200 application\/json/}));
+  expect((await screen.findByRole("alert")).textContent).toContain("Unsupported linked Mock schema keyword pattern");
+  expect(update).not.toHaveBeenCalled();
+});
+
+it("shows a stale link when the request switches to a different specification with the same pointer",async()=>{
+  vi.stubGlobal("ResizeObserver",class {observe(){} unobserve(){} disconnect(){}});
+  HTMLElement.prototype.scrollIntoView=()=>{};
+  await setLanguage("en");
+  const request=newRequest("R","https://example.test/items");
+  request.specification_id="new";
+  const pointer="#/paths/~1items/get/responses/200/content/application~1json/schema";
+  request.examples=[{id:"e",name:"Example",status:200,headers:[],body:"static",mock_schema_link:{specification_id:"old",pointer}}];
+  const source=JSON.stringify({openapi:"3.1.0",paths:{"/items":{get:{responses:{"200":{content:{"application/json":{schema:{type:"string"}}}}}}}}});
+  const update=vi.fn();
+  render(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w" specifications={[{id:"new",name:"New",kind:"openapi",source,dialect:"3.1.0"}]}/></Theme>);
+  expect(screen.getByRole("combobox",{name:"Mock body source"}).textContent).toContain("Linked response unavailable");
+  expect(screen.getByRole("alert").textContent).toContain("does not match this specification");
+  fireEvent.click(screen.getByRole("button",{name:"Clear schema link"}));
+  expect(update.mock.lastCall?.[0].examples[0].mock_schema_link).toBeUndefined();
+});
+
+it("keeps newer example edits while linked-response validation is pending",async()=>{
+  vi.stubGlobal("ResizeObserver",class {observe(){} unobserve(){} disconnect(){}});
+  HTMLElement.prototype.scrollIntoView=()=>{};
+  await setLanguage("en");
+  const request=newRequest("R","https://example.test/items");
+  request.specification_id="spec";
+  request.examples=[{id:"e",name:"Before",status:200,headers:[{id:"h",key:"Content-Type",value:"text/plain",enabled:true}],body:"static"}];
+  const source=JSON.stringify({openapi:"3.1.0",paths:{"/items":{get:{responses:{"200":{content:{"application/json":{schema:{type:"string"}}}}}}}}});
+  const specifications=[{id:"spec",name:"Spec",kind:"openapi",source,dialect:"3.1.0"}];
+  let resolveValidation!:(value:{method:string;status:number;media_type:string})=>void;
+  api.mockImplementation(()=>new Promise(resolve=>{resolveValidation=resolve;}));
+  const update=vi.fn();
+  const page=render(<Theme><ExamplesEditor request={request} update={update} dark={false} workspaceId="w" workspaceRevision={1} specifications={specifications}/></Theme>);
+  fireEvent.click(screen.getByRole("combobox",{name:"Mock body source"}));
+  fireEvent.click(screen.getByRole("option",{name:/GET \/items · 200 application\/json/}));
+  const updatedRequest={...request,examples:[{...request.examples[0],name:"After",headers:[{...request.examples[0].headers[0],value:"text/html"}]}]};
+  page.rerender(<Theme><ExamplesEditor request={updatedRequest} update={update} dark={false} workspaceId="w" workspaceRevision={1} specifications={specifications}/></Theme>);
+  await act(async()=>resolveValidation({method:"GET",status:200,media_type:"application/json"}));
+  await waitFor(()=>expect(update).toHaveBeenCalled());
+  expect(update.mock.lastCall?.[0].examples[0]).toMatchObject({name:"After",headers:[{value:"application/json"}]});
+  let resolveSecond!:(value:{method:string;status:number;media_type:string})=>void;
+  api.mockImplementation(()=>new Promise(resolve=>{resolveSecond=resolve;}));
+  fireEvent.click(screen.getByRole("combobox",{name:"Mock body source"}));
+  fireEvent.click(screen.getByRole("option",{name:/GET \/items · 200 application\/json/}));
+  page.rerender(<Theme><ExamplesEditor request={{...updatedRequest,method:"POST"}} update={update} dark={false} workspaceId="w" workspaceRevision={1} specifications={specifications}/></Theme>);
+  await act(async()=>resolveSecond({method:"GET",status:200,media_type:"application/json"}));
+  expect(update).toHaveBeenCalledTimes(1);
 });
 
 it("shows the mock editor in Chinese",async()=>{

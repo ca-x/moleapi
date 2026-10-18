@@ -440,6 +440,10 @@ async fn build(
             get(mock_public::list).post(mock_public::create),
         )
         .route(
+            "/workspaces/{id}/mock-schema/validate",
+            post(mock::validate_linked_schema),
+        )
+        .route(
             "/workspaces/{id}/mock-shares/{share_id}",
             axum::routing::delete(mock_public::revoke),
         )

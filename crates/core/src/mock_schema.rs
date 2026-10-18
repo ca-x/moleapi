@@ -31,6 +31,7 @@ fn validator(schema: &Value) -> Result<jsonschema::Validator> {
     jsonschema::options()
         .with_draft(jsonschema::Draft::Draft202012)
         .with_retriever(NoResources)
+        .should_validate_formats(true)
         .build(schema)
         .context("Invalid Mock schema")
 }
@@ -72,6 +73,13 @@ fn scan(schema: &Value, path: &str, depth: usize, nodes: &mut usize) -> Result<(
                     Some("object" | "array" | "string" | "integer" | "number" | "boolean" | "null")
                 ),
                 "Unsupported Mock schema type at {field}"
+            ),
+            "format" => ensure!(
+                matches!(
+                    value.as_str(),
+                    Some("uuid" | "email" | "date" | "date-time" | "uri")
+                ),
+                "Unsupported Mock schema format at {field}"
             ),
             "required" => ensure!(
                 value
@@ -230,6 +238,17 @@ fn synthesize(
         "null" => Value::Null,
         "boolean" => Value::Bool(false),
         "string" => {
+            if let Some(format) = object.get("format").and_then(Value::as_str) {
+                let fixed = match format {
+                    "uuid" => "00000000-0000-4000-8000-000000000000",
+                    "email" => "mock@example.test",
+                    "date" => "2026-01-01",
+                    "date-time" => "2026-01-01T00:00:00Z",
+                    "uri" => "https://example.test/mock",
+                    _ => bail!("Unsupported Mock schema format"),
+                };
+                return Ok(Value::String(fixed.into()));
+            }
             let min = object.get("minLength").and_then(Value::as_u64).unwrap_or(0);
             let max = object
                 .get("maxLength")
@@ -438,5 +457,21 @@ mod tests {
         assert!(
             valid_candidate(&schema, &schema, &Value::String("ok".into()), &mut context).is_err()
         );
+    }
+
+    #[test]
+    fn known_formats_generate_valid_values_and_reject_invalid_const() {
+        assert_eq!(
+            generate_mock_schema(
+                r#"{"type":"string","format":"email","examples":["not-an-email"]}"#
+            )
+            .unwrap(),
+            r#""mock@example.test""#
+        );
+        assert!(
+            validate_mock_schema(r#"{"type":"string","format":"email","const":"not-an-email"}"#)
+                .is_err()
+        );
+        assert!(validate_mock_schema(r#"{"type":"string","format":"phone"}"#).is_err());
     }
 }

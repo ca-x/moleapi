@@ -62,6 +62,8 @@ pub struct Example {
     pub status: u16,
     pub headers: Vec<Pair>,
     pub body: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mock_schema_link: Option<MockSchemaLink>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub mock_schema: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -70,6 +72,11 @@ pub struct Example {
     pub mock_match: Option<MockMatch>,
     #[serde(default, skip_serializing_if = "is_zero_delay")]
     pub delay_ms: u64,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MockSchemaLink {
+    pub specification_id: String,
+    pub pointer: String,
 }
 fn is_zero_delay(value: &u64) -> bool {
     *value == 0
