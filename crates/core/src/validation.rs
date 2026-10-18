@@ -355,6 +355,14 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
             "Mock delay must be at most 30000 ms"
         );
         ensure!(
+            example.fault_rate_percent <= 100,
+            "Mock fault rate must be at most 100 percent"
+        );
+        ensure!(
+            (500..=599).contains(&example.fault_status),
+            "Mock fault status must be 500–599"
+        );
+        ensure!(
             (200..=599).contains(&example.status),
             "Example status must be 200–599"
         );
