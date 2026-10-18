@@ -121,6 +121,24 @@ pub(super) fn import(content: &str) -> Result<ImportResult> {
     for resource in resources {
         if matches!(field(resource, "_type")?, "request_group" | "folder") {
             parent_folder(field(resource, "_id")?, workspace_id, &by_id)?;
+            for key in [
+                "environment",
+                "authentication",
+                "preRequestScript",
+                "afterResponseScript",
+                "scripts",
+                "tests",
+            ] {
+                if let Some(value) = resource.get(key) {
+                    ensure!(
+                        value.is_null()
+                            || value == ""
+                            || value == &Value::Object(Default::default())
+                            || value == &Value::Array(Vec::new()),
+                        "Insomnia folder {key} cannot be mapped safely"
+                    );
+                }
+            }
             folder_ids.insert(field(resource, "_id")?, uid());
         }
     }
@@ -155,6 +173,20 @@ pub(super) fn import(content: &str) -> Result<ImportResult> {
 
     let (parsed_environments, variables) = read_environments(resources, workspace_id)?;
     let placeholders = Regex::new(r"\{\{\s*_\.\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")?;
+    for resource in resources {
+        if resource["_type"] == "request" {
+            for environment in &parsed_environments {
+                let values = environment
+                    .variables
+                    .iter()
+                    .map(|row| (row.key.clone(), row.value.clone()))
+                    .collect();
+                normalize_url(field(resource, "url")?, &values, &placeholders).with_context(
+                    || format!("Invalid URL in Insomnia environment {}", environment.name),
+                )?;
+            }
+        }
+    }
     let specification_id = uid();
     for resource in resources {
         if field(resource, "_type")? != "request" {
@@ -252,6 +284,11 @@ fn parent_folder<'a>(
 }
 
 fn environment_variables(resource: &Value) -> Result<Vec<moleapi_core::Pair>> {
+    let private = match resource.get("isPrivate") {
+        None | Some(Value::Null) => false,
+        Some(Value::Bool(value)) => *value,
+        _ => bail!("Insomnia environment isPrivate must be a boolean"),
+    };
     let values = resource["data"]
         .as_object()
         .context("Insomnia environment data must be an object")?;
@@ -271,7 +308,7 @@ fn environment_variables(resource: &Value) -> Result<Vec<moleapi_core::Pair>> {
             _ => bail!("Insomnia variable {key} cannot be represented as text"),
         };
         let mut entry = pair(key, text);
-        if crate::redact::sensitive(key) {
+        if private || crate::redact::sensitive(key) {
             entry.secret = Some(true);
         }
         result.push(entry);
@@ -325,7 +362,11 @@ fn read_environments(
                 .iter_mut()
                 .find(|row| row.key == override_value.key)
             {
+                let inherited_private = existing.secret == Some(true);
                 *existing = override_value;
+                if inherited_private {
+                    existing.secret = Some(true);
+                }
             } else {
                 variables.push(override_value);
             }
@@ -410,6 +451,14 @@ fn enabled(row: &Value) -> Result<bool> {
     }
 }
 
+fn boolean_setting(resource: &Value, key: &str, default: bool) -> Result<bool> {
+    match resource.get(key) {
+        None | Some(Value::Null) => Ok(default),
+        Some(Value::Bool(value)) => Ok(*value),
+        _ => bail!("Insomnia {key} must be a boolean"),
+    }
+}
+
 fn convert_request(
     resource: &Value,
     variables: &HashMap<String, String>,
@@ -440,6 +489,31 @@ fn convert_request(
     );
     let url = normalize_url(field(resource, "url")?, variables, placeholders)?;
     let mut converted = request(field(resource, "name")?.into(), method.into(), url.clone())?;
+    ensure!(
+        boolean_setting(resource, "settingEncodeUrl", true)?,
+        "Insomnia unencoded URL setting is unsupported"
+    );
+    ensure!(
+        boolean_setting(resource, "settingRebuildPath", true)?,
+        "Insomnia path rebuild setting is unsupported"
+    );
+    ensure!(
+        !boolean_setting(resource, "settingDisableRenderRequestBody", false)?,
+        "Insomnia disabled body rendering is unsupported"
+    );
+    converted.follow_redirects = match resource.get("settingFollowRedirects") {
+        None | Some(Value::Null) => true,
+        Some(Value::String(value)) if value == "global" => true,
+        Some(Value::Bool(value)) => *value,
+        _ => bail!("Unsupported Insomnia redirect setting"),
+    };
+    let send_cookies = boolean_setting(resource, "settingSendCookies", true)?;
+    let store_cookies = boolean_setting(resource, "settingStoreCookies", true)?;
+    ensure!(
+        send_cookies == store_cookies,
+        "Insomnia separate Cookie Jar send/store settings are unsupported"
+    );
+    converted.use_cookie_jar = send_cookies;
     converted.description = optional_string(resource, "description")?
         .unwrap_or_default()
         .into();
@@ -464,7 +538,7 @@ fn convert_request(
             .map(|row| (row.key.clone(), row.value.clone()))
             .collect();
         ensure!(
-            listed.is_empty() || listed == encoded,
+            parameters.is_empty() || listed == encoded,
             "Insomnia URL and parameter list disagree"
         );
         if parameters.iter().any(|row| !row.enabled) {

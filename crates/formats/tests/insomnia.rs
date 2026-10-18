@@ -80,6 +80,105 @@ fn insomnia_source_and_credentials_survive_only_explicit_full_backup() {
 }
 
 #[test]
+fn insomnia_form_credentials_are_private_in_default_backup() {
+    let mut source: Value = serde_json::from_str(SOURCE).unwrap();
+    source["resources"][6]["body"]["params"] = serde_json::json!([
+        {"name":"password","value":"form-only-secret"},
+        {"name":"note","value":"form-only-secret"},
+        {"name":"color","value":"red"}
+    ]);
+    source["resources"][5]["body"] = serde_json::json!({
+        "mimeType":"text/plain","text":"copied form-only-secret"
+    });
+    source["resources"][5]["authentication"] = Value::Null;
+    source["resources"][6]["authentication"] = Value::Null;
+    let imported = import("insomnia", &source.to_string()).unwrap();
+    let workspace: Workspace = serde_json::from_value(serde_json::json!({
+        "id":"w","name":imported.name,"revision":1,"updated_at":"now","data":imported.data
+    }))
+    .unwrap();
+    let safe = export(&workspace, "moleapi", false).unwrap();
+    assert!(!safe.content.contains("form-only-secret"));
+    let full = export(&workspace, "moleapi", true).unwrap();
+    assert!(full.content.contains("form-only-secret"));
+}
+
+#[test]
+fn insomnia_rejects_disabled_query_still_present_in_url() {
+    let mut source: Value = serde_json::from_str(SOURCE).unwrap();
+    source["resources"][5]["url"] = "https://example.test/items?token=secret".into();
+    source["resources"][5]["parameters"] =
+        serde_json::json!([{"name":"token","value":"secret","disabled":true}]);
+    assert!(import("insomnia", &source.to_string()).is_err());
+}
+
+#[test]
+fn insomnia_rejects_unmapped_folder_environment() {
+    let mut source: Value = serde_json::from_str(SOURCE).unwrap();
+    source["resources"][3]["environment"] =
+        serde_json::json!({"base_url":"https://other.example.test"});
+    assert!(import("insomnia", &source.to_string()).is_err());
+}
+
+#[test]
+fn insomnia_private_environment_variables_stay_private() {
+    let mut source: Value = serde_json::from_str(SOURCE).unwrap();
+    source["resources"][1]["isPrivate"] = true.into();
+    source["resources"][1]["data"]["session"] = "private-session-value".into();
+    let imported = import("insomnia", &source.to_string()).unwrap();
+    let workspace: Workspace = serde_json::from_value(serde_json::json!({
+        "id":"w","name":imported.name,"revision":1,"updated_at":"now","data":imported.data
+    }))
+    .unwrap();
+    assert!(
+        !export(&workspace, "moleapi", false)
+            .unwrap()
+            .content
+            .contains("private-session-value")
+    );
+    assert!(
+        export(&workspace, "moleapi", true)
+            .unwrap()
+            .content
+            .contains("private-session-value")
+    );
+}
+
+#[test]
+fn insomnia_rejects_invalid_child_environment_url() {
+    let mut source: Value = serde_json::from_str(SOURCE).unwrap();
+    source["resources"][2]["data"]["base_url"] = "file:///tmp/private".into();
+    assert!(import("insomnia", &source.to_string()).is_err());
+}
+
+#[test]
+fn insomnia_request_settings_preserve_supported_wire_controls() {
+    let mut source: Value = serde_json::from_str(SOURCE).unwrap();
+    source["resources"][5]["settingFollowRedirects"] = false.into();
+    source["resources"][5]["settingSendCookies"] = false.into();
+    source["resources"][5]["settingStoreCookies"] = false.into();
+    let imported = import("insomnia", &source.to_string()).unwrap();
+    let request = &imported
+        .data
+        .collections
+        .iter()
+        .flat_map(|c| &c.requests)
+        .find(|r| r.name == "List items")
+        .unwrap();
+    assert!(!request.follow_redirects);
+    assert!(!request.use_cookie_jar);
+
+    source["resources"][5]["settingStoreCookies"] = true.into();
+    assert!(import("insomnia", &source.to_string()).is_err());
+    source["resources"][5]["settingSendCookies"] = true.into();
+    source["resources"][5]["settingEncodeUrl"] = false.into();
+    assert!(import("insomnia", &source.to_string()).is_err());
+    source["resources"][5]["settingEncodeUrl"] = true.into();
+    source["resources"][5]["settingRebuildPath"] = false.into();
+    assert!(import("insomnia", &source.to_string()).is_err());
+}
+
+#[test]
 fn insomnia_rejects_conflicting_and_unrepresentable_resources_atomically() {
     let base: Value = serde_json::from_str(SOURCE).unwrap();
     let mut source = base.clone();

@@ -461,7 +461,26 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
                 example.body = redact_embedded_json(&example.body);
             }
             request.url = redact_url(&request.url);
-            request.body = redact_embedded_json(&request.body);
+            request.body = if request.body_kind == "form" {
+                url::form_urlencoded::Serializer::new(String::new())
+                    .extend_pairs(url::form_urlencoded::parse(request.body.as_bytes()).map(
+                        |(key, value)| {
+                            let screened = if sensitive(&key) {
+                                String::new()
+                            } else {
+                                tcp_privacy.screen_generation_text(&value)
+                            };
+                            (key.into_owned(), screened)
+                        },
+                    ))
+                    .finish()
+            } else if !matches!(request.body_kind.as_str(), "binary" | "multipart")
+                && !request.body_kind.contains("{{")
+            {
+                tcp_privacy.screen_generation_json(&redact_embedded_json(&request.body))
+            } else {
+                redact_embedded_json(&request.body)
+            };
             let dynamic = request.body_kind.contains("{{");
             let file_source = serde_json::from_str::<Value>(&request.body).ok();
             if request.body_kind == "binary"
