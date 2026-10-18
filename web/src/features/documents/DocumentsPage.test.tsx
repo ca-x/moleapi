@@ -4,9 +4,10 @@ import {Theme} from "@radix-ui/themes";
 import {afterEach,beforeEach,expect,it,vi} from "vitest";
 import {setLanguage} from "../../shared/i18n";
 import {newRequest} from "../../shared/model";
-import type {WorkspaceData} from "../../shared/types";
+import type {MarkdownDocument,WorkspaceData} from "../../shared/types";
 import {useWorkbench} from "../workbench/context";
 import DocumentsPage from "./DocumentsPage";
+import {acknowledgeSave,hasChanges} from "../workspaces/draft";
 
 vi.mock("../workbench/context",()=>({useWorkbench:vi.fn()}));
 vi.mock("../../shared/ui",async original=>({
@@ -21,7 +22,7 @@ function setup(source="# Guide\n\n[Safe](https://example.test) [Unsafe](javascri
   const updateData=vi.fn();
   const save=vi.fn();
   const setGuard=vi.fn();
-  const draft={id:"w",name:"W",revision:1,data};
+  const draft={id:"w",name:"W",revision:1,updated_at:"2026-10-18T00:00:00Z",data};
   const context={accountId:"owner",draft,stateRef:{current:{draft}},accountRef:{current:"owner"},setRequestId:vi.fn(),setView:vi.fn(),setSidebar:vi.fn(),updateData,save,setGuard,dirty:true,saving:false,dark:false};
   vi.mocked(useWorkbench).mockReturnValue(context as never);
   return {data,updateData,save,setGuard,context};
@@ -49,6 +50,10 @@ it("creates private documents and edits saved drafts through the workspace contr
   const created=updateData.mock.lastCall?.[0](data);
   expect(created.documents).toHaveLength(2);
   expect(created.documents[1].secret).toBe(true);
+  expect(created.documents[1]).not.toHaveProperty("collection_id");
+  const draft={...context.draft,data:created};
+  const serializedServer={...draft,revision:2,data:{...created,documents:created.documents?.map((document:MarkdownDocument)=>document.collection_id==null?{id:document.id,name:document.name,source:document.source,secret:document.secret}:document)}};
+  expect(hasChanges(acknowledgeSave({draft,saved:context.draft},serializedServer))).toBe(false);
   vi.mocked(useWorkbench).mockReturnValue({...context,draft:{...context.draft,data:created}} as never);
   page.rerender(<Theme><DocumentsPage/></Theme>);
   expect(screen.getByRole("textbox",{name:"Document title"})).toHaveProperty("value","New document");
