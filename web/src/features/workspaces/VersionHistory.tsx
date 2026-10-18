@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertDialog, Button, Callout, Flex, Heading, ScrollArea, Text } from "@radix-ui/themes";
+import { AlertDialog, Button, Callout, Flex, Heading, ScrollArea, Text, TextField } from "@radix-ui/themes";
 import { toast } from "sonner";
 import { api, ApiError } from "../../shared/api";
 import { t, useLanguage, message, liveTranslation } from "../../shared/i18n";
@@ -17,6 +17,7 @@ export default function VersionHistory() {
   const [selectedRevision, setSelectedRevision] = useState<number | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [requestSearch, setRequestSearch] = useState("");
   const history = useQuery({
     queryKey: ["workspace-versions", account, workspace?.id],
     queryFn: () => api<Workspace[]>(`/api/workspaces/${encodeURIComponent(workspace!.id)}/versions`),
@@ -24,6 +25,11 @@ export default function VersionHistory() {
   });
   const selected = history.data?.find((item) => item.revision === selectedRevision)
     ?? history.data?.[0];
+  const needle = requestSearch.trim().toLocaleLowerCase();
+  const matchingRequests = selected?.data.collections.flatMap((collection) =>
+    collection.requests.map((request) => ({ collection, request })))
+    .filter(({ collection, request }) => !needle || [collection.name, request.name, request.id, request.method]
+      .some((value) => value.toLocaleLowerCase().includes(needle))) ?? [];
 
   async function applyRestore(revision: number, origin: string, originAccount: string) {
     const current = state.stateRef.current.saved;
@@ -94,16 +100,15 @@ export default function VersionHistory() {
           <Text size="2" color="gray">{new Date(selected.updated_at).toLocaleString(language)}</Text>
           <Text size="2">{t("工作区名称：{{name}}", { name: selected.name })}</Text>
           <Text size="2">{t("集合 {{collections}} 个，请求 {{requests}} 个", { collections: selected.data.collections.length, requests: selected.data.collections.reduce((count, collection) => count + collection.requests.length, 0) })}</Text>
+          <TextField.Root aria-label={t("查找历史请求")} placeholder={t("按请求名称或 ID 查找")} value={requestSearch} onChange={(event) => setRequestSearch(event.target.value)} />
           <ScrollArea style={{ maxHeight: 160 }}>
             <ul style={{ margin: 0, paddingInlineStart: 20, overflowWrap: "anywhere" }}>
-              {selected.data.collections.slice(0, 5).map((collection) => <li key={collection.id}>
-                <Text size="2" weight="medium">{collection.name}</Text>
-                <ul style={{ paddingInlineStart: 20 }}>
-                  {collection.requests.slice(0, 5).map((request) => <li key={request.id}><Text size="2" color="gray">{request.name}</Text></li>)}
-                  {collection.requests.length > 5 && <li><Text size="2" color="gray">{t("更多请求…")}</Text></li>}
-                </ul>
+              {matchingRequests.slice(0, 20).map(({ collection, request }) => <li key={request.id}>
+                <Text size="2" color="gray">{collection.name} · </Text>
+                <Button size="1" variant="ghost" color="gray" onClick={() => { state.setModal(null); state.setVersionRequestId(request.id); }}>{request.name}</Button>
               </li>)}
-              {selected.data.collections.length > 5 && <li><Text size="2" color="gray">{t("更多集合…")}</Text></li>}
+              {matchingRequests.length > 20 && <li><Text size="2" color="gray">{t("匹配结果较多，请缩小搜索范围。")}</Text></li>}
+              {matchingRequests.length === 0 && <li><Text size="2" color="gray">{t("没有匹配的历史请求。")}</Text></li>}
             </ul>
           </ScrollArea>
           <AlertDialog.Root open={confirming} onOpenChange={setConfirming}>

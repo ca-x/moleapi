@@ -25,7 +25,7 @@ import {
   TextArea,
   TextField,
 } from "@radix-ui/themes";
-import { Braces, Copy, FileText, Save, Send } from "lucide-react";
+import { Braces, Copy, FileText, History, Save, Send } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../../shared/api";
 import { Choice, Editor, Field, PairEditor, ToolButton } from "../../shared/ui";
@@ -66,6 +66,7 @@ export default function RequestEditor({
   workspaceData,
   workspaceRevision,
   onWorkspaceImported,
+  openVersions,
   cookieWorkspace,
   protocolConnected = false,
   bodyScope = "",
@@ -85,6 +86,7 @@ export default function RequestEditor({
   workspaceData?: WorkspaceData;
   workspaceRevision?: number;
   onWorkspaceImported?: (workspace:Workspace)=>void;
+  openVersions?: () => void;
   protocolConnected?: boolean;
   bodyScope?: string;
   update: (patch: Partial<RequestSpec>) => void;
@@ -283,6 +285,9 @@ export default function RequestEditor({
           )}
           <Button color="gray" variant="soft" loading={saving} onClick={save}>
             <Save size={15} /> {t("保存")} </Button>
+          {openVersions && <Button color="gray" variant="soft" onClick={openVersions}>
+            <History size={15} /> {t("请求版本")}
+          </Button>}
           <Button variant="soft" color="gray" disabled={kind !== "http"} onClick={() => setGenerationOpen(true)}>{t("生成代码")}</Button>
           <ToolButton
             label={
