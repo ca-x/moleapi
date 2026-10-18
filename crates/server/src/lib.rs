@@ -5,6 +5,7 @@ mod ci;
 mod cookies;
 mod credential_revocations;
 mod data_datasets;
+mod doc_publications;
 mod dubbo;
 mod entities;
 mod execution;
@@ -427,6 +428,14 @@ async fn build(
                 .delete(workspaces::delete),
         )
         .route("/workspaces/{id}/versions", get(workspaces::versions))
+        .route(
+            "/workspaces/{id}/doc-publications",
+            get(doc_publications::list).post(doc_publications::create),
+        )
+        .route(
+            "/workspaces/{id}/doc-publications/{publication}",
+            axum::routing::delete(doc_publications::revoke),
+        )
         .route("/workspaces/{id}/ci-preset", post(ci::generate))
         .route(
             "/workspaces/{id}/history",
@@ -647,6 +656,7 @@ async fn build(
         protected.route_layer(middleware::from_fn_with_state(state.clone(), auth::guard));
     let api = protected
         .merge(mock_public::routes())
+        .route("/public/docs/{id}", get(doc_publications::public_get))
         .route(
             "/health",
             get(|| async {
@@ -713,7 +723,26 @@ async fn static_asset(uri: axum::http::Uri, method: axum::http::Method) -> Respo
     } else {
         return ApiError::not_found().into_response();
     };
-    ([("content-type", mime)], file.data.into_owned()).into_response()
+    let mut response = ([("content-type", mime)], file.data.into_owned()).into_response();
+    if path.starts_with("docs/") {
+        use axum::http::{HeaderValue, header};
+        response
+            .headers_mut()
+            .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+        response.headers_mut().insert(
+            header::REFERRER_POLICY,
+            HeaderValue::from_static("no-referrer"),
+        );
+        response.headers_mut().insert(
+            header::X_CONTENT_TYPE_OPTIONS,
+            HeaderValue::from_static("nosniff"),
+        );
+        response.headers_mut().insert(
+            header::CONTENT_SECURITY_POLICY,
+            HeaderValue::from_static("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'"),
+        );
+    }
+    response
 }
 
 async fn json_errors(request: axum::extract::Request, next: middleware::Next) -> Response {

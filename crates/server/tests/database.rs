@@ -52,6 +52,69 @@ async fn identical_storage_auth_cas_tests_on_every_configured_database() {
         let username = format!("user_{prefix}");
         let a = register(&router, &username).await;
         let b = register(&router, &format!("other_{prefix}")).await;
+        let published_id = format!("published-{prefix}");
+        let docs = json!({"schema_version":1,"collections":[],"environments":[],"active_environment_id":null,
+            "documents":[{"id":"guide","name":"Guide","source":"# Published across instances","secret":false}]});
+        let (status, published_workspace) = call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            Some(&a),
+            Some(json!({"id":published_id,"name":"Private workspace","data":docs})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{published_workspace}");
+        let publications_path = format!("/api/workspaces/{published_id}/doc-publications");
+        let publication_input = json!({"title":"Public guides","expected_revision":published_workspace["revision"],"document_ids":["guide"],"idempotency_key":"same-key"});
+        let (status, publication) = call(
+            &router,
+            "POST",
+            &publications_path,
+            Some(&a),
+            Some(publication_input.clone()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{publication}");
+        let (status, retry) = call(
+            &router_again,
+            "POST",
+            &publications_path,
+            Some(&a),
+            Some(publication_input),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{retry}");
+        assert_eq!(retry["id"], publication["id"]);
+        let publication_id = publication["id"].as_str().unwrap();
+        let public_path = format!("/api/public/docs/{publication_id}");
+        let (status, public) = call(&router_again, "GET", &public_path, None, None).await;
+        assert_eq!(status, StatusCode::OK, "{public}");
+        assert_eq!(
+            public["documents"][0]["source"],
+            "# Published across instances"
+        );
+        assert_eq!(
+            call(&router_again, "GET", &publications_path, Some(&b), None)
+                .await
+                .0,
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            call(
+                &router_again,
+                "DELETE",
+                &format!("{publications_path}/{publication_id}"),
+                Some(&a),
+                None,
+            )
+            .await
+            .0,
+            StatusCode::OK
+        );
+        assert_eq!(
+            call(&router, "GET", &public_path, None, None).await.0,
+            StatusCode::NOT_FOUND
+        );
         let rate_id = format!("rate-{prefix}");
         let mut rate_data = example_data();
         rate_data["collections"][0]["requests"][0]["examples"][0]["rate_limit_per_minute"] =

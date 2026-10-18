@@ -10,6 +10,8 @@ import {validateMarkdownDocuments} from "./validation";
 import MarkdownPreview from "./MarkdownPreview";
 import ApiReference from "./ApiReference";
 import {searchWorkspace} from "./search";
+import {native} from "../../shared/api";
+import DocumentPublications from "./DocumentPublications";
 import type {SearchResult} from "./search";
 
 export default function DocumentsPage() {
@@ -98,7 +100,7 @@ export default function DocumentsPage() {
     {invalidSourceDocument&&<Text role="alert" color="red" size="2">{t("文档「{{value0}}」的 Markdown 正文不能超过 256 KiB。",{value0:invalidSourceDocument.name})}</Text>}
     {invalidTotalSource&&<Text role="alert" color="red" size="2">{t("工作区 Markdown 正文合计不能超过 2 MiB。")}</Text>}
     <Tabs.Root value={section} onValueChange={setSection} className="documents-sections">
-      <Tabs.List><Tabs.Trigger value="markdown">{t("Markdown")}</Tabs.Trigger><Tabs.Trigger value="api">{t("API 参考")}</Tabs.Trigger></Tabs.List>
+      <Tabs.List><Tabs.Trigger value="markdown">{t("Markdown")}</Tabs.Trigger><Tabs.Trigger value="api">{t("API 参考")}</Tabs.Trigger>{!native&&<Tabs.Trigger value="publish">{t("发布")}</Tabs.Trigger>}</Tabs.List>
       <Tabs.Content value="markdown">
     <div className="documents-layout">
       <nav className="documents-list" aria-label={t("文档列表")}>
@@ -123,6 +125,7 @@ export default function DocumentsPage() {
     </div>
       </Tabs.Content>
       <Tabs.Content value="api"><ApiReference data={draft.data} scopeKey={`${accountId}/${draft.id}`} onOpenRequest={openRequest}/></Tabs.Content>
+      {!native&&<Tabs.Content value="publish"><DocumentPublications key={`${accountId}/${draft.id}`}/></Tabs.Content>}
     </Tabs.Root>
   </div>;
 }
