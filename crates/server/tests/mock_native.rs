@@ -2,6 +2,66 @@ mod common;
 use common::*;
 
 #[tokio::test]
+async fn native_public_listener_serves_saved_mock_fault_on_a_real_socket() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("fault-listener.db")).await.unwrap();
+    let mut data = example_data();
+    let example = &mut data["collections"][0]["requests"][0]["examples"][0];
+    example["fault_rate_percent"] = json!(100);
+    example["fault_status"] = json!(504);
+    example["body"] = json!("private-native-body");
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            None,
+            Some(json!({"id":"w","name":"W","data":data}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let (_, share) = call(
+        &router,
+        "POST",
+        "/api/workspaces/w/mock-shares",
+        None,
+        Some(json!({"request_id":"r","expires_in_days":1})),
+    )
+    .await;
+    let (status, started) = call(
+        &router,
+        "POST",
+        "/api/mock-public/listener/start",
+        None,
+        Some(json!({"host":"127.0.0.1","port":0})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{started}");
+    let url = format!(
+        "{}/api/public/mock/{}/e",
+        started["origin"].as_str().unwrap(),
+        share["token"].as_str().unwrap()
+    );
+    let response = reqwest::get(url).await.unwrap();
+    assert_eq!(response.status(), StatusCode::GATEWAY_TIMEOUT);
+    assert_eq!(response.text().await.unwrap(), "Simulated Mock failure");
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/mock-public/listener/stop",
+            None,
+            Some(json!({}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+}
+
+#[tokio::test]
 async fn native_listener_is_explicit_and_exposes_only_capability_routes() {
     let dir = tempfile::tempdir().unwrap();
     let router = local(&dir.path().join("native-mock.db")).await.unwrap();

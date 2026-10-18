@@ -10,9 +10,12 @@ use axum::{
     http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode},
     response::IntoResponse,
 };
+use rand::Rng;
 use serde::Deserialize;
 #[derive(Clone)]
 pub(crate) struct SavedExample;
+#[derive(Clone)]
+struct SimulatedFailure;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -493,6 +496,9 @@ async fn record_outcome(
 
 fn outcome_meta(result: &Result<axum::response::Response, ApiError>) -> (StatusCode, &'static str) {
     match result {
+        Ok(response) if response.extensions().get::<SimulatedFailure>().is_some() => {
+            (response.status(), "simulated_failure")
+        }
         Ok(response) => (response.status(), "served"),
         Err(error) => (error.status, "failed"),
     }
@@ -633,6 +639,31 @@ async fn serve_selected(
     method: &Method,
     body: &[u8],
 ) -> Result<axum::response::Response, ApiError> {
+    if e.fault_rate_percent > 100 || !(500..=599).contains(&e.fault_status) {
+        return Err(ApiError::bad("Invalid saved Mock fault settings"));
+    }
+    if e.fault_rate_percent > 0
+        && (e.fault_rate_percent == 100
+            || rand::thread_rng().gen_range(0u8..100) < e.fault_rate_percent)
+    {
+        wait_selected_delay(s, owner, w, e.delay_ms).await?;
+        let mut response = (
+            StatusCode::from_u16(e.fault_status)
+                .map_err(|_| ApiError::bad("Invalid Mock fault status"))?,
+            [
+                (
+                    axum::http::header::CONTENT_TYPE,
+                    "text/plain; charset=utf-8",
+                ),
+                (axum::http::header::CACHE_CONTROL, "no-store"),
+            ],
+            "Simulated Mock failure",
+        )
+            .into_response();
+        response.extensions_mut().insert(SavedExample);
+        response.extensions_mut().insert(SimulatedFailure);
+        return Ok(response);
+    }
     let mut response_headers = e.headers.clone();
     enum SchemaSource {
         Inline(String),
@@ -772,26 +803,36 @@ async fn serve_selected(
         draft.body,
     )
         .into_response();
-    if e.delay_ms > 0 {
-        if e.delay_ms > 30_000 {
-            return Err(ApiError::bad("Mock delay exceeds 30000 ms"));
-        }
-        let _permit = s
-            .mock_delay_slots
-            .clone()
-            .try_acquire_owned()
-            .map_err(|_| ApiError {
-                status: StatusCode::TOO_MANY_REQUESTS,
-                message: "Delayed Mock capacity reached".into(),
-            })?;
-        tokio::time::sleep(std::time::Duration::from_millis(e.delay_ms)).await;
-        let current = owned(s, owner, &w.id).await?;
-        if current.revision != w.revision {
-            return Err(ApiError::conflict("Workspace changed during Mock delay"));
-        }
-    }
+    wait_selected_delay(s, owner, w, e.delay_ms).await?;
     response.extensions_mut().insert(SavedExample);
     Ok(response)
+}
+async fn wait_selected_delay(
+    s: &AppState,
+    owner: &str,
+    workspace: &moleapi_core::Workspace,
+    delay_ms: u64,
+) -> Result<(), ApiError> {
+    if delay_ms == 0 {
+        return Ok(());
+    }
+    if delay_ms > 30_000 {
+        return Err(ApiError::bad("Mock delay exceeds 30000 ms"));
+    }
+    let _permit = s
+        .mock_delay_slots
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| ApiError {
+            status: StatusCode::TOO_MANY_REQUESTS,
+            message: "Delayed Mock capacity reached".into(),
+        })?;
+    tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+    let current = owned(s, owner, &workspace.id).await?;
+    if current.revision != workspace.revision {
+        return Err(ApiError::conflict("Workspace changed during Mock delay"));
+    }
+    Ok(())
 }
 fn safe_incoming_request(
     saved: &moleapi_core::RequestSpec,

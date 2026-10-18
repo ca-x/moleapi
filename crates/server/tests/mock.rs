@@ -39,6 +39,63 @@ async fn saved_mock_example_uses_status_body_and_only_safe_headers() {
 }
 
 #[tokio::test]
+async fn selected_mock_fault_rate_changes_direct_and_routed_wire_and_logs() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("fault.db")).await.unwrap();
+    let mut data = example_data();
+    data["script_mode"] = json!("v2");
+    data["collections"][0]["requests"][0]["url"] = json!("https://example.test/items");
+    let (status, saved) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"w","name":"Fault","data":data.clone()})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    assert_eq!(
+        call(&router, "GET", "/api/mock/w/r/e", None, None).await.0,
+        StatusCode::CREATED
+    );
+
+    let example = &mut data["collections"][0]["requests"][0]["examples"][0];
+    example["fault_rate_percent"] = json!(100);
+    example["fault_status"] = json!(502);
+    example["delay_ms"] = json!(30);
+    example["body"] = json!("private-authored-body");
+    example["mock_script"] = json!("throw new Error('fault should bypass script')");
+    example["headers"] =
+        json!([{"id":"h","key":"X-Private","value":"private-authored-header","enabled":true}]);
+    let (status, updated) = call(
+        &router,
+        "PUT",
+        "/api/workspaces/w",
+        None,
+        Some(json!({"name":"Fault","expected_revision":saved["revision"],"data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{updated}");
+    for path in ["/api/mock/w/r/e", "/api/mocks/w/items"] {
+        let started = std::time::Instant::now();
+        let response = router
+            .clone()
+            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+        assert!(started.elapsed() >= std::time::Duration::from_millis(25));
+        assert!(!response.headers().contains_key("x-private"));
+        let body = to_bytes(response.into_body(), 128).await.unwrap();
+        assert_eq!(body.as_ref(), b"Simulated Mock failure");
+    }
+    let (_, logs) = call(&router, "GET", "/api/workspaces/w/mock-calls", None, None).await;
+    assert_eq!(logs[0]["outcome"], "simulated_failure");
+    assert_eq!(logs[0]["response_status"], 502);
+    assert_eq!(logs[1]["outcome"], "simulated_failure");
+}
+
+#[tokio::test]
 async fn saved_schema_generates_direct_and_routed_json_before_optional_script() {
     let dir = tempfile::tempdir().unwrap();
     let router = local(&dir.path().join("schema.db")).await.unwrap();

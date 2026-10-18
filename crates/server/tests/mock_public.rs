@@ -2,6 +2,70 @@ mod common;
 use common::*;
 
 #[tokio::test]
+async fn public_mock_fault_returns_fixed_body_and_respects_share_revocation() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = hosted(config(
+        moleapi_server::sqlite_database_url(&dir.path().join("fault-share.db")).unwrap(),
+        true,
+    ))
+    .await
+    .unwrap();
+    let owner = register(&router, "faultshareowner").await;
+    let mut data = example_data();
+    let example = &mut data["collections"][0]["requests"][0]["examples"][0];
+    example["fault_rate_percent"] = json!(100);
+    example["fault_status"] = json!(503);
+    example["body"] = json!("private-public-body");
+    let (status, saved) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        Some(&owner),
+        Some(json!({"id":"w","name":"W","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    let (_, share) = call(
+        &router,
+        "POST",
+        "/api/workspaces/w/mock-shares",
+        Some(&owner),
+        Some(json!({"request_id":"r","expires_in_days":1})),
+    )
+    .await;
+    let path = format!("/api/public/mock/{}/e", share["token"].as_str().unwrap());
+    let (status, body) = call(&router, "GET", &path, None, None).await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert!(!body.to_string().contains("private-public-body"));
+    let (_, logs) = call(
+        &router,
+        "GET",
+        "/api/workspaces/w/mock-calls",
+        Some(&owner),
+        None,
+    )
+    .await;
+    assert_eq!(logs[0]["outcome"], "simulated_failure");
+    let id = share["id"].as_str().unwrap();
+    assert_eq!(
+        call(
+            &router,
+            "DELETE",
+            &format!("/api/workspaces/w/mock-shares/{id}"),
+            Some(&owner),
+            None
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        call(&router, "GET", &path, None, None).await.0,
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[tokio::test]
 async fn public_mock_uses_saved_name_inference_without_exposing_schema_settings() {
     let dir = tempfile::tempdir().unwrap();
     let router = hosted(config(

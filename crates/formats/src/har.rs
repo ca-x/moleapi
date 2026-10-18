@@ -669,6 +669,8 @@ fn import_example(
         mock_script: String::new(),
         mock_match: None,
         delay_ms: 0,
+        fault_rate_percent: 0,
+        fault_status: 503,
         headers: response
             .headers
             .into_iter()
