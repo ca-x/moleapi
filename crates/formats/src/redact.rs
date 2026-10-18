@@ -229,6 +229,19 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
                     || r.network.is_some()
             });
     let mut result = source.clone();
+    for document in &mut result.data.documents {
+        let name = privacy.screen_bounded(&document.name, 512);
+        document.name = if name.is_empty() || name.chars().count() > 128 {
+            "[REDACTED]".into()
+        } else {
+            name
+        };
+        document.source = if document.secret {
+            String::new()
+        } else {
+            privacy.screen_bounded(&document.source, 256 * 1024)
+        };
+    }
     for scenario in &mut result.data.scenarios {
         scenario.name = data_privacy.screen_bounded(&scenario.name, 256);
         if scenario.name.trim().is_empty() {

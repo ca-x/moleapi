@@ -62,6 +62,9 @@ pub fn import(format: &str, content: &str) -> Result<ImportResult> {
 }
 
 pub fn export(workspace: &Workspace, format: &str, include_secrets: bool) -> Result<ExportResult> {
+    if format != "moleapi" && !workspace.data.documents.is_empty() {
+        bail!("Markdown documents require MoleAPI backup until external mappings are verified");
+    }
     if format != "moleapi"
         && workspace
             .data
@@ -353,6 +356,7 @@ pub(crate) fn data(
         }],
         active_environment_id: Some(environment_id),
         specifications: vec![],
+        documents: vec![],
     }
 }
 

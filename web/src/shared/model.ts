@@ -65,6 +65,7 @@ export function initialData(): WorkspaceData {
   ];
   return {
     schema_version: 1,
+    documents: [],
     collections: [
       {
         id: id(),

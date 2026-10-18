@@ -49,5 +49,8 @@ export function moveCollection(data: WorkspaceData, id: string, parent_id: strin
 }
 export function removeCollectionTree(data: WorkspaceData, id: string) {
   const ids = collectionDescendants(data.collections, id);
-  return { ...data, collections: data.collections.filter(c => !ids.has(c.id)) };
+  return { ...data,
+    collections: data.collections.filter(c => !ids.has(c.id)),
+    documents: data.documents?.map(document=>document.collection_id&&ids.has(document.collection_id)?{...document,collection_id:null}:document)
+  };
 }

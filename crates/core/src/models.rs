@@ -308,6 +308,16 @@ pub struct Environment {
     pub name: String,
     pub variables: Vec<Pair>,
 }
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct MarkdownDocument {
+    pub id: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub collection_id: Option<String>,
+    pub source: String,
+    #[serde(default = "default_true")]
+    pub secret: bool,
+}
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ScriptMode {
@@ -338,6 +348,8 @@ pub struct WorkspaceData {
     pub post_response_script: String,
     #[serde(default)]
     pub specifications: Vec<Specification>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub documents: Vec<MarkdownDocument>,
     pub schema_version: u32,
     pub collections: Vec<Collection>,
     pub environments: Vec<Environment>,
