@@ -39,6 +39,292 @@ async fn saved_mock_example_uses_status_body_and_only_safe_headers() {
 }
 
 #[tokio::test]
+async fn selected_mock_fault_rate_changes_direct_and_routed_wire_and_logs() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("fault.db")).await.unwrap();
+    let mut data = example_data();
+    data["script_mode"] = json!("v2");
+    data["collections"][0]["requests"][0]["url"] = json!("https://example.test/items");
+    let (status, saved) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"w","name":"Fault","data":data.clone()})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    assert_eq!(
+        call(&router, "GET", "/api/mock/w/r/e", None, None).await.0,
+        StatusCode::CREATED
+    );
+
+    let example = &mut data["collections"][0]["requests"][0]["examples"][0];
+    example["fault_rate_percent"] = json!(100);
+    example["fault_status"] = json!(502);
+    example["delay_ms"] = json!(30);
+    example["body"] = json!("private-authored-body");
+    example["mock_script"] = json!("throw new Error('fault should bypass script')");
+    example["headers"] =
+        json!([{"id":"h","key":"X-Private","value":"private-authored-header","enabled":true}]);
+    let (status, updated) = call(
+        &router,
+        "PUT",
+        "/api/workspaces/w",
+        None,
+        Some(json!({"name":"Fault","expected_revision":saved["revision"],"data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{updated}");
+    for path in ["/api/mock/w/r/e", "/api/mocks/w/items"] {
+        let started = std::time::Instant::now();
+        let response = router
+            .clone()
+            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+        assert!(started.elapsed() >= std::time::Duration::from_millis(25));
+        assert!(!response.headers().contains_key("x-private"));
+        let body = to_bytes(response.into_body(), 128).await.unwrap();
+        assert_eq!(body.as_ref(), b"Simulated Mock failure");
+    }
+    let (_, logs) = call(&router, "GET", "/api/workspaces/w/mock-calls", None, None).await;
+    assert_eq!(logs[0]["outcome"], "simulated_failure");
+    assert_eq!(logs[0]["response_status"], 502);
+    assert_eq!(logs[1]["outcome"], "simulated_failure");
+}
+
+#[tokio::test]
+async fn selected_mock_rate_limit_applies_before_fault_and_delay_and_resets_on_save() {
+    use sea_orm::{ConnectionTrait, Database, Statement};
+    let dir = tempfile::tempdir().unwrap();
+    let database_path = dir.path().join("rate.db");
+    let router = local(&database_path).await.unwrap();
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["url"] = json!("https://example.test/items");
+    let example = &mut data["collections"][0]["requests"][0]["examples"][0];
+    example["rate_limit_per_minute"] = json!(2);
+    example["fault_rate_percent"] = json!(100);
+    example["fault_status"] = json!(502);
+    example["delay_ms"] = json!(100);
+    let (status, saved) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"w","name":"Rate","data":data.clone()})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    for path in ["/api/mock/w/r/e", "/api/mocks/w/items"] {
+        assert_eq!(
+            call(&router, "GET", path, None, None).await.0,
+            StatusCode::BAD_GATEWAY
+        );
+    }
+    let started = std::time::Instant::now();
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/mock/w/r/e")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert!(started.elapsed() < std::time::Duration::from_millis(80));
+    assert!(
+        response
+            .headers()
+            .get("retry-after")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .parse::<u64>()
+            .unwrap()
+            >= 1
+    );
+    let body = to_bytes(response.into_body(), 128).await.unwrap();
+    assert_eq!(body.as_ref(), b"Simulated Mock rate limit");
+    let (_, logs) = call(&router, "GET", "/api/workspaces/w/mock-calls", None, None).await;
+    assert_eq!(logs[0]["outcome"], "rate_limited");
+    assert_eq!(logs[0]["response_status"], 429);
+    let (status, updated) = call(
+        &router,
+        "PUT",
+        "/api/workspaces/w",
+        None,
+        Some(json!({"name":"Rate","expected_revision":saved["revision"],"data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{updated}");
+    assert_eq!(
+        call(&router, "GET", "/api/mock/w/r/e", None, None).await.0,
+        StatusCode::BAD_GATEWAY
+    );
+    assert_eq!(
+        call(
+            &router,
+            "DELETE",
+            "/api/workspaces/w",
+            None,
+            Some(json!({"expected_revision":updated["revision"]}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let db = Database::connect(moleapi_server::sqlite_database_url(&database_path).unwrap())
+        .await
+        .unwrap();
+    let count = db
+        .query_one(Statement::from_string(
+            sea_orm::DatabaseBackend::Sqlite,
+            "SELECT COUNT(*) AS count FROM documents WHERE kind = 'mock-rate' AND ref_id = 'w'",
+        ))
+        .await
+        .unwrap()
+        .unwrap()
+        .try_get::<i64>("", "count")
+        .unwrap();
+    assert_eq!(count, 0);
+}
+
+#[tokio::test]
+async fn mock_rate_admission_is_shared_across_instances_and_isolated_by_owner() {
+    let dir = tempfile::tempdir().unwrap();
+    let database_url =
+        moleapi_server::sqlite_database_url(&dir.path().join("shared-rate.db")).unwrap();
+    let first = hosted(config(database_url.clone(), true)).await.unwrap();
+    let second = hosted(config(database_url, true)).await.unwrap();
+    let alice = register(&first, "ratealice").await;
+    let bob = register(&second, "ratebob").await;
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["examples"][0]["rate_limit_per_minute"] = json!(1);
+    for (router, token) in [(&first, &alice), (&second, &bob)] {
+        let (status, result) = call(
+            router,
+            "POST",
+            "/api/workspaces",
+            Some(token),
+            Some(json!({"id":"w","name":"Rate","data":data.clone()})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{result}");
+    }
+    let (one, two) = tokio::join!(
+        call(&first, "GET", "/api/mock/w/r/e", Some(&alice), None),
+        call(&second, "GET", "/api/mock/w/r/e", Some(&alice), None)
+    );
+    assert_eq!(
+        [one.0, two.0]
+            .iter()
+            .filter(|status| **status == StatusCode::CREATED)
+            .count(),
+        1
+    );
+    assert_eq!(
+        [one.0, two.0]
+            .iter()
+            .filter(|status| **status == StatusCode::TOO_MANY_REQUESTS)
+            .count(),
+        1
+    );
+    assert_eq!(
+        call(&second, "GET", "/api/mock/w/r/e", Some(&bob), None)
+            .await
+            .0,
+        StatusCode::CREATED
+    );
+}
+
+#[tokio::test]
+async fn corrupt_mock_rate_state_fails_closed_without_saved_response_data() {
+    use sea_orm::{ConnectionTrait, Database};
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("corrupt-rate.db");
+    let router = local(&path).await.unwrap();
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["examples"][0]["rate_limit_per_minute"] = json!(1);
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            None,
+            Some(json!({"id":"w","name":"Rate","data":data}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        call(&router, "GET", "/api/mock/w/r/e", None, None).await.0,
+        StatusCode::CREATED
+    );
+    let db = Database::connect(moleapi_server::sqlite_database_url(&path).unwrap())
+        .await
+        .unwrap();
+    db.execute_unprepared("UPDATE documents SET payload = 'not-json' WHERE kind = 'mock-rate'")
+        .await
+        .unwrap();
+    let (status, body) = call(&router, "GET", "/api/mock/w/r/e", None, None).await;
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert!(!body.to_string().contains("example body"));
+}
+
+#[tokio::test]
+async fn cancelled_admitted_mock_attempt_still_uses_its_rate_quota() {
+    let dir = tempfile::tempdir().unwrap();
+    let slots = std::sync::Arc::new(tokio::sync::Semaphore::new(32));
+    let router = moleapi_server::local_with_mock_delay_slots_for_test(
+        &dir.path().join("cancelled-rate.db"),
+        std::path::Path::new(env!("CARGO_BIN_EXE_moleapi-server")),
+        slots.clone(),
+    )
+    .await
+    .unwrap();
+    let mut data = example_data();
+    let example = &mut data["collections"][0]["requests"][0]["examples"][0];
+    example["rate_limit_per_minute"] = json!(1);
+    example["delay_ms"] = json!(5_000);
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            None,
+            Some(json!({"id":"w","name":"Rate","data":data}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let running = {
+        let router = router.clone();
+        tokio::spawn(async move { call(&router, "GET", "/api/mock/w/r/e", None, None).await })
+    };
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        while slots.available_permits() != 31 {
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("admitted Mock never entered its delay");
+    running.abort();
+    let _ = running.await;
+    let started = std::time::Instant::now();
+    assert_eq!(
+        call(&router, "GET", "/api/mock/w/r/e", None, None).await.0,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    assert!(started.elapsed() < std::time::Duration::from_millis(250));
+}
+
+#[tokio::test]
 async fn saved_schema_generates_direct_and_routed_json_before_optional_script() {
     let dir = tempfile::tempdir().unwrap();
     let router = local(&dir.path().join("schema.db")).await.unwrap();
@@ -85,6 +371,130 @@ async fn saved_schema_generates_direct_and_routed_json_before_optional_script() 
     let (status, result) = call(&router, "GET", "/api/mock/w/r/e", None, None).await;
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(result, json!({"id":99}));
+}
+
+#[tokio::test]
+async fn composed_schema_generates_the_same_direct_and_routed_tuple() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("composed-schema.db")).await.unwrap();
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["url"] = json!("https://example.test/items");
+    data["collections"][0]["requests"][0]["examples"][0]["mock_schema"] = json!(
+        r#"{"type":"array","prefixItems":[{"oneOf":[{"type":"string","const":"Ada"},{"type":"integer","minimum":5}]},{"type":["null","integer"],"minimum":3}],"items":false,"minItems":2}"#
+    );
+    let (status, body) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"w","name":"Composed","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    for path in ["/api/mock/w/r/e", "/api/mocks/w/items"] {
+        let response = router
+            .clone()
+            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        assert_eq!(response.headers()["content-type"], "application/json");
+        assert_eq!(
+            to_bytes(response.into_body(), 1024).await.unwrap().as_ref(),
+            br#"["Ada",3]"#
+        );
+    }
+}
+
+#[tokio::test]
+async fn opted_in_name_inference_reaches_direct_and_routed_mock_without_changing_static_body() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("named-schema.db")).await.unwrap();
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["url"] = json!("https://example.test/items");
+    data["collections"][0]["requests"][0]["examples"][0]["body"] = json!("unchanged static body");
+    data["collections"][0]["requests"][0]["examples"][0]["mock_schema"] = json!(
+        r#"{"type":"object","properties":{"id":{"type":"integer"},"name":{"type":"string"}},"required":["id","name"]}"#
+    );
+    data["collections"][0]["requests"][0]["examples"][0]["mock_name_inference"] = json!(true);
+    let (status, body) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"w","name":"Named","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    for path in ["/api/mock/w/r/e", "/api/mocks/w/items"] {
+        assert_eq!(
+            call(&router, "GET", path, None, None).await,
+            (StatusCode::CREATED, json!({"id":1,"name":"Ada Lovelace"}))
+        );
+    }
+    let (_, saved) = call(&router, "GET", "/api/workspaces/w", None, None).await;
+    let example = &saved["data"]["collections"][0]["requests"][0]["examples"][0];
+    assert_eq!(example["body"], "unchanged static body");
+    assert_eq!(example["mock_name_inference"], true);
+}
+
+#[tokio::test]
+async fn linked_composed_response_preserves_component_schema_on_real_calls() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("linked-composed.db")).await.unwrap();
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["url"] = json!("https://example.test/items");
+    data["collections"][0]["requests"][0]["specification_id"] = json!("spec");
+    data["collections"][0]["requests"][0]["examples"][0]["mock_schema_link"] = json!({"specification_id":"spec","pointer":"#/paths/~1items/get/responses/201/content/application~1json/schema"});
+    data["collections"][0]["requests"][0]["examples"][0]["mock_name_inference"] = json!(true);
+    let source = json!({"openapi":"3.1.0","paths":{"/items":{"get":{"responses":{"201":{"content":{"application/json":{"schema":{"allOf":[{"type":"object","properties":{"id":{"$ref":"#/components/schemas/Id"}},"required":["id"]},{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}]}}}}}}}},"components":{"schemas":{"Id":{"type":"integer","minimum":3}}}});
+    data["specifications"] = json!([{"id":"spec","name":"Spec","kind":"openapi","dialect":"3.1.0","source":source.to_string()}]);
+    let (status, body) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"w","name":"Linked composed","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    for path in ["/api/mock/w/r/e", "/api/mocks/w/items"] {
+        let response = router
+            .clone()
+            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        assert_eq!(response.headers()["content-type"], "application/json");
+        assert_eq!(
+            to_bytes(response.into_body(), 1024).await.unwrap().as_ref(),
+            br#"{"id":3,"name":"Ada Lovelace"}"#
+        );
+    }
+}
+
+#[tokio::test]
+async fn linked_name_inference_rejects_conflicting_optional_values_at_save() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("linked-names-invalid.db"))
+        .await
+        .unwrap();
+    let mut data = example_data();
+    data["collections"][0]["requests"][0]["specification_id"] = json!("spec");
+    data["collections"][0]["requests"][0]["examples"][0]["status"] = json!(200);
+    data["collections"][0]["requests"][0]["examples"][0]["mock_schema_link"] = json!({"specification_id":"spec","pointer":"#/paths/~1items/get/responses/200/content/application~1json/schema"});
+    data["collections"][0]["requests"][0]["examples"][0]["mock_name_inference"] = json!(true);
+    let source = json!({"openapi":"3.1.0","paths":{"/items":{"get":{"responses":{"200":{"content":{"application/json":{"schema":{"allOf":[{"type":"object","properties":{"name":{"type":"string","const":"A"}}},{"type":"object","properties":{"name":{"type":"string"}}}]}}}}}}}}});
+    data["specifications"] = json!([{"id":"spec","name":"Spec","kind":"openapi","dialect":"3.1.0","source":source.to_string()}]);
+    let (status, body) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"w","name":"Invalid names","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
 }
 
 #[tokio::test]

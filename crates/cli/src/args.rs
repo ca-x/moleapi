@@ -72,7 +72,7 @@ pub enum Command {
         #[arg(long)]
         workspace: Option<String>,
     },
-    /// Import a file using shared native/Postman/OpenAPI/HAR/cURL conversion.
+    /// Import a file using shared native/Postman/OpenAPI/HAR/Insomnia/cURL conversion.
     Import {
         #[arg(long)]
         input: PathBuf,
