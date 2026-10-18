@@ -68,3 +68,29 @@ it("requires confirmation before removing a document from the draft",async()=>{
   guard.action();
   expect(updateData.mock.lastCall?.[0](data).documents).toEqual([]);
 });
+
+it("keeps save disabled when a different document has an invalid title or oversized source",async()=>{
+  await setLanguage("en");
+  const {data,context,save}=setup("# Guide");
+  const invalid={...data,documents:[...data.documents,{id:"other",name:"Bad ",collection_id:null,source:"x".repeat(256*1024+1),secret:true}]};
+  vi.mocked(useWorkbench).mockReturnValue({...context,draft:{...context.draft,data:invalid}} as never);
+  render(<Theme><DocumentsPage/></Theme>);
+  fireEvent.click(screen.getByRole("button",{name:/Bad/}));
+  fireEvent.click(screen.getByRole("button",{name:/Guide/}));
+  expect(screen.getByRole("button",{name:"Save workspace"}).hasAttribute("disabled")).toBe(true);
+  expect(screen.getByText(/Document “Bad ” needs a 1–128 character title/)).toBeTruthy();
+  expect(screen.getByText(/Markdown content in “Bad ” must be at most 256 KiB/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button",{name:"Save workspace"}));
+  expect(save).not.toHaveBeenCalled();
+});
+
+it("blocks save when valid documents exceed the aggregate Markdown limit",async()=>{
+  await setLanguage("en");
+  const {data,context,save}=setup("");
+  const largeDocuments=Array.from({length:9},(_,index)=>({id:`large-${index}`,name:`Part ${index}`,collection_id:null,source:"x".repeat(256*1024),secret:true}));
+  vi.mocked(useWorkbench).mockReturnValue({...context,draft:{...context.draft,data:{...data,documents:[...data.documents,...largeDocuments]}}} as never);
+  render(<Theme><DocumentsPage/></Theme>);
+  expect(screen.getByRole("button",{name:"Save workspace"}).hasAttribute("disabled")).toBe(true);
+  expect(screen.getByText("Workspace Markdown content must total at most 2 MiB.")).toBeTruthy();
+  expect(save).not.toHaveBeenCalled();
+});

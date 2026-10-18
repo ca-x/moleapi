@@ -8,6 +8,7 @@ import type { Workspace, WorkspaceData } from "../../shared/types";
 import { useCloseGuard } from "./useCloseGuard";
 import { acknowledgeSave, hasChanges, retainLocal } from "./draft";
 import type { DraftState } from "./draft";
+import {validateMarkdownDocuments} from "../documents/validation";
 
 export function useWorkspace(authenticated: boolean, accountId = "local") {
   useLanguage();
@@ -100,6 +101,19 @@ export function useWorkspace(authenticated: boolean, accountId = "local") {
       if (pendingSave.current) return pendingSave.current;
       const current = stateRef.current.draft;
       if (!current) return Promise.resolve(null);
+      const {invalidTitleDocument,invalidSourceDocument,invalidTotalSource}=validateMarkdownDocuments(current.data.documents);
+      if (invalidTitleDocument) {
+        toast.error(liveTranslation("文档「{{value0}}」的标题须为 1–128 个字符，不能含首尾空格或控制字符。",{value0:invalidTitleDocument.name}));
+        return Promise.resolve(null);
+      }
+      if (invalidSourceDocument) {
+        toast.error(liveTranslation("文档「{{value0}}」的 Markdown 正文不能超过 256 KiB。",{value0:invalidSourceDocument.name}));
+        return Promise.resolve(null);
+      }
+      if (invalidTotalSource) {
+        toast.error(liveTranslation("工作区 Markdown 正文合计不能超过 2 MiB。"));
+        return Promise.resolve(null);
+      }
       const snapshot = structuredClone(current);
       setSaving(true);
       const operation = (async () => {

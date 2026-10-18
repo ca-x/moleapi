@@ -8,6 +8,7 @@ import {id} from "../../shared/model";
 import {Choice,Editor,Field} from "../../shared/ui";
 import type {MarkdownDocument} from "../../shared/types";
 import {useWorkbench} from "../workbench/context";
+import {validateMarkdownDocuments} from "./validation";
 
 function safeLink(raw?:string):string {
   if(!raw)return "";
@@ -57,14 +58,15 @@ export default function DocumentsPage() {
       setSelectedId("");
     }});
   };
-  const invalidTitle=!!current&&(current.name.trim()!==current.name||!current.name.trim()||[...current.name].length>128||/[\x00-\x1F\x7F]/.test(current.name));
-  const sourceBytes=current?new TextEncoder().encode(current.source).length:0;
-  const invalidSource=sourceBytes>256*1024;
+  const {invalidTitleDocument,invalidSourceDocument,invalidTotalSource}=validateMarkdownDocuments(documents);
   return <div className="page-panel documents-page">
     <div className="page-heading">
       <div><Heading size="5">{t("Markdown 文档")}</Heading><Text size="2" color="gray">{t("为工作区编写说明，并在保存前预览。")}</Text></div>
-      <Flex gap="2" wrap="wrap"><Button variant="soft" color="gray" onClick={create} disabled={documents.length>=256}><FilePlus2 size={16}/>{t("新建文档")}</Button><Button variant={dirty?"solid":"soft"} color={dirty?undefined:"gray"} onClick={()=>void save()} disabled={!dirty||saving||invalidTitle||invalidSource} loading={saving}>{t("保存工作区")}</Button></Flex>
+      <Flex gap="2" wrap="wrap"><Button variant="soft" color="gray" onClick={create} disabled={documents.length>=256}><FilePlus2 size={16}/>{t("新建文档")}</Button><Button variant={dirty?"solid":"soft"} color={dirty?undefined:"gray"} onClick={()=>void save()} disabled={!dirty||saving||!!invalidTitleDocument||!!invalidSourceDocument||invalidTotalSource} loading={saving}>{t("保存工作区")}</Button></Flex>
     </div>
+    {invalidTitleDocument&&<Text role="alert" color="red" size="2">{t("文档「{{value0}}」的标题须为 1–128 个字符，不能含首尾空格或控制字符。",{value0:invalidTitleDocument.name})}</Text>}
+    {invalidSourceDocument&&<Text role="alert" color="red" size="2">{t("文档「{{value0}}」的 Markdown 正文不能超过 256 KiB。",{value0:invalidSourceDocument.name})}</Text>}
+    {invalidTotalSource&&<Text role="alert" color="red" size="2">{t("工作区 Markdown 正文合计不能超过 2 MiB。")}</Text>}
     <div className="documents-layout">
       <nav className="documents-list" aria-label={t("文档列表")}>
         {documents.length?documents.map(document=><button type="button" key={document.id} className={document.id===selected?"selected":""} onClick={()=>{setSelectedId(document.id);setMode("preview");}}>
@@ -79,8 +81,6 @@ export default function DocumentsPage() {
           <label className="document-private"><Checkbox checked={current.secret??true} onCheckedChange={value=>updateDocument({secret:value===true})}/><span>{t("私密文档")}</span></label>
         </div>
         <Text size="1" color="gray">{t("私密文档的正文不进入默认备份；完整备份会保留原文。")}</Text>
-        {invalidTitle&&<Text role="alert" color="red" size="2">{t("标题须为 1–128 个字符，不能含首尾空格或控制字符。")}</Text>}
-        {invalidSource&&<Text role="alert" color="red" size="2">{t("Markdown 正文不能超过 256 KiB。")}</Text>}
         <Tabs.Root value={mode} onValueChange={setMode}>
           <Tabs.List><Tabs.Trigger value="edit">{t("编辑")}</Tabs.Trigger><Tabs.Trigger value="preview">{t("预览")}</Tabs.Trigger></Tabs.List>
           <Tabs.Content value="edit"><Editor label={t("Markdown 正文")} value={current.source} onChange={source=>updateDocument({source})} dark={dark} language="markdown" height="420px"/></Tabs.Content>

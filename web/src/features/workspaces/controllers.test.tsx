@@ -113,6 +113,19 @@ describe("frontend async controllers", () => {
     expect(result.current.saved?.name).toBe("Sent name");
     expect(result.current.dirty).toBe(true);
   });
+  it("blocks every workspace save entry point for invalid Markdown drafts", async () => {
+    const original=makeWorkspace();
+    const {result}=renderHook(()=>useWorkspace(true),{wrapper:harness(original)});
+    await waitFor(()=>expect(result.current.draft?.id).toBe(original.id));
+    act(()=>result.current.updateData(data=>({...data,documents:[{id:"guide",name:"Guide",collection_id:null,source:"x".repeat(256*1024+1),secret:true}]})));
+    await act(async()=>{expect(await result.current.save()).toBe(null);});
+    expect(mockedApi).not.toHaveBeenCalled();
+    expect(result.current.dirty).toBe(true);
+    act(()=>result.current.updateData(data=>({...data,documents:[{...data.documents![0],source:"Valid"}]})));
+    mockedApi.mockResolvedValue({...original,data:{...original.data,documents:[{id:"guide",name:"Guide",collection_id:null,source:"Valid",secret:true}]},revision:2});
+    await act(async()=>{expect(await result.current.save()).not.toBe(null);});
+    expect(mockedApi).toHaveBeenCalledTimes(1);
+  });
   it("retains edits on a failed save and offers a remote revision for an explicit retry", async () => {
     const original = makeWorkspace();
     const remote = { ...original, name: "Remote", revision: 3 };
