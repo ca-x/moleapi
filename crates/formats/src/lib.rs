@@ -3,6 +3,7 @@ mod run_reports;
 pub use run_reports::{RunReportPrivacy, export_run_report};
 mod curl;
 mod har;
+mod insomnia;
 mod openapi;
 mod postman;
 mod redact;
@@ -37,6 +38,7 @@ pub fn import(format: &str, content: &str) -> Result<ImportResult> {
         "postman" => postman::import(content)?,
         "curl" => curl::import(content)?,
         "har" => har::import(content)?,
+        "insomnia" => insomnia::import(content)?,
         "moleapi" => {
             let value: serde_json::Value =
                 serde_json::from_str(content).context("无效 MoleAPI JSON")?;
@@ -66,6 +68,15 @@ pub fn export(workspace: &Workspace, format: &str, include_secrets: bool) -> Res
     if format != "moleapi"
         && workspace
             .data
+            .specifications
+            .iter()
+            .any(|spec| spec.kind == "insomnia")
+    {
+        bail!("Insomnia source requires MoleAPI backup until external mappings are verified");
+    }
+    if format != "moleapi"
+        && workspace
+            .data
             .collections
             .iter()
             .flat_map(|collection| &collection.requests)
@@ -73,12 +84,15 @@ pub fn export(workspace: &Workspace, format: &str, include_secrets: bool) -> Res
             .any(|example| {
                 example.mock_match.is_some()
                     || example.delay_ms > 0
+                    || example.fault_rate_percent > 0
+                    || example.fault_status != 503
+                    || example.rate_limit_per_minute > 0
                     || !example.mock_schema.is_empty()
                     || example.mock_schema_link.is_some()
             })
     {
         bail!(
-            "Mock matching, delay or schema settings require MoleAPI backup until external mappings are verified"
+            "Mock matching, delay, rate limit or schema settings require MoleAPI backup until external mappings are verified"
         );
     }
     if workspace.data.script_mode == moleapi_core::ScriptMode::V2 && format != "moleapi" {

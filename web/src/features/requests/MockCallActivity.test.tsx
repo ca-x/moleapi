@@ -42,3 +42,17 @@ it("withholds a previous account's loaded calls immediately when identity change
   expect(screen.queryByText(/GET · 202 · Served/)).toBeNull();
   await screen.findByText("No Mock calls yet");
 });
+
+it("labels injected Mock faults separately from execution failures",async()=>{
+  await setLanguage("en");
+  api.mockResolvedValue([{id:"fault",request_id:"r",example_id:"e",method:"GET",response_status:503,outcome:"simulated_failure",at:"2026-10-17T00:00:00Z",elapsed_ms:7}]);
+  render(<Theme><MockCallActivity workspaceId="w" requestId="r"/></Theme>);
+  await screen.findByText(/GET · 503 · Simulated failure/);
+});
+
+it("labels simulated Mock rate limiting separately from execution failures",async()=>{
+  await setLanguage("en");
+  api.mockResolvedValue([{id:"limited",request_id:"r",example_id:"e",method:"GET",response_status:429,outcome:"rate_limited",at:"2026-10-17T00:00:00Z",elapsed_ms:2}]);
+  render(<Theme><MockCallActivity workspaceId="w" requestId="r"/></Theme>);
+  await screen.findByText(/GET · 429 · Rate limited/);
+});
