@@ -129,6 +129,33 @@ async fn password_publication_unlocks_without_exposing_owner_or_password_metadat
         .unwrap();
     assert_eq!(malformed.status(), StatusCode::BAD_REQUEST);
     assert_eq!(malformed.headers()["cache-control"], "no-store");
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            &unlock,
+            None,
+            Some(json!({"password":"x".repeat(129)})),
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    let too_large = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(&unlock)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"password":"x".repeat(2048)}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(too_large.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(too_large.headers()["cache-control"], "no-store");
+    assert!(too_large.headers().contains_key("content-security-policy"));
     let (status, content) = call(
         &router,
         "POST",
@@ -196,6 +223,24 @@ async fn password_publication_unlocks_without_exposing_owner_or_password_metadat
         .unwrap();
     assert_eq!(revoked_html.status(), StatusCode::NOT_FOUND);
     assert_eq!(revoked_html.headers()["cache-control"], "no-store");
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            &unlock,
+            None,
+            Some(json!({"password":"x".repeat(129)})),
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        call(&router, "POST", &unlock, None, Some(json!({})))
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
     assert_eq!(
         call(
             &router,

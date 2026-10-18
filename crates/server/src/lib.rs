@@ -672,6 +672,7 @@ async fn build(
         .route("/auth/login", post(auth::login))
         .fallback(|| async { ApiError::not_found() })
         .layer(middleware::from_fn(json_errors));
+    let api = api.layer(middleware::from_fn(doc_publications::public_docs_headers));
     let receiver = Router::new()
         .route("/hooks/{token}", axum::routing::any(webhooks::ingest))
         .with_state(webhooks::ReceiverState {

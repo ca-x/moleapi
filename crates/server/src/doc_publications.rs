@@ -10,8 +10,9 @@ use argon2::{
 };
 use axum::{
     Extension, Json,
-    extract::{Path, State, rejection::JsonRejection},
+    extract::{Path, Request, State, rejection::JsonRejection},
     http::{HeaderValue, StatusCode, header},
+    middleware::Next,
     response::{IntoResponse, Response},
 };
 use rand::RngCore;
@@ -589,6 +590,17 @@ fn public_json_headers(mut response: Response) -> Response {
     response
 }
 
+pub(crate) async fn public_docs_headers(request: Request, next: Next) -> Response {
+    let is_public_docs = request.uri().path().starts_with("/public/docs/")
+        || request.uri().path().starts_with("/api/public/docs/");
+    let response = next.run(request).await;
+    if is_public_docs {
+        public_json_headers(response)
+    } else {
+        response
+    }
+}
+
 fn public_json_response(status: StatusCode, body: serde_json::Value) -> Response {
     public_json_headers((status, Json(body)).into_response())
 }
@@ -596,12 +608,6 @@ fn public_json_response(status: StatusCode, body: serde_json::Value) -> Response
 async fn unlock_inner(state: &AppState, id: &str, password: String) -> Result<Response, ApiError> {
     if state.local || !valid_id(id) {
         return Err(ApiError::not_found());
-    }
-    if password.len() > 128 {
-        return Ok(public_json_response(
-            StatusCode::BAD_REQUEST,
-            serde_json::json!({"error":"Invalid publication password"}),
-        ));
     }
     let tx = state.db.begin().await?;
     document::Entity::update_many()
@@ -617,6 +623,12 @@ async fn unlock_inner(state: &AppState, id: &str, password: String) -> Result<Re
     let Some(hash) = publication.password_hash.clone() else {
         return Err(ApiError::not_found());
     };
+    if password.len() > 128 {
+        return Ok(public_json_response(
+            StatusCode::BAD_REQUEST,
+            serde_json::json!({"error":"Invalid publication password"}),
+        ));
+    }
     let now = database_now_seconds(&tx).await?;
     if let Some(seconds) = failed_attempt_retry(&mut publication.failed_attempts, now)? {
         tx.commit().await?;
@@ -656,11 +668,18 @@ pub async fn unlock(
     Path(id): Path<String>,
     input: Result<Json<Unlock>, JsonRejection>,
 ) -> Response {
+    if let Err(error) = page_exists(&state, &id).await {
+        return public_json_headers(error.into_response());
+    }
     let Json(input) = match input {
         Ok(input) => input,
-        Err(_) => {
+        Err(rejection) => {
             return public_json_response(
-                StatusCode::BAD_REQUEST,
+                if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE {
+                    StatusCode::PAYLOAD_TOO_LARGE
+                } else {
+                    StatusCode::BAD_REQUEST
+                },
                 serde_json::json!({"error":"Invalid unlock request"}),
             );
         }
