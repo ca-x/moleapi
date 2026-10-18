@@ -65,7 +65,7 @@ async fn identical_storage_auth_cas_tests_on_every_configured_database() {
         .await;
         assert_eq!(status, StatusCode::OK, "{published_workspace}");
         let publications_path = format!("/api/workspaces/{published_id}/doc-publications");
-        let publication_input = json!({"title":"Public guides","expected_revision":published_workspace["revision"],"document_ids":["guide"],"idempotency_key":"same-key"});
+        let publication_input = json!({"title":"Public guides","expected_revision":published_workspace["revision"],"document_ids":["guide"],"idempotency_key":"same-key","appearance":{"theme":"dark","layout":"top"}});
         let (status, publication) = call(
             &router,
             "POST",
@@ -85,10 +85,16 @@ async fn identical_storage_auth_cas_tests_on_every_configured_database() {
         .await;
         assert_eq!(status, StatusCode::OK, "{retry}");
         assert_eq!(retry["id"], publication["id"]);
+        assert_eq!(
+            retry["appearance"],
+            json!({"theme":"dark","layout":"top","has_logo":false})
+        );
         let publication_id = publication["id"].as_str().unwrap();
         let public_path = format!("/api/public/docs/{publication_id}");
         let (status, public) = call(&router_again, "GET", &public_path, None, None).await;
         assert_eq!(status, StatusCode::OK, "{public}");
+        assert_eq!(public["appearance"]["theme"], "dark");
+        assert_eq!(public["appearance"]["layout"], "top");
         assert_eq!(
             public["documents"][0]["source"],
             "# Published across instances"

@@ -1,4 +1,5 @@
 mod common;
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use common::*;
 
 fn docs_data() -> Value {
@@ -16,6 +17,172 @@ fn docs_data() -> Value {
 
 fn publish(revision: i64, ids: &[&str], key: &str) -> Value {
     json!({"title":"Reference","expected_revision":revision,"document_ids":ids,"idempotency_key":key})
+}
+
+#[tokio::test]
+async fn publication_appearance_is_immutable_and_strips_logo_metadata() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = hosted(config(
+        moleapi_server::sqlite_database_url(&dir.path().join("appearance.db")).unwrap(),
+        true,
+    ))
+    .await
+    .unwrap();
+    let owner = register(&router, "appearanceowner").await;
+    let (_, workspace) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        Some(&owner),
+        Some(json!({"id":"w","name":"Workspace","data":docs_data()})),
+    )
+    .await;
+    let revision = workspace["revision"].as_i64().unwrap();
+    let mut png_bytes = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut png_bytes, 1, 1);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        encoder
+            .add_text_chunk("Comment".into(), "private-logo-metadata".into())
+            .unwrap();
+        encoder
+            .write_header()
+            .unwrap()
+            .write_image_data(&[255, 0, 0, 255])
+            .unwrap();
+    }
+    let encoded = BASE64.encode(&png_bytes);
+    let mut input = publish(revision, &["guide"], "appearance-key");
+    input["appearance"] = json!({"theme":"dark","layout":"top","logo_png_base64":encoded});
+    let (status, created) = call(
+        &router,
+        "POST",
+        "/api/workspaces/w/doc-publications",
+        Some(&owner),
+        Some(input.clone()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{created}");
+    assert_eq!(
+        created["appearance"],
+        json!({"theme":"dark","layout":"top","has_logo":true})
+    );
+    assert!(!created.to_string().contains("logo_png_base64"));
+    let path = format!("/api/public/docs/{}", created["id"].as_str().unwrap());
+    let (_, snapshot) = call(&router, "GET", &path, None, None).await;
+    assert_eq!(snapshot["appearance"]["theme"], "dark");
+    assert_eq!(snapshot["appearance"]["layout"], "top");
+    let sanitized = BASE64
+        .decode(snapshot["appearance"]["logo_png_base64"].as_str().unwrap())
+        .unwrap();
+    assert!(
+        !sanitized
+            .windows("private-logo-metadata".len())
+            .any(|window| window == b"private-logo-metadata")
+    );
+    assert_ne!(sanitized, png_bytes);
+    let (_, retried) = call(
+        &router,
+        "POST",
+        "/api/workspaces/w/doc-publications",
+        Some(&owner),
+        Some(input.clone()),
+    )
+    .await;
+    assert_eq!(created["id"], retried["id"]);
+    input["appearance"]["theme"] = json!("system");
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces/w/doc-publications",
+            Some(&owner),
+            Some(input)
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(call(&router, "GET", &path, None, None).await.1, snapshot);
+    let mut invalid = publish(revision, &["guide"], "invalid-logo");
+    invalid["appearance"] = json!({"logo_png_base64":BASE64.encode(b"not a png")});
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces/w/doc-publications",
+            Some(&owner),
+            Some(invalid)
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    for (key, malformed) in [
+        ("missing-iend", png_bytes[..png_bytes.len() - 12].to_vec()),
+        ("trailing-bytes", [png_bytes.as_slice(), b"extra"].concat()),
+        ("corrupt-iend", {
+            let mut corrupt = png_bytes.clone();
+            *corrupt.last_mut().unwrap() ^= 1;
+            corrupt
+        }),
+    ] {
+        let mut invalid = publish(revision, &["guide"], key);
+        invalid["appearance"] = json!({"logo_png_base64":BASE64.encode(malformed)});
+        assert_eq!(
+            call(
+                &router,
+                "POST",
+                "/api/workspaces/w/doc-publications",
+                Some(&owner),
+                Some(invalid)
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST,
+            "{key}"
+        );
+    }
+    let mut wide_png = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut wide_png, 513, 1);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        encoder
+            .write_header()
+            .unwrap()
+            .write_image_data(&vec![0; 513 * 4])
+            .unwrap();
+    }
+    let mut invalid = publish(revision, &["guide"], "wide-logo");
+    invalid["appearance"] = json!({"logo_png_base64":BASE64.encode(wide_png)});
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces/w/doc-publications",
+            Some(&owner),
+            Some(invalid)
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    let mut invalid = publish(revision, &["guide"], "unknown-theme");
+    invalid["appearance"] = json!({"theme":"sepia"});
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces/w/doc-publications",
+            Some(&owner),
+            Some(invalid)
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
 }
 
 #[tokio::test]
@@ -68,6 +235,7 @@ async fn password_publication_unlocks_without_exposing_owner_or_password_metadat
     let mut input = publish(revision, &["guide"], "password-once");
     input["visibility"] = json!("password");
     input["password"] = json!("correct-password-123");
+    input["appearance"] = json!({"theme":"dark","layout":"top"});
     let (status, created) = call(
         &router,
         "POST",
@@ -91,6 +259,7 @@ async fn password_publication_unlocks_without_exposing_owner_or_password_metadat
     let (status, locked) = call(&router, "GET", &path, None, None).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert!(!locked.to_string().contains("Public guide"));
+    assert!(!locked.to_string().contains("appearance"));
     assert!(!locked.to_string().contains("Secret workspace name"));
     let locked_headers = router
         .clone()
@@ -115,6 +284,7 @@ async fn password_publication_unlocks_without_exposing_owner_or_password_metadat
     .await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
     assert!(!denied.to_string().contains("Public guide"));
+    assert!(!denied.to_string().contains("appearance"));
     let malformed = router
         .clone()
         .oneshot(

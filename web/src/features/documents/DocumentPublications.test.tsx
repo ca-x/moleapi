@@ -70,3 +70,56 @@ it("requires an explicit password and does not show it in publication history",a
   expect(screen.queryByText("correct-password-123")).toBeNull();
   expect(screen.getByLabelText("Document access password")).toHaveProperty("value","");
 });
+
+it("publishes selected appearance and clears the local logo after success",async()=>{
+  await setLanguage("en");
+  const state=setup();
+  render(<Theme><DocumentPublications/></Theme>);
+  await screen.findByText("No documents have been published.");
+  fireEvent.change(screen.getByRole("textbox",{name:"Public site title"}),{target:{value:"Site"}});
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("radio",{name:"Dark"}));
+  fireEvent.click(screen.getByRole("radio",{name:"Top"}));
+  const bytes=new Uint8Array([137,80,78,71,13,10,26,10,1]);
+  const file=new File([bytes],"logo.png",{type:"image/png"});
+  Object.defineProperty(file,"arrayBuffer",{value:async()=>bytes.buffer});
+  fireEvent.change(screen.getByLabelText("Site logo (PNG)"),{target:{files:[file]}});
+  await screen.findByRole("img",{name:"Site logo preview"});
+  fireEvent.click(screen.getByRole("button",{name:"Publish selected documents"}));
+  state.setGuard.mock.lastCall?.[0].action();
+  await waitFor(()=>expect(vi.mocked(api).mock.calls.some(([,method])=>method==="POST")).toBe(true));
+  const body=vi.mocked(api).mock.calls.find(([,method])=>method==="POST")?.[2] as {appearance:{theme:string;layout:string;logo_png_base64:string}};
+  expect(body.appearance).toEqual({theme:"dark",layout:"top",logo_png_base64:btoa(String.fromCharCode(...bytes))});
+  await waitFor(()=>expect(screen.queryByRole("img",{name:"Site logo preview"})).toBeNull());
+  expect((screen.getByLabelText("Site logo (PNG)") as HTMLInputElement).files).toHaveLength(0);
+});
+
+it("rejects a replacement logo without keeping the old logo or a pending file read",async()=>{
+  await setLanguage("en");
+  const state=setup();
+  render(<Theme><DocumentPublications/></Theme>);
+  await screen.findByText("No documents have been published.");
+  fireEvent.change(screen.getByRole("textbox",{name:"Public site title"}),{target:{value:"Site"}});
+  fireEvent.click(screen.getByRole("checkbox"));
+  const bytes=new Uint8Array([137,80,78,71,13,10,26,10,1]);
+  const first=new File([bytes],"first.png",{type:"image/png"});
+  Object.defineProperty(first,"arrayBuffer",{value:async()=>bytes.buffer});
+  fireEvent.change(screen.getByLabelText("Site logo (PNG)"),{target:{files:[first]}});
+  await screen.findByRole("img",{name:"Site logo preview"});
+  let finishRead:(value:ArrayBuffer)=>void=()=>{};
+  const pending=new File([bytes],"pending.png",{type:"image/png"});
+  Object.defineProperty(pending,"arrayBuffer",{value:()=>new Promise<ArrayBuffer>(resolve=>{finishRead=resolve;})});
+  fireEvent.change(screen.getByLabelText("Site logo (PNG)"),{target:{files:[pending]}});
+  expect(screen.getByRole("button",{name:"Publish selected documents"}).hasAttribute("disabled")).toBe(true);
+  const invalid=new File(["not png"],"replacement.jpg",{type:"image/jpeg"});
+  fireEvent.change(screen.getByLabelText("Site logo (PNG)"),{target:{files:[invalid]}});
+  await waitFor(()=>expect(screen.getByRole("button",{name:"Publish selected documents"}).hasAttribute("disabled")).toBe(false));
+  finishRead(bytes.buffer);
+  await waitFor(()=>expect(screen.queryByRole("img",{name:"Site logo preview"})).toBeNull());
+  expect((screen.getByLabelText("Site logo (PNG)") as HTMLInputElement).files).toHaveLength(0);
+  fireEvent.click(screen.getByRole("button",{name:"Publish selected documents"}));
+  state.setGuard.mock.lastCall?.[0].action();
+  await waitFor(()=>expect(vi.mocked(api).mock.calls.some(([,method])=>method==="POST")).toBe(true));
+  const body=vi.mocked(api).mock.calls.find(([,method])=>method==="POST")?.[2] as {appearance:{logo_png_base64?:string}};
+  expect(body.appearance.logo_png_base64).toBeUndefined();
+});

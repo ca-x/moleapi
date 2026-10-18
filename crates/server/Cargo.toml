@@ -42,6 +42,7 @@ hex = "0.4"
 futures-util = "0.3"
 chrono = "0.4"
 base64 = "0.22"
+png = "=0.18.1"
 url = "2"
 percent-encoding = "2"
 clap = { version = "4", features = ["derive", "env"] }

@@ -6930,6 +6930,7 @@ dependencies = [
  "moleapi-script-runtime",
  "oauth2",
  "percent-encoding 2.3.2",
+ "png 0.18.1",
  "prost",
  "prost-types",
  "rand 0.8.8",

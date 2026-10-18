@@ -1,4 +1,4 @@
-import {useEffect,useState} from "react";
+import {useEffect,useRef,useState} from "react";
 import {Button,Card,Checkbox,Flex,Heading,Text,TextField} from "@radix-ui/themes";
 import {api} from "../../shared/api";
 import {message,t,useLanguage} from "../../shared/i18n";
@@ -6,7 +6,9 @@ import {safeMessage} from "../../shared/model";
 import {useWorkbench} from "../workbench/context";
 import {hasChanges} from "../workspaces/draft";
 
-type Publication={id:string;source_revision:number;created_at:number;title:string;document_titles:string[];public_url:string;revoked:boolean;visibility:"public"|"password"};
+type ThemeChoice="light"|"dark"|"system";
+type LayoutChoice="sidebar"|"top";
+type Publication={id:string;source_revision:number;created_at:number;title:string;document_titles:string[];public_url:string;revoked:boolean;visibility:"public"|"password";appearance?:{theme:ThemeChoice;layout:LayoutChoice;has_logo:boolean}};
 const newKey=()=>crypto.randomUUID();
 
 export default function DocumentPublications() {
@@ -18,12 +20,20 @@ export default function DocumentPublications() {
   const [title,setTitle]=useState("");
   const [visibility,setVisibility]=useState<"public"|"password">("public");
   const [password,setPassword]=useState("");
+  const [theme,setTheme]=useState<ThemeChoice>("light");
+  const [layout,setLayout]=useState<LayoutChoice>("sidebar");
+  const [logo,setLogo]=useState<string|undefined>();
+  const [logoName,setLogoName]=useState("");
+  const [logoLoading,setLogoLoading]=useState(false);
+  const [logoInputKey,setLogoInputKey]=useState(0);
+  const logoTicket=useRef(0);
   const [key,setKey]=useState(newKey);
   const [busy,setBusy]=useState(false);
   const [loading,setLoading]=useState(true);
   const [failure,setFailure]=useState("");
   const [notice,setNotice]=useState("");
   const workspaceId=draft?.id??"";
+  useEffect(()=>{logoTicket.current++;setLogo(undefined);setLogoName("");setLogoLoading(false);setLogoInputKey(value=>value+1);},[accountId,workspaceId]);
   useEffect(()=>{
     if(!workspaceId)return;
     let active=true;
@@ -46,13 +56,30 @@ export default function DocumentPublications() {
     });
     setKey(newKey());setNotice("");
   };
+  const chooseLogo=async(file:File|undefined)=>{
+    const ticket=++logoTicket.current;
+    setLogo(undefined);setLogoName("");setLogoLoading(false);setKey(newKey());
+    if(!file){setLogoInputKey(value=>value+1);return;}
+    if(file.type!=="image/png"||file.size>64*1024||file.size===0){setLogoInputKey(value=>value+1);setFailure(t("请选择不超过 64 KiB 的 PNG 图片。"));return;}
+    setLogoLoading(true);
+    try {
+      const bytes=new Uint8Array(await file.arrayBuffer());
+      if(ticket!==logoTicket.current)return;
+      if(bytes.length<8||!bytes.slice(0,8).every((byte,index)=>byte===[137,80,78,71,13,10,26,10][index])){setLogoInputKey(value=>value+1);setFailure(t("请选择有效的 PNG 图片。"));return;}
+      let binary="";
+      for(const byte of bytes)binary+=String.fromCharCode(byte);
+      setLogo(btoa(binary));setLogoName(file.name);setFailure("");
+    } catch {if(ticket===logoTicket.current){setLogoInputKey(value=>value+1);setFailure(t("无法读取 PNG 图片。"));}}
+    finally {if(ticket===logoTicket.current)setLogoLoading(false);}
+  };
   const publish=()=>{
     const name=title.trim();
     const ids=choices.map(document=>document.id);
     const revision=draft.revision;
     const idempotencyKey=key;
+    const appearance={theme,layout,logo_png_base64:logo};
     const passwordBytes=new TextEncoder().encode(password).length;
-    if(!name||name!==title||[...name].length>128||!ids.length||ids.length>32||bytes>1024*1024||dirty||(visibility==="password"&&(passwordBytes<10||passwordBytes>128)))return;
+    if(!name||name!==title||[...name].length>128||!ids.length||ids.length>32||bytes>1024*1024||dirty||logoLoading||(visibility==="password"&&(passwordBytes<10||passwordBytes>128)))return;
     setGuard({
       title:message("发布文档快照"),
       description:visibility==="password"?message("以下文档需要密码才能查看：{{value0}}。密码无法找回，编辑工作区不会更新此版本。",{value0:choices.map(document=>document.name).join("、")}):message("以下文档将无需登录即可查看：{{value0}}。发布后，编辑工作区不会更新此版本。",{value0:choices.map(document=>document.name).join("、")}),
@@ -63,11 +90,11 @@ export default function DocumentPublications() {
         }
         setBusy(true);setFailure("");setNotice("");
         void api<Publication>(`/api/workspaces/${encodeURIComponent(workspaceId)}/doc-publications`,"POST",{
-          title:name,expected_revision:revision,document_ids:ids,idempotency_key:idempotencyKey,visibility,password:visibility==="password"?password:undefined
+          title:name,expected_revision:revision,document_ids:ids,idempotency_key:idempotencyKey,visibility,password:visibility==="password"?password:undefined,appearance
         }).then(created=>{
           if(accountRef.current!==accountId||stateRef.current.draft?.id!==workspaceId)return;
           setVersions(current=>[created,...current.filter(item=>item.id!==created.id)]);
-          setSelected(new Set());setTitle("");setPassword("");setKey(newKey());setNotice(t("文档快照已发布。"));
+          logoTicket.current++;setLogo(undefined);setLogoName("");setLogoInputKey(value=>value+1);setSelected(new Set());setTitle("");setPassword("");setKey(newKey());setNotice(t("文档快照已发布。"));
         }).catch(error=>setFailure(safeMessage(error))).finally(()=>setBusy(false));
       }
     });
@@ -104,17 +131,25 @@ export default function DocumentPublications() {
           <label><input type="radio" name="publication-visibility" checked={visibility==="public"} onChange={()=>{setVisibility("public");setPassword("");setKey(newKey());}}/>{t("任何人可查看")}</label>
           <label><input type="radio" name="publication-visibility" checked={visibility==="password"} onChange={()=>{setVisibility("password");setKey(newKey());}}/>{t("需要密码")}</label>
         </fieldset>
+        <fieldset className="document-publications-choices"><legend>{t("发布外观")}</legend>
+          <Text size="2">{t("颜色主题")}</Text>
+          {(["light","dark","system"] as const).map(value=><label key={value}><input type="radio" name="publication-theme" checked={theme===value} onChange={()=>{setTheme(value);setKey(newKey());}}/>{value==="light"?t("浅色"):value==="dark"?t("深色"):t("跟随系统")}</label>)}
+          <Text size="2">{t("目录布局")}</Text>
+          {(["sidebar","top"] as const).map(value=><label key={value}><input type="radio" name="publication-layout" checked={layout===value} onChange={()=>{setLayout(value);setKey(newKey());}}/>{value==="sidebar"?t("侧栏"):t("顶部")}</label>)}
+          <label className="field"><Text size="2">{t("站点 Logo（PNG）")}</Text><input key={logoInputKey} type="file" aria-label={t("站点 Logo（PNG）")} accept="image/png,.png" onChange={event=>void chooseLogo(event.target.files?.[0])}/><Text size="1" color="gray">{t("最大 64 KiB，宽高不超过 512 像素。图片由服务端清除元数据后发布。")}</Text></label>
+          {logo&&<div className="document-publications-logo"><img src={`data:image/png;base64,${logo}`} alt={t("站点 Logo 预览")}/><Text size="2">{logoName}</Text><Button type="button" variant="soft" onClick={()=>void chooseLogo(undefined)}>{t("清除 Logo")}</Button></div>}
+        </fieldset>
         {visibility==="password"?<label className="field"><Text size="2">{t("文档访问密码")}</Text><TextField.Root type="password" aria-label={t("文档访问密码")} autoComplete="new-password" value={password} maxLength={128} onChange={event=>{setPassword(event.target.value);setKey(newKey());}}/><Text size="1" color="gray">{t("密码需为 10–128 字节，无法找回；读者每次重新打开都需输入。")}</Text></label>:<Text size="2" color="gray">{t("发布内容无需登录即可查看。请先检查文档原文中的凭证和个人信息。")}</Text>}
         {dirty&&<Text role="alert" size="2" color="amber">{t("请先保存工作区，再发布固定版本。")}</Text>}
         {bytes>1024*1024&&<Text role="alert" size="2" color="red">{t("所选文档正文合计不能超过 1 MiB。")}</Text>}
-        <Button disabled={busy||loading||dirty||versions.filter(version=>!version.revoked).length>=20||versions.length>=256||!title.trim()||title.trim()!==title||choices.length<1||choices.length>32||bytes>1024*1024||(visibility==="password"&&!(new TextEncoder().encode(password).length>=10&&new TextEncoder().encode(password).length<=128))} onClick={publish}>{t("发布所选文档")}</Button>
+        <Button disabled={busy||loading||logoLoading||dirty||versions.filter(version=>!version.revoked).length>=20||versions.length>=256||!title.trim()||title.trim()!==title||choices.length<1||choices.length>32||bytes>1024*1024||(visibility==="password"&&!(new TextEncoder().encode(password).length>=10&&new TextEncoder().encode(password).length<=128))} onClick={publish}>{t("发布所选文档")}</Button>
       </Flex>
     </Card>
     {failure&&<Text role="alert" color="red" size="2">{failure}</Text>}
     {notice&&<Text role="status" color="green" size="2">{notice}</Text>}
     <Heading as="h3" size="3">{t("已发布版本")}</Heading>
     {loading?<Text role="status" size="2">{t("正在读取发布版本…")}</Text>:versions.length?versions.map(version=><Card key={version.id}>
-      <Flex justify="between" align="center" gap="3" wrap="wrap"><div><Text weight="medium">{version.title}</Text><Text as="p" size="1" color="gray">{version.document_titles.join("、")} · {new Date(version.created_at*1000).toLocaleString()} · {version.visibility==="password"?t("需要密码"):t("任何人可查看")}</Text></div><Flex gap="2" wrap="wrap">{version.revoked?<Text size="2" color="gray">{t("已撤销")}</Text>:<><Button asChild variant="soft"><a href={`/docs/${version.id}`} target="_blank" rel="noopener noreferrer">{t("打开公开页")}</a></Button><Button variant="soft" onClick={()=>void copy(version.id)}>{t("复制链接")}</Button><Button variant="soft" color="red" disabled={busy} onClick={()=>revoke(version)}>{t("撤销发布")}</Button></>}</Flex></Flex>
+      <Flex justify="between" align="center" gap="3" wrap="wrap"><div><Text weight="medium">{version.title}</Text><Text as="p" size="1" color="gray">{version.document_titles.join("、")} · {new Date(version.created_at*1000).toLocaleString()} · {version.visibility==="password"?t("需要密码"):t("任何人可查看")}</Text><Text as="p" size="1" color="gray">{version.appearance?.theme==="dark"?t("深色"):version.appearance?.theme==="system"?t("跟随系统"):t("浅色")} · {version.appearance?.layout==="top"?t("顶部"):t("侧栏")}{version.appearance?.has_logo?` · ${t("含 Logo")}`:""}</Text></div><Flex gap="2" wrap="wrap">{version.revoked?<Text size="2" color="gray">{t("已撤销")}</Text>:<><Button asChild variant="soft"><a href={`/docs/${version.id}`} target="_blank" rel="noopener noreferrer">{t("打开公开页")}</a></Button><Button variant="soft" onClick={()=>void copy(version.id)}>{t("复制链接")}</Button><Button variant="soft" color="red" disabled={busy} onClick={()=>revoke(version)}>{t("撤销发布")}</Button></>}</Flex></Flex>
     </Card>):<Text size="2" color="gray">{t("尚未发布文档。")}</Text>}
   </section>;
 }
