@@ -29,6 +29,8 @@ Editors and admins can read the canonical owner's saved history, report summarie
 
 Editors and admins can preview an existing saved Mock example through an explicit owner/workspace/request/example route and read that workspace's Mock call records. Preview checks the canonical saved IDs, records the real actor, polls membership during generation and rechecks it before releasing the response. The hosted client previews only saved examples and discards a delayed response after selection, edit, revision or membership changes. Viewers cannot preview examples or read calls. Public Mock share creation and catch-all Mock serving remain owner-only until their policies are audited.
 
+The hosted shared editor can add/remove saved examples and edit their name, status, body, response headers and delay through the same canonical workspace CAS write. Unsaved drafts never feed the preview route. Advanced schema, script, data, matching and fault settings are preserved when basic fields change; their complete shared editor controls remain future work.
+
 A successful shared preview carries `x-moleapi-mock-preview: saved-example`, regardless of its simulated HTTP status. The client treats an unmarked status as an API/auth error, so an intentional saved 401 does not expire the member's session and a denied 403/404 cannot appear as example content.
 
 ## Client behavior

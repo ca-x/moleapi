@@ -5,8 +5,8 @@ import { api, previewSharedMock, token } from "../../shared/api";
 import { t, useLanguage } from "../../shared/i18n";
 import { liveError } from "../../shared/i18n/errors";
 import { id } from "../../shared/model";
-import type { ApiResponse, HistoryEntry, RequestSpec, RunReportPage, SharedWorkspaceSummary, Workspace } from "../../shared/types";
-import { Choice, Field } from "../../shared/ui";
+import type { ApiResponse, Example, HistoryEntry, RequestSpec, RunReportPage, SharedWorkspaceSummary, Workspace } from "../../shared/types";
+import { Choice, Field, PairEditor } from "../../shared/ui";
 import { hasChanges } from "./draft";
 
 type Tab = "resources" | "history" | "reports" | "mock";
@@ -31,6 +31,7 @@ export default function SharedWorkspaceView({ accountId, selected, onClose, onDi
   const [collectionId, setCollectionId] = useState("");
   const [requestId, setRequestId] = useState("");
   const [exampleId, setExampleId] = useState("");
+  const [exampleStatusInput, setExampleStatusInput] = useState("");
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
   const runGeneration = useRef(0);
@@ -71,11 +72,12 @@ export default function SharedWorkspaceView({ accountId, selected, onClose, onDi
   const collection = draft?.data.collections.find((item) => item.id === collectionId) ?? draft?.data.collections[0];
   const request = collection?.requests.find((item) => item.id === requestId) ?? collection?.requests[0];
   const example = request?.examples.find((item) => item.id === exampleId) ?? request?.examples[0];
+  const statusPending = !!example && exampleStatusInput !== String(example.status);
+  useEffect(() => { setExampleStatusInput(example ? String(example.status) : ""); }, [collection?.id, request?.id, example?.id, example?.status]);
   useEffect(() => { runGeneration.current += 1; setRunning(false); setRunResult(null); }, [collection?.id]);
   useEffect(() => { sendGeneration.current += 1; setSending(false); setRequestResponse(null); }, [collection?.id, request?.id]);
   useEffect(() => { mockGeneration.current += 1; setMocking(false); setMockPreview(null); }, [collection?.id, request?.id, example?.id]);
-  function updateRequest(change: (request: RequestSpec) => RequestSpec) {
-    if (!canEdit || !collection || !request) return;
+  function invalidateDraftResults() {
     sendGeneration.current += 1;
     setSending(false);
     setRequestResponse(null);
@@ -85,7 +87,21 @@ export default function SharedWorkspaceView({ accountId, selected, onClose, onDi
     mockGeneration.current += 1;
     setMocking(false);
     setMockPreview(null);
+  }
+  function updateRequest(change: (request: RequestSpec) => RequestSpec) {
+    if (!canEdit || !collection || !request) return;
+    invalidateDraftResults();
     setDraft((currentDraft) => currentDraft ? ({ ...currentDraft, data: { ...currentDraft.data, collections: currentDraft.data.collections.map((item) => item.id === collection.id ? { ...item, requests: item.requests.map((entry) => entry.id === request.id ? change(entry) : entry) } : item) } }) : null);
+  }
+  function updateExample(change: (example: Example) => Example) {
+    if (!example) return;
+    updateRequest((item) => ({ ...item, examples: item.examples.map((entry) => entry.id === example.id ? change(entry) : entry) }));
+  }
+  function addExample() {
+    if (!request) return;
+    const nextId = id();
+    updateRequest((item) => ({ ...item, examples: [...item.examples, { id: nextId, name: t("新示例"), status: 200, headers: [], body: "" }] }));
+    setExampleId(nextId);
   }
   async function save() {
     if (!canEdit || !draft || !saved || !dirty || saving || conflict || !current(scope)) return;
@@ -94,7 +110,7 @@ export default function SharedWorkspaceView({ accountId, selected, onClose, onDi
     setSaving(true); setError("");
     try {
       const updated = await api<Workspace>(base, "PUT", { name: snapshot.name, data: snapshot.data, expected_revision: saved.revision });
-      if (current(origin)) { setDraft((latestDraft) => latestDraft?.id === updated.id ? { ...updated, name: latestDraft.name, data: latestDraft.data } : latestDraft); setSaved(updated); setConflict(null); client.setQueryData(["shared-workspace", accountId, owner, workspaceId, selected.role, epoch], updated); void client.invalidateQueries({ queryKey: ["shared-workspaces", accountId] }); }
+      if (current(origin)) { invalidateDraftResults(); setDraft((latestDraft) => latestDraft?.id === updated.id ? { ...updated, name: latestDraft.name, data: latestDraft.data } : latestDraft); setSaved(updated); setConflict(null); client.setQueryData(["shared-workspace", accountId, owner, workspaceId, selected.role, epoch], updated); void client.invalidateQueries({ queryKey: ["shared-workspaces", accountId] }); }
     } catch (cause) {
       if (current(origin)) { setError(liveError(cause)); try { const remote = await api<Workspace>(base); if (current(origin) && remote.revision !== saved.revision) setConflict(remote); } catch { /* Access revocation is shown by the next workspace refresh. */ } }
     } finally { if (current(origin)) setSaving(false); }
@@ -123,7 +139,7 @@ export default function SharedWorkspaceView({ accountId, selected, onClose, onDi
     finally { if (current(origin) && sendGeneration.current === generation) setSending(false); }
   }
   async function previewExample() {
-    if (!canEdit || !request || !example || mocking || dirty || !current(scope)) return;
+    if (!canEdit || !request || !example || mocking || dirty || statusPending || conflict || !current(scope)) return;
     const origin = scope;
     const generation = ++mockGeneration.current;
     setMocking(true); setError(""); setMockPreview(null);
@@ -141,8 +157,9 @@ export default function SharedWorkspaceView({ accountId, selected, onClose, onDi
     {error && <Callout.Root color="red" role="alert"><Callout.Text>{error}</Callout.Text></Callout.Root>}
     {!workspace.error && draft && loadedScope === scope && <Flex direction="column" gap="4">
       <Flex gap="2" wrap="wrap"><Button variant={tab === "resources" ? "solid" : "outline"} onClick={() => setTab("resources")}>{t("资源")}</Button>{canEdit && <><Button variant={tab === "history" ? "solid" : "outline"} onClick={() => setTab("history")}>{t("执行历史")}</Button><Button variant={tab === "reports" ? "solid" : "outline"} onClick={() => setTab("reports")}>{t("测试报告")}</Button><Button variant={tab === "mock" ? "solid" : "outline"} onClick={() => setTab("mock")}>{t("Mock 预览")}</Button></>}</Flex>
+      {conflict && <Callout.Root color="amber" role="alert"><Callout.Text>{t("共享工作区已被其他成员更新。选择要保留的版本。")}</Callout.Text><Flex gap="2" wrap="wrap" mt="2"><Button variant="soft" onClick={() => { setDraft(conflict); setSaved(conflict); setConflict(null); setError(""); }}>{t("使用服务器版本")}</Button><Button variant="soft" onClick={() => { setSaved(conflict); setDraft((currentDraft) => currentDraft ? { ...currentDraft, revision: conflict.revision } : null); setConflict(null); setError(""); }}>{t("保留我的修改")}</Button></Flex></Callout.Root>}
       {tab === "resources" && <>
-        {canEdit ? <Field label={t("工作区名称")}><TextField.Root value={draft.name} onChange={(event) => setDraft((currentDraft) => currentDraft ? { ...currentDraft, name: event.target.value } : null)} /></Field> : <Text size="2">{draft.name}</Text>}
+        {canEdit ? <Field label={t("工作区名称")}><TextField.Root value={draft.name} onChange={(event) => { invalidateDraftResults(); setDraft((currentDraft) => currentDraft ? { ...currentDraft, name: event.target.value } : null); }} /></Field> : <Text size="2">{draft.name}</Text>}
         {draft.data.collections.length === 0 ? <Text size="2" color="gray">{t("此工作区还没有集合")}</Text> : <>
           <Choice label={t("集合")} value={collection?.id ?? ""} onChange={(value) => { setCollectionId(value); setRequestId(""); }} options={draft.data.collections.map((item) => ({ value: item.id, label: item.name }))} />
           {collection && <Flex align="center" justify="between" gap="2" wrap="wrap"><Heading size="3">{collection.name}</Heading>{canEdit && <Button loading={running} disabled={running || dirty || collection.requests.length === 0} onClick={() => void runCollection()}>{t("运行集合")}</Button>}</Flex>}
@@ -154,7 +171,6 @@ export default function SharedWorkspaceView({ accountId, selected, onClose, onDi
             {requestResponse && <><Text role="status" size="2">{requestResponse.status} {requestResponse.status_text} · {requestResponse.elapsed_ms} ms</Text><TextArea aria-label={t("响应正文预览")} readOnly value={requestResponse.body.slice(0, 16 * 1024)} />{requestResponse.body.length > 16 * 1024 && <Text size="1" color="gray">{t("仅显示响应正文前 16 KiB。")}</Text>}</>}
           </Flex>}
         </>}
-        {conflict && <Callout.Root color="amber" role="alert"><Callout.Text>{t("共享工作区已被其他成员更新。选择要保留的版本。")}</Callout.Text><Flex gap="2" wrap="wrap" mt="2"><Button variant="soft" onClick={() => { setDraft(conflict); setSaved(conflict); setConflict(null); setError(""); }}>{t("使用服务器版本")}</Button><Button variant="soft" onClick={() => { setSaved(conflict); setDraft((currentDraft) => currentDraft ? { ...currentDraft, revision: conflict.revision } : null); setConflict(null); setError(""); }}>{t("保留我的修改")}</Button></Flex></Callout.Root>}
         {canEdit && <Button loading={saving} disabled={!dirty || saving || !!conflict} onClick={() => void save()}>{t("保存共享工作区")}</Button>}
       </>}
       {tab === "history" && canEdit && <Flex direction="column" gap="2">{history.isPending && <Text role="status">{t("正在加载执行历史…")}</Text>}{history.error && <Callout.Root color="red" role="alert"><Callout.Text>{liveError(history.error)}</Callout.Text></Callout.Root>}{!history.error && history.data?.length === 0 && <Text size="2" color="gray">{t("暂无执行历史")}</Text>}{!history.error && history.data?.map((item) => <Flex key={item.id} justify="between" gap="2" wrap="wrap"><Text size="2">{item.method} {item.request_name}</Text><Text size="2">{item.status} · {item.created_at}</Text></Flex>)}</Flex>}
@@ -163,11 +179,24 @@ export default function SharedWorkspaceView({ accountId, selected, onClose, onDi
         <Heading size="3">{t("Mock 示例预览")}</Heading>
         {draft.data.collections.length > 0 && <Choice label={t("集合")} value={collection?.id ?? ""} onChange={(value) => { setCollectionId(value); setRequestId(""); setExampleId(""); }} options={draft.data.collections.map((item) => ({ value: item.id, label: item.name }))} />}
         {collection && collection.requests.length > 0 && <Choice label={t("请求")} value={request?.id ?? ""} onChange={(value) => { setRequestId(value); setExampleId(""); }} options={collection.requests.map((item) => ({ value: item.id, label: `${item.method} ${item.name}` }))} />}
+        {request && <Button variant="outline" onClick={addExample}>{t("新增响应示例")}</Button>}
         {request && request.examples.length > 0 && <Choice label={t("响应示例")} value={example?.id ?? ""} onChange={setExampleId} options={request.examples.map((item) => ({ value: item.id, label: `${item.status} ${item.name}` }))} />}
         {!example && <Text size="2" color="gray">{t("所选请求没有响应示例")}</Text>}
-        {example && <Button loading={mocking} disabled={mocking || dirty} onClick={() => void previewExample()}>{t("预览已保存 Mock 示例")}</Button>}
+        {example && <Flex direction="column" gap="2">
+          <Field label={t("示例名称")}><TextField.Root value={example.name} onChange={(event) => updateExample((item) => ({ ...item, name: event.target.value }))} /></Field>
+          <Flex className="shared-request-line" gap="2" wrap="wrap">
+            <Field label={t("状态码")}><TextField.Root inputMode="numeric" maxLength={3} value={exampleStatusInput} onChange={(event) => { const value = event.target.value; setExampleStatusInput(value); const status = Number(value); if (/^[2-5]\d\d$/.test(value) && status <= 599) updateExample((item) => ({ ...item, status })); }} onBlur={() => { if (statusPending) setExampleStatusInput(String(example.status)); }} /></Field>
+            <Field label={t("Mock 延迟（毫秒）")}><TextField.Root type="number" min="0" max="30000" step="1" value={example.delay_ms ?? 0} onChange={(event) => { const delay = Number(event.target.value); if (Number.isInteger(delay) && delay >= 0 && delay <= 30_000) updateExample((item) => ({ ...item, delay_ms: delay })); }} /></Field>
+          </Flex>
+          {statusPending && <Text role="alert" size="1" color="red">{t("状态码必须为 200 到 599。")}</Text>}
+          <Field label={t("响应正文")}><TextArea value={example.body} onChange={(event) => updateExample((item) => ({ ...item, body: event.target.value }))} /></Field>
+          <div><Text as="p" size="2" weight="medium">{t("响应头")}</Text><PairEditor rows={example.headers} onChange={(headers) => updateExample((item) => ({ ...item, headers }))} keyLabel="Header" valueLabel={t("值")} secrets /></div>
+          <Button variant="outline" color="red" onClick={() => { updateRequest((item) => ({ ...item, examples: item.examples.filter((entry) => entry.id !== example.id) })); setExampleId(""); }}>{t("删除示例")}</Button>
+        </Flex>}
+        {example && <Button loading={mocking} disabled={mocking || dirty || statusPending || !!conflict} onClick={() => void previewExample()}>{t("预览已保存 Mock 示例")}</Button>}
         {dirty && <Text size="1" color="gray">{t("先保存修改，再预览 Mock 示例。")}</Text>}
         {mockPreview && <><Text role="status" size="2">{t("Mock 响应状态")}: {mockPreview.status}</Text><TextArea aria-label={t("Mock 响应正文")} readOnly value={mockPreview.body.slice(0, 16 * 1024)} />{mockPreview.body.length > 16 * 1024 && <Text size="1" color="gray">{t("仅显示响应正文前 16 KiB。")}</Text>}</>}
+        <Button loading={saving} disabled={!dirty || saving || statusPending || !!conflict} onClick={() => void save()}>{t("保存共享工作区")}</Button>
         <Heading size="3">{t("Mock 调用记录")}</Heading>
         {mockCalls.isPending && <Text role="status">{t("正在加载 Mock 调用记录…")}</Text>}
         {mockCalls.error && <Callout.Root color="red" role="alert"><Callout.Text>{liveError(mockCalls.error)}</Callout.Text></Callout.Root>}

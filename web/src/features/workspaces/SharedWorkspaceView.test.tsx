@@ -10,7 +10,7 @@ import type { SharedWorkspaceSummary, Workspace } from "../../shared/types";
 import SharedWorkspaceView from "./SharedWorkspaceView";
 
 vi.mock("../../shared/api", () => ({ api: vi.fn(), previewSharedMock: vi.fn(), token: vi.fn() }));
-vi.mock("../../shared/ui", () => ({ Field: ({ label, children }: { label: string; children: React.ReactNode }) => <label>{label}{children}</label>, Choice: ({ label, value, options, onChange }: { label: string; value: string; options: { value: string; label: string }[]; onChange: (value: string) => void }) => <label>{label}<select value={value} onChange={(event) => onChange(event.target.value)}>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label> }));
+vi.mock("../../shared/ui", () => ({ Field: ({ label, children }: { label: string; children: React.ReactNode }) => <label>{label}{children}</label>, Choice: ({ label, value, options, onChange }: { label: string; value: string; options: { value: string; label: string }[]; onChange: (value: string) => void }) => <label>{label}<select value={value} onChange={(event) => onChange(event.target.value)}>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>, PairEditor: ({ rows, onChange }: { rows: unknown[]; onChange: (rows: unknown[]) => void }) => <button onClick={() => onChange([...rows, { id: "header-a", key: "X-Test", value: "yes", enabled: true }])}>添加一行</button> }));
 const base = "/api/owners/owner-id/workspaces/w";
 const workspace: Workspace = { id: "w", name: "Team", revision: 3, updated_at: "now", data: initialData() };
 const summary = (role: SharedWorkspaceSummary["role"]): SharedWorkspaceSummary => ({ owner_id: "owner-id", owner_username: "owner", workspace_id: "w", workspace_name: "Team", revision: 3, role });
@@ -42,6 +42,133 @@ it("previews a saved shared Mock example and loads its calls for an editor", asy
   expect((await screen.findByLabelText("Mock 响应正文") as HTMLTextAreaElement).value).toBe("shared-mock");
   expect(screen.getByText(`请求: ${first.id} · 响应示例: ${example.id}`)).toBeTruthy();
   expect(screen.getByText("201 · 已响应")).toBeTruthy();
+});
+
+it("saves example edits through owner CAS before previewing the saved version", async () => {
+  const first = workspace.data.collections[0].requests[0];
+  const example = { id: "example-a", name: "Old", status: 200, headers: [], body: "old", mock_script: "console.log('keep')" };
+  const withExample: Workspace = { ...workspace, data: { ...workspace.data, collections: [{ ...workspace.data.collections[0], requests: [{ ...first, examples: [example] }] }] } };
+  vi.mocked(api).mockImplementation((path, method, body) => {
+    if (path.endsWith("/mock-calls")) return Promise.resolve([]);
+    if (method === "PUT") return Promise.resolve({ ...withExample, revision: 4, data: (body as { data: Workspace["data"] }).data });
+    return Promise.resolve(withExample);
+  });
+  vi.mocked(previewSharedMock).mockResolvedValue({ status: 401, body: "saved edited body" });
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "Mock 预览" }));
+  fireEvent.change(screen.getByLabelText("示例名称"), { target: { value: "Edited" } });
+  fireEvent.change(screen.getByLabelText("状态码"), { target: { value: "401" } });
+  fireEvent.change(screen.getByLabelText("Mock 延迟（毫秒）"), { target: { value: "500" } });
+  fireEvent.change(screen.getByLabelText("响应正文"), { target: { value: "saved edited body" } });
+  fireEvent.click(screen.getByRole("button", { name: "添加一行" }));
+  expect(screen.getByRole("button", { name: "预览已保存 Mock 示例" })).toHaveProperty("disabled", true);
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.objectContaining({ expected_revision: 3 })));
+  const saved = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
+  expect(saved.data.collections[0].requests[0].examples[0]).toMatchObject({ id: "example-a", name: "Edited", status: 401, delay_ms: 500, body: "saved edited body", mock_script: "console.log('keep')", headers: [{ key: "X-Test", value: "yes" }] });
+  await waitFor(() => expect(screen.getByRole("button", { name: "预览已保存 Mock 示例" })).toHaveProperty("disabled", false));
+  fireEvent.click(screen.getByRole("button", { name: "预览已保存 Mock 示例" }));
+  await waitFor(() => expect(previewSharedMock).toHaveBeenCalledWith(`${base}/mock/${encodeURIComponent(first.id)}/example-a`));
+});
+
+it("adds and removes a shared response example within the unsaved draft", async () => {
+  vi.mocked(api).mockImplementation((path) => Promise.resolve(path.endsWith("/mock-calls") ? [] : workspace));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "Mock 预览" }));
+  expect(screen.getByText("所选请求没有响应示例")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "新增响应示例" }));
+  expect(screen.getByLabelText("示例名称")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "保存共享工作区" })).toHaveProperty("disabled", false);
+  fireEvent.click(screen.getByRole("button", { name: "删除示例" }));
+  expect(screen.getByText("所选请求没有响应示例")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "保存共享工作区" })).toHaveProperty("disabled", true);
+});
+
+it("keeps a shared Mock draft visible through a remote revision conflict", async () => {
+  const first = workspace.data.collections[0].requests[0];
+  const example = { id: "example-a", name: "Success", status: 200, headers: [], body: "original" };
+  const withExample: Workspace = { ...workspace, data: { ...workspace.data, collections: [{ ...workspace.data.collections[0], requests: [{ ...first, examples: [example] }] }] } };
+  vi.mocked(api).mockImplementation((path, method, body) => {
+    if (path.endsWith("/mock-calls")) return Promise.resolve([]);
+    if (method === "PUT") return Promise.resolve({ ...withExample, revision: 5, data: (body as { data: Workspace["data"] }).data });
+    return Promise.resolve(withExample);
+  });
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "Mock 预览" }));
+  fireEvent.change(screen.getByLabelText("响应正文"), { target: { value: "member draft" } });
+  const remote = { ...withExample, revision: 4, data: { ...withExample.data, collections: [{ ...withExample.data.collections[0], requests: [{ ...first, examples: [{ ...example, body: "owner edit" }] }] }] } };
+  await act(async () => client.setQueryData(["shared-workspace", "member", "owner-id", "w", "editor", 0], remote));
+  expect(await screen.findByText("共享工作区已被其他成员更新。选择要保留的版本。")).toBeTruthy();
+  expect((screen.getByLabelText("响应正文") as HTMLTextAreaElement).value).toBe("member draft");
+  expect(screen.getByRole("button", { name: "保存共享工作区" })).toHaveProperty("disabled", true);
+  fireEvent.click(screen.getByRole("button", { name: "保留我的修改" }));
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.objectContaining({ expected_revision: 4 })));
+  const saved = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
+  expect(saved.data.collections[0].requests[0].examples[0].body).toBe("member draft");
+});
+
+it("blocks saving and previewing an incomplete Mock status", async () => {
+  const first = workspace.data.collections[0].requests[0];
+  const withExample: Workspace = { ...workspace, data: { ...workspace.data, collections: [{ ...workspace.data.collections[0], requests: [{ ...first, examples: [{ id: "example-a", name: "Success", status: 200, headers: [], body: "old" }] }] }] } };
+  vi.mocked(api).mockImplementation((path) => Promise.resolve(path.endsWith("/mock-calls") ? [] : withExample));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "Mock 预览" }));
+  fireEvent.change(screen.getByLabelText("响应正文"), { target: { value: "edited" } });
+  fireEvent.change(screen.getByLabelText("状态码"), { target: { value: "60" } });
+  expect(screen.getByText("状态码必须为 200 到 599。")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "保存共享工作区" })).toHaveProperty("disabled", true);
+  expect(screen.getByRole("button", { name: "预览已保存 Mock 示例" })).toHaveProperty("disabled", true);
+  fireEvent.blur(screen.getByLabelText("状态码"));
+  expect((screen.getByLabelText("状态码") as HTMLInputElement).value).toBe("200");
+  expect(screen.getByRole("button", { name: "保存共享工作区" })).toHaveProperty("disabled", false);
+});
+
+it("resets an incomplete status when another request uses the same example ID", async () => {
+  const first = workspace.data.collections[0].requests[0];
+  const example = { id: "same-example", name: "First", status: 200, headers: [], body: "first" };
+  const second = { ...first, id: "second-request", name: "Second", examples: [{ ...example, name: "Second" }] };
+  const withTwo: Workspace = { ...workspace, data: { ...workspace.data, collections: [{ ...workspace.data.collections[0], requests: [{ ...first, examples: [example] }, second] }] } };
+  vi.mocked(api).mockImplementation((path) => Promise.resolve(path.endsWith("/mock-calls") ? [] : withTwo));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "Mock 预览" }));
+  fireEvent.change(screen.getByLabelText("状态码"), { target: { value: "60" } });
+  fireEvent.change(screen.getByLabelText("请求"), { target: { value: second.id } });
+  expect((screen.getByLabelText("状态码") as HTMLInputElement).value).toBe("200");
+  expect(screen.queryByText("状态码必须为 200 到 599。")).toBeNull();
+});
+
+it("clears old and delayed Mock previews when a workspace name edit is saved", async () => {
+  const first = workspace.data.collections[0].requests[0];
+  const example = { id: "example-a", name: "Success", status: 200, headers: [], body: "saved" };
+  const withExample: Workspace = { ...workspace, data: { ...workspace.data, collections: [{ ...workspace.data.collections[0], requests: [{ ...first, examples: [example] }] }] } };
+  let revision = 3;
+  vi.mocked(api).mockImplementation((path, method, body) => {
+    if (path.endsWith("/mock-calls")) return Promise.resolve([]);
+    if (method === "PUT") return Promise.resolve({ ...withExample, revision: ++revision, name: (body as { name: string }).name });
+    return Promise.resolve(withExample);
+  });
+  let finish!: (value: { status: number; body: string }) => void;
+  vi.mocked(previewSharedMock).mockResolvedValueOnce({ status: 200, body: "old-preview" }).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "Mock 预览" }));
+  fireEvent.click(screen.getByRole("button", { name: "预览已保存 Mock 示例" }));
+  expect((await screen.findByLabelText("Mock 响应正文") as HTMLTextAreaElement).value).toBe("old-preview");
+  fireEvent.click(screen.getByRole("button", { name: "资源" }));
+  fireEvent.change(screen.getByLabelText("工作区名称"), { target: { value: "First rename" } });
+  fireEvent.click(screen.getByRole("button", { name: "Mock 预览" }));
+  expect(screen.queryByLabelText("Mock 响应正文")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "预览已保存 Mock 示例" })).toHaveProperty("disabled", false));
+  fireEvent.click(screen.getByRole("button", { name: "预览已保存 Mock 示例" }));
+  await waitFor(() => expect(previewSharedMock).toHaveBeenCalledTimes(2));
+  fireEvent.click(screen.getByRole("button", { name: "资源" }));
+  fireEvent.change(screen.getByLabelText("工作区名称"), { target: { value: "Second rename" } });
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.objectContaining({ name: "Second rename", expected_revision: 4 })));
+  await act(async () => finish({ status: 200, body: "delayed-old-preview" }));
+  fireEvent.click(screen.getByRole("button", { name: "Mock 预览" }));
+  expect(screen.queryByLabelText("Mock 响应正文")).toBeNull();
 });
 
 it("drops a delayed Mock preview when the selected example changes", async () => {

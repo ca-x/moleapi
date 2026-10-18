@@ -539,7 +539,7 @@ async fn viewer_gets_safe_projection_and_editor_writes_canonical_workspace() {
     .unwrap();
     let owner = register(&router, "accessowner").await;
     let member = register(&router, "accessmember").await;
-    let mut source = data();
+    let mut source = example_data();
     source["global_variables"] =
         json!([{"id":"s","key":"secret","value":"private-sentinel","enabled":true,"secret":true}]);
     let (status, workspace) = call(
@@ -608,15 +608,30 @@ async fn viewer_gets_safe_projection_and_editor_writes_canonical_workspace() {
     let (status, editor) = call(&router, "GET", &shared_path, Some(&member), None).await;
     assert_eq!(status, StatusCode::OK, "{editor}");
     assert!(editor.to_string().contains("private-sentinel"));
+    let mut edited_data = editor["data"].clone();
+    edited_data["collections"][0]["requests"][0]["examples"][0]["body"] = json!("edited by member");
     let (status, updated) = call(
         &router,
         "PUT",
         &shared_path,
         Some(&member),
-        Some(json!({"name":"Edited","expected_revision":editor["revision"],"data":editor["data"]})),
+        Some(json!({"name":"Edited","expected_revision":editor["revision"],"data":edited_data})),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{updated}");
+    let (status, preview) = call(
+        &router,
+        "GET",
+        &format!("{shared_path}/mock/r/e"),
+        Some(&member),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{preview}");
+    assert_eq!(preview["raw"], "edited by member");
+    let (status, owner_preview) = call(&router, "GET", "/api/mock/w/r/e", Some(&owner), None).await;
+    assert_eq!(status, StatusCode::CREATED, "{owner_preview}");
+    assert_eq!(owner_preview["raw"], "edited by member");
     let (status, audit) = call(&router, "GET", &audit_path, Some(&owner), None).await;
     assert_eq!(status, StatusCode::OK, "{audit}");
     assert!(

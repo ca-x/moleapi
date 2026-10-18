@@ -2234,5 +2234,9 @@
   "Mock 响应正文": "Mock response body",
   "Mock 调用记录": "Mock call history",
   "正在加载 Mock 调用记录…": "Loading Mock call history…",
-  "暂无 Mock 调用记录": "No Mock calls yet"
+  "暂无 Mock 调用记录": "No Mock calls yet",
+  "新示例": "New example",
+  "新增响应示例": "Add response example",
+  "状态码必须为 200 到 599。": "Status code must be between 200 and 599.",
+  "响应正文": "Response body"
 }
