@@ -1170,6 +1170,124 @@ async fn editor_run_is_audited_and_cross_instance_removal_withholds_its_result()
 }
 
 #[tokio::test]
+async fn editor_http_settings_save_to_owner_and_execute_on_the_wire() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut settings = config(
+        moleapi_server::sqlite_database_url(&dir.path().join("shared-http.db")).unwrap(),
+        true,
+    );
+    settings.allow_private_network = true;
+    let router = hosted(settings).await.unwrap();
+    let owner = register(&router, "httpowner").await;
+    let member = register(&router, "httpmember").await;
+    let (url, fixture) = serve(Router::new().route(
+        "/echo",
+        axum::routing::post(
+            |uri: axum::http::Uri, headers: axum::http::HeaderMap, body: String| async move {
+                axum::Json(json!({
+                    "query":uri.query(),
+                    "team_header":headers.get("x-team").and_then(|value| value.to_str().ok()),
+                    "auth_valid":headers.get("authorization").and_then(|value| value.to_str().ok()) == Some("Bearer team-secret"),
+                    "body":body,
+                }))
+            },
+        ),
+    ))
+    .await;
+    let (status, _) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        Some(&owner),
+        Some(json!({"id":"w","name":"Team HTTP","data":example_data()})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, invitation) = call(
+        &router,
+        "POST",
+        "/api/workspaces/w/invitations",
+        Some(&owner),
+        Some(json!({"role":"editor","expires_in_days":1})),
+    )
+    .await;
+    let (_, accepted) = call(
+        &router,
+        "POST",
+        "/api/workspace-invitations/accept",
+        Some(&member),
+        Some(json!({"token":invitation["token"]})),
+    )
+    .await;
+    let owner_id = accepted["owner_id"].as_str().unwrap();
+    let member_id = accepted["member_id"].as_str().unwrap();
+    let shared = format!("/api/owners/{owner_id}/workspaces/w");
+    let (_, current) = call(&router, "GET", &shared, Some(&member), None).await;
+    let mut data = current["data"].clone();
+    let request = &mut data["collections"][0]["requests"][0];
+    request["method"] = json!("POST");
+    request["url"] = json!(format!("{url}/echo"));
+    request["query"] = json!([{"id":"query","key":"source","value":"member","enabled":true}]);
+    request["headers"] = json!([{"id":"header","key":"X-Team","value":"shared","enabled":true}]);
+    request["body_kind"] = json!("json");
+    request["body"] = json!(r#"{"hello":"team"}"#);
+    request["auth"] = json!({"kind":"bearer","token":"team-secret","username":"","password":""});
+    let (status, updated) = call(
+        &router,
+        "PUT",
+        &shared,
+        Some(&member),
+        Some(json!({"name":"Team HTTP","expected_revision":current["revision"],"data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{updated}");
+    let (_, owner_workspace) = call(&router, "GET", "/api/workspaces/w", Some(&owner), None).await;
+    assert_eq!(owner_workspace["revision"], updated["revision"]);
+    let (status, response) = call(
+        &router,
+        "POST",
+        &format!("{shared}/requests/r/execute"),
+        Some(&member),
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(response["status"], 200);
+    let body: serde_json::Value = serde_json::from_str(response["body"].as_str().unwrap()).unwrap();
+    assert_eq!(body["query"], "source=member");
+    assert_eq!(body["team_header"], "shared");
+    assert_eq!(body["auth_valid"], true);
+    assert_eq!(body["body"], r#"{"hello":"team"}"#);
+    let (status, history) = call(
+        &router,
+        "GET",
+        &format!("{shared}/history"),
+        Some(&member),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{history}");
+    assert_eq!(history[0]["status"], 200);
+    let (status, audit) = call(
+        &router,
+        "GET",
+        &format!("{shared}/audit"),
+        Some(&owner),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{audit}");
+    assert!(
+        audit
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|event| event["action"] == "request.execute" && event["actor_id"] == member_id)
+    );
+    fixture.abort();
+}
+
+#[tokio::test]
 async fn rejoining_with_same_role_cannot_restore_an_in_flight_request() {
     use std::sync::Arc;
     let dir = tempfile::tempdir().unwrap();

@@ -5,7 +5,7 @@ import {t,useLanguage} from "../../../shared/i18n";
 import type {OAuth1Auth,OAuth1Grant} from "../../../shared/types";
 export const oauth1GrantConfig=():OAuth1Grant=>({request_token_url:"",authorization_url:"",access_token_url:"",callback_url:"oob",request_params:[],access_params:[]});
 export const oauth1Config=():OAuth1Auth=>({consumer_key:"",consumer_secret:"",token:"",token_secret:"",private_key:"",algorithm:"HMAC-SHA1",location:"header",realm:"",nonce:"",timestamp:"",callback:"",verifier:"",include_version:true,include_body_hash:false,include_empty_params:true});
-export default function OAuth1AuthEditor({config,change,collectionId}:{config:OAuth1Auth;change:(value:OAuth1Auth)=>void;collectionId?:string|null}) {
+export default function OAuth1AuthEditor({config,change,collectionId,tokenManagement=true}:{config:OAuth1Auth;change:(value:OAuth1Auth)=>void;collectionId?:string|null;tokenManagement?:boolean}) {
  useLanguage();const update=(patch:Partial<OAuth1Auth>)=>change({...config,...patch}),rsa=config.algorithm.startsWith("RSA-");
  const grant=config.grant??oauth1GrantConfig();const updateGrant=(patch:Partial<OAuth1Grant>)=>update({grant:{...grant,...patch}});
  return <Flex direction="column" gap="3">
@@ -31,7 +31,7 @@ export default function OAuth1AuthEditor({config,change,collectionId}:{config:OA
  <Field label={t("请求 Token 附加参数")}><PairEditor rows={grant.request_params} onChange={request_params=>updateGrant({request_params})} secrets/></Field>
  <Field label={t("访问 Token 附加参数")}><PairEditor rows={grant.access_params} onChange={access_params=>updateGrant({access_params})} secrets/></Field>
  </Flex></details>
- <TokenManager config={config} select={token_id=>update({token_id})} callback={callback_url=>updateGrant({callback_url})} collectionId={collectionId}/>
- <Text size="1" color="gray">{t("签名使用实际 URL 和请求体，支持环境变量及父级继承。选择私有 Token 后，执行时使用令牌库中的凭据。")}</Text>
+ {tokenManagement&&<TokenManager config={config} select={token_id=>update({token_id})} callback={callback_url=>updateGrant({callback_url})} collectionId={collectionId}/>}
+ <Text size="1" color="gray">{tokenManagement?t("签名使用实际 URL 和请求体，支持环境变量及父级继承。选择私有 Token 后，执行时使用令牌库中的凭据。"):t("共享请求的私有 Token 由工作区所有者管理。")}</Text>
  </Flex>;
 }

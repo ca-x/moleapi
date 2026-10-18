@@ -10,12 +10,18 @@ import type { SharedWorkspaceSummary, Workspace } from "../../shared/types";
 import SharedWorkspaceView from "./SharedWorkspaceView";
 
 vi.mock("../../shared/api", () => ({ api: vi.fn(), previewSharedMock: vi.fn(), token: vi.fn() }));
-vi.mock("../../shared/ui", () => ({ Field: ({ label, children }: { label: string; children: React.ReactNode }) => <label>{label}{children}</label>, Choice: ({ label, value, options, onChange }: { label: string; value: string; options: { value: string; label: string }[]; onChange: (value: string) => void }) => <label>{label}<select value={value} onChange={(event) => onChange(event.target.value)}>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>, PairEditor: ({ rows, onChange }: { rows: unknown[]; onChange: (rows: unknown[]) => void }) => <button onClick={() => onChange([...rows, { id: "header-a", key: "X-Test", value: "yes", enabled: true }])}>添加一行</button> }));
+vi.mock("../../shared/ui", () => ({
+  Field: ({ label, children }: { label: string; children: React.ReactNode }) => <label>{label}{children}</label>,
+  Choice: ({ label, value, options, onChange }: { label: string; value: string; options: { value: string; label: string }[]; onChange: (value: string) => void }) => <label>{label}<select value={value} onChange={(event) => onChange(event.target.value)}>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>,
+  Editor: ({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) => <label>{label}<textarea value={value} onChange={(event) => onChange(event.target.value)} /></label>,
+  PairEditor: ({ rows, onChange, keyLabel, valueLabel }: { rows: { id: string; key: string; value: string; enabled: boolean }[]; onChange: (rows: { id: string; key: string; value: string; enabled: boolean }[]) => void; keyLabel: string; valueLabel: string }) => <div>{rows.map((row) => <div key={row.id}><label>{keyLabel}<input value={row.key} onChange={(event) => onChange(rows.map((item) => item.id === row.id ? { ...item, key: event.target.value } : item))} /></label><label>{valueLabel}<input value={row.value} onChange={(event) => onChange(rows.map((item) => item.id === row.id ? { ...item, value: event.target.value } : item))} /></label></div>)}<button onClick={() => onChange([...rows, { id: "header-a", key: "X-Test", value: "yes", enabled: true }])}>添加一行</button></div>,
+  ToolButton: ({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) => <button aria-label={label} onClick={onClick}>{children}</button>,
+}));
 const base = "/api/owners/owner-id/workspaces/w";
 const workspace: Workspace = { id: "w", name: "Team", revision: 3, updated_at: "now", data: initialData() };
 const summary = (role: SharedWorkspaceSummary["role"]): SharedWorkspaceSummary => ({ owner_id: "owner-id", owner_username: "owner", workspace_id: "w", workspace_name: "Team", revision: 3, role });
 let client: QueryClient;
-function view(role: SharedWorkspaceSummary["role"]) { return <QueryClientProvider client={client}><Theme><SharedWorkspaceView accountId="member" selected={summary(role)} onClose={vi.fn()} onDirtyChange={vi.fn()} /></Theme></QueryClientProvider>; }
+function view(role: SharedWorkspaceSummary["role"]) { return <QueryClientProvider client={client}><Theme><SharedWorkspaceView accountId="member" selected={summary(role)} dark={false} onClose={vi.fn()} onDirtyChange={vi.fn()} /></Theme></QueryClientProvider>; }
 beforeEach(async () => { await setLanguage("zh-CN"); client = new QueryClient({ defaultOptions: { queries: { retry: false } } }); vi.mocked(token).mockReturnValue("session-member"); vi.mocked(api).mockReset(); vi.mocked(api).mockResolvedValue(workspace); vi.mocked(previewSharedMock).mockReset(); });
 afterEach(() => { cleanup(); client.clear(); });
 
@@ -26,6 +32,7 @@ it("keeps viewer resources read-only and hides private execution controls", asyn
   expect(screen.queryByRole("button", { name: "保存共享工作区" })).toBeNull();
   expect(screen.queryByRole("button", { name: "执行历史" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Mock 预览" })).toBeNull();
+  expect(screen.queryByRole("tab", { name: /参数/ })).toBeNull();
   expect(api).toHaveBeenCalledWith(base);
 });
 
@@ -213,6 +220,68 @@ it("saves editor changes against the canonical owner revision", async () => {
   fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
   await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", { name: "Renamed", data: workspace.data, expected_revision: 3 }));
 });
+
+it("saves shared HTTP query, headers, JSON body and auth in one canonical revision", async () => {
+  vi.mocked(api).mockImplementation((_path, method, body) => Promise.resolve(method === "PUT" ? { ...workspace, revision: 4, data: (body as { data: Workspace["data"] }).data } : workspace));
+  render(view("editor"));
+  await screen.findByRole("tab", { name: /参数/ });
+  fireEvent.click(screen.getByRole("button", { name: "添加一行" }));
+  fireEvent.mouseDown(screen.getByRole("tab", { name: /请求头/ }), { button: 0 });
+  fireEvent.click(screen.getByRole("button", { name: "添加一行" }));
+  fireEvent.mouseDown(screen.getByRole("tab", { name: /请求体/ }), { button: 0 });
+  fireEvent.change(screen.getByLabelText("请求体格式"), { target: { value: "json" } });
+  fireEvent.change(screen.getByLabelText("请求正文"), { target: { value: '{"hello":"team"}' } });
+  fireEvent.mouseDown(screen.getByRole("tab", { name: /鉴权/ }), { button: 0 });
+  fireEvent.change(screen.getByLabelText("鉴权类型"), { target: { value: "bearer" } });
+  fireEvent.change(screen.getByLabelText("Token"), { target: { value: "member-secret" } });
+  expect(screen.getByRole("button", { name: "发送已保存请求" })).toHaveProperty("disabled", true);
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.objectContaining({ expected_revision: 3 })));
+  const saved = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
+  expect(saved.data.collections[0].requests[0]).toMatchObject({ query: [{ key: "X-Test", value: "yes" }], headers: [{ key: "X-Test", value: "yes" }], body_kind: "json", body: '{"hello":"team"}', auth: { kind: "bearer", token: "member-secret" } });
+  expect(screen.getByRole("tab", { name: /鉴权/ }).getAttribute("aria-selected")).toBe("true");
+});
+
+it("does not retain a binary descriptor when switching a shared request to text", async () => {
+  const first = workspace.data.collections[0].requests[0];
+  const withBinary: Workspace = { ...workspace, data: { ...workspace.data, collections: [{ ...workspace.data.collections[0], requests: [{ ...first, body_kind: "binary", body: '{"file_name":"private.bin","mime":"application/octet-stream","base64":"YQ=="}' }] }] } };
+  vi.mocked(api).mockImplementation((_path, method, body) => Promise.resolve(method === "PUT" ? { ...withBinary, revision: 4, data: (body as { data: Workspace["data"] }).data } : withBinary));
+  render(view("editor"));
+  fireEvent.mouseDown(await screen.findByRole("tab", { name: /请求体/ }), { button: 0 });
+  fireEvent.change(screen.getByLabelText("请求体格式"), { target: { value: "text" } });
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.objectContaining({ expected_revision: 3 })));
+  const saved = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
+  expect(saved.data.collections[0].requests[0]).toMatchObject({ body_kind: "text", body: "" });
+});
+
+it("saves shared HTTP assertions, scripts and network settings through CAS", async () => {
+  vi.mocked(api).mockImplementation((_path, method, body) => Promise.resolve(method === "PUT" ? { ...workspace, revision: 4, data: (body as { data: Workspace["data"] }).data } : workspace));
+  render(view("editor"));
+  fireEvent.mouseDown(await screen.findByRole("tab", { name: /断言/ }), { button: 0 });
+  fireEvent.change(screen.getByLabelText("断言名称"), { target: { value: "Shared status" } });
+  fireEvent.mouseDown(screen.getByRole("tab", { name: /脚本/ }), { button: 0 });
+  fireEvent.change(screen.getByLabelText("请求前 JavaScript 脚本"), { target: { value: "pm.test('shared', () => {});" } });
+  fireEvent.mouseDown(screen.getByRole("tab", { name: /网络设置/ }), { button: 0 });
+  fireEvent.click(screen.getByText("请求网络设置"));
+  fireEvent.change(screen.getByLabelText("连接超时 (ms)"), { target: { value: "2500" } });
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.objectContaining({ expected_revision: 3 })));
+  const saved = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
+  expect(saved.data.collections[0].requests[0]).toMatchObject({ assertions: [{ name: "Shared status" }], pre_request_script: "pm.test('shared', () => {});", network: { connect_timeout_ms: 2500 } });
+});
+
+for (const kind of ["oauth1", "oauth2"] as const) {
+  it(`keeps ${kind} token management out of the shared member editor`, async () => {
+    const first = workspace.data.collections[0].requests[0];
+    const withOAuth: Workspace = { ...workspace, data: { ...workspace.data, collections: [{ ...workspace.data.collections[0], requests: [{ ...first, auth: { ...first.auth, kind } }] }] } };
+    vi.mocked(api).mockResolvedValue(withOAuth);
+    render(view("editor"));
+    fireEvent.mouseDown(await screen.findByRole("tab", { name: /鉴权/ }), { button: 0 });
+    expect(screen.getByText("共享请求的私有 Token 由工作区所有者管理。")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Token.*管理|Manage.*Token/ })).toBeNull();
+  });
+}
 
 it("keeps edits made while a shared save is pending", async () => {
   let finish!: (value: Workspace) => void;

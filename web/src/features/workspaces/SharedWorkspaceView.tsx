@@ -1,19 +1,27 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Callout, Flex, Heading, Text, TextArea, TextField } from "@radix-ui/themes";
+import { Button, Callout, Flex, Heading, Tabs, Text, TextArea, TextField } from "@radix-ui/themes";
 import { api, previewSharedMock, token } from "../../shared/api";
 import { t, useLanguage } from "../../shared/i18n";
 import { liveError } from "../../shared/i18n/errors";
 import { id } from "../../shared/model";
 import type { ApiResponse, Example, HistoryEntry, RequestSpec, RunReportPage, SharedWorkspaceSummary, Workspace } from "../../shared/types";
-import { Choice, Field, PairEditor } from "../../shared/ui";
+import { Choice, Editor, Field, PairEditor } from "../../shared/ui";
+import RequestAuthEditor from "../authentication/RequestAuthEditor";
+import { authenticationEligibility } from "../authentication/eligibility";
+import RequestBodyEditor from "../request-body/RequestBodyEditor";
+import { bodyModePatch } from "../request-body/model";
+import RequestScripts from "../scripts/RequestScripts";
+import AssertionsEditor from "../testing/AssertionsEditor";
+import ExtractionsEditor from "../testing/ExtractionsEditor";
+import NetworkSettings from "../network/NetworkSettings";
 import { hasChanges } from "./draft";
 
 type Tab = "resources" | "history" | "reports" | "mock";
 type RunResult = { passed: number; failed: number; cancelled: boolean; report_id?: string };
 type MockCall = { id: string; request_id: string | null; example_id: string | null; response_status: number; outcome: string; at: string };
 
-export default function SharedWorkspaceView({ accountId, selected, onClose, onDirtyChange }: { accountId: string; selected: SharedWorkspaceSummary; onClose: () => void; onDirtyChange: (dirty: boolean) => void }) {
+export default function SharedWorkspaceView({ accountId, selected, dark, onClose, onDirtyChange }: { accountId: string; selected: SharedWorkspaceSummary; dark: boolean; onClose: () => void; onDirtyChange: (dirty: boolean) => void }) {
   const { language } = useLanguage();
   const client = useQueryClient();
   const credential = token();
@@ -28,6 +36,7 @@ export default function SharedWorkspaceView({ accountId, selected, onClose, onDi
   const [loadedScope, setLoadedScope] = useState("");
   const [conflict, setConflict] = useState<Workspace | null>(null);
   const [tab, setTab] = useState<Tab>("resources");
+  const [requestEditorTab, setRequestEditorTab] = useState("query");
   const [collectionId, setCollectionId] = useState("");
   const [requestId, setRequestId] = useState("");
   const [exampleId, setExampleId] = useState("");
@@ -48,7 +57,7 @@ export default function SharedWorkspaceView({ accountId, selected, onClose, onDi
   const latest = useRef(scope);
   latest.current = scope;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  useEffect(() => { setDraft(null); setSaved(null); setLoadedScope(""); setConflict(null); setCollectionId(""); setRequestId(""); setExampleId(""); setTab("resources"); setError(""); setRunResult(null); setRequestResponse(null); setMockPreview(null); setSaving(false); setRunning(false); setSending(false); setMocking(false); }, [scope]);
+  useEffect(() => { setDraft(null); setSaved(null); setLoadedScope(""); setConflict(null); setCollectionId(""); setRequestId(""); setExampleId(""); setTab("resources"); setRequestEditorTab("query"); setError(""); setRunResult(null); setRequestResponse(null); setMockPreview(null); setSaving(false); setRunning(false); setSending(false); setMocking(false); }, [scope]);
   const current = (origin: string) => mounted.current && latest.current === origin && token() === credential;
   const workspace = useQuery({
     queryKey: ["shared-workspace", accountId, owner, workspaceId, selected.role, epoch],
@@ -92,6 +101,9 @@ export default function SharedWorkspaceView({ accountId, selected, onClose, onDi
     if (!canEdit || !collection || !request) return;
     invalidateDraftResults();
     setDraft((currentDraft) => currentDraft ? ({ ...currentDraft, data: { ...currentDraft.data, collections: currentDraft.data.collections.map((item) => item.id === collection.id ? { ...item, requests: item.requests.map((entry) => entry.id === request.id ? change(entry) : entry) } : item) } }) : null);
+  }
+  function updateSelectedRequest(patch: Partial<RequestSpec>) {
+    updateRequest((item) => ({ ...item, ...patch }));
   }
   function updateExample(change: (example: Example) => Example) {
     if (!example) return;
@@ -165,7 +177,39 @@ export default function SharedWorkspaceView({ accountId, selected, onClose, onDi
           {collection && <Flex align="center" justify="between" gap="2" wrap="wrap"><Heading size="3">{collection.name}</Heading>{canEdit && <Button loading={running} disabled={running || dirty || collection.requests.length === 0} onClick={() => void runCollection()}>{t("运行集合")}</Button>}</Flex>}
           {canEdit && dirty && <Text size="1" color="gray">{t("先保存修改，再运行集合。")}</Text>}
           {runResult && <Text role="status" size="2">{t("通过")}: {runResult.passed} · {t("失败")}: {runResult.failed}</Text>}
-          {collection && collection.requests.length > 0 && <><Choice label={t("请求")} value={request?.id ?? ""} onChange={setRequestId} options={collection.requests.map((item) => ({ value: item.id, label: `${item.method} ${item.name}` }))} />{request && (canEdit ? <Flex direction="column" gap="3"><Field label={t("请求名称")}><TextField.Root value={request.name} onChange={(event) => updateRequest((item) => ({ ...item, name: event.target.value }))} /></Field><Flex className="shared-request-line" gap="2" wrap="wrap"><Choice label={t("方法")} value={request.method} onChange={(value) => updateRequest((item) => ({ ...item, method: value }))} options={["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].map((value) => ({ value, label: value }))} /><Field label={t("请求地址")}><TextField.Root value={request.url} onChange={(event) => updateRequest((item) => ({ ...item, url: event.target.value }))} /></Field></Flex><Field label={t("描述")}><TextArea value={request.description} onChange={(event) => updateRequest((item) => ({ ...item, description: event.target.value }))} /></Field></Flex> : <Flex direction="column" gap="1"><Text weight="medium">{request.method} {request.name}</Text><Text size="2" style={{ overflowWrap: "anywhere" }}>{request.url}</Text><Text size="2" color="gray">{request.description}</Text></Flex>)}</>}
+          {collection && collection.requests.length > 0 && <>
+            <Choice label={t("请求")} value={request?.id ?? ""} onChange={setRequestId} options={collection.requests.map((item) => ({ value: item.id, label: `${item.method} ${item.name}` }))} />
+            {request && (canEdit ? <Flex direction="column" gap="3">
+              <Field label={t("请求名称")}><TextField.Root value={request.name} onChange={(event) => updateSelectedRequest({ name: event.target.value })} /></Field>
+              <Flex className="shared-request-line" gap="2" wrap="wrap">
+                <Choice label={t("方法")} value={request.method} onChange={(method) => updateSelectedRequest({ method })} options={["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].map((value) => ({ value, label: value }))} />
+                <Field label={t("请求地址")}><TextField.Root value={request.url} onChange={(event) => updateSelectedRequest({ url: event.target.value })} /></Field>
+              </Flex>
+              <Field label={t("描述")}><TextArea value={request.description} onChange={(event) => updateSelectedRequest({ description: event.target.value })} /></Field>
+              {(!request.protocol?.kind || request.protocol.kind === "http") && <Tabs.Root key={`${collection.id}/${request.id}/${saved?.revision}`} value={requestEditorTab} onValueChange={setRequestEditorTab}>
+                <Tabs.List className="shared-request-tabs">
+                  {[
+                    { value: "query", label: t("参数") }, { value: "headers", label: t("请求头") },
+                    { value: "body", label: t("请求体") }, { value: "auth", label: t("鉴权") },
+                    { value: "assertions", label: t("断言") }, { value: "scripts", label: t("脚本") },
+                    { value: "network", label: t("网络设置") },
+                  ].map(({ value, label }) => <Tabs.Trigger key={value} value={value}>{label}</Tabs.Trigger>)}
+                </Tabs.List>
+                <Tabs.Content value="query"><PairEditor rows={request.query} onChange={(query) => updateSelectedRequest({ query })} keyLabel={t("参数名")} valueLabel={t("参数值")} /></Tabs.Content>
+                <Tabs.Content value="headers"><PairEditor rows={request.headers} onChange={(headers) => updateSelectedRequest({ headers })} keyLabel="Header" valueLabel={t("值")} secrets /></Tabs.Content>
+                <Tabs.Content value="body">
+                  <Flex direction="column" gap="2">
+                    <Choice label={t("请求体格式")} value={request.body_kind} onChange={(kind) => updateSelectedRequest(bodyModePatch(request, kind as RequestSpec["body_kind"]))} options={[{ value: "none", label: t("无请求体") }, { value: "json", label: "JSON" }, { value: "text", label: "Raw Text" }, { value: "form", label: "x-www-form-urlencoded" }, { value: "binary", label: t("二进制文件") }, { value: "multipart", label: "multipart/form-data" }]} />
+                    {["binary", "multipart"].includes(request.body_kind) ? <RequestBodyEditor key={`${scope}/${collection.id}/${request.id}/${saved?.revision}/${request.body_kind}`} kind={request.body_kind} value={request.body} change={(body) => updateSelectedRequest({ body })} busy={saving || sending || running} dark={dark} /> : request.body_kind === "none" ? <Text size="2" color="gray">{t("此请求不发送 Body。")}</Text> : <Editor label={t("请求正文")} value={request.body} onChange={(body) => updateSelectedRequest({ body })} dark={dark} jsonMode={request.body_kind === "json"} height="210px" />}
+                  </Flex>
+                </Tabs.Content>
+                <Tabs.Content value="auth"><RequestAuthEditor auth={request.auth} change={(auth) => updateSelectedRequest({ auth })} dark={dark} collectionId={collection?.id ?? null} tokenManagement={false} {...authenticationEligibility(request)} /></Tabs.Content>
+                <Tabs.Content value="assertions"><AssertionsEditor request={request} update={updateSelectedRequest} dark={dark} /><ExtractionsEditor request={request} update={updateSelectedRequest} /></Tabs.Content>
+                <Tabs.Content value="scripts"><RequestScripts request={request} update={updateSelectedRequest} dark={dark} /></Tabs.Content>
+                <Tabs.Content value="network"><NetworkSettings value={request.network} change={(network) => updateSelectedRequest({ network })} ntlm={request.auth.kind === "ntlm"} /></Tabs.Content>
+              </Tabs.Root>}
+            </Flex> : <Flex direction="column" gap="1"><Text weight="medium">{request.method} {request.name}</Text><Text size="2" style={{ overflowWrap: "anywhere" }}>{request.url}</Text><Text size="2" color="gray">{request.description}</Text></Flex>)}
+          </>}
           {canEdit && request && <Flex direction="column" gap="2">
             <Button loading={sending} disabled={sending || dirty} onClick={() => void sendSavedRequest()}>{t("发送已保存请求")}</Button>
             {requestResponse && <><Text role="status" size="2">{requestResponse.status} {requestResponse.status_text} · {requestResponse.elapsed_ms} ms</Text><TextArea aria-label={t("响应正文预览")} readOnly value={requestResponse.body.slice(0, 16 * 1024)} />{requestResponse.body.length > 16 * 1024 && <Text size="1" color="gray">{t("仅显示响应正文前 16 KiB。")}</Text>}</>}

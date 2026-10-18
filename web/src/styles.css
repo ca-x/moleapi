@@ -143,6 +143,14 @@ a:focus-visible {
 .shared-request-line .rt-TextFieldRoot {
   width: 100%;
 }
+.shared-request-tabs {
+  max-width: min(760px, 100%);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.shared-request-tabs + .rt-TabsContent {
+  padding-top: 12px;
+}
 .app-header {
   grid-column: 1 / -1;
   display: flex;

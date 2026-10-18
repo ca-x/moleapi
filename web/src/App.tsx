@@ -53,7 +53,7 @@ export default function App() {
         <WorkbenchContext.Provider value={state}>
           <div className={`app-shell${state.selectedShared ? " shared-shell" : ""}`}>
             <WorkbenchHeader />
-            {state.selectedShared ? <SharedWorkspaceView key={`${state.accountId}:${state.selectedShared.owner_id}:${state.selectedShared.workspace_id}:${state.selectedShared.role}`} accountId={state.accountId} selected={state.selectedShared} onClose={state.closeShared} onDirtyChange={state.setSharedDirty} /> : <><NavigationRail /><CollectionSidebar /><WorkbenchMain /><StatusBar /></>}
+            {state.selectedShared ? <SharedWorkspaceView key={`${state.accountId}:${state.selectedShared.owner_id}:${state.selectedShared.workspace_id}:${state.selectedShared.role}`} accountId={state.accountId} selected={state.selectedShared} dark={dark} onClose={state.closeShared} onDirtyChange={state.setSharedDirty} /> : <><NavigationRail /><CollectionSidebar /><WorkbenchMain /><StatusBar /></>}
           </div>
           <WorkbenchDialogs />
           <GuardDialog />

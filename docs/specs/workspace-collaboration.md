@@ -31,6 +31,10 @@ Editors and admins can preview an existing saved Mock example through an explici
 
 The hosted shared editor can add/remove saved examples and edit their name, status, body, response headers and delay through the same canonical workspace CAS write. Unsaved drafts never feed the preview route. Advanced schema, script, data, matching and fault settings are preserved when basic fields change; their complete shared editor controls remain future work.
 
+For saved HTTP requests, the hosted shared editor reuses the owned editor's query/header, body/file, authentication, assertions/extractions, scripts and network controls. Changes are persisted only by the owner/workspace CAS write; canonical saved-request execution is disabled while the draft is dirty. Switching body mode uses the same descriptor conversion as the owned editor. Non-HTTP protocols retain their limited shared view until their dedicated member editor and execution policies are specified.
+
+OAuth1/OAuth2 configuration can be inspected and edited in the shared request, but private token management controls remain owner-only. The owned editor's token managers use the active owned workspace context and must not mount inside a member's shared view; member-scoped token vault operations require separate explicit routes and actor policy.
+
 A successful shared preview carries `x-moleapi-mock-preview: saved-example`, regardless of its simulated HTTP status. The client treats an unmarked status as an API/auth error, so an intentional saved 401 does not expire the member's session and a denied 403/404 cannot appear as example content.
 
 ## Client behavior
