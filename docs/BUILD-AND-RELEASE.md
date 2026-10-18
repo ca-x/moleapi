@@ -64,8 +64,8 @@ CI 为无 FUSE 环境全局设置 `APPIMAGE_EXTRACT_AND_RUN=1`。修复脚本读
 2026-10-18 Linux 安装验收续项：原生桌面工作流在 deb/rpm/AppImage 解包检查后，
 于一次性 Ubuntu runner 通过 apt 实际安装当前构建的唯一 `.deb`，随后从已安装的
 `/usr/bin/moleapi` 和 `/usr/lib/MoleAPI` 运行脚本 worker、原始 JRE 与 Dubbo 检查。
-`scripts/check-installed-linux-deb.py` 拒绝非 GitHub Linux 环境，不能在开发机上
-调用安装操作。5 项合成命令/拒绝测试、脚本编译与 actionlint1.7.7 已在本地通过；
+`scripts/check-installed-linux-deb.py` 会在普通非 CI/非 Linux 环境中先拒绝执行；
+环境变量可人为伪造，因此开发机不得用模拟 CI 环境运行此脚本。5 项合成命令/拒绝测试、脚本编译与 actionlint1.7.7 已在本地通过；
 actionlint 仅需忽略其不认识的现有 GitHub `macos-15-intel` 标签。真实安装仍待本分支固定提交
 的 Linux 原生 CI，图形界面启动、macOS/Windows 安装与签名门禁仍独立开放。
 

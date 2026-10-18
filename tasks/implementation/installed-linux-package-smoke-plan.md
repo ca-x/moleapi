@@ -12,7 +12,7 @@
 
 ## Global constraints
 
-- Refuse non-GitHub/non-Linux execution before `sudo` or `apt`.
+- Reject ordinary non-CI/non-Linux execution before `sudo` or `apt`; never simulate CI variables on a developer host.
 - Require exactly one produced deb; do not guess or select the first.
 - Check `/usr/bin/moleapi` and `/usr/lib/MoleAPI` after actual apt installation.
 - Keep extracted deb/RPM/AppImage checks and artifact upload behavior intact.
