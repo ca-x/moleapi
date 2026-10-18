@@ -8,6 +8,8 @@ const MAX_OUTPUT: usize = 1024 * 1024;
 const MAX_DEPTH: usize = 64;
 const MAX_NODES: usize = 10_000;
 const MAX_CANDIDATES: usize = 256;
+const MAX_BRANCHES: usize = 16;
+const MAX_PREFIX_ITEMS: usize = 32;
 
 #[derive(Default)]
 struct GenerateContext {
@@ -45,6 +47,52 @@ fn scan(schema: &Value, path: &str, depth: usize, nodes: &mut usize) -> Result<(
     let object = schema
         .as_object()
         .with_context(|| format!("Mock schema must be an object at {path}"))?;
+    let compositions = ["oneOf", "anyOf", "allOf"]
+        .iter()
+        .filter(|key| object.contains_key(**key))
+        .count();
+    ensure!(
+        compositions <= 1,
+        "Mock schema has multiple composition operators at {path}"
+    );
+    if compositions == 1 {
+        ensure!(
+            object.keys().all(|key| {
+                matches!(
+                    key.as_str(),
+                    "oneOf" | "anyOf" | "allOf" | "title" | "description"
+                ) || (key == "$defs" && path == "#")
+            }),
+            "Mock schema composition siblings are unsupported at {path}"
+        );
+    }
+    if object.contains_key("prefixItems") {
+        let array_type = match object.get("type") {
+            Some(Value::String(kind)) => kind == "array",
+            Some(Value::Array(types)) => {
+                types.len() == 2
+                    && types.iter().any(|value| value.as_str() == Some("null"))
+                    && types.iter().any(|value| value.as_str() == Some("array"))
+            }
+            _ => false,
+        };
+        ensure!(
+            array_type
+                && object.keys().all(|key| {
+                    matches!(
+                        key.as_str(),
+                        "type"
+                            | "prefixItems"
+                            | "items"
+                            | "minItems"
+                            | "maxItems"
+                            | "title"
+                            | "description"
+                    ) || (key == "$defs" && path == "#")
+                }),
+            "Mock schema tuple siblings are unsupported at {path}"
+        );
+    }
     for (key, value) in object {
         let field = format!("{path}/{key}");
         match key.as_str() {
@@ -60,20 +108,58 @@ fn scan(schema: &Value, path: &str, depth: usize, nodes: &mut usize) -> Result<(
                     scan(child, &format!("{field}/{name}"), depth + 1, nodes)?;
                 }
             }
-            "items" => scan(value, &field, depth + 1, nodes)?,
+            "items" => {
+                if value != &Value::Bool(true) && value != &Value::Bool(false) {
+                    scan(value, &field, depth + 1, nodes)?;
+                }
+            }
+            "prefixItems" => {
+                let branches = value
+                    .as_array()
+                    .context("Mock schema prefixItems must be an array")?;
+                ensure!(
+                    !branches.is_empty() && branches.len() <= MAX_PREFIX_ITEMS,
+                    "Mock schema tuple item limit exceeded"
+                );
+                for (index, child) in branches.iter().enumerate() {
+                    scan(child, &format!("{field}/{index}"), depth + 1, nodes)?;
+                }
+            }
+            "oneOf" | "anyOf" | "allOf" => {
+                let branches = value
+                    .as_array()
+                    .with_context(|| format!("Mock schema {field} must be an array"))?;
+                ensure!(
+                    !branches.is_empty() && branches.len() <= MAX_BRANCHES,
+                    "Mock schema composition branch limit exceeded at {field}"
+                );
+                for (index, child) in branches.iter().enumerate() {
+                    scan(child, &format!("{field}/{index}"), depth + 1, nodes)?;
+                }
+            }
             "$ref" => ensure!(
                 value
                     .as_str()
                     .is_some_and(|s| s.starts_with("#/$defs/") && !s.contains(' ')),
                 "Mock schema {field} must reference #/$defs"
             ),
-            "type" => ensure!(
-                matches!(
-                    value.as_str(),
-                    Some("object" | "array" | "string" | "integer" | "number" | "boolean" | "null")
-                ),
-                "Unsupported Mock schema type at {field}"
-            ),
+            "type" => {
+                let supported = |s: &str| {
+                    matches!(
+                        s,
+                        "object" | "array" | "string" | "integer" | "number" | "boolean" | "null"
+                    )
+                };
+                ensure!(
+                    value.as_str().is_some_and(supported)
+                        || value.as_array().is_some_and(|types| types.len() == 2
+                            && types.iter().any(|v| v.as_str() == Some("null"))
+                            && types
+                                .iter()
+                                .any(|v| v.as_str().is_some_and(|s| s != "null" && supported(s)))),
+                    "Unsupported Mock schema type at {field}"
+                );
+            }
             "format" => ensure!(
                 matches!(
                     value.as_str(),
@@ -230,9 +316,67 @@ fn synthesize(
             bail!("Unsatisfiable Mock schema {key}");
         }
     }
+    if let Some(branches) = object
+        .get("oneOf")
+        .or_else(|| object.get("anyOf"))
+        .and_then(Value::as_array)
+    {
+        ensure!(depth < MAX_DEPTH, "Mock schema generation depth exceeded");
+        for branch in branches {
+            let candidate = synthesize(root, branch, depth + 1, refs, context);
+            ensure!(
+                context.nodes <= MAX_NODES && context.candidates <= MAX_CANDIDATES,
+                "Mock schema generation budget exceeded"
+            );
+            if let Ok(value) = candidate
+                && valid_candidate(root, schema, &value, context)?
+            {
+                context.values.insert(schema_key, value.clone());
+                return Ok(value);
+            }
+        }
+        bail!("Unsatisfiable Mock schema union");
+    }
+    if let Some(branches) = object.get("allOf").and_then(Value::as_array) {
+        let mut merged = Map::new();
+        for branch in branches {
+            let value = synthesize(root, branch, depth + 1, refs, context)?;
+            let fields = value
+                .as_object()
+                .context("Mock schema allOf supports object branches only")?;
+            for (name, value) in fields {
+                if let Some(previous) = merged.insert(name.clone(), value.clone()) {
+                    ensure!(
+                        previous == *value,
+                        "Conflicting Mock schema allOf property {name}"
+                    );
+                }
+            }
+            ensure!(
+                serde_json::to_vec(&merged)?.len() <= MAX_OUTPUT,
+                "Generated Mock body exceeds 1 MiB"
+            );
+        }
+        let value = Value::Object(merged);
+        ensure!(
+            valid_candidate(root, schema, &value, context)?,
+            "Unsatisfiable Mock schema allOf"
+        );
+        context.values.insert(schema_key, value.clone());
+        return Ok(value);
+    }
     let kind = object
         .get("type")
-        .and_then(Value::as_str)
+        .and_then(|value| {
+            value.as_str().or_else(|| {
+                value.as_array().and_then(|types| {
+                    types
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .find(|kind| *kind != "null")
+                })
+            })
+        })
         .context("Mock schema node needs a supported type or authored value")?;
     let result = match kind {
         "null" => Value::Null,
@@ -327,17 +471,33 @@ fn synthesize(
                 "Unsatisfiable Mock schema array length"
             );
             let item = object.get("items");
-            ensure!(min == 0 || item.is_some(), "Mock schema array needs items");
+            let prefix = object.get("prefixItems").and_then(Value::as_array);
+            ensure!(
+                min == 0 || item.is_some() || prefix.is_some(),
+                "Mock schema array needs items"
+            );
+            let prefix_len = prefix.map_or(0, Vec::len);
+            let target_len = if item == Some(&Value::Bool(false)) {
+                min.max((prefix_len as u64).min(max))
+            } else {
+                min.max(prefix_len as u64).min(max)
+            };
+            ensure!(target_len >= min, "Unsatisfiable Mock schema array length");
+            ensure!(
+                item != Some(&Value::Bool(false)) || target_len <= prefix_len as u64,
+                "Unsatisfiable Mock schema tuple length"
+            );
             let mut values = Vec::new();
             let mut size = 2usize;
-            for _ in 0..min {
-                let value = synthesize(
-                    root,
-                    item.context("Missing Mock schema items")?,
-                    depth + 1,
-                    refs,
-                    context,
-                )?;
+            for index in 0..target_len as usize {
+                let child = prefix.and_then(|values| values.get(index)).or(item);
+                let value = match child {
+                    Some(Value::Bool(true)) => Value::Null,
+                    Some(Value::Bool(false)) => bail!("Unsatisfiable Mock schema tuple length"),
+                    Some(child) => synthesize(root, child, depth + 1, refs, context)?,
+                    None if prefix.is_some() => Value::Null,
+                    None => bail!("Missing Mock schema items"),
+                };
                 size = size.saturating_add(serde_json::to_vec(&value)?.len() + 1);
                 ensure!(size <= MAX_OUTPUT, "Generated Mock body exceeds 1 MiB");
                 values.push(value);
@@ -473,5 +633,103 @@ mod tests {
                 .is_err()
         );
         assert!(validate_mock_schema(r#"{"type":"string","format":"phone"}"#).is_err());
+    }
+
+    #[test]
+    fn unions_choose_a_valid_branch_and_reject_ambiguous_oneof() {
+        assert_eq!(
+            generate_mock_schema(
+                r#"{"oneOf":[{"type":"string","const":"cat"},{"type":"integer","minimum":5}]}"#
+            )
+            .unwrap(),
+            r#""cat""#
+        );
+        assert_eq!(generate_mock_schema(r#"{"anyOf":[{"type":"string","minLength":3,"maxLength":2},{"type":"integer","minimum":4}]}"#).unwrap(),"4");
+        assert_eq!(generate_mock_schema(r##"{"$defs":{"bad":{"type":"string","minLength":3,"maxLength":2}},"anyOf":[{"$ref":"#/$defs/bad"},{"type":"integer","minimum":4}]}"##).unwrap(),"4");
+        assert!(
+            validate_mock_schema(
+                r#"{"oneOf":[{"type":"integer","minimum":0},{"type":"number","minimum":0}]}"#
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn allof_merges_distinct_required_objects_and_rejects_conflicting_values() {
+        let inherited = r#"{"allOf":[{"type":"object","properties":{"id":{"type":"integer","minimum":3}},"required":["id"]},{"type":"object","properties":{"name":{"type":"string","const":"Ada"}},"required":["name"]}]}"#;
+        assert_eq!(
+            generate_mock_schema(inherited).unwrap(),
+            r#"{"id":3,"name":"Ada"}"#
+        );
+        assert!(validate_mock_schema(r#"{"allOf":[{"type":"object","properties":{"id":{"const":3}},"required":["id"]},{"type":"object","properties":{"id":{"const":5}},"required":["id"]}]}"#).is_err());
+    }
+
+    #[test]
+    fn nullable_type_and_prefix_items_respect_tuple_limits() {
+        assert_eq!(
+            generate_mock_schema(r#"{"type":["null","string"],"minLength":2}"#).unwrap(),
+            r#""xx""#
+        );
+        assert_eq!(
+            generate_mock_schema(r#"{"type":["null","array"],"prefixItems":[{"type":"integer","const":3}],"minItems":1}"#).unwrap(),
+            "[3]"
+        );
+        assert_eq!(generate_mock_schema(r#"{"type":"array","prefixItems":[{"type":"string","const":"x"},{"type":"integer","minimum":2}],"items":false,"minItems":2,"maxItems":2}"#).unwrap(),r#"["x",2]"#);
+        assert_eq!(generate_mock_schema(r#"{"type":"array","prefixItems":[{"type":"integer","const":1}],"items":{"type":"string","const":"a"},"minItems":3}"#).unwrap(),r#"[1,"a","a"]"#);
+        assert_eq!(generate_mock_schema(r#"{"type":"array","prefixItems":[{"type":"integer","const":1}],"items":true,"minItems":2}"#).unwrap(),"[1,null]");
+        assert_eq!(
+            generate_mock_schema(
+                r#"{"type":"array","prefixItems":[{"type":"integer","const":1}],"minItems":2}"#
+            )
+            .unwrap(),
+            "[1,null]"
+        );
+        assert_eq!(generate_mock_schema(r#"{"type":"array","prefixItems":[{"type":"integer","const":1},{"type":"integer","const":2}],"items":false,"maxItems":1}"#).unwrap(),"[1]");
+        assert!(validate_mock_schema(r#"{"type":"array","prefixItems":[{"type":"integer","const":1}],"items":false,"minItems":2}"#).is_err());
+    }
+
+    #[test]
+    fn composition_and_tuple_branch_limits_reject() {
+        let branches = vec![serde_json::json!({"type":"string"}); 17];
+        assert!(validate_mock_schema(&serde_json::json!({"oneOf":branches}).to_string()).is_err());
+        let tuple = vec![serde_json::json!({"type":"string"}); 33];
+        assert!(
+            validate_mock_schema(
+                &serde_json::json!({"type":"array","prefixItems":tuple}).to_string()
+            )
+            .is_err()
+        );
+        for source in [
+            r#"{"oneOf":[]}"#,
+            r#"{"anyOf":[{"type":"string"}],"minimum":2}"#,
+            r#"{"allOf":[{"type":"object"}],"oneOf":[{"type":"object"}]}"#,
+            r#"{"type":"array","prefixItems":[]}"#,
+            r#"{"type":"array","prefixItems":[{"type":"string"}],"enum":[["x"]]}"#,
+        ] {
+            assert!(validate_mock_schema(source).is_err(), "{source}");
+        }
+    }
+
+    #[test]
+    fn union_branch_failures_cannot_bypass_global_work_budgets() {
+        let mut properties = Map::new();
+        for index in 0..300 {
+            properties.insert(
+                index.to_string(),
+                serde_json::json!({"type":"integer","examples":["bad"]}),
+            );
+        }
+        let required: Vec<String> = properties.keys().cloned().collect();
+        let candidate_heavy = serde_json::json!({"anyOf":[{"type":"object","properties":properties,"required":required},{"type":"string","const":"ok"}]});
+        assert!(validate_mock_schema(&candidate_heavy.to_string()).is_err());
+
+        let node_heavy = serde_json::json!({"anyOf":[{"type":"array","minItems":10001,"items":{"type":"null"}},{"type":"string","const":"ok"}]});
+        assert!(validate_mock_schema(&node_heavy.to_string()).is_err());
+
+        let mut nested = serde_json::json!({"type":"string"});
+        for _ in 0..65 {
+            nested = serde_json::json!({"anyOf":[nested]});
+        }
+        assert!(validate_mock_schema(&nested.to_string()).is_err());
     }
 }
