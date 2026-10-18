@@ -15,6 +15,7 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use rand::RngCore;
 use sea_orm::{
     ColumnTrait, ConnectionTrait, DbBackend, EntityTrait, QueryFilter, QuerySelect, Statement,
@@ -32,6 +33,43 @@ const MAX_SELECTED: usize = 32;
 const MAX_SOURCE: usize = 1024 * 1024;
 const MAX_FAILED_UNLOCKS: usize = 10;
 const ATTEMPT_WINDOW: i64 = 5 * 60;
+const MAX_LOGO_BYTES: usize = 64 * 1024;
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Theme {
+    #[default]
+    Light,
+    Dark,
+    System,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Layout {
+    #[default]
+    Sidebar,
+    Top,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct Appearance {
+    #[serde(default)]
+    pub theme: Theme,
+    #[serde(default)]
+    pub layout: Layout,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logo_png_base64: Option<String>,
+}
+
+impl Appearance {
+    fn is_default(&self) -> bool {
+        self.theme == Theme::Light
+            && self.layout == Layout::Sidebar
+            && self.logo_png_base64.is_none()
+    }
+}
 
 fn failed_attempt_retry(attempts: &mut Vec<i64>, now: i64) -> Result<Option<i64>, ApiError> {
     if attempts.len() > MAX_FAILED_UNLOCKS
@@ -63,6 +101,8 @@ pub struct Create {
     visibility: Visibility,
     #[serde(default)]
     password: Option<String>,
+    #[serde(default)]
+    appearance: Appearance,
 }
 
 #[derive(Deserialize)]
@@ -82,6 +122,8 @@ pub struct PublishedDocument {
 pub struct PublicSnapshot {
     pub title: String,
     pub documents: Vec<PublishedDocument>,
+    #[serde(default)]
+    pub appearance: Appearance,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -111,6 +153,14 @@ pub struct PublicationView {
     public_url: String,
     revoked: bool,
     visibility: Visibility,
+    appearance: AppearanceView,
+}
+
+#[derive(Serialize)]
+struct AppearanceView {
+    theme: Theme,
+    layout: Layout,
+    has_logo: bool,
 }
 
 fn view(publication: &Publication) -> PublicationView {
@@ -131,6 +181,11 @@ fn view(publication: &Publication) -> PublicationView {
             Visibility::Password
         } else {
             Visibility::Public
+        },
+        appearance: AppearanceView {
+            theme: publication.snapshot.appearance.theme.clone(),
+            layout: publication.snapshot.appearance.layout.clone(),
+            has_logo: publication.snapshot.appearance.logo_png_base64.is_some(),
         },
     }
 }
@@ -197,7 +252,100 @@ fn request_digest(input: &Create) -> Result<String, ApiError> {
         digest.update(b"password\0");
     }
     digest.update(content);
+    if !input.appearance.is_default() {
+        digest.update(b"\0appearance\0");
+        digest.update(serde_json::to_vec(&input.appearance).map_err(|_| ApiError::internal())?);
+    }
     Ok(hex::encode(digest.finalize()))
+}
+
+fn sanitize_logo(appearance: &mut Appearance) -> Result<(), ApiError> {
+    let Some(encoded) = appearance.logo_png_base64.as_ref() else {
+        return Ok(());
+    };
+    if encoded.len() > (MAX_LOGO_BYTES / 3 + 1) * 4 {
+        return Err(ApiError::bad("PNG logo exceeds 64 KiB"));
+    }
+    let source = BASE64
+        .decode(encoded)
+        .map_err(|_| ApiError::bad("Invalid PNG logo"))?;
+    if source.is_empty() || source.len() > MAX_LOGO_BYTES {
+        return Err(ApiError::bad("PNG logo exceeds 64 KiB"));
+    }
+    if !has_single_png_stream(&source) {
+        return Err(ApiError::bad("Invalid PNG logo"));
+    }
+    let mut decoder = png::Decoder::new(std::io::Cursor::new(source.as_slice()));
+    decoder.set_limits(png::Limits {
+        bytes: 2 * 1024 * 1024,
+    });
+    decoder.set_transformations(png::Transformations::normalize_to_color8());
+    let mut reader = decoder
+        .read_info()
+        .map_err(|_| ApiError::bad("Invalid PNG logo"))?;
+    let info = reader.info();
+    if !(1..=512).contains(&info.width)
+        || !(1..=512).contains(&info.height)
+        || info.animation_control().is_some()
+    {
+        return Err(ApiError::bad(
+            "PNG logo must be a static image of at most 512 × 512 pixels",
+        ));
+    }
+    let size = reader
+        .output_buffer_size()
+        .ok_or_else(|| ApiError::bad("Invalid PNG logo"))?;
+    if size > 1024 * 1024 {
+        return Err(ApiError::bad("PNG logo is too large"));
+    }
+    let mut pixels = vec![0; size];
+    let frame = reader
+        .next_frame(&mut pixels)
+        .map_err(|_| ApiError::bad("Invalid PNG logo"))?;
+    reader
+        .finish()
+        .map_err(|_| ApiError::bad("Invalid PNG logo"))?;
+    let mut cleaned = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut cleaned, frame.width, frame.height);
+        encoder.set_color(frame.color_type);
+        encoder.set_depth(frame.bit_depth);
+        let mut writer = encoder
+            .write_header()
+            .map_err(|_| ApiError::bad("Invalid PNG logo"))?;
+        writer
+            .write_image_data(&pixels[..frame.buffer_size()])
+            .map_err(|_| ApiError::bad("Invalid PNG logo"))?;
+    }
+    if cleaned.len() > MAX_LOGO_BYTES {
+        return Err(ApiError::bad("Sanitized PNG logo exceeds 64 KiB"));
+    }
+    appearance.logo_png_base64 = Some(BASE64.encode(cleaned));
+    Ok(())
+}
+
+fn has_single_png_stream(source: &[u8]) -> bool {
+    if !source.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return false;
+    }
+    let mut offset = 8usize;
+    while let Some(header) = source.get(offset..offset.saturating_add(8)) {
+        let length = u32::from_be_bytes(header[..4].try_into().expect("four bytes")) as usize;
+        let Some(end) = offset
+            .checked_add(12)
+            .and_then(|end| end.checked_add(length))
+        else {
+            return false;
+        };
+        if end > source.len() {
+            return false;
+        }
+        if &header[4..8] == b"IEND" {
+            return length == 0 && end == source.len();
+        }
+        offset = end;
+    }
+    false
 }
 
 async fn hash_password(password: String) -> Result<String, ApiError> {
@@ -262,6 +410,7 @@ fn snapshot(
     Ok(PublicSnapshot {
         title: input.title.clone(),
         documents,
+        appearance: input.appearance.clone(),
     })
 }
 
@@ -335,10 +484,11 @@ pub async fn create(
     Extension(owner): Extension<Identity>,
     session: Option<Extension<SessionAuthentication>>,
     Path(workspace): Path<String>,
-    Json(input): Json<Create>,
+    Json(mut input): Json<Create>,
 ) -> Result<Json<PublicationView>, ApiError> {
     require_hosted_session(&state, session)?;
     validate(&input)?;
+    sanitize_logo(&mut input.appearance)?;
     let digest = request_digest(&input)?;
     let tx = state.db.begin().await?;
     let source = lock_workspace(&tx, &owner.0, &workspace).await?;

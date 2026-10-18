@@ -6,12 +6,14 @@ import {t,useLanguage} from "../../shared/i18n";
 import {indexPublishedDocuments,searchPublishedDocuments} from "./publishedSearch";
 
 type PublishedDocument={title:string;folder:string|null;source:string};
-type Snapshot={title:string;documents:PublishedDocument[]};
+type Appearance={theme:"light"|"dark"|"system";layout:"sidebar"|"top";logo_png_base64?:string};
+type Snapshot={title:string;documents:PublishedDocument[];appearance?:Appearance};
 
 function validSnapshot(value:unknown):value is Snapshot {
   if(!value||typeof value!=="object")return false;
   const snapshot=value as Partial<Snapshot>;
-  return typeof snapshot.title==="string"&&Array.isArray(snapshot.documents)&&snapshot.documents.length>0&&snapshot.documents.length<=32&&snapshot.documents.every(document=>
+  const appearance=snapshot.appearance;
+  return (appearance===undefined||(appearance!==null&&["light","dark","system"].includes(appearance.theme)&&["sidebar","top"].includes(appearance.layout)&&(appearance.logo_png_base64===undefined||typeof appearance.logo_png_base64==="string")))&&typeof snapshot.title==="string"&&Array.isArray(snapshot.documents)&&snapshot.documents.length>0&&snapshot.documents.length<=32&&snapshot.documents.every(document=>
     document&&typeof document.title==="string"&&(document.folder===null||typeof document.folder==="string")&&typeof document.source==="string"
   );
 }
@@ -25,9 +27,17 @@ export default function PublicDocsPage({id}:{id:string}) {
   const [password,setPassword]=useState("");
   const [unlocking,setUnlocking]=useState(false);
   const [unlockError,setUnlockError]=useState("");
+  const [systemDark,setSystemDark]=useState(()=>window.matchMedia?.("(prefers-color-scheme: dark)").matches??false);
   const activeId=useRef(id);
   const unlockRequest=useRef<AbortController|null>(null);
   activeId.current=id;
+  useEffect(()=>{
+    const media=window.matchMedia?.("(prefers-color-scheme: dark)");
+    if(!media)return;
+    const update=()=>setSystemDark(media.matches);
+    media.addEventListener("change",update);
+    return ()=>media.removeEventListener("change",update);
+  },[]);
   useEffect(()=>{
     if(!/^[a-f0-9]{32}$/.test(id)){setStatus("missing");return;}
     const controller=new AbortController();
@@ -75,7 +85,9 @@ export default function PublicDocsPage({id}:{id:string}) {
   const current=snapshot?.documents[selected];
   const searchIndex=useMemo(()=>snapshot?indexPublishedDocuments(snapshot.documents):[],[snapshot]);
   const matches=useMemo(()=>searchPublishedDocuments(searchIndex,query),[searchIndex,query]);
-  return <Theme accentColor="cyan" grayColor="slate" radius="medium">
+  const appearance=snapshot?.appearance;
+  const color=appearance?.theme==="dark"||(appearance?.theme==="system"&&systemDark)?"dark":"light";
+  return <Theme accentColor="cyan" grayColor="slate" radius="medium" appearance={status==="ready"?color:"light"}>
     <main className="published-docs">
       {status==="loading"?<Text role="status">{t("正在加载文档…")}</Text>:status==="missing"?<div className="published-docs-empty"><Heading size="5">{t("文档不可用")}</Heading><Text>{t("此发布版本不存在，或已被撤销。")}</Text></div>:status==="locked"?<div className="published-docs-lock">
         <div className="published-docs-header-top"><Text size="2" color="gray">MoleAPI</Text><Button size="1" color="gray" variant="ghost" onClick={()=>void setLanguage(language==="en"?"zh-CN":"en")}>{language==="en"?t("简体中文"):"English"}</Button></div>
@@ -86,9 +98,9 @@ export default function PublicDocsPage({id}:{id:string}) {
           <Button type="submit" disabled={unlocking||!password||new TextEncoder().encode(password).length>128} loading={unlocking}>{t("解锁文档")}</Button>
         </form></section>
       </div>:snapshot&&current?<>
-        <header className="published-docs-header"><div className="published-docs-header-top"><Text size="2" color="gray">MoleAPI</Text><Button size="1" color="gray" variant="ghost" onClick={()=>void setLanguage(language==="en"?"zh-CN":"en")}>{language==="en"?t("简体中文"):"English"}</Button></div><Heading as="h1" size="6">{snapshot.title}</Heading></header>
+        <header className="published-docs-header"><div className="published-docs-header-top"><Text size="2" color="gray">MoleAPI</Text><Button size="1" color="gray" variant="ghost" onClick={()=>void setLanguage(language==="en"?"zh-CN":"en")}>{language==="en"?t("简体中文"):"English"}</Button></div>{appearance?.logo_png_base64&&<img className="published-docs-logo" src={`data:image/png;base64,${appearance.logo_png_base64}`} alt={snapshot.title}/>}<Heading as="h1" size="6">{snapshot.title}</Heading></header>
         <div className="published-docs-search"><TextField.Root aria-label={t("搜索公开文档")} placeholder={t("搜索公开文档")} value={query} maxLength={128} onChange={event=>setQuery(event.target.value)}/>{query.trim()&&<Text role="status" size="2" color="gray">{matches.length?t("找到 {{value0}} 篇公开文档。",{value0:matches.length}):t("没有匹配的公开文档。")}</Text>}</div>
-        <div className="published-docs-layout">
+        <div className={`published-docs-layout${appearance?.layout==="top"?" published-docs-layout-top":""}`}>
           <nav aria-label={t("文档目录")} className="published-docs-nav">
             {matches.map(index=>{const item=snapshot.documents[index];return <Button key={index} variant={selected===index?"soft":"ghost"} color="gray" aria-current={selected===index?"page":undefined} onClick={()=>setSelected(index)}>
               <span>{item.title}</span>{item.folder&&<small>{item.folder}</small>}

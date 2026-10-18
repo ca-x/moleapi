@@ -51,12 +51,14 @@ it("keeps protected source locked until a correct in-memory password is submitte
   const fetcher=vi.fn()
     .mockResolvedValueOnce({ok:false,status:403})
     .mockResolvedValueOnce({ok:false,status:401})
-    .mockResolvedValueOnce({ok:true,status:200,json:async()=>({title:"Protected site",documents:[{title:"Guide",folder:null,source:"# Protected source"}]})});
+    .mockResolvedValueOnce({ok:true,status:200,json:async()=>({title:"Protected site",documents:[{title:"Guide",folder:null,source:"# Protected source"}],appearance:{theme:"dark",layout:"top",logo_png_base64:"iVBORw0KGgo="}})});
   vi.stubGlobal("fetch",fetcher);
   const page=render(<PublicDocsPage id={id}/>);
   await screen.findByRole("heading",{name:"Password-protected documentation"});
   expect(screen.queryByText("Protected site")).toBeNull();
   expect(screen.queryByText("Protected source")).toBeNull();
+  expect(page.container.querySelector(".published-docs-logo")).toBeNull();
+  expect(page.container.querySelector(".radix-themes.dark")).toBeNull();
   fireEvent.change(screen.getByLabelText("Access password"),{target:{value:"wrong-password"}});
   fireEvent.click(screen.getByRole("button",{name:"Unlock documents"}));
   await screen.findByRole("alert");
@@ -65,6 +67,7 @@ it("keeps protected source locked until a correct in-memory password is submitte
   fireEvent.change(screen.getByLabelText("Access password"),{target:{value:"correct-password-123"}});
   fireEvent.click(screen.getByRole("button",{name:"Unlock documents"}));
   await screen.findByRole("heading",{name:"Protected source"});
+  expect(screen.getByRole("img",{name:"Protected site"})).toBeTruthy();
   expect(fetcher).toHaveBeenCalledWith(`/api/public/docs/${id}/unlock`,expect.objectContaining({method:"POST",credentials:"omit",cache:"no-store"}));
   expect(fetcher).toHaveBeenCalledTimes(3);
   expect(page.container.querySelector("input[type=password]")).toBeNull();
@@ -85,4 +88,19 @@ it("shows a bounded retry message after password rate limiting",async()=>{
   fireEvent.change(screen.getByLabelText("Access password"),{target:{value:"wrong-password"}});
   fireEvent.click(screen.getByRole("button",{name:"Unlock documents"}));
   expect((await screen.findByRole("alert")).textContent).toContain("42 seconds");
+});
+
+it("applies the published dark top layout and renders only the snapshot logo",async()=>{
+  await setLanguage("en");
+  const fetcher=vi.fn().mockResolvedValue({ok:true,status:200,json:async()=>({
+    title:"Branded docs",documents:[{title:"Guide",folder:null,source:"# Content"}],
+    appearance:{theme:"dark",layout:"top",logo_png_base64:"iVBORw0KGgo="}
+  })});
+  vi.stubGlobal("fetch",fetcher);
+  const page=render(<PublicDocsPage id={"d".repeat(32)}/>);
+  await screen.findByRole("heading",{name:"Content"});
+  expect(page.container.querySelector(".published-docs-layout-top")).toBeTruthy();
+  await waitFor(()=>expect(page.container.querySelector(".radix-themes.dark")).toBeTruthy());
+  expect(screen.getByRole("img",{name:"Branded docs"}).getAttribute("src")).toBe("data:image/png;base64,iVBORw0KGgo=");
+  expect(fetcher).toHaveBeenCalledTimes(1);
 });
