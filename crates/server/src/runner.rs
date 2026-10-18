@@ -245,6 +245,7 @@ pub async fn run(
             locals: &c.locals,
             cancel: &lease.cancel,
             deadline,
+            allow_empty: false,
         })
         .await
         {

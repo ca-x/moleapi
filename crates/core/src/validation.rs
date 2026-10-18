@@ -392,6 +392,9 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
         if let Some(rule) = &example.mock_match {
             validate_mock_match(rule)?;
         }
+        if let Some(binding) = &example.mock_data {
+            validate_mock_data(binding, r)?;
+        }
         for h in example.headers.iter().filter(|h| h.enabled) {
             if !templates || !h.key.contains("{{") {
                 HeaderName::from_bytes(h.key.as_bytes()).context("Invalid example header")?;
@@ -452,6 +455,71 @@ fn validate_mock_match(rule: &MockMatch) -> Result<()> {
                 && row.local_value.is_none(),
             "Mock header match must be literal and safe"
         );
+    }
+    Ok(())
+}
+fn validate_mock_data(binding: &MockDataBinding, request: &RequestSpec) -> Result<()> {
+    ensure!(
+        !binding.dataset_id.is_empty()
+            && binding.dataset_id.len() <= 128
+            && !binding.view_id.is_empty()
+            && binding.view_id.len() <= 128
+            && binding.parameters.len() <= 16,
+        "Mock data binding exceeds its ID or parameter limit"
+    );
+    ensure!(
+        request.protocol == Protocol::Http,
+        "Mock data binding requires an HTTP request"
+    );
+    let url = url::Url::parse(&request.url).ok();
+    for parameter in &binding.parameters {
+        ensure!(
+            !parameter.name.is_empty()
+                && parameter.name.len() <= 128
+                && !parameter.name.chars().any(char::is_control)
+                && !parameter.name.contains("{{"),
+            "Invalid Mock data parameter name"
+        );
+        match parameter.source {
+            MockDataSource::Path => {
+                let matches = url.as_ref().is_some_and(|url| {
+                    url.path().split('/').any(|segment| {
+                        percent_encoding::percent_decode_str(segment)
+                            .decode_utf8()
+                            .ok()
+                            .is_some_and(|decoded| {
+                                decoded.as_ref() == format!("{{{}}}", parameter.name)
+                            })
+                    })
+                });
+                ensure!(matches, "Mock data path parameter is absent from saved URL");
+            }
+            MockDataSource::Query => ensure!(
+                !crate::sensitive_query_key(&parameter.name),
+                "Mock data query parameter is sensitive"
+            ),
+            MockDataSource::Header => {
+                let name = HeaderName::from_bytes(parameter.name.as_bytes())
+                    .context("Invalid Mock data header parameter")?;
+                ensure!(
+                    !crate::sensitive_query_key(name.as_str())
+                        && !matches!(
+                            name.as_str(),
+                            "authorization"
+                                | "cookie"
+                                | "proxy-authorization"
+                                | "connection"
+                                | "keep-alive"
+                                | "proxy-authenticate"
+                                | "te"
+                                | "trailer"
+                                | "transfer-encoding"
+                                | "upgrade"
+                        ),
+                    "Mock data header parameter is sensitive"
+                );
+            }
+        }
     }
     Ok(())
 }
@@ -536,6 +604,42 @@ pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
             }
             let mut examples = HashSet::new();
             for e in &r.examples {
+                if let Some(binding) = &e.mock_data {
+                    ensure!(
+                        data.script_mode == crate::ScriptMode::V2,
+                        "Mock data bindings require compatibility v2"
+                    );
+                    ensure!(
+                        e.mock_schema.is_empty() && e.mock_schema_link.is_none(),
+                        "Mock data and schema sources are mutually exclusive"
+                    );
+                    let dataset = data
+                        .datasets
+                        .iter()
+                        .find(|dataset| dataset.id == binding.dataset_id)
+                        .context("Mock data dataset is unavailable")?;
+                    ensure!(
+                        dataset.views.iter().any(|view| {
+                            view.id == binding.view_id
+                                && view.sql.as_ref().is_some_and(|sql| !sql.trim().is_empty())
+                        }),
+                        "Mock data view is unavailable"
+                    );
+                    ensure!(
+                        e.headers
+                            .iter()
+                            .filter(|header| header.enabled
+                                && header.key.eq_ignore_ascii_case("content-type"))
+                            .all(|header| header
+                                .value
+                                .split(';')
+                                .next()
+                                .unwrap_or_default()
+                                .trim()
+                                .eq_ignore_ascii_case("application/json")),
+                        "Mock data Content-Type must be application/json"
+                    );
+                }
                 if let Some(link) = &e.mock_schema_link {
                     linked_examples += 1;
                     ensure!(

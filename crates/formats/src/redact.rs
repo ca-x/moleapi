@@ -466,6 +466,7 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
             }
             for example in &mut request.examples {
                 example.mock_script.clear();
+                example.mock_data = None;
                 example.mock_schema.clear();
                 example.mock_schema_link = None;
                 example.mock_name_inference = false;

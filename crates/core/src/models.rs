@@ -55,6 +55,36 @@ pub struct MockMatch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub body: Option<String>,
 }
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MockDataShape {
+    #[default]
+    Rows,
+    First,
+}
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MockDataSource {
+    Path,
+    Query,
+    Header,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MockDataParameter {
+    pub source: MockDataSource,
+    pub name: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MockDataBinding {
+    pub dataset_id: String,
+    pub view_id: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parameters: Vec<MockDataParameter>,
+    #[serde(default)]
+    pub shape: MockDataShape,
+}
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Example {
     pub id: String,
@@ -72,6 +102,8 @@ pub struct Example {
     pub mock_script: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mock_match: Option<MockMatch>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mock_data: Option<MockDataBinding>,
     #[serde(default, skip_serializing_if = "is_zero_delay")]
     pub delay_ms: u64,
     #[serde(default, skip_serializing_if = "is_zero_rate")]

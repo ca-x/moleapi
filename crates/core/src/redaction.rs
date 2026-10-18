@@ -53,6 +53,7 @@ pub fn sensitive_query_key(key: &str) -> bool {
         "auth",
         "credential",
         "signature",
+        "cookie",
     ]
     .iter()
     .any(|part| key.contains(part))

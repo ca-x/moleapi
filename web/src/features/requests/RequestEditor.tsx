@@ -516,7 +516,7 @@ export default function RequestEditor({
               </div>
             </Tabs.Content>
             <Tabs.Content value="examples">
-              <ExamplesEditor request={request} update={update} dark={dark} asyncMock={workspaceData?.script_mode === "v2"} workspaceId={cookieWorkspace} workspaceRevision={workspaceRevision} dirty={dirty} specifications={workspaceData?.specifications ?? []} />
+              <ExamplesEditor request={request} update={update} dark={dark} asyncMock={workspaceData?.script_mode === "v2"} workspaceId={cookieWorkspace} workspaceRevision={workspaceRevision} dirty={dirty} specifications={workspaceData?.specifications ?? []} datasets={workspaceData?.datasets ?? []} />
             </Tabs.Content>
             <Tabs.Content value="settings">
               <div className="form-panel">

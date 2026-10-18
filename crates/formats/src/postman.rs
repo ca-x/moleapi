@@ -378,6 +378,7 @@ fn walk(
                     mock_schema_link: None,
                     mock_script: String::new(),
                     mock_match: None,
+                    mock_data: None,
                     delay_ms: 0,
                     fault_rate_percent: 0,
                     fault_status: 503,

@@ -19,6 +19,7 @@ pub(crate) struct Refresh<'a> {
     pub locals: &'a [VariableUpdate],
     pub cancel: &'a CancellationToken,
     pub deadline: Instant,
+    pub allow_empty: bool,
 }
 
 pub(crate) async fn refresh(input: Refresh<'_>) -> Result<Dataset, ApiError> {
@@ -33,6 +34,7 @@ pub(crate) async fn refresh(input: Refresh<'_>) -> Result<Dataset, ApiError> {
         locals,
         cancel,
         deadline,
+        allow_empty,
     } = input;
     let (collection, request) = workspace
         .data
@@ -119,11 +121,34 @@ pub(crate) async fn refresh(input: Refresh<'_>) -> Result<Dataset, ApiError> {
         Some(Ok(Err(_))) => return Err(ApiError::bad("Dataset query failed")),
         Some(Ok(Ok(result))) => result,
     };
-    let source =
-        moleapi_data::dataset_source(&result).map_err(|error| ApiError::bad(error.to_string()))?;
-    let dataset = source
-        .parse()
-        .map_err(|error| ApiError::bad(error.to_string()))?;
+    let dataset = if allow_empty && result.rows.is_empty() {
+        let mut names = std::collections::BTreeSet::new();
+        if result.truncated
+            || !(1..=100).contains(&result.columns.len())
+            || result.columns.iter().any(|column| {
+                column.name.is_empty()
+                    || column.name.len() > 1024
+                    || column.name.contains('\0')
+                    || !names.insert(column.name.clone())
+            })
+        {
+            return Err(ApiError::bad("Empty Data dataset has invalid columns"));
+        }
+        Dataset {
+            rows: Vec::new(),
+            columns: result
+                .columns
+                .iter()
+                .map(|column| column.name.clone())
+                .collect(),
+        }
+    } else {
+        let source = moleapi_data::dataset_source(&result)
+            .map_err(|error| ApiError::bad(error.to_string()))?;
+        source
+            .parse()
+            .map_err(|error| ApiError::bad(error.to_string()))?
+    };
     if cancel.is_cancelled() || Instant::now() >= deadline {
         return Err(ApiError::bad("Dataset refresh cancelled or timed out"));
     }

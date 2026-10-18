@@ -2,6 +2,105 @@ mod common;
 use common::*;
 
 #[tokio::test]
+async fn data_bound_public_mock_requires_dynamic_grant_and_stops_after_revocation() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = hosted(config(
+        moleapi_server::sqlite_database_url(&dir.path().join("data-share.db")).unwrap(),
+        true,
+    ))
+    .await
+    .unwrap();
+    let owner = register(&router, "datashareowner").await;
+    let foreign = register(&router, "datashareforeign").await;
+    let mut data = example_data();
+    data["script_mode"] = json!("v2");
+    data["datasets"] = json!([{"id":"d","name":"Private rows","source":{"format":"json","source":"[{\"value\":\"private-row\"}]"},"views":[{"id":"all","name":"All","sql":"SELECT value FROM data"}]}]);
+    data["collections"][0]["requests"][0]["examples"][0]["mock_data"] =
+        json!({"dataset_id":"d","view_id":"all"});
+    let (status, saved) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        Some(&owner),
+        Some(json!({"id":"w","name":"W","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    let (status, denied) = call(&router, "GET", "/api/mock/w/r/e", Some(&foreign), None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert!(!denied.to_string().contains("private-row"));
+    let share_path = "/api/workspaces/w/mock-shares";
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            share_path,
+            Some(&owner),
+            Some(json!({"request_id":"r","expires_in_days":1}))
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    let (status, grant) = call(
+        &router,
+        "POST",
+        share_path,
+        Some(&owner),
+        Some(json!({"request_id":"r","expires_in_days":1,"allow_dynamic":true})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{grant}");
+    let path = format!("/api/public/mock/{}/e", grant["token"].as_str().unwrap());
+    let (status, response) = call(&router, "GET", &path, None, None).await;
+    assert_eq!(status, StatusCode::CREATED, "{response}");
+    assert_eq!(response, json!([{"value":"private-row"}]));
+    let (_, logs) = call(
+        &router,
+        "GET",
+        "/api/workspaces/w/mock-calls",
+        Some(&owner),
+        None,
+    )
+    .await;
+    assert!(!logs.to_string().contains("private-row"));
+    let mut changed = saved["data"].clone();
+    changed["datasets"][0]["source"]["source"] = json!("[{\"value\":\"new-private-row\"}]");
+    assert_eq!(
+        call(
+            &router,
+            "PUT",
+            "/api/workspaces/w",
+            Some(&owner),
+            Some(json!({"name":"W","expected_revision":saved["revision"],"data":changed}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        call(&router, "GET", &path, None, None).await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        call(
+            &router,
+            "DELETE",
+            &format!("{share_path}/{}", grant["id"].as_str().unwrap()),
+            Some(&owner),
+            None
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        call(&router, "GET", &path, None, None).await.0,
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[tokio::test]
 async fn public_mock_fault_returns_fixed_body_and_respects_share_revocation() {
     let dir = tempfile::tempdir().unwrap();
     let router = hosted(config(

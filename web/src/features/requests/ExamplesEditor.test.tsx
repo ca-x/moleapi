@@ -20,6 +20,33 @@ vi.mock("../../shared/ui",()=>({
 }));
 afterEach(()=>{cleanup();api.mockReset();vi.unstubAllGlobals();Reflect.deleteProperty(HTMLElement.prototype,"scrollIntoView");});
 
+it("selects a saved data view and keeps authored body separate from the binding",async()=>{
+  vi.stubGlobal("ResizeObserver",class {observe(){} unobserve(){} disconnect(){}});
+  HTMLElement.prototype.scrollIntoView=()=>{};
+  await setLanguage("en");
+  const request=newRequest("R","https://example.test/items/{id}");
+  request.examples=[{id:"e",name:"Example",status:200,headers:[{id:"h",key:"Content-Type",value:"text/plain",enabled:true}],body:"static",mock_schema:'{"type":"object"}'}];
+  const datasets=[{id:"d",name:"Rows",description:"",secret:true,source:{format:"json" as const,source:'[{"id":"a"}]'},views:[{id:"by-id",name:"By ID",sql:"SELECT id FROM data WHERE id = ?"}]}];
+  const update=vi.fn();
+  const page=render(<Theme><ExamplesEditor request={request} update={update} dark={false} asyncMock datasets={datasets}/></Theme>);
+  fireEvent.click(screen.getByRole("checkbox",{name:"Generate Mock body from a dataset view"}));
+  expect(update.mock.lastCall?.[0].examples[0]).toMatchObject({body:"static",mock_data:{dataset_id:"d",view_id:"by-id",shape:"rows",parameters:[]}});
+  expect(update.mock.lastCall?.[0].examples[0].mock_schema).toBeUndefined();
+  expect(update.mock.lastCall?.[0].examples[0].headers[0].value).toBe("application/json");
+  request.examples=[update.mock.lastCall?.[0].examples[0]];
+  page.rerender(<Theme><ExamplesEditor request={request} update={update} dark={false} asyncMock datasets={datasets}/></Theme>);
+  expect(screen.getByRole("combobox",{name:"Read-only data view"})).toBeTruthy();
+  expect(screen.queryByRole("checkbox",{name:"Generate Mock body from JSON Schema"})).toBeNull();
+  fireEvent.click(screen.getByRole("button",{name:"Add view parameter"}));
+  expect(update.mock.lastCall?.[0].examples[0].mock_data.parameters).toEqual([{source:"query",name:""}]);
+  request.examples=[update.mock.lastCall?.[0].examples[0]];
+  page.rerender(<Theme><ExamplesEditor request={request} update={update} dark={false} asyncMock datasets={datasets}/></Theme>);
+  fireEvent.change(screen.getByRole("textbox",{name:"Parameter name 1"}),{target:{value:"id"}});
+  expect(update.mock.lastCall?.[0].examples[0].mock_data.parameters).toEqual([{source:"query",name:"id"}]);
+  await setLanguage("zh-CN");
+  expect(screen.getByRole("checkbox",{name:"从数据集视图生成 Mock 正文"})).toBeTruthy();
+});
+
 it("edits an opt-in mock implementation without replacing the saved example",async()=>{
   await setLanguage("en");
   const request=newRequest("R","https://example.test/");
@@ -161,6 +188,14 @@ it("keeps newer example edits while linked-response validation is pending",async
   fireEvent.click(screen.getByRole("option",{name:/GET \/items · 200 application\/json/}));
   page.rerender(<Theme><ExamplesEditor request={{...updatedRequest,method:"POST"}} update={update} dark={false} workspaceId="w" workspaceRevision={1} specifications={specifications}/></Theme>);
   await act(async()=>resolveSecond({method:"GET",status:200,media_type:"application/json"}));
+  expect(update).toHaveBeenCalledTimes(1);
+  let resolveThird!:(value:{method:string;status:number;media_type:string})=>void;
+  api.mockImplementation(()=>new Promise(resolve=>{resolveThird=resolve;}));
+  page.rerender(<Theme><ExamplesEditor request={updatedRequest} update={update} dark={false} workspaceId="w" workspaceRevision={1} specifications={specifications}/></Theme>);
+  fireEvent.click(screen.getByRole("combobox",{name:"Mock body source"}));
+  fireEvent.click(screen.getByRole("option",{name:/GET \/items · 200 application\/json/}));
+  page.rerender(<Theme><ExamplesEditor request={updatedRequest} update={update} dark={false} workspaceId="other" workspaceRevision={1} specifications={specifications}/></Theme>);
+  await act(async()=>resolveThird({method:"GET",status:200,media_type:"application/json"}));
   expect(update).toHaveBeenCalledTimes(1);
 });
 
