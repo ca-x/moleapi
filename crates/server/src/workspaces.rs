@@ -4,7 +4,9 @@ use axum::{
     extract::{Path, State},
 };
 use moleapi_core::{Workspace, WorkspaceData};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, TransactionTrait, sea_query::Expr};
+use sea_orm::{
+    ColumnTrait, DbErr, EntityTrait, QueryFilter, RuntimeErr, TransactionTrait, sea_query::Expr,
+};
 use serde::Deserialize;
 #[derive(Deserialize)]
 pub struct Create {
@@ -196,6 +198,61 @@ pub async fn versions(
         storage::documents(&s.db, &owner.0, "version", Some(&id), 10000).await?;
     versions.sort_by_key(|w| std::cmp::Reverse(w.revision));
     Ok(Json(versions))
+}
+
+pub async fn restore_version(
+    State(s): State<AppState>,
+    Extension(owner): Extension<Identity>,
+    Path((id, revision)): Path<(String, i64)>,
+    Json(request): Json<Revision>,
+) -> Result<Json<Workspace>, ApiError> {
+    if revision < 1 || !(1..i64::MAX).contains(&request.expected_revision) {
+        return Err(ApiError::bad("Invalid workspace revision"));
+    }
+    let mut current = owned(&s, &owner.0, &id).await?;
+    let archived = document::Entity::find()
+        .filter(document::Column::Owner.eq(&owner.0))
+        .filter(document::Column::Kind.eq("version"))
+        .filter(document::Column::RefId.eq(&id))
+        .filter(document::Column::Revision.eq(revision))
+        .one(&s.db)
+        .await?
+        .ok_or_else(ApiError::not_found)?;
+    let snapshot: Workspace =
+        serde_json::from_str(&archived.payload).map_err(|_| ApiError::internal())?;
+    if snapshot.id != id || snapshot.revision != revision {
+        return Err(ApiError::internal());
+    }
+    validate(&snapshot.name, &snapshot.data)?;
+    current.name = snapshot.name;
+    current.data = snapshot.data;
+    if !s.local {
+        moleapi_core::scrub_local_values(&mut current.data);
+    }
+    let mut attempts = 0;
+    let restored = loop {
+        match storage::replace(&s.db, &owner.0, current.clone(), request.expected_revision).await {
+            Ok(Some(restored)) => break restored,
+            Ok(None) => return Err(ApiError::conflict("Workspace revision changed")),
+            Err(error) if is_sqlite_busy(&error) && attempts < 3 => {
+                attempts += 1;
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+            Err(error) => return Err(error.into()),
+        }
+    };
+    reconcile_sessions(&s, &owner.0, &restored).await;
+    Ok(Json(restored))
+}
+
+fn is_sqlite_busy(error: &DbErr) -> bool {
+    let DbErr::Exec(RuntimeErr::SqlxError(sea_orm::sqlx::Error::Database(database))) = error else {
+        return false;
+    };
+    database
+        .try_downcast_ref::<sea_orm::sqlx::sqlite::SqliteError>()
+        .is_some()
+        && matches!(database.code().as_deref(), Some("5" | "517"))
 }
 
 pub(crate) async fn reconcile_sessions(s: &AppState, owner: &str, w: &Workspace) {

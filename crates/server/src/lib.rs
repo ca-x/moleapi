@@ -429,6 +429,10 @@ async fn build(
         )
         .route("/workspaces/{id}/versions", get(workspaces::versions))
         .route(
+            "/workspaces/{id}/versions/{revision}/restore",
+            post(workspaces::restore_version),
+        )
+        .route(
             "/workspaces/{id}/doc-publications",
             get(doc_publications::list).post(doc_publications::create),
         )

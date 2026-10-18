@@ -20,11 +20,13 @@ export function useAuth() {
       if (!native) {
         sessionStorage.removeItem("moleapi_token");
         setAuthenticated(false);
+        client.removeQueries({ queryKey: ["workspaces"] });
+        client.removeQueries({ queryKey: ["workspace-versions"] });
       }
     };
     window.addEventListener("moleapi:unauthorized", fail);
     return () => window.removeEventListener("moleapi:unauthorized", fail);
-  }, []);
+  }, [client]);
   const login = () => {
     const account = native
       ? "local"
@@ -43,6 +45,7 @@ export function useAuth() {
     sessionStorage.removeItem("moleapi_token");
     setAuthenticated(false);
     client.removeQueries({ queryKey: ["workspaces"] });
+    client.removeQueries({ queryKey: ["workspace-versions"] });
   };
   return {
     authenticated,
