@@ -37,6 +37,7 @@ export default function VersionHistory() {
       );
       if (state.accountRef.current !== originAccount || state.stateRef.current.saved?.id !== origin) return;
       state.installWorkspace(restored);
+      state.setResponse();
       const requests = restored.data.collections.flatMap((collection) => collection.requests);
       state.setRequestId(requests.some((request) => request.id === state.requestId)
         ? state.requestId : (requests[0]?.id ?? ""));

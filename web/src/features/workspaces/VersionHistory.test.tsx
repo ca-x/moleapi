@@ -32,6 +32,7 @@ function setup(dirty = false) {
     installWorkspace: vi.fn(),
     requestId: "removed-request",
     setRequestId: vi.fn(),
+    setResponse: vi.fn(),
     setSaveConflict: vi.fn(),
     setModal: vi.fn(),
     setGuard: vi.fn(),
@@ -48,6 +49,7 @@ it("restores a selected archived revision with the current CAS revision", async 
   fireEvent.click(screen.getByRole("button", { name: "确认恢复" }));
   await waitFor(() => expect(api).toHaveBeenCalledWith("/api/workspaces/workspace-a/versions/1/restore", "POST", { expected_revision: 2 }));
   await waitFor(() => expect(state.installWorkspace).toHaveBeenCalledWith(restored));
+  expect(state.setResponse).toHaveBeenCalledOnce();
   expect(state.setRequestId).toHaveBeenCalledWith(restored.data.collections.flatMap((collection) => collection.requests)[0]?.id ?? "");
   expect(state.setModal).toHaveBeenCalledWith(null);
 });
