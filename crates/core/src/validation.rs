@@ -363,6 +363,10 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
             "Mock fault status must be 500–599"
         );
         ensure!(
+            example.rate_limit_per_minute <= 1_000,
+            "Mock rate limit must be at most 1000 requests per minute"
+        );
+        ensure!(
             (200..=599).contains(&example.status),
             "Example status must be 200–599"
         );

@@ -150,6 +150,12 @@ export default function ExamplesEditor({
               if(Number.isFinite(value))patchExample(example.id,{fault_status:Math.min(599,Math.max(500,Math.round(value)))});
             }}/>
           </Field>
+          <Field label={t("每分钟请求上限")} hint={t("0 表示关闭；滑动 60 秒内超过上限立即返回 429，最多 1000 次。")}>
+            <TextField.Root type="number" min="0" max="1000" step="1" value={example.rate_limit_per_minute??0} onChange={event=>{
+              const value=Number(event.target.value);
+              if(Number.isFinite(value))patchExample(example.id,{rate_limit_per_minute:Math.min(1000,Math.max(0,Math.round(value)))});
+            }}/>
+          </Field>
           <Editor value={example.body} readOnly dark={dark} height="150px" />
           {linkedSpec ? <Field label={t("Mock 正文来源")} hint={t("来源规范：{{name}}",{name:linkedSpec.name})}>
             <Select.Root value={example.mock_schema_link?(validLink(example)?example.mock_schema_link.pointer:"stale"):(example.mock_schema?"inline":"static")} onValueChange={value=>{

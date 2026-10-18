@@ -1,5 +1,6 @@
 use crate::{
-    ApiError, AppState, auth::Identity, execution, mock_logs, mock_public, workspaces::owned,
+    ApiError, AppState, auth::Identity, execution, mock_logs, mock_public, mock_rate,
+    workspaces::owned,
 };
 use axum::{
     Extension, Json,
@@ -16,6 +17,8 @@ use serde::Deserialize;
 pub(crate) struct SavedExample;
 #[derive(Clone)]
 struct SimulatedFailure;
+#[derive(Clone)]
+struct SimulatedRateLimit;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -496,6 +499,9 @@ async fn record_outcome(
 
 fn outcome_meta(result: &Result<axum::response::Response, ApiError>) -> (StatusCode, &'static str) {
     match result {
+        Ok(response) if response.extensions().get::<SimulatedRateLimit>().is_some() => {
+            (response.status(), "rate_limited")
+        }
         Ok(response) if response.extensions().get::<SimulatedFailure>().is_some() => {
             (response.status(), "simulated_failure")
         }
@@ -641,6 +647,34 @@ async fn serve_selected(
 ) -> Result<axum::response::Response, ApiError> {
     if e.fault_rate_percent > 100 || !(500..=599).contains(&e.fault_status) {
         return Err(ApiError::bad("Invalid saved Mock fault settings"));
+    }
+    if let mock_rate::Admission::Limited {
+        retry_after_seconds,
+    } = mock_rate::admit(s, owner, w, &request.id, e).await?
+    {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::RETRY_AFTER,
+            HeaderValue::from_str(&retry_after_seconds.to_string())
+                .map_err(|_| ApiError::internal())?,
+        );
+        headers.insert(
+            axum::http::header::CONTENT_TYPE,
+            HeaderValue::from_static("text/plain; charset=utf-8"),
+        );
+        headers.insert(
+            axum::http::header::CACHE_CONTROL,
+            HeaderValue::from_static("no-store"),
+        );
+        let mut response = (
+            StatusCode::TOO_MANY_REQUESTS,
+            headers,
+            "Simulated Mock rate limit",
+        )
+            .into_response();
+        response.extensions_mut().insert(SavedExample);
+        response.extensions_mut().insert(SimulatedRateLimit);
+        return Ok(response);
     }
     if e.fault_rate_percent > 0
         && (e.fault_rate_percent == 100

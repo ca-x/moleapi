@@ -9,6 +9,7 @@ async fn native_public_listener_serves_saved_mock_fault_on_a_real_socket() {
     let example = &mut data["collections"][0]["requests"][0]["examples"][0];
     example["fault_rate_percent"] = json!(100);
     example["fault_status"] = json!(504);
+    example["rate_limit_per_minute"] = json!(1);
     example["body"] = json!("private-native-body");
     assert_eq!(
         call(
@@ -44,9 +45,13 @@ async fn native_public_listener_serves_saved_mock_fault_on_a_real_socket() {
         started["origin"].as_str().unwrap(),
         share["token"].as_str().unwrap()
     );
-    let response = reqwest::get(url).await.unwrap();
+    let response = reqwest::get(&url).await.unwrap();
     assert_eq!(response.status(), StatusCode::GATEWAY_TIMEOUT);
     assert_eq!(response.text().await.unwrap(), "Simulated Mock failure");
+    let limited = reqwest::get(url).await.unwrap();
+    assert_eq!(limited.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert!(limited.headers().get("retry-after").is_some());
+    assert_eq!(limited.text().await.unwrap(), "Simulated Mock rate limit");
     assert_eq!(
         call(
             &router,

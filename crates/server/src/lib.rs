@@ -18,6 +18,7 @@ mod mock;
 mod mock_logs;
 mod mock_public;
 mod mock_public_listener;
+mod mock_rate;
 mod notifications;
 mod oauth1;
 mod oauth2;
