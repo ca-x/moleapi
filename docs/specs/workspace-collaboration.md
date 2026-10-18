@@ -27,6 +27,10 @@ The first shared execution entry point is `POST /api/owners/{owner}/workspaces/{
 
 Editors and admins can read the canonical owner's saved history, report summaries/detail and report step responses through explicit owner/workspace routes. Each read checks the current role before loading private data and rechecks the membership revision before returning it. Viewers and removed members receive no history or report data. Report deletion/export and history clearing remain owner-only until their write and export policies are audited.
 
+Editors and admins can preview an existing saved Mock example through an explicit owner/workspace/request/example route and read that workspace's Mock call records. Preview checks the canonical saved IDs, records the real actor, polls membership during generation and rechecks it before releasing the response. The hosted client previews only saved examples and discards a delayed response after selection, edit, revision or membership changes. Viewers cannot preview examples or read calls. Public Mock share creation and catch-all Mock serving remain owner-only until their policies are audited.
+
+A successful shared preview carries `x-moleapi-mock-preview: saved-example`, regardless of its simulated HTTP status. The client treats an unmarked status as an API/auth error, so an intentional saved 401 does not expire the member's session and a denied 403/404 cannot appear as example content.
+
 ## Client behavior
 
 - Workspace picker lists owned and shared workspaces with role and owner label, without duplicating IDs across owners. Account switch/logout closes member-scoped drafts, query caches, pending saves and protocol sessions.

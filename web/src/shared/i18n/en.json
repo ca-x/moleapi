@@ -2223,5 +2223,16 @@
   "工作区尚未加载，请稍后重试。": "Workspaces have not loaded yet. Try again shortly.",
   "发送已保存请求": "Send saved request",
   "响应正文预览": "Response body preview",
-  "仅显示响应正文前 16 KiB。": "Showing only the first 16 KiB of the response body."
+  "仅显示响应正文前 16 KiB。": "Showing only the first 16 KiB of the response body.",
+  "Mock 预览": "Mock preview",
+  "Mock 示例预览": "Mock example preview",
+  "响应示例": "Response example",
+  "所选请求没有响应示例": "The selected request has no response examples",
+  "预览已保存 Mock 示例": "Preview saved Mock example",
+  "先保存修改，再预览 Mock 示例。": "Save changes before previewing the Mock example.",
+  "Mock 响应状态": "Mock response status",
+  "Mock 响应正文": "Mock response body",
+  "Mock 调用记录": "Mock call history",
+  "正在加载 Mock 调用记录…": "Loading Mock call history…",
+  "暂无 Mock 调用记录": "No Mock calls yet"
 }

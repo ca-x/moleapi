@@ -463,6 +463,14 @@ async fn build(
             post(collaboration::shared_execute),
         )
         .route(
+            "/owners/{owner}/workspaces/{workspace}/mock/{request}/{example}",
+            get(collaboration::shared_mock),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/mock-calls",
+            get(collaboration::shared_mock_calls),
+        )
+        .route(
             "/owners/{owner}/workspaces/{workspace}/history",
             get(collaboration::shared_history),
         )

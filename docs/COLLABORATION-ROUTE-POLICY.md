@@ -42,6 +42,8 @@ This inventory covers every `.route` registered in `crates/server/src/lib.rs` at
 | `/owners/{owner}/workspaces/{workspace}` | GET viewer; PUT editor | workspace; viewer projection |
 | `/owners/{owner}/workspaces/{workspace}/run` | POST editor | outbound requests, private results and saved report |
 | `/owners/{owner}/workspaces/{workspace}/requests/{request}/execute` | POST editor | canonical saved request execution and private response |
+| `/owners/{owner}/workspaces/{workspace}/mock/{request}/{example}` | GET editor | saved Mock example preview and call record |
+| `/owners/{owner}/workspaces/{workspace}/mock-calls` | GET editor | Mock call metadata |
 | `/owners/{owner}/workspaces/{workspace}/history` | GET editor | saved redacted response history |
 | `/owners/{owner}/workspaces/{workspace}/reports` | GET editor | saved report summaries |
 | `/owners/{owner}/workspaces/{workspace}/reports/{report}` | GET editor | saved report detail |
@@ -146,6 +148,6 @@ This inventory covers every `.route` registered in `crates/server/src/lib.rs` at
 | `/hooks/{token}` | Public / unauthenticated | Existing public contract |
 | `/docs/{id}` | Public / unauthenticated | Existing public contract |
 
-Inventory: 141 route patterns; 14 explicit member-facing patterns; 8 public patterns. A route without an explicit shared policy is unavailable through owner-scoped member URLs.
+Inventory: 143 route patterns; 16 explicit member-facing patterns; 8 public patterns. A route without an explicit shared policy is unavailable through owner-scoped member URLs.
 
-The workspace-scoped routes currently supported for members are the explicit owner/workspace pair above. Shared collection and canonical saved-request execution poll membership every 200 ms and withhold results after a role change or removal; the actor is recorded before execution. Shared history/report reads recheck membership before returning private data. Ad hoc direct execution, Mock management, exports, credentials and other resource routes remain closed to members until their actor attribution, cancellation and response fencing are implemented and tested.
+The workspace-scoped routes currently supported for members are the explicit owner/workspace pair above. Shared collection, canonical saved-request and saved Mock example execution poll membership every 200 ms and withhold results after a role change or removal; the actor is recorded before execution. Shared history/report/Mock-call reads recheck membership before returning private data. Ad hoc direct execution, public Mock share management, exports, credentials and other resource routes remain closed to members until their actor attribution, cancellation and response fencing are implemented and tested.

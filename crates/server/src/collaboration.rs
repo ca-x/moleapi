@@ -8,7 +8,8 @@ use crate::{
 };
 use axum::{
     Extension, Json,
-    extract::{Path, Query, State},
+    extract::{OriginalUri, Path, Query, State},
+    http::HeaderMap,
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use moleapi_core::{Workspace, WorkspaceData};
@@ -208,6 +209,27 @@ async fn access<C: ConnectionTrait>(
     ))
 }
 
+async fn watch_access(
+    state: &AppState,
+    actor: &str,
+    owner: &str,
+    workspace: &str,
+    admission: Access,
+) {
+    let period = std::time::Duration::from_millis(200);
+    // Fast operations use the final check; a first-tick DB read would contend
+    // with their writes on SQLite's single pooled connection.
+    let mut check = tokio::time::interval_at(tokio::time::Instant::now() + period, period);
+    check.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    loop {
+        check.tick().await;
+        let current = access(&state.db, actor, owner, workspace).await;
+        if !matches!(current, Ok((_, current)) if current == admission) {
+            break;
+        }
+    }
+}
+
 pub async fn shared_get(
     State(state): State<AppState>,
     Extension(actor): Extension<Identity>,
@@ -311,17 +333,7 @@ pub async fn shared_run(
         Path(workspace.clone()),
         Json(input),
     );
-    let watch = async {
-        let mut check = tokio::time::interval(std::time::Duration::from_millis(200));
-        check.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        loop {
-            check.tick().await;
-            let current = access(&state.db, &actor.0, &owner, &workspace).await;
-            if !matches!(current, Ok((_, current)) if current == admission) {
-                break;
-            }
-        }
-    };
+    let watch = watch_access(&state, &actor.0, &owner, &workspace, admission);
     tokio::pin!(run);
     tokio::pin!(watch);
     let result = tokio::select! {
@@ -378,17 +390,7 @@ pub async fn shared_execute(
         Extension(Identity(owner.clone())),
         Json(input.into_execute(workspace.clone(), request, canonical.revision)),
     );
-    let watch = async {
-        let mut check = tokio::time::interval(std::time::Duration::from_millis(200));
-        check.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        loop {
-            check.tick().await;
-            let current = access(&state.db, &actor.0, &owner, &workspace).await;
-            if !matches!(current, Ok((_, current)) if current == admission) {
-                break;
-            }
-        }
-    };
+    let watch = watch_access(&state, &actor.0, &owner, &workspace, admission);
     tokio::pin!(run);
     tokio::pin!(watch);
     let result = tokio::select! {
@@ -401,6 +403,88 @@ pub async fn shared_execute(
         return Err(ApiError::not_found());
     }
     result
+}
+
+pub async fn shared_mock(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Identity>,
+    Path((owner, workspace, request_id, example_id)): Path<(String, String, String, String)>,
+    OriginalUri(uri): OriginalUri,
+    headers: HeaderMap,
+) -> Result<axum::response::Response, ApiError> {
+    if state.local {
+        return Err(ApiError::not_found());
+    }
+    let tx = state.db.begin().await?;
+    let canonical = lock_workspace(&tx, &owner, &workspace).await?;
+    let (_, admission) = access(&tx, &actor.0, &owner, &workspace).await?;
+    if admission.role == Role::Viewer {
+        return Err(ApiError::forbidden("Viewer cannot preview Mock responses"));
+    }
+    let exists = canonical
+        .data
+        .collections
+        .iter()
+        .flat_map(|collection| &collection.requests)
+        .any(|request| {
+            request.id == request_id
+                && request
+                    .examples
+                    .iter()
+                    .any(|example| example.id == example_id)
+        });
+    if !exists {
+        return Err(ApiError::not_found());
+    }
+    record_event_result(
+        &tx,
+        &owner,
+        &workspace,
+        &actor.0,
+        "mock.preview",
+        Some(&request_id),
+        "started",
+    )
+    .await?;
+    tx.commit().await?;
+    let preview = crate::mock::mock(
+        State(state.clone()),
+        Extension(Identity(owner.clone())),
+        Path((workspace.clone(), request_id, example_id)),
+        OriginalUri(uri),
+        headers,
+    );
+    let watch = watch_access(&state, &actor.0, &owner, &workspace, admission);
+    tokio::pin!(preview);
+    tokio::pin!(watch);
+    let result = tokio::select! {
+        biased;
+        _ = &mut watch => return Err(ApiError::not_found()),
+        result = &mut preview => result,
+    };
+    let (_, current) = access(&state.db, &actor.0, &owner, &workspace).await?;
+    if current != admission {
+        return Err(ApiError::not_found());
+    }
+    let mut response = result?;
+    response.headers_mut().insert(
+        "x-moleapi-mock-preview",
+        axum::http::HeaderValue::from_static("saved-example"),
+    );
+    Ok(response)
+}
+
+pub async fn shared_mock_calls(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Identity>,
+    Path((owner, workspace)): Path<(String, String)>,
+) -> Result<Json<Vec<crate::mock_logs::MockCall>>, ApiError> {
+    let read = crate::mock_logs::list(
+        State(state.clone()),
+        Extension(Identity(owner.clone())),
+        Path(workspace.clone()),
+    );
+    editor_read(&state, &actor.0, &owner, &workspace, read).await
 }
 
 async fn editor_read<T>(

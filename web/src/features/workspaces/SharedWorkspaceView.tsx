@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Callout, Flex, Heading, Text, TextArea, TextField } from "@radix-ui/themes";
-import { api, token } from "../../shared/api";
+import { api, previewSharedMock, token } from "../../shared/api";
 import { t, useLanguage } from "../../shared/i18n";
 import { liveError } from "../../shared/i18n/errors";
 import { id } from "../../shared/model";
@@ -9,11 +9,12 @@ import type { ApiResponse, HistoryEntry, RequestSpec, RunReportPage, SharedWorks
 import { Choice, Field } from "../../shared/ui";
 import { hasChanges } from "./draft";
 
-type Tab = "resources" | "history" | "reports";
+type Tab = "resources" | "history" | "reports" | "mock";
 type RunResult = { passed: number; failed: number; cancelled: boolean; report_id?: string };
+type MockCall = { id: string; request_id: string | null; example_id: string | null; response_status: number; outcome: string; at: string };
 
 export default function SharedWorkspaceView({ accountId, selected, onClose, onDirtyChange }: { accountId: string; selected: SharedWorkspaceSummary; onClose: () => void; onDirtyChange: (dirty: boolean) => void }) {
-  useLanguage();
+  const { language } = useLanguage();
   const client = useQueryClient();
   const credential = token();
   const boundary = useRef({ accountId, credential, epoch: 0 });
@@ -29,12 +30,16 @@ export default function SharedWorkspaceView({ accountId, selected, onClose, onDi
   const [tab, setTab] = useState<Tab>("resources");
   const [collectionId, setCollectionId] = useState("");
   const [requestId, setRequestId] = useState("");
+  const [exampleId, setExampleId] = useState("");
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
   const runGeneration = useRef(0);
   const [sending, setSending] = useState(false);
   const sendGeneration = useRef(0);
   const [requestResponse, setRequestResponse] = useState<ApiResponse | null>(null);
+  const [mocking, setMocking] = useState(false);
+  const [mockPreview, setMockPreview] = useState<{ status: number; body: string } | null>(null);
+  const mockGeneration = useRef(0);
   const [error, setError] = useState<ReturnType<typeof liveError>>("");
   const [runResult, setRunResult] = useState<RunResult | null>(null);
   const mounted = useRef(true);
@@ -42,7 +47,7 @@ export default function SharedWorkspaceView({ accountId, selected, onClose, onDi
   const latest = useRef(scope);
   latest.current = scope;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  useEffect(() => { setDraft(null); setSaved(null); setLoadedScope(""); setConflict(null); setCollectionId(""); setRequestId(""); setTab("resources"); setError(""); setRunResult(null); setRequestResponse(null); setSaving(false); setRunning(false); setSending(false); }, [scope]);
+  useEffect(() => { setDraft(null); setSaved(null); setLoadedScope(""); setConflict(null); setCollectionId(""); setRequestId(""); setExampleId(""); setTab("resources"); setError(""); setRunResult(null); setRequestResponse(null); setMockPreview(null); setSaving(false); setRunning(false); setSending(false); setMocking(false); }, [scope]);
   const current = (origin: string) => mounted.current && latest.current === origin && token() === credential;
   const workspace = useQuery({
     queryKey: ["shared-workspace", accountId, owner, workspaceId, selected.role, epoch],
@@ -50,12 +55,13 @@ export default function SharedWorkspaceView({ accountId, selected, onClose, onDi
   });
   const history = useQuery({ queryKey: ["shared-history", accountId, owner, workspaceId, epoch], queryFn: () => api<HistoryEntry[]>(`${base}/history`), enabled: !!credential && selected.role !== "viewer" && tab === "history" && !workspace.error, retry: false });
   const reports = useQuery({ queryKey: ["shared-reports", accountId, owner, workspaceId, epoch], queryFn: () => api<RunReportPage>(`${base}/reports`), enabled: !!credential && selected.role !== "viewer" && tab === "reports" && !workspace.error, retry: false });
+  const mockCalls = useQuery({ queryKey: ["shared-mock-calls", accountId, owner, workspaceId, epoch], queryFn: () => api<MockCall[]>(`${base}/mock-calls`), enabled: !!credential && selected.role !== "viewer" && tab === "mock" && !workspace.error, retry: false });
   useEffect(() => {
-    if (workspace.error || !workspace.data) { if (workspace.error) { sendGeneration.current += 1; runGeneration.current += 1; setSending(false); setRunning(false); setDraft(null); setSaved(null); setLoadedScope(""); setRunResult(null); setRequestResponse(null); } return; }
+    if (workspace.error || !workspace.data) { if (workspace.error) { sendGeneration.current += 1; runGeneration.current += 1; mockGeneration.current += 1; setSending(false); setRunning(false); setMocking(false); setDraft(null); setSaved(null); setLoadedScope(""); setRunResult(null); setRequestResponse(null); setMockPreview(null); } return; }
     if (!saved) { setDraft(workspace.data); setSaved(workspace.data); setLoadedScope(scope); return; }
     if (workspace.data.revision !== saved.revision) {
-      if (hasChanges({ draft, saved })) setConflict(workspace.data);
-      else { sendGeneration.current += 1; runGeneration.current += 1; setSending(false); setRunning(false); setRequestResponse(null); setRunResult(null); setDraft(workspace.data); setSaved(workspace.data); setConflict(null); }
+      if (hasChanges({ draft, saved })) { mockGeneration.current += 1; setMocking(false); setMockPreview(null); setConflict(workspace.data); }
+      else { sendGeneration.current += 1; runGeneration.current += 1; mockGeneration.current += 1; setSending(false); setRunning(false); setMocking(false); setRequestResponse(null); setRunResult(null); setMockPreview(null); setDraft(workspace.data); setSaved(workspace.data); setConflict(null); }
     }
   }, [workspace.data, workspace.error, draft, saved, scope]);
   const canEdit = selected.role !== "viewer";
@@ -64,8 +70,10 @@ export default function SharedWorkspaceView({ accountId, selected, onClose, onDi
   useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
   const collection = draft?.data.collections.find((item) => item.id === collectionId) ?? draft?.data.collections[0];
   const request = collection?.requests.find((item) => item.id === requestId) ?? collection?.requests[0];
+  const example = request?.examples.find((item) => item.id === exampleId) ?? request?.examples[0];
   useEffect(() => { runGeneration.current += 1; setRunning(false); setRunResult(null); }, [collection?.id]);
   useEffect(() => { sendGeneration.current += 1; setSending(false); setRequestResponse(null); }, [collection?.id, request?.id]);
+  useEffect(() => { mockGeneration.current += 1; setMocking(false); setMockPreview(null); }, [collection?.id, request?.id, example?.id]);
   function updateRequest(change: (request: RequestSpec) => RequestSpec) {
     if (!canEdit || !collection || !request) return;
     sendGeneration.current += 1;
@@ -74,6 +82,9 @@ export default function SharedWorkspaceView({ accountId, selected, onClose, onDi
     runGeneration.current += 1;
     setRunning(false);
     setRunResult(null);
+    mockGeneration.current += 1;
+    setMocking(false);
+    setMockPreview(null);
     setDraft((currentDraft) => currentDraft ? ({ ...currentDraft, data: { ...currentDraft.data, collections: currentDraft.data.collections.map((item) => item.id === collection.id ? { ...item, requests: item.requests.map((entry) => entry.id === request.id ? change(entry) : entry) } : item) } }) : null);
   }
   async function save() {
@@ -111,6 +122,17 @@ export default function SharedWorkspaceView({ accountId, selected, onClose, onDi
     } catch (cause) { if (current(origin) && sendGeneration.current === generation) setError(liveError(cause)); }
     finally { if (current(origin) && sendGeneration.current === generation) setSending(false); }
   }
+  async function previewExample() {
+    if (!canEdit || !request || !example || mocking || dirty || !current(scope)) return;
+    const origin = scope;
+    const generation = ++mockGeneration.current;
+    setMocking(true); setError(""); setMockPreview(null);
+    try {
+      const result = await previewSharedMock(`${base}/mock/${encodeURIComponent(request.id)}/${encodeURIComponent(example.id)}`);
+      if (current(origin) && mockGeneration.current === generation) { setMockPreview(result); void client.invalidateQueries({ queryKey: ["shared-mock-calls", accountId, owner, workspaceId] }); }
+    } catch (cause) { if (current(origin) && mockGeneration.current === generation) setError(liveError(cause)); }
+    finally { if (current(origin) && mockGeneration.current === generation) setMocking(false); }
+  }
   return <main className="main-workspace shared-workspace" aria-label={t("共享工作区")}>
     <Flex align="center" justify="between" gap="3" wrap="wrap"><Flex direction="column" gap="1"><Heading size="5">{selected.workspace_name}</Heading><Text size="2" color="gray">{t("所有者")}: {selected.owner_username} · {selected.role === "viewer" ? t("查看者") : selected.role === "admin" ? t("管理员") : t("编辑者")}</Text></Flex><Button variant="soft" color="gray" onClick={onClose}>{t("返回我的工作区")}</Button></Flex>
     {selected.role === "viewer" && <Callout.Root color="gray"><Callout.Text>{t("此工作区为只读。不能保存、运行请求或查看私有执行记录。")}</Callout.Text></Callout.Root>}
@@ -118,7 +140,7 @@ export default function SharedWorkspaceView({ accountId, selected, onClose, onDi
     {workspace.error && <Callout.Root color="red" role="alert"><Callout.Text>{t("共享工作区访问已失效或暂时不可用。")}</Callout.Text></Callout.Root>}
     {error && <Callout.Root color="red" role="alert"><Callout.Text>{error}</Callout.Text></Callout.Root>}
     {!workspace.error && draft && loadedScope === scope && <Flex direction="column" gap="4">
-      <Flex gap="2" wrap="wrap"><Button variant={tab === "resources" ? "solid" : "soft"} onClick={() => setTab("resources")}>{t("资源")}</Button>{canEdit && <><Button variant={tab === "history" ? "solid" : "soft"} onClick={() => setTab("history")}>{t("执行历史")}</Button><Button variant={tab === "reports" ? "solid" : "soft"} onClick={() => setTab("reports")}>{t("测试报告")}</Button></>}</Flex>
+      <Flex gap="2" wrap="wrap"><Button variant={tab === "resources" ? "solid" : "outline"} onClick={() => setTab("resources")}>{t("资源")}</Button>{canEdit && <><Button variant={tab === "history" ? "solid" : "outline"} onClick={() => setTab("history")}>{t("执行历史")}</Button><Button variant={tab === "reports" ? "solid" : "outline"} onClick={() => setTab("reports")}>{t("测试报告")}</Button><Button variant={tab === "mock" ? "solid" : "outline"} onClick={() => setTab("mock")}>{t("Mock 预览")}</Button></>}</Flex>
       {tab === "resources" && <>
         {canEdit ? <Field label={t("工作区名称")}><TextField.Root value={draft.name} onChange={(event) => setDraft((currentDraft) => currentDraft ? { ...currentDraft, name: event.target.value } : null)} /></Field> : <Text size="2">{draft.name}</Text>}
         {draft.data.collections.length === 0 ? <Text size="2" color="gray">{t("此工作区还没有集合")}</Text> : <>
@@ -137,6 +159,21 @@ export default function SharedWorkspaceView({ accountId, selected, onClose, onDi
       </>}
       {tab === "history" && canEdit && <Flex direction="column" gap="2">{history.isPending && <Text role="status">{t("正在加载执行历史…")}</Text>}{history.error && <Callout.Root color="red" role="alert"><Callout.Text>{liveError(history.error)}</Callout.Text></Callout.Root>}{!history.error && history.data?.length === 0 && <Text size="2" color="gray">{t("暂无执行历史")}</Text>}{!history.error && history.data?.map((item) => <Flex key={item.id} justify="between" gap="2" wrap="wrap"><Text size="2">{item.method} {item.request_name}</Text><Text size="2">{item.status} · {item.created_at}</Text></Flex>)}</Flex>}
       {tab === "reports" && canEdit && <Flex direction="column" gap="2">{reports.isPending && <Text role="status">{t("正在加载测试报告…")}</Text>}{reports.error && <Callout.Root color="red" role="alert"><Callout.Text>{liveError(reports.error)}</Callout.Text></Callout.Root>}{!reports.error && reports.data?.items.length === 0 && <Text size="2" color="gray">{t("暂无测试报告")}</Text>}{!reports.error && reports.data?.items.map((item) => <Flex key={item.id} justify="between" gap="2" wrap="wrap"><Text size="2">{item.collection_name}</Text><Text size="2">{t("通过")}: {item.summary.passed} · {t("失败")}: {item.summary.failed}</Text></Flex>)}</Flex>}
+      {tab === "mock" && canEdit && <Flex direction="column" gap="3">
+        <Heading size="3">{t("Mock 示例预览")}</Heading>
+        {draft.data.collections.length > 0 && <Choice label={t("集合")} value={collection?.id ?? ""} onChange={(value) => { setCollectionId(value); setRequestId(""); setExampleId(""); }} options={draft.data.collections.map((item) => ({ value: item.id, label: item.name }))} />}
+        {collection && collection.requests.length > 0 && <Choice label={t("请求")} value={request?.id ?? ""} onChange={(value) => { setRequestId(value); setExampleId(""); }} options={collection.requests.map((item) => ({ value: item.id, label: `${item.method} ${item.name}` }))} />}
+        {request && request.examples.length > 0 && <Choice label={t("响应示例")} value={example?.id ?? ""} onChange={setExampleId} options={request.examples.map((item) => ({ value: item.id, label: `${item.status} ${item.name}` }))} />}
+        {!example && <Text size="2" color="gray">{t("所选请求没有响应示例")}</Text>}
+        {example && <Button loading={mocking} disabled={mocking || dirty} onClick={() => void previewExample()}>{t("预览已保存 Mock 示例")}</Button>}
+        {dirty && <Text size="1" color="gray">{t("先保存修改，再预览 Mock 示例。")}</Text>}
+        {mockPreview && <><Text role="status" size="2">{t("Mock 响应状态")}: {mockPreview.status}</Text><TextArea aria-label={t("Mock 响应正文")} readOnly value={mockPreview.body.slice(0, 16 * 1024)} />{mockPreview.body.length > 16 * 1024 && <Text size="1" color="gray">{t("仅显示响应正文前 16 KiB。")}</Text>}</>}
+        <Heading size="3">{t("Mock 调用记录")}</Heading>
+        {mockCalls.isPending && <Text role="status">{t("正在加载 Mock 调用记录…")}</Text>}
+        {mockCalls.error && <Callout.Root color="red" role="alert"><Callout.Text>{liveError(mockCalls.error)}</Callout.Text></Callout.Root>}
+        {!mockCalls.error && mockCalls.data?.length === 0 && <Text size="2" color="gray">{t("暂无 Mock 调用记录")}</Text>}
+        {!mockCalls.error && mockCalls.data?.map((item) => <Flex key={item.id} direction="column" gap="1"><Text size="2">{t("请求")}: {item.request_id ?? "—"} · {t("响应示例")}: {item.example_id ?? "—"}</Text><Flex justify="between" gap="2" wrap="wrap"><Text size="2">{item.response_status} · {item.outcome === "served" ? t("已响应") : item.outcome === "unmatched" ? t("未匹配") : item.outcome === "simulated_failure" ? t("模拟故障") : item.outcome === "rate_limited" ? t("已限流") : t("失败")}</Text><Text size="2">{new Date(item.at).toLocaleString(language)}</Text></Flex></Flex>)}
+      </Flex>}
     </Flex>}
   </main>;
 }

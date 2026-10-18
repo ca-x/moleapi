@@ -822,6 +822,15 @@ async fn editor_run_is_audited_and_cross_instance_removal_withholds_its_result()
     let mut fast = workspace_data["collections"][0]["requests"][0].clone();
     fast["id"] = json!("fast");
     fast["url"] = json!(format!("{url}/fast"));
+    fast["examples"][0]["delay_ms"] = json!(450);
+    let mut unauthorized_example = fast["examples"][0].clone();
+    unauthorized_example["id"] = json!("auth-example");
+    unauthorized_example["status"] = json!(401);
+    unauthorized_example["body"] = json!("intentional Mock 401");
+    fast["examples"]
+        .as_array_mut()
+        .unwrap()
+        .push(unauthorized_example);
     let mut slow = fast.clone();
     slow["id"] = json!("slow");
     slow["url"] = json!(format!("{url}/slow"));
@@ -857,6 +866,8 @@ async fn editor_run_is_audited_and_cross_instance_removal_withholds_its_result()
     let shared_path = format!("/api/owners/{owner_id}/workspaces/w");
     let run_path = format!("{shared_path}/run");
     let execute_path = format!("{shared_path}/requests/fast/execute");
+    let mock_path = format!("{shared_path}/mock/fast/e");
+    let mock_calls_path = format!("{shared_path}/mock-calls");
     let history_path = format!("{shared_path}/history");
     let reports_path = format!("{shared_path}/reports");
     assert_eq!(
@@ -882,6 +893,16 @@ async fn editor_run_is_audited_and_cross_instance_removal_withholds_its_result()
         .await
         .0,
         StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        call(&first, "GET", &mock_path, Some(&member), None).await.0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        call(&first, "GET", &mock_calls_path, Some(&member), None)
+            .await
+            .0,
+        StatusCode::NOT_FOUND
     );
     for path in [&history_path, &reports_path] {
         assert_eq!(
@@ -938,6 +959,97 @@ async fn editor_run_is_audited_and_cross_instance_removal_withholds_its_result()
     .await;
     assert_eq!(status, StatusCode::OK, "{direct}");
     assert_eq!(direct["status"], 200);
+    let (status, mock_response) = call(&first, "GET", &mock_path, Some(&member), None).await;
+    assert_eq!(status, StatusCode::CREATED, "{mock_response}");
+    assert_eq!(mock_response["raw"], "example body");
+    let auth_example_response = first
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("{shared_path}/mock/fast/auth-example"))
+                .header("authorization", format!("Bearer {member}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(auth_example_response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        auth_example_response.headers()["x-moleapi-mock-preview"],
+        "saved-example"
+    );
+    let (status, mock_calls) = call(&first, "GET", &mock_calls_path, Some(&member), None).await;
+    assert_eq!(status, StatusCode::OK, "{mock_calls}");
+    assert!(
+        mock_calls
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|call| { call["request_id"] == "fast" && call["example_id"] == "e" })
+    );
+    let first_for_mock = first.clone();
+    let member_for_mock = member.clone();
+    let mock_path_for_task = mock_path.clone();
+    let delayed_mock = tokio::spawn(async move {
+        call(
+            &first_for_mock,
+            "GET",
+            &mock_path_for_task,
+            Some(&member_for_mock),
+            None,
+        )
+        .await
+    });
+    let audit_path = format!("{shared_path}/audit");
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        loop {
+            let (_, events) = call(&second, "GET", &audit_path, Some(&owner), None).await;
+            if events
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|event| event["action"] == "mock.preview")
+                .count()
+                >= 2
+            {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        call(
+            &second,
+            "PATCH",
+            &role_path,
+            Some(&owner),
+            Some(json!({"role":"viewer","expected_revision":2}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let (status, withheld_mock) =
+        tokio::time::timeout(std::time::Duration::from_secs(3), delayed_mock)
+            .await
+            .unwrap()
+            .unwrap();
+    assert_eq!(status, StatusCode::NOT_FOUND, "{withheld_mock}");
+    assert!(!withheld_mock.to_string().contains("example body"));
+    assert_eq!(
+        call(
+            &second,
+            "PATCH",
+            &role_path,
+            Some(&owner),
+            Some(json!({"role":"editor","expected_revision":3}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
     assert_eq!(
         call(
             &first,
@@ -1002,6 +1114,12 @@ async fn editor_run_is_audited_and_cross_instance_removal_withholds_its_result()
         .0,
         StatusCode::NOT_FOUND
     );
+    for path in [&mock_path, &mock_calls_path] {
+        assert_eq!(
+            call(&first, "GET", path, Some(&member), None).await.0,
+            StatusCode::NOT_FOUND
+        );
+    }
     for path in [&history_path, &reports_path, &detail_path, &response_path] {
         assert_eq!(
             call(&first, "GET", path, Some(&member), None).await.0,
@@ -1025,6 +1143,11 @@ async fn editor_run_is_audited_and_cross_instance_removal_withholds_its_result()
     assert!(audit.as_array().unwrap().iter().any(|event| {
         event["actor_id"] == member_id
             && event["action"] == "request.execute"
+            && event["subject_id"] == "fast"
+    }));
+    assert!(audit.as_array().unwrap().iter().any(|event| {
+        event["actor_id"] == member_id
+            && event["action"] == "mock.preview"
             && event["subject_id"] == "fast"
     }));
     release.notify_one();
