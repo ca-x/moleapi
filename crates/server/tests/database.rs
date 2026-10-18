@@ -228,6 +228,85 @@ async fn identical_storage_auth_cas_tests_on_every_configured_database() {
             .0,
             StatusCode::BAD_REQUEST
         );
+        let password_workspace = format!("protected-{prefix}");
+        let (status, protected_workspace) = call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            Some(&a),
+            Some(json!({"id":password_workspace,"name":"Protected","data":{"schema_version":1,"collections":[],"environments":[],"active_environment_id":null,"documents":[{"id":"guide","name":"Guide","source":"# Protected","secret":false}]}})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{protected_workspace}");
+        let protected_path = format!("/api/workspaces/{password_workspace}/doc-publications");
+        let (status, protected) = call(
+            &router,
+            "POST",
+            &protected_path,
+            Some(&a),
+            Some(json!({"title":"Protected guide","expected_revision":protected_workspace["revision"],"document_ids":["guide"],"idempotency_key":"password-rate","visibility":"password","password":"correct-password-123"})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{protected}");
+        let protected_id = protected["id"].as_str().unwrap();
+        let unlock_path = format!("/api/public/docs/{protected_id}/unlock");
+        for index in 0..10 {
+            let instance = if index % 2 == 0 {
+                &router
+            } else {
+                &router_again
+            };
+            let (status, body) = call(
+                instance,
+                "POST",
+                &unlock_path,
+                None,
+                Some(json!({"password":"wrong-password"})),
+            )
+            .await;
+            assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
+            assert!(!body.to_string().contains("Protected guide"));
+        }
+        let limited = router_again
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(&unlock_path)
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({"password":"correct-password-123"}).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(limited.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert!(limited.headers().get("retry-after").is_some());
+        assert_eq!(
+            call(
+                &router,
+                "DELETE",
+                &format!("{protected_path}/{protected_id}"),
+                Some(&a),
+                None,
+            )
+            .await
+            .0,
+            StatusCode::OK
+        );
+        assert_eq!(
+            call(
+                &router_again,
+                "POST",
+                &unlock_path,
+                None,
+                Some(json!({"password":"correct-password-123"}))
+            )
+            .await
+            .0,
+            StatusCode::NOT_FOUND
+        );
         verify_workspace_restore(&router, &router_again, &a, &b, &prefix).await;
         let rate_id = format!("rate-{prefix}");
         let mut rate_data = example_data();

@@ -19,6 +19,243 @@ fn publish(revision: i64, ids: &[&str], key: &str) -> Value {
 }
 
 #[tokio::test]
+async fn password_publication_unlocks_without_exposing_owner_or_password_metadata() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = hosted(config(
+        moleapi_server::sqlite_database_url(&dir.path().join("password.db")).unwrap(),
+        true,
+    ))
+    .await
+    .unwrap();
+    let owner = register(&router, "passwordpublishowner").await;
+    let (_, workspace) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        Some(&owner),
+        Some(json!({"id":"w","name":"Secret workspace name","data":docs_data()})),
+    )
+    .await;
+    let revision = workspace["revision"].as_i64().unwrap();
+    let mut invalid = publish(revision, &["guide"], "invalid-public-password");
+    invalid["password"] = json!("should-not-be-ignored");
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces/w/doc-publications",
+            Some(&owner),
+            Some(invalid),
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    let mut invalid = publish(revision, &["guide"], "missing-password");
+    invalid["visibility"] = json!("password");
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces/w/doc-publications",
+            Some(&owner),
+            Some(invalid),
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    let mut input = publish(revision, &["guide"], "password-once");
+    input["visibility"] = json!("password");
+    input["password"] = json!("correct-password-123");
+    let (status, created) = call(
+        &router,
+        "POST",
+        "/api/workspaces/w/doc-publications",
+        Some(&owner),
+        Some(input.clone()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{created}");
+    assert_eq!(created["visibility"], "password");
+    assert!(!created.to_string().contains("correct-password-123"));
+    assert!(!created.to_string().contains("argon2"));
+    let id = created["id"].as_str().unwrap();
+    let path = format!("/api/public/docs/{id}");
+    let html = format!("/docs/{id}");
+    let unlock = format!("{path}/unlock");
+    assert_eq!(
+        call(&router, "GET", &html, None, None).await.0,
+        StatusCode::OK
+    );
+    let (status, locked) = call(&router, "GET", &path, None, None).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert!(!locked.to_string().contains("Public guide"));
+    assert!(!locked.to_string().contains("Secret workspace name"));
+    let locked_headers = router
+        .clone()
+        .oneshot(Request::builder().uri(&path).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(locked_headers.status(), StatusCode::FORBIDDEN);
+    assert_eq!(locked_headers.headers()["cache-control"], "no-store");
+    assert_eq!(locked_headers.headers()["referrer-policy"], "no-referrer");
+    assert!(
+        locked_headers
+            .headers()
+            .contains_key("content-security-policy")
+    );
+    let (status, denied) = call(
+        &router,
+        "POST",
+        &unlock,
+        None,
+        Some(json!({"password":"wrong-password"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert!(!denied.to_string().contains("Public guide"));
+    let malformed = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(&unlock)
+                .header("content-type", "application/json")
+                .body(Body::from("{}"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(malformed.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(malformed.headers()["cache-control"], "no-store");
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            &unlock,
+            None,
+            Some(json!({"password":"x".repeat(129)})),
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    let too_large = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(&unlock)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"password":"x".repeat(2048)}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(too_large.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(too_large.headers()["cache-control"], "no-store");
+    assert!(too_large.headers().contains_key("content-security-policy"));
+    let (status, content) = call(
+        &router,
+        "POST",
+        &unlock,
+        None,
+        Some(json!({"password":"correct-password-123"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{content}");
+    assert_eq!(content["documents"][0]["source"], "# Hello\nSafe content");
+    assert!(!content.to_string().contains("correct-password-123"));
+    let (_, repeated) = call(
+        &router,
+        "POST",
+        "/api/workspaces/w/doc-publications",
+        Some(&owner),
+        Some(input.clone()),
+    )
+    .await;
+    assert_eq!(repeated["id"], created["id"]);
+    input["password"] = json!("different-password-123");
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces/w/doc-publications",
+            Some(&owner),
+            Some(input),
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    let (_, history) = call(
+        &router,
+        "GET",
+        "/api/workspaces/w/doc-publications",
+        Some(&owner),
+        None,
+    )
+    .await;
+    assert_eq!(history[0]["visibility"], "password");
+    assert!(!history.to_string().contains("correct-password-123"));
+    assert!(!history.to_string().contains("argon2"));
+    assert_eq!(
+        call(
+            &router,
+            "DELETE",
+            &format!("/api/workspaces/w/doc-publications/{id}"),
+            Some(&owner),
+            None,
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        call(&router, "GET", &html, None, None).await.0,
+        StatusCode::NOT_FOUND
+    );
+    let revoked_html = router
+        .clone()
+        .oneshot(Request::builder().uri(&html).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(revoked_html.status(), StatusCode::NOT_FOUND);
+    assert_eq!(revoked_html.headers()["cache-control"], "no-store");
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            &unlock,
+            None,
+            Some(json!({"password":"x".repeat(129)})),
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        call(&router, "POST", &unlock, None, Some(json!({})))
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            &unlock,
+            None,
+            Some(json!({"password":"correct-password-123"}))
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[tokio::test]
 async fn publication_is_explicit_immutable_owned_and_revocable() {
     let dir = tempfile::tempdir().unwrap();
     let router = hosted(config(

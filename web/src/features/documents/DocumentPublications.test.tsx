@@ -18,9 +18,9 @@ function setup(dirty=false) {
   ]}};
   const context={draft,saved:draft,accountId:"owner",dirty,setGuard:vi.fn(),stateRef:{current:{draft,saved:draft}},accountRef:{current:"owner"}};
   vi.mocked(useWorkbench).mockReturnValue(context as never);
-  vi.mocked(api).mockImplementation(async(path,method="GET")=>{
+  vi.mocked(api).mockImplementation(async(path,method="GET",body)=>{
     if(method==="GET")return [] as never;
-    if(method==="POST")return {id:"a".repeat(32),title:"Site",created_at:1,source_revision:2,document_titles:["Guide"],public_url:`/docs/${"a".repeat(32)}`,revoked:false} as never;
+    if(method==="POST")return {id:"a".repeat(32),title:"Site",created_at:1,source_revision:2,document_titles:["Guide"],public_url:`/docs/${"a".repeat(32)}`,revoked:false,visibility:(body as {visibility?:string})?.visibility??"public"} as never;
     throw new Error(`Unexpected ${method} ${path}`);
   });
   return context;
@@ -47,4 +47,26 @@ it("requires a saved workspace and deliberate public document confirmation",asyn
   expect(body.document_ids).toEqual(["guide"]);
   expect(body.expected_revision).toBe(2);
   expect((await screen.findByRole("link",{name:"Open public page"})).getAttribute("href")).toBe(`/docs/${"a".repeat(32)}`);
+});
+
+it("requires an explicit password and does not show it in publication history",async()=>{
+  await setLanguage("en");
+  const state=setup(false);
+  render(<Theme><DocumentPublications/></Theme>);
+  await waitFor(()=>expect(screen.getByText("No documents have been published.")).toBeTruthy());
+  fireEvent.change(screen.getByRole("textbox",{name:"Public site title"}),{target:{value:"Site"}});
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("radio",{name:"Password required"}));
+  expect(screen.getByRole("button",{name:"Publish selected documents"}).hasAttribute("disabled")).toBe(true);
+  fireEvent.change(screen.getByLabelText("Document access password"),{target:{value:"correct-password-123"}});
+  fireEvent.click(screen.getByRole("button",{name:"Publish selected documents"}));
+  expect(state.setGuard.mock.lastCall?.[0].description.key).toContain("需要密码");
+  state.setGuard.mock.lastCall?.[0].action();
+  await waitFor(()=>expect(vi.mocked(api).mock.calls.some(([,method])=>method==="POST")).toBe(true));
+  const body=vi.mocked(api).mock.calls.find(([,method])=>method==="POST")?.[2] as {visibility:string;password:string};
+  expect(body.visibility).toBe("password");
+  expect(body.password).toBe("correct-password-123");
+  await waitFor(()=>expect(screen.getAllByText(/Password required/).length).toBeGreaterThan(1));
+  expect(screen.queryByText("correct-password-123")).toBeNull();
+  expect(screen.getByLabelText("Document access password")).toHaveProperty("value","");
 });

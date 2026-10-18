@@ -662,6 +662,10 @@ async fn build(
         .merge(mock_public::routes())
         .route("/public/docs/{id}", get(doc_publications::public_get))
         .route(
+            "/public/docs/{id}/unlock",
+            post(doc_publications::unlock).layer(DefaultBodyLimit::max(1024)),
+        )
+        .route(
             "/health",
             get(|| async {
                 Json(serde_json::json!({"status":"ok","version":env!("CARGO_PKG_VERSION")}))
@@ -672,6 +676,7 @@ async fn build(
         .route("/auth/login", post(auth::login))
         .fallback(|| async { ApiError::not_found() })
         .layer(middleware::from_fn(json_errors));
+    let api = api.layer(middleware::from_fn(doc_publications::public_docs_headers));
     let receiver = Router::new()
         .route("/hooks/{token}", axum::routing::any(webhooks::ingest))
         .with_state(webhooks::ReceiverState {
@@ -710,11 +715,12 @@ struct Assets;
 #[cfg(feature = "web")]
 async fn static_asset(uri: axum::http::Uri, method: axum::http::Method) -> Response {
     let _bundle_digest = env!("MOLEAPI_WEB_BUNDLE_DIGEST");
+    if uri.path() == "/docs" || uri.path().starts_with("/docs/") {
+        return public_doc_page_headers(ApiError::not_found().into_response());
+    }
     if method != axum::http::Method::GET && method != axum::http::Method::HEAD
         || uri.path() == "/api"
         || uri.path().starts_with("/api/")
-        || uri.path() == "/docs"
-        || uri.path().starts_with("/docs/")
     {
         return ApiError::not_found().into_response();
     }
@@ -738,17 +744,21 @@ async fn public_doc_page(
     axum::extract::State(state): axum::extract::State<AppState>,
     axum::extract::Path(id): axum::extract::Path<String>,
 ) -> Response {
-    if let Err(error) = doc_publications::read_snapshot(&state, &id).await {
-        return error.into_response();
+    if let Err(error) = doc_publications::page_exists(&state, &id).await {
+        return public_doc_page_headers(error.into_response());
     }
     let Some(file) = Assets::get("index.html") else {
-        return ApiError::not_found().into_response();
+        return public_doc_page_headers(ApiError::not_found().into_response());
     };
-    let mut response = (
+    let response = (
         [("content-type", "text/html; charset=utf-8")],
         file.data.into_owned(),
     )
         .into_response();
+    public_doc_page_headers(response)
+}
+#[cfg(feature = "web")]
+fn public_doc_page_headers(mut response: Response) -> Response {
     use axum::http::{HeaderValue, header};
     response
         .headers_mut()

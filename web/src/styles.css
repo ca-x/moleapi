@@ -66,6 +66,9 @@ a:focus-visible {
 .published-docs-article {min-width: 0;overflow-wrap: anywhere;line-height: 1.6;}
 .published-docs-article .markdown-preview {margin-top: 20px;}
 .published-docs-empty {min-height: 60dvh;display: flex;flex-direction: column;align-items: center;justify-content: center;text-align: center;gap: 10px;}
+.published-docs-lock {min-height: 80dvh;display: flex;flex-direction: column;gap: 40px;}
+.published-docs-lock-card {width: min(420px,100%);margin: auto;background: var(--gray-1);border: 1px solid var(--gray-6);border-radius: 8px;}
+.published-docs-lock-form {display: flex;flex-direction: column;gap: 18px;padding: 20px;}
 .document-publications {display: flex;flex-direction: column;gap: 16px;max-width: 850px;padding: 18px 0 36px;}
 .document-publications-choices {display: flex;flex-direction: column;gap: 10px;min-width: 0;border: 1px solid var(--gray-6);border-radius: 6px;padding: 14px;}
 .document-publications-choices label {display: flex;align-items: center;gap: 10px;min-height: 44px;overflow-wrap: anywhere;}

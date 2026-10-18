@@ -6,7 +6,7 @@ import {safeMessage} from "../../shared/model";
 import {useWorkbench} from "../workbench/context";
 import {hasChanges} from "../workspaces/draft";
 
-type Publication={id:string;source_revision:number;created_at:number;title:string;document_titles:string[];public_url:string;revoked:boolean};
+type Publication={id:string;source_revision:number;created_at:number;title:string;document_titles:string[];public_url:string;revoked:boolean;visibility:"public"|"password"};
 const newKey=()=>crypto.randomUUID();
 
 export default function DocumentPublications() {
@@ -16,6 +16,8 @@ export default function DocumentPublications() {
   const [versions,setVersions]=useState<Publication[]>([]);
   const [selected,setSelected]=useState<Set<string>>(new Set());
   const [title,setTitle]=useState("");
+  const [visibility,setVisibility]=useState<"public"|"password">("public");
+  const [password,setPassword]=useState("");
   const [key,setKey]=useState(newKey);
   const [busy,setBusy]=useState(false);
   const [loading,setLoading]=useState(true);
@@ -49,10 +51,11 @@ export default function DocumentPublications() {
     const ids=choices.map(document=>document.id);
     const revision=draft.revision;
     const idempotencyKey=key;
-    if(!name||name!==title||[...name].length>128||!ids.length||ids.length>32||bytes>1024*1024||dirty)return;
+    const passwordBytes=new TextEncoder().encode(password).length;
+    if(!name||name!==title||[...name].length>128||!ids.length||ids.length>32||bytes>1024*1024||dirty||(visibility==="password"&&(passwordBytes<10||passwordBytes>128)))return;
     setGuard({
       title:message("发布文档快照"),
-      description:message("以下文档将无需登录即可查看：{{value0}}。发布后，编辑工作区不会更新此版本。",{value0:choices.map(document=>document.name).join("、")}),
+      description:visibility==="password"?message("以下文档需要密码才能查看：{{value0}}。密码无法找回，编辑工作区不会更新此版本。",{value0:choices.map(document=>document.name).join("、")}):message("以下文档将无需登录即可查看：{{value0}}。发布后，编辑工作区不会更新此版本。",{value0:choices.map(document=>document.name).join("、")}),
       action:()=>{
         const latest=stateRef.current;
         if(accountRef.current!==accountId||latest.draft?.id!==workspaceId||latest.draft.revision!==revision||hasChanges(latest)){
@@ -60,11 +63,11 @@ export default function DocumentPublications() {
         }
         setBusy(true);setFailure("");setNotice("");
         void api<Publication>(`/api/workspaces/${encodeURIComponent(workspaceId)}/doc-publications`,"POST",{
-          title:name,expected_revision:revision,document_ids:ids,idempotency_key:idempotencyKey
+          title:name,expected_revision:revision,document_ids:ids,idempotency_key:idempotencyKey,visibility,password:visibility==="password"?password:undefined
         }).then(created=>{
           if(accountRef.current!==accountId||stateRef.current.draft?.id!==workspaceId)return;
           setVersions(current=>[created,...current.filter(item=>item.id!==created.id)]);
-          setSelected(new Set());setTitle("");setKey(newKey());setNotice(t("文档快照已发布。"));
+          setSelected(new Set());setTitle("");setPassword("");setKey(newKey());setNotice(t("文档快照已发布。"));
         }).catch(error=>setFailure(safeMessage(error))).finally(()=>setBusy(false));
       }
     });
@@ -97,17 +100,21 @@ export default function DocumentPublications() {
         <fieldset className="document-publications-choices"><legend>{t("选择要发布的文档")}</legend>
           {eligible.length?eligible.map(document=><label key={document.id}><Checkbox checked={selected.has(document.id)} onCheckedChange={checked=>changeSelection(document.id,checked===true)}/><span>{document.name}</span></label>):<Text size="2" color="gray">{t("没有可发布的非私密文档。")}</Text>}
         </fieldset>
-        <Text size="2" color="gray">{t("发布内容无需登录即可查看。请先检查文档原文中的凭证和个人信息。")}</Text>
+        <fieldset className="document-publications-choices"><legend>{t("访问方式")}</legend>
+          <label><input type="radio" name="publication-visibility" checked={visibility==="public"} onChange={()=>{setVisibility("public");setPassword("");setKey(newKey());}}/>{t("任何人可查看")}</label>
+          <label><input type="radio" name="publication-visibility" checked={visibility==="password"} onChange={()=>{setVisibility("password");setKey(newKey());}}/>{t("需要密码")}</label>
+        </fieldset>
+        {visibility==="password"?<label className="field"><Text size="2">{t("文档访问密码")}</Text><TextField.Root type="password" aria-label={t("文档访问密码")} autoComplete="new-password" value={password} maxLength={128} onChange={event=>{setPassword(event.target.value);setKey(newKey());}}/><Text size="1" color="gray">{t("密码需为 10–128 字节，无法找回；读者每次重新打开都需输入。")}</Text></label>:<Text size="2" color="gray">{t("发布内容无需登录即可查看。请先检查文档原文中的凭证和个人信息。")}</Text>}
         {dirty&&<Text role="alert" size="2" color="amber">{t("请先保存工作区，再发布固定版本。")}</Text>}
         {bytes>1024*1024&&<Text role="alert" size="2" color="red">{t("所选文档正文合计不能超过 1 MiB。")}</Text>}
-        <Button disabled={busy||loading||dirty||versions.filter(version=>!version.revoked).length>=20||versions.length>=256||!title.trim()||title.trim()!==title||choices.length<1||choices.length>32||bytes>1024*1024} onClick={publish}>{t("发布所选文档")}</Button>
+        <Button disabled={busy||loading||dirty||versions.filter(version=>!version.revoked).length>=20||versions.length>=256||!title.trim()||title.trim()!==title||choices.length<1||choices.length>32||bytes>1024*1024||(visibility==="password"&&!(new TextEncoder().encode(password).length>=10&&new TextEncoder().encode(password).length<=128))} onClick={publish}>{t("发布所选文档")}</Button>
       </Flex>
     </Card>
     {failure&&<Text role="alert" color="red" size="2">{failure}</Text>}
     {notice&&<Text role="status" color="green" size="2">{notice}</Text>}
     <Heading as="h3" size="3">{t("已发布版本")}</Heading>
     {loading?<Text role="status" size="2">{t("正在读取发布版本…")}</Text>:versions.length?versions.map(version=><Card key={version.id}>
-      <Flex justify="between" align="center" gap="3" wrap="wrap"><div><Text weight="medium">{version.title}</Text><Text as="p" size="1" color="gray">{version.document_titles.join("、")} · {new Date(version.created_at*1000).toLocaleString()}</Text></div><Flex gap="2" wrap="wrap">{version.revoked?<Text size="2" color="gray">{t("已撤销")}</Text>:<><Button asChild variant="soft"><a href={`/docs/${version.id}`} target="_blank" rel="noopener noreferrer">{t("打开公开页")}</a></Button><Button variant="soft" onClick={()=>void copy(version.id)}>{t("复制链接")}</Button><Button variant="soft" color="red" disabled={busy} onClick={()=>revoke(version)}>{t("撤销发布")}</Button></>}</Flex></Flex>
+      <Flex justify="between" align="center" gap="3" wrap="wrap"><div><Text weight="medium">{version.title}</Text><Text as="p" size="1" color="gray">{version.document_titles.join("、")} · {new Date(version.created_at*1000).toLocaleString()} · {version.visibility==="password"?t("需要密码"):t("任何人可查看")}</Text></div><Flex gap="2" wrap="wrap">{version.revoked?<Text size="2" color="gray">{t("已撤销")}</Text>:<><Button asChild variant="soft"><a href={`/docs/${version.id}`} target="_blank" rel="noopener noreferrer">{t("打开公开页")}</a></Button><Button variant="soft" onClick={()=>void copy(version.id)}>{t("复制链接")}</Button><Button variant="soft" color="red" disabled={busy} onClick={()=>revoke(version)}>{t("撤销发布")}</Button></>}</Flex></Flex>
     </Card>):<Text size="2" color="gray">{t("尚未发布文档。")}</Text>}
   </section>;
 }

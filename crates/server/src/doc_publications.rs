@@ -4,15 +4,21 @@ use crate::{
     entities::document,
     storage,
 };
+use argon2::{
+    Argon2, PasswordHasher, PasswordVerifier,
+    password_hash::{PasswordHash, SaltString, rand_core::OsRng},
+};
 use axum::{
     Extension, Json,
-    extract::{Path, State},
-    http::header,
+    extract::{Path, Request, State, rejection::JsonRejection},
+    http::{HeaderValue, StatusCode, header},
+    middleware::Next,
     response::{IntoResponse, Response},
 };
 use rand::RngCore;
 use sea_orm::{
-    ColumnTrait, EntityTrait, QueryFilter, QuerySelect, TransactionTrait, sea_query::Expr,
+    ColumnTrait, ConnectionTrait, DbBackend, EntityTrait, QueryFilter, QuerySelect, Statement,
+    TransactionTrait, sea_query::Expr,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -24,6 +30,27 @@ const MAX_ACTIVE: usize = 20;
 const MAX_HISTORY: usize = 256;
 const MAX_SELECTED: usize = 32;
 const MAX_SOURCE: usize = 1024 * 1024;
+const MAX_FAILED_UNLOCKS: usize = 10;
+const ATTEMPT_WINDOW: i64 = 5 * 60;
+
+fn failed_attempt_retry(attempts: &mut Vec<i64>, now: i64) -> Result<Option<i64>, ApiError> {
+    if attempts.len() > MAX_FAILED_UNLOCKS
+        || attempts.windows(2).any(|pair| pair[0] > pair[1])
+        || attempts.iter().any(|time| *time <= 0 || *time > now)
+    {
+        return Err(ApiError::internal());
+    }
+    attempts.retain(|time| *time > now - ATTEMPT_WINDOW);
+    Ok((attempts.len() >= MAX_FAILED_UNLOCKS).then(|| (attempts[0] + ATTEMPT_WINDOW - now).max(1)))
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum Visibility {
+    #[default]
+    Public,
+    Password,
+}
 
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -32,6 +59,16 @@ pub struct Create {
     expected_revision: i64,
     document_ids: Vec<String>,
     idempotency_key: String,
+    #[serde(default)]
+    visibility: Visibility,
+    #[serde(default)]
+    password: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Unlock {
+    password: String,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -57,6 +94,10 @@ struct Publication {
     request_digest: String,
     #[serde(default)]
     revoked_at: Option<i64>,
+    #[serde(default)]
+    password_hash: Option<String>,
+    #[serde(default)]
+    failed_attempts: Vec<i64>,
     snapshot: PublicSnapshot,
 }
 
@@ -69,6 +110,7 @@ pub struct PublicationView {
     document_titles: Vec<String>,
     public_url: String,
     revoked: bool,
+    visibility: Visibility,
 }
 
 fn view(publication: &Publication) -> PublicationView {
@@ -85,6 +127,11 @@ fn view(publication: &Publication) -> PublicationView {
             .collect(),
         public_url: format!("/docs/{}", publication.id),
         revoked: publication.revoked_at.is_some(),
+        visibility: if publication.password_hash.is_some() {
+            Visibility::Password
+        } else {
+            Visibility::Public
+        },
     }
 }
 
@@ -127,13 +174,53 @@ fn validate(input: &Create) -> Result<(), ApiError> {
     {
         return Err(ApiError::bad("Invalid publication idempotency key"));
     }
+    match (input.visibility, input.password.as_deref()) {
+        (Visibility::Public, None) => {}
+        (Visibility::Public, Some(_)) => {
+            return Err(ApiError::bad(
+                "Public publication cannot include a password",
+            ));
+        }
+        (Visibility::Password, Some(password)) if (10..=128).contains(&password.len()) => {}
+        (Visibility::Password, _) => {
+            return Err(ApiError::bad("Publication password must be 10–128 bytes"));
+        }
+    }
     Ok(())
 }
 
 fn request_digest(input: &Create) -> Result<String, ApiError> {
     let content = serde_json::to_vec(&(&input.title, input.expected_revision, &input.document_ids))
         .map_err(|_| ApiError::internal())?;
-    Ok(hex::encode(Sha256::digest(content)))
+    let mut digest = Sha256::new();
+    if input.visibility == Visibility::Password {
+        digest.update(b"password\0");
+    }
+    digest.update(content);
+    Ok(hex::encode(digest.finalize()))
+}
+
+async fn hash_password(password: String) -> Result<String, ApiError> {
+    tokio::task::spawn_blocking(move || {
+        Argon2::default()
+            .hash_password(password.as_bytes(), &SaltString::generate(&mut OsRng))
+            .map(|hash| hash.to_string())
+    })
+    .await
+    .map_err(|_| ApiError::internal())?
+    .map_err(|_| ApiError::internal())
+}
+
+async fn password_matches(password: String, hash: String) -> Result<bool, ApiError> {
+    tokio::task::spawn_blocking(move || {
+        PasswordHash::new(&hash).ok().is_some_and(|parsed| {
+            Argon2::default()
+                .verify_password(password.as_bytes(), &parsed)
+                .is_ok()
+        })
+    })
+    .await
+    .map_err(|_| ApiError::internal())
 }
 
 fn snapshot(
@@ -263,14 +350,21 @@ pub async fn create(
         .iter()
         .find(|publication| publication.idempotency_key == input.idempotency_key)
     {
+        if existing.revoked_at.is_some() {
+            return Err(ApiError::conflict(
+                "Publication key refers to a revoked version",
+            ));
+        }
         if existing.request_digest != digest {
             return Err(ApiError::conflict(
                 "Publication key was reused with different content",
             ));
         }
-        if existing.revoked_at.is_some() {
+        if let Some(hash) = &existing.password_hash
+            && !password_matches(input.password.clone().unwrap_or_default(), hash.clone()).await?
+        {
             return Err(ApiError::conflict(
-                "Publication key refers to a revoked version",
+                "Publication key was reused with a different password",
             ));
         }
         let result = view(existing);
@@ -294,6 +388,10 @@ pub async fn create(
         return Err(ApiError::bad("Publication history limit reached"));
     }
     let snapshot = snapshot(&source, &input)?;
+    let password_hash = match input.password.clone() {
+        Some(password) => Some(hash_password(password).await?),
+        None => None,
+    };
     let mut random = [0u8; 16];
     rand::thread_rng().fill_bytes(&mut random);
     let publication = Publication {
@@ -304,6 +402,8 @@ pub async fn create(
         idempotency_key: input.idempotency_key,
         request_digest: digest,
         revoked_at: None,
+        password_hash,
+        failed_attempts: Vec::new(),
         snapshot,
     };
     storage::insert_doc(
@@ -370,13 +470,16 @@ fn valid_id(id: &str) -> bool {
     id.len() == 32 && id.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
-pub(crate) async fn read_snapshot(state: &AppState, id: &str) -> Result<PublicSnapshot, ApiError> {
-    if !valid_id(id) || state.local {
+async fn active_publication<C: ConnectionTrait>(
+    db: &C,
+    id: &str,
+) -> Result<(document::Model, Publication), ApiError> {
+    if !valid_id(id) {
         return Err(ApiError::not_found());
     }
     let row = document::Entity::find_by_id(format!("dp_{id}"))
         .filter(document::Column::Kind.eq(KIND))
-        .one(&state.db)
+        .one(db)
         .await?
         .ok_or_else(ApiError::not_found)?;
     let publication: Publication =
@@ -387,31 +490,231 @@ pub(crate) async fn read_snapshot(state: &AppState, id: &str) -> Result<PublicSn
     {
         return Err(ApiError::not_found());
     }
-    if storage::get(&state.db, &row.owner, &publication.workspace_id)
+    if storage::get(db, &row.owner, &publication.workspace_id)
         .await?
         .is_none()
     {
         return Err(ApiError::not_found());
     }
+    Ok((row, publication))
+}
+
+pub(crate) async fn page_exists(state: &AppState, id: &str) -> Result<(), ApiError> {
+    if state.local {
+        return Err(ApiError::not_found());
+    }
+    active_publication(&state.db, id).await.map(|_| ())
+}
+
+pub(crate) async fn read_snapshot(state: &AppState, id: &str) -> Result<PublicSnapshot, ApiError> {
+    if state.local {
+        return Err(ApiError::not_found());
+    }
+    let (_, publication) = active_publication(&state.db, id).await?;
+    if publication.password_hash.is_some() {
+        return Err(ApiError::forbidden("Publication password required"));
+    }
     Ok(publication.snapshot)
 }
 
-pub async fn public_get(
+pub async fn public_get(State(state): State<AppState>, Path(id): Path<String>) -> Response {
+    match read_snapshot(&state, &id).await {
+        Ok(snapshot) => match serde_json::to_value(snapshot) {
+            Ok(value) => public_json_response(StatusCode::OK, value),
+            Err(_) => public_json_headers(ApiError::internal().into_response()),
+        },
+        Err(error) => public_json_headers(error.into_response()),
+    }
+}
+
+async fn database_now_seconds<C: ConnectionTrait>(db: &C) -> Result<i64, ApiError> {
+    let backend = db.get_database_backend();
+    let sql = match backend {
+        DbBackend::Sqlite => "SELECT CAST(strftime('%s','now') AS INTEGER) AS now_sec",
+        DbBackend::Postgres => {
+            "SELECT CAST(EXTRACT(EPOCH FROM clock_timestamp()) AS BIGINT) AS now_sec"
+        }
+        DbBackend::MySql => "SELECT CAST(UNIX_TIMESTAMP(CURRENT_TIMESTAMP) AS SIGNED) AS now_sec",
+    };
+    let row = db
+        .query_one(Statement::from_string(backend, sql))
+        .await?
+        .ok_or_else(ApiError::internal)?;
+    let now: i64 = row.try_get("", "now_sec")?;
+    if now <= 0 {
+        return Err(ApiError::internal());
+    }
+    Ok(now)
+}
+
+async fn update_publication<C: ConnectionTrait>(
+    db: &C,
+    row: &document::Model,
+    publication: &Publication,
+) -> Result<(), ApiError> {
+    let revision = row.revision.checked_add(1).ok_or_else(ApiError::internal)?;
+    let changed = document::Entity::update_many()
+        .col_expr(
+            document::Column::Payload,
+            Expr::value(serde_json::to_string(publication).map_err(|_| ApiError::internal())?),
+        )
+        .col_expr(document::Column::Revision, Expr::value(revision))
+        .col_expr(document::Column::UpdatedAt, Expr::value(storage::now()))
+        .filter(document::Column::Id.eq(&row.id))
+        .filter(document::Column::Kind.eq(KIND))
+        .filter(document::Column::Revision.eq(row.revision))
+        .exec(db)
+        .await?;
+    if changed.rows_affected != 1 {
+        return Err(ApiError::internal());
+    }
+    Ok(())
+}
+
+fn public_json_headers(mut response: Response) -> Response {
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response.headers_mut().insert(
+        header::REFERRER_POLICY,
+        HeaderValue::from_static("no-referrer"),
+    );
+    response.headers_mut().insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    response.headers_mut().insert(
+        header::CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static("default-src 'none'; frame-ancestors 'none'"),
+    );
+    response
+}
+
+pub(crate) async fn public_docs_headers(request: Request, next: Next) -> Response {
+    let is_public_docs = request.uri().path().starts_with("/public/docs/")
+        || request.uri().path().starts_with("/api/public/docs/");
+    let response = next.run(request).await;
+    if is_public_docs {
+        public_json_headers(response)
+    } else {
+        response
+    }
+}
+
+fn public_json_response(status: StatusCode, body: serde_json::Value) -> Response {
+    public_json_headers((status, Json(body)).into_response())
+}
+
+async fn unlock_inner(state: &AppState, id: &str, password: String) -> Result<Response, ApiError> {
+    if state.local || !valid_id(id) {
+        return Err(ApiError::not_found());
+    }
+    let tx = state.db.begin().await?;
+    document::Entity::update_many()
+        .col_expr(
+            document::Column::Revision,
+            Expr::col(document::Column::Revision).into(),
+        )
+        .filter(document::Column::Id.eq(format!("dp_{id}")))
+        .filter(document::Column::Kind.eq(KIND))
+        .exec(&tx)
+        .await?;
+    let (row, mut publication) = active_publication(&tx, id).await?;
+    let Some(hash) = publication.password_hash.clone() else {
+        return Err(ApiError::not_found());
+    };
+    if password.len() > 128 {
+        return Ok(public_json_response(
+            StatusCode::BAD_REQUEST,
+            serde_json::json!({"error":"Invalid publication password"}),
+        ));
+    }
+    let now = database_now_seconds(&tx).await?;
+    if let Some(seconds) = failed_attempt_retry(&mut publication.failed_attempts, now)? {
+        tx.commit().await?;
+        let mut response = public_json_response(
+            StatusCode::TOO_MANY_REQUESTS,
+            serde_json::json!({"error":"Too many password attempts"}),
+        );
+        response.headers_mut().insert(
+            header::RETRY_AFTER,
+            HeaderValue::from_str(&seconds.to_string()).map_err(|_| ApiError::internal())?,
+        );
+        return Ok(response);
+    }
+    let valid = password_matches(password, hash).await?;
+    if !valid {
+        publication.failed_attempts.push(now);
+        update_publication(&tx, &row, &publication).await?;
+        tx.commit().await?;
+        return Ok(public_json_response(
+            StatusCode::UNAUTHORIZED,
+            serde_json::json!({"error":"Invalid publication password"}),
+        ));
+    }
+    if !publication.failed_attempts.is_empty() {
+        publication.failed_attempts.clear();
+        update_publication(&tx, &row, &publication).await?;
+    }
+    tx.commit().await?;
+    Ok(public_json_response(
+        StatusCode::OK,
+        serde_json::to_value(publication.snapshot).map_err(|_| ApiError::internal())?,
+    ))
+}
+
+pub async fn unlock(
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> Result<Response, ApiError> {
-    let snapshot = read_snapshot(&state, &id).await?;
-    Ok((
-        [
-            (header::CACHE_CONTROL, "no-store"),
-            (header::REFERRER_POLICY, "no-referrer"),
-            (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
-            (
-                header::CONTENT_SECURITY_POLICY,
-                "default-src 'none'; frame-ancestors 'none'",
-            ),
-        ],
-        Json(snapshot),
-    )
-        .into_response())
+    input: Result<Json<Unlock>, JsonRejection>,
+) -> Response {
+    if let Err(error) = page_exists(&state, &id).await {
+        return public_json_headers(error.into_response());
+    }
+    let Json(input) = match input {
+        Ok(input) => input,
+        Err(rejection) => {
+            return public_json_response(
+                if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE {
+                    StatusCode::PAYLOAD_TOO_LARGE
+                } else {
+                    StatusCode::BAD_REQUEST
+                },
+                serde_json::json!({"error":"Invalid unlock request"}),
+            );
+        }
+    };
+    match unlock_inner(&state, &id, input.password).await {
+        Ok(response) => response,
+        Err(error) => public_json_headers(error.into_response()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ATTEMPT_WINDOW, MAX_FAILED_UNLOCKS, failed_attempt_retry};
+
+    #[test]
+    fn password_attempt_window_slides_and_rejects_future_or_corrupt_state() {
+        let now = 1_000_000;
+        let mut attempts: Vec<i64> = (0..MAX_FAILED_UNLOCKS)
+            .map(|index| now + index as i64)
+            .collect();
+        assert_eq!(
+            failed_attempt_retry(&mut attempts, now + ATTEMPT_WINDOW - 1).unwrap(),
+            Some(1)
+        );
+        assert_eq!(
+            failed_attempt_retry(&mut attempts, now + ATTEMPT_WINDOW).unwrap(),
+            None
+        );
+        assert_eq!(attempts.len(), MAX_FAILED_UNLOCKS - 1);
+        attempts.push(now + ATTEMPT_WINDOW);
+        assert_eq!(
+            failed_attempt_retry(&mut attempts, now + ATTEMPT_WINDOW).unwrap(),
+            Some(1)
+        );
+        assert!(failed_attempt_retry(&mut vec![now + 1], now).is_err());
+        assert!(failed_attempt_retry(&mut vec![now + 1, now], now + 1).is_err());
+    }
 }

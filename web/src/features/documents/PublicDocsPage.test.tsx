@@ -44,3 +44,45 @@ it("rejects malformed publication IDs before any fetch",async()=>{
   expect(await screen.findByRole("heading",{name:"Documentation unavailable"})).toBeTruthy();
   expect(fetcher).not.toHaveBeenCalled();
 });
+
+it("keeps protected source locked until a correct in-memory password is submitted",async()=>{
+  await setLanguage("en");
+  const id="b".repeat(32);
+  const fetcher=vi.fn()
+    .mockResolvedValueOnce({ok:false,status:403})
+    .mockResolvedValueOnce({ok:false,status:401})
+    .mockResolvedValueOnce({ok:true,status:200,json:async()=>({title:"Protected site",documents:[{title:"Guide",folder:null,source:"# Protected source"}]})});
+  vi.stubGlobal("fetch",fetcher);
+  const page=render(<PublicDocsPage id={id}/>);
+  await screen.findByRole("heading",{name:"Password-protected documentation"});
+  expect(screen.queryByText("Protected site")).toBeNull();
+  expect(screen.queryByText("Protected source")).toBeNull();
+  fireEvent.change(screen.getByLabelText("Access password"),{target:{value:"wrong-password"}});
+  fireEvent.click(screen.getByRole("button",{name:"Unlock documents"}));
+  await screen.findByRole("alert");
+  expect(screen.getByRole("alert").textContent).toContain("Incorrect password");
+  expect(screen.getByLabelText("Access password")).toHaveProperty("value","");
+  fireEvent.change(screen.getByLabelText("Access password"),{target:{value:"correct-password-123"}});
+  fireEvent.click(screen.getByRole("button",{name:"Unlock documents"}));
+  await screen.findByRole("heading",{name:"Protected source"});
+  expect(fetcher).toHaveBeenCalledWith(`/api/public/docs/${id}/unlock`,expect.objectContaining({method:"POST",credentials:"omit",cache:"no-store"}));
+  expect(fetcher).toHaveBeenCalledTimes(3);
+  expect(page.container.querySelector("input[type=password]")).toBeNull();
+  page.unmount();
+  fetcher.mockResolvedValueOnce({ok:false,status:403});
+  render(<PublicDocsPage id={id}/>);
+  expect(await screen.findByRole("heading",{name:"Password-protected documentation"})).toBeTruthy();
+});
+
+it("shows a bounded retry message after password rate limiting",async()=>{
+  await setLanguage("en");
+  const fetcher=vi.fn()
+    .mockResolvedValueOnce({ok:false,status:403})
+    .mockResolvedValueOnce({ok:false,status:429,headers:{get:()=>"42"}});
+  vi.stubGlobal("fetch",fetcher);
+  render(<PublicDocsPage id={"c".repeat(32)}/>);
+  await screen.findByRole("heading",{name:"Password-protected documentation"});
+  fireEvent.change(screen.getByLabelText("Access password"),{target:{value:"wrong-password"}});
+  fireEvent.click(screen.getByRole("button",{name:"Unlock documents"}));
+  expect((await screen.findByRole("alert")).textContent).toContain("42 seconds");
+});
