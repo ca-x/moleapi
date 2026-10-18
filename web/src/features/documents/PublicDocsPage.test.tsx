@@ -22,8 +22,18 @@ it("loads a public snapshot without credentials and renders only safe Markdown",
   expect(screen.queryByRole("button",{name:"internal"})).toBeNull();
   expect(screen.queryByRole("link",{name:"internal"})).toBeNull();
   expect(screen.getByRole("link",{name:"safe"}).getAttribute("rel")).toContain("noreferrer");
+  fireEvent.change(screen.getByRole("textbox",{name:"Search published docs"}),{target:{value:"Second"}});
+  expect(screen.queryByRole("button",{name:"Guide"})).toBeNull();
+  expect(screen.getByRole("status").textContent).toContain("1 published documents");
   fireEvent.click(screen.getByRole("button",{name:"Second"}));
   expect(screen.getByText("Other page")).toBeTruthy();
+  fireEvent.change(screen.getByRole("textbox",{name:"Search published docs"}),{target:{value:"none"}});
+  expect(screen.getByRole("status").textContent).toContain("No published documents");
+  expect(screen.getByText("Other page")).toBeTruthy();
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole("button",{name:"Chinese (Simplified)"}));
+  await waitFor(()=>expect(screen.getByRole("textbox",{name:"搜索公开文档"})).toBeTruthy());
+  await waitFor(()=>expect(document.title).toBe("Public site · MoleAPI"));
 });
 
 it("rejects malformed publication IDs before any fetch",async()=>{
