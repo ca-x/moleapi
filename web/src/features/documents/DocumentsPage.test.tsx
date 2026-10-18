@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import {cleanup,fireEvent,render,screen} from "@testing-library/react";
+import {cleanup,fireEvent,render,screen,waitFor} from "@testing-library/react";
 import {Theme} from "@radix-ui/themes";
 import {afterEach,beforeEach,expect,it,vi} from "vitest";
 import {setLanguage} from "../../shared/i18n";
@@ -139,4 +139,41 @@ it("opens only a current-workspace request and refuses stale or foreign referenc
   context.accountRef.current="other";
   fireEvent.click(screen.getByRole("button",{name:"Open"}));
   expect(context.setRequestId).not.toHaveBeenCalled();
+});
+
+it("searches private Markdown source and opens its exact document without editing it",async()=>{
+  await setLanguage("en");
+  const {data,context,updateData}=setup("# Guide");
+  data.documents?.push({id:"other",name:"Care notes",collection_id:null,source:"Private 猫 care instructions",secret:true});
+  render(<Theme><DocumentsPage/></Theme>);
+  fireEvent.change(screen.getByRole("textbox",{name:"Search docs and APIs"}),{target:{value:"猫 care"}});
+  expect(screen.getByRole("status").textContent).toContain("1 result");
+  fireEvent.click(screen.getByRole("button",{name:"Markdown document: Care notes"}));
+  expect(screen.getByRole("heading",{name:"Care notes"})).toBeTruthy();
+  expect(screen.getByText(/Private 猫 care instructions/)).toBeTruthy();
+  expect(screen.getByRole("textbox",{name:"Search docs and APIs"})).toHaveProperty("value","");
+  expect(updateData).not.toHaveBeenCalled();
+  expect(context.setView).not.toHaveBeenCalled();
+});
+
+it("routes a request result through the current-workspace guard and clears search on account change",async()=>{
+  await setLanguage("en");
+  const {data,context}=setup("# Guide");
+  const request=newRequest("Create pets","https://example.test/pets");
+  request.id="pets";request.method="POST";request.description="Animal care";
+  data.collections[0].requests.push(request);
+  const page=render(<Theme><DocumentsPage/></Theme>);
+  fireEvent.change(screen.getByRole("textbox",{name:"Search docs and APIs"}),{target:{value:"POST animal"}});
+  const result=screen.getByRole("button",{name:"API request: Create pets"});
+  context.accountRef.current="other";
+  fireEvent.click(result);
+  expect(context.setRequestId).not.toHaveBeenCalled();
+  context.accountRef.current="owner";
+  fireEvent.click(result);
+  expect(context.setRequestId).toHaveBeenCalledExactlyOnceWith("pets");
+  expect(context.setView).toHaveBeenCalledExactlyOnceWith("requests");
+  vi.mocked(useWorkbench).mockReturnValue({...context,accountId:"new-owner",draft:{...context.draft,id:"other-workspace"}} as never);
+  page.rerender(<Theme><DocumentsPage/></Theme>);
+  await waitFor(()=>expect(screen.getByRole("textbox",{name:"Search docs and APIs"})).toHaveProperty("value",""));
+  expect(screen.queryByRole("button",{name:"API request: Create pets"})).toBeNull();
 });
