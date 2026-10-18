@@ -62,7 +62,7 @@ export default function DocumentsPage() {
   };
   const create=()=>{
     if(documents.length>=256)return;
-    const next:MarkdownDocument={id:id(),name:t("新建文档"),collection_id:null,source:"",secret:true};
+    const next:MarkdownDocument={id:id(),name:t("新建文档"),source:"",secret:true};
     updateData(data=>({...data,documents:[...(data.documents??[]),next]}));
     setSelectedId(next.id);setMode("edit");
   };
@@ -112,7 +112,7 @@ export default function DocumentsPage() {
         <Flex justify="between" align="center" gap="3" wrap="wrap"><Heading as="h2" ref={documentHeadingRef} tabIndex={-1} size="3">{current.name}</Heading><Button variant="ghost" color="red" onClick={remove} aria-label={t("删除文档")}><Trash2 size={16}/>{t("删除")}</Button></Flex>
         <div className="document-fields">
           <Field label={t("文档标题")}><TextField.Root value={current.name} maxLength={128} onChange={event=>updateDocument({name:event.target.value})}/></Field>
-          <Choice label={t("所在目录")} value={current.collection_id??"none"} onChange={value=>updateDocument({collection_id:value==="none"?null:value})} options={[{value:"none",label:t("工作区根目录")},...draft.data.collections.map(collection=>({value:collection.id,label:collection.name}))]}/>
+          <Choice label={t("所在目录")} value={current.collection_id??"none"} onChange={value=>updateDocument({collection_id:value==="none"?undefined:value})} options={[{value:"none",label:t("工作区根目录")},...draft.data.collections.map(collection=>({value:collection.id,label:collection.name}))]}/>
           <label className="document-private"><Checkbox checked={current.secret??true} onCheckedChange={value=>updateDocument({secret:value===true})}/><span>{t("私密文档")}</span></label>
         </div>
         <Text size="1" color="gray">{t("私密文档的正文不进入默认备份；完整备份会保留原文。")}</Text>
