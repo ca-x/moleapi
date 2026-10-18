@@ -1,6 +1,6 @@
 import { t, useLanguage } from "../../shared/i18n";
 import { Button, Callout, Flex, Heading, Text } from "@radix-ui/themes";
-import { ChevronRight, Plus, Upload, Workflow } from "lucide-react";
+import { ChevronRight, History, Plus, Upload, Workflow } from "lucide-react";
 import { Choice } from "../../shared/ui";
 import { safeMessage } from "../../shared/model";
 import RequestEditor from "../requests/RequestEditor";
@@ -68,6 +68,9 @@ export default function WorkbenchMain() {
               <Text size="1">{nav.find((x) => x.id === view)?.label}</Text>
             </Flex>
             <Flex align="center" gap="3">
+              <Button size="1" variant="ghost" color="gray" onClick={() => openModal("versions")}>
+                <History size={14} /> {t("版本历史")}
+              </Button>
               <Choice
                 value={draft.data.active_environment_id || "none"}
                 onChange={(value) =>
