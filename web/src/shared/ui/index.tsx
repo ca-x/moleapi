@@ -20,6 +20,7 @@ import { protobuf } from "@codemirror/legacy-modes/mode/protobuf";
 import { json } from "@codemirror/lang-json";
 import { xml } from "@codemirror/lang-xml";
 import { javascript } from "@codemirror/lang-javascript";
+import { markdown } from "@codemirror/lang-markdown";
 import {
   HighlightStyle,
   syntaxHighlighting,
@@ -146,7 +147,7 @@ export function Editor({
   readOnly?: boolean;
   jsonMode?: boolean;
   height?: string;
-  language?: "json" | "javascript" | "protobuf" | "xml";
+  language?: "json" | "javascript" | "protobuf" | "xml" | "markdown";
   label?: string;
 }) {
   const { language: interfaceLanguage } = useLanguage();
@@ -162,7 +163,7 @@ export function Editor({
     attributes.of(EditorView.contentAttributes.of({
       "aria-label": label || (readOnly ? t("只读代码") : t("代码编辑器")), tabindex: "0",
     })),
-    ...(language === "xml" ? [xml()] : language === "protobuf"
+    ...(language === "markdown" ? [markdown()] : language === "xml" ? [xml()] : language === "protobuf"
       ? [StreamLanguage.define(protobuf)] : language === "javascript"
         ? [javascript()] : jsonMode || language === "json" ? [json()] : []),
   // Locale and accessible labels are reconfigured in their own compartments.

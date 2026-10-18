@@ -590,6 +590,42 @@ pub fn validate_workspace(data: &WorkspaceData) -> Result<()> {
             );
         }
     }
+    ensure!(
+        data.documents.len() <= 256,
+        "Workspace exceeds 256 Markdown documents"
+    );
+    let mut document_ids = HashSet::new();
+    let mut source_bytes = 0usize;
+    for document in &data.documents {
+        ensure!(
+            !document.id.is_empty()
+                && document.id.len() <= 128
+                && document_ids.insert(&document.id),
+            "Markdown document IDs must be unique and at most 128 bytes"
+        );
+        ensure!(
+            document.name.trim() == document.name
+                && (1..=128).contains(&document.name.chars().count())
+                && !document.name.chars().any(char::is_control),
+            "Markdown document title must be 1–128 visible characters"
+        );
+        ensure!(
+            document
+                .collection_id
+                .as_ref()
+                .is_none_or(|id| collections.contains(id)),
+            "Markdown document collection does not exist"
+        );
+        ensure!(
+            document.source.len() <= 256 * 1024,
+            "Markdown document source exceeds 256 KiB"
+        );
+        source_bytes = source_bytes.saturating_add(document.source.len());
+        ensure!(
+            source_bytes <= 2 * 1024 * 1024,
+            "Workspace Markdown documents exceed 2 MiB"
+        );
+    }
     crate::validate_scenarios(data)?;
     for e in &data.environments {
         validate_variables(&e.variables)?;

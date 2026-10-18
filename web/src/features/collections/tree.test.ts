@@ -14,5 +14,8 @@ it("moves complete subtrees without changing child identities and rejects cycles
 });
 it("removes all descendants and preserves sibling collections",()=>{
  const d=data();expect([...collectionDescendants(d.collections,"folder")].sort()).toEqual(["folder","leaf"]);
+ d.documents=[{id:"guide",name:"Guide",collection_id:"leaf",source:"# Guide",secret:true},{id:"other-doc",name:"Other",collection_id:"other",source:"",secret:true}];
+ const removed=removeCollectionTree(d,"folder");
+ expect(removed.documents?.map(document=>document.collection_id)).toEqual([null,"other"]);
  expect(removeCollectionTree(d,"root").collections.map(c=>c.id)).toEqual(["other"]);
 });

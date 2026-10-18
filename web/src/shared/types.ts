@@ -179,6 +179,7 @@ export interface Specification {
   source: string;
   dialect: string;
 }
+export interface MarkdownDocument {id:string;name:string;collection_id?:string|null;source:string;secret?:boolean}
 export type ScenarioTarget={action:"step";step_id:string}|{action:"stop"};
 export interface ScenarioStep {id:string;request_id:string;name:string;group:string;enabled:boolean;condition?:string;repeat?:number;on_true?:ScenarioTarget;on_false?:ScenarioTarget}
 export interface ScenarioParallel {id:string;name:string;step_ids:string[];concurrency:number}
@@ -192,6 +193,7 @@ export interface WorkspaceData {
   pre_request_script?: string;
   post_response_script?: string;
   specifications?: Specification[];
+  documents?: MarkdownDocument[];
   schema_version: 1;
   collections: Collection[];
   environments: Environment[];

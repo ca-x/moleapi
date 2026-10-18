@@ -8,6 +8,7 @@ import EnvironmentsPage from "../environments/EnvironmentsPage";
 import HistoryPage from "../history/HistoryPage";
 import TestingPage from "../testing/TestingPage";
 import SpecificationsPage from "../specifications/SpecificationsPage";
+import DocumentsPage from "../documents/DocumentsPage";
 import { useWorkbench } from "./context";
 import WebhooksPage from "../webhooks/WebhooksPage";
 import { nav } from "./navigation";
@@ -138,6 +139,7 @@ export default function WorkbenchMain() {
           {view === "runner" && <TestingPage />}
           {view === "webhooks" && <WebhooksPage />}
           {view === "specifications" && <SpecificationsPage />}
+          {view === "documents" && <DocumentsPage />}
         </>
       )}
     </main>

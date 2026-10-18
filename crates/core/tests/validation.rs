@@ -52,6 +52,7 @@ fn compatibility_defaults_preserve_old_workspace_and_request_documents() {
     )
     .unwrap();
     assert!(w.specifications.is_empty());
+    assert!(w.documents.is_empty());
     assert_eq!(w.script_mode, ScriptMode::V1);
     let mut async_workspace = w.clone();
     async_workspace.script_mode = ScriptMode::V2;
@@ -68,6 +69,46 @@ fn compatibility_defaults_preserve_old_workspace_and_request_documents() {
     assert!(r.specification_id.is_none());
     assert!(r.operation_id.is_none());
     assert!(validate_workspace(&w).is_ok());
+}
+
+#[test]
+fn markdown_documents_validate_ids_folders_titles_and_source_budgets() {
+    let mut data: WorkspaceData = serde_json::from_value(json!({
+        "schema_version":1,
+        "collections":[{"id":"c","name":"C","description":"","requests":[]}],
+        "environments":[],"active_environment_id":null,
+        "documents":[{"id":"d","name":"Guide","collection_id":"c","source":"# Hello"}]
+    }))
+    .unwrap();
+    assert!(data.documents[0].secret);
+    assert!(validate_workspace(&data).is_ok());
+    let encoded = serde_json::to_value(&data).unwrap();
+    assert_eq!(encoded["documents"][0]["secret"], true);
+
+    data.documents.push(data.documents[0].clone());
+    assert!(validate_workspace(&data).is_err());
+    data.documents.pop();
+    data.documents[0].collection_id = Some("missing".into());
+    assert!(validate_workspace(&data).is_err());
+    data.documents[0].collection_id = Some("c".into());
+    for invalid in ["", " padded ", "bad\nname"] {
+        data.documents[0].name = invalid.into();
+        assert!(validate_workspace(&data).is_err(), "{invalid:?}");
+    }
+    data.documents[0].name = "Guide".into();
+    data.documents[0].source = "x".repeat(256 * 1024 + 1);
+    assert!(validate_workspace(&data).is_err());
+    data.documents[0].source = "x".repeat(256 * 1024);
+    data.documents = (0..9)
+        .map(|index| MarkdownDocument {
+            id: format!("d{index}"),
+            name: format!("Guide {index}"),
+            collection_id: Some("c".into()),
+            source: "x".repeat(256 * 1024),
+            secret: true,
+        })
+        .collect();
+    assert!(validate_workspace(&data).is_err());
 }
 #[test]
 fn mock_implementation_scripts_require_explicit_v2_mode() {
@@ -229,6 +270,7 @@ fn canonical_specification_references_and_size_are_checked() {
         pre_request_script: String::new(),
         post_response_script: String::new(),
         specifications: vec![],
+        documents: vec![],
         schema_version: 1,
         collections: vec![Collection {
             variables_enabled: None,
