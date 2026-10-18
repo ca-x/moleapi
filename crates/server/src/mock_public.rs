@@ -101,6 +101,38 @@ fn request_digest(
         let source = serde_json::to_vec(&(id, &spec.source)).map_err(|_| ApiError::internal())?;
         digest.update(source);
     }
+    let bound: std::collections::BTreeSet<&str> = request
+        .examples
+        .iter()
+        .filter_map(|example| {
+            example
+                .mock_data
+                .as_ref()
+                .map(|binding| binding.dataset_id.as_str())
+        })
+        .collect();
+    for id in bound {
+        let dataset = workspace
+            .data
+            .datasets
+            .iter()
+            .find(|dataset| dataset.id == id)
+            .ok_or_else(ApiError::not_found)?;
+        digest.update(serde_json::to_vec(&(id, dataset)).map_err(|_| ApiError::internal())?);
+        if let Some(query) = &dataset.query {
+            let source = workspace
+                .data
+                .collections
+                .iter()
+                .flat_map(|collection| &collection.requests)
+                .find(|source| source.id == query.request_id)
+                .ok_or_else(ApiError::not_found)?;
+            digest.update(
+                serde_json::to_vec(&(&query.request_id, source))
+                    .map_err(|_| ApiError::internal())?,
+            );
+        }
+    }
     Ok(hex::encode(digest.finalize()))
 }
 
@@ -117,7 +149,7 @@ fn validate_target(
         && request
             .examples
             .iter()
-            .all(|example| !example.mock_script.is_empty())
+            .all(|example| !example.mock_script.is_empty() || example.mock_data.is_some())
     {
         return Err(ApiError::bad(
             "Public Mock requires a static example or explicit dynamic permission",

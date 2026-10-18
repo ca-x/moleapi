@@ -201,7 +201,6 @@ pub fn query_snapshot(dataset: &QuerySnapshot, sql: &str, params: &[String]) -> 
     ensure!(
         !dataset.columns.is_empty()
             && dataset.columns.len() <= MAX_COLUMNS
-            && !dataset.rows.is_empty()
             && dataset.rows.len() <= MAX_ROWS
             && dataset
                 .rows

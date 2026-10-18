@@ -113,6 +113,12 @@ export interface Example {
   mock_schema_link?: { specification_id: string; pointer: string };
   mock_name_inference?: boolean;
   mock_script?: string;
+  mock_data?: {
+    dataset_id:string;
+    view_id:string;
+    shape:"rows"|"first";
+    parameters:{source:"path"|"query"|"header";name:string}[];
+  };
   mock_match?: {
     priority: number;
     query?: Pair[];

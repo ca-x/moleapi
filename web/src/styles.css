@@ -435,6 +435,10 @@ kbd {
 .example-list .cm-editor {
   margin-top: 16px;
 }
+.mock-data-editor {display:flex;flex-direction:column;gap:12px;min-width:0;margin:14px 0;padding:14px;border:1px solid var(--gray-6);border-radius:var(--radius-2);}
+.mock-data-editor .rt-Button {align-self:flex-start;min-height:44px;}
+.mock-data-parameter {display:grid;grid-template-columns:minmax(120px,180px) minmax(0,1fr) auto;align-items:center;gap:8px;min-width:0;}
+@media (max-width:640px) {.mock-data-parameter {grid-template-columns:minmax(0,1fr);}.mock-data-parameter .rt-Button {width:100%;}}
 .mock-call-list {
   list-style: none;
   margin: 8px 0 0;

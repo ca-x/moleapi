@@ -83,6 +83,7 @@ pub fn export(workspace: &Workspace, format: &str, include_secrets: bool) -> Res
             .flat_map(|request| &request.examples)
             .any(|example| {
                 example.mock_match.is_some()
+                    || example.mock_data.is_some()
                     || example.delay_ms > 0
                     || example.fault_rate_percent > 0
                     || example.fault_status != 503
@@ -92,7 +93,7 @@ pub fn export(workspace: &Workspace, format: &str, include_secrets: bool) -> Res
             })
     {
         bail!(
-            "Mock matching, delay, rate limit or schema settings require MoleAPI backup until external mappings are verified"
+            "Mock matching, data, delay, rate limit or schema settings require MoleAPI backup until external mappings are verified"
         );
     }
     if workspace.data.script_mode == moleapi_core::ScriptMode::V2 && format != "moleapi" {

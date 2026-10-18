@@ -176,7 +176,7 @@ async fn serve_direct(
             })
     });
     let selected = selected.filter(|(_, _, example)| {
-        grant.is_none_or(|grant| grant.share.allow_dynamic || example.mock_script.is_empty())
+        grant.is_none_or(|grant| grant.share.allow_dynamic || !is_dynamic(example))
     });
     let Some((collection, request, e)) = selected else {
         mock_logs::record(
@@ -206,6 +206,7 @@ async fn serve_direct(
         incoming_headers,
         &Method::GET,
         &[],
+        None,
     )
     .await;
     if let Some(grant) = grant {
@@ -375,9 +376,7 @@ async fn serve_routed(
                     )
                     .await;
                 }
-                if grant.is_some_and(|grant| !grant.share.allow_dynamic)
-                    && !example.mock_script.is_empty()
-                {
+                if grant.is_some_and(|grant| !grant.share.allow_dynamic) && is_dynamic(example) {
                     continue;
                 }
                 let Some(condition_count) = example_matches(example, incoming) else {
@@ -424,6 +423,7 @@ async fn serve_routed(
         &parts.headers,
         &parts.method,
         &bytes,
+        Some(&actual),
     )
     .await;
     if let Some(grant) = grant {
@@ -508,6 +508,95 @@ fn outcome_meta(result: &Result<axum::response::Response, ApiError>) -> (StatusC
         Ok(response) => (response.status(), "served"),
         Err(error) => (error.status, "failed"),
     }
+}
+
+fn is_dynamic(example: &moleapi_core::Example) -> bool {
+    !example.mock_script.trim().is_empty() || example.mock_data.is_some()
+}
+
+fn mock_data_parameters(
+    binding: &moleapi_core::MockDataBinding,
+    saved: &moleapi_core::RequestSpec,
+    route_path: Option<&str>,
+    incoming: &moleapi_core::RequestSpec,
+) -> Result<Vec<String>, ApiError> {
+    if binding.parameters.len() > 16 {
+        return Err(ApiError::bad("Mock data parameter limit exceeded"));
+    }
+    binding
+        .parameters
+        .iter()
+        .map(|parameter| {
+            let values: Vec<String> = match parameter.source {
+                moleapi_core::MockDataSource::Query => incoming
+                    .query
+                    .iter()
+                    .filter(|row| row.enabled && row.key == parameter.name)
+                    .map(|row| row.value.clone())
+                    .collect(),
+                moleapi_core::MockDataSource::Header => incoming
+                    .headers
+                    .iter()
+                    .filter(|row| row.enabled && row.key.eq_ignore_ascii_case(&parameter.name))
+                    .map(|row| row.value.clone())
+                    .collect(),
+                moleapi_core::MockDataSource::Path => {
+                    let actual = route_path.ok_or_else(|| {
+                        ApiError::bad("Mock data path parameter requires a routed Mock call")
+                    })?;
+                    let saved = url::Url::parse(&saved.url)
+                        .map_err(|_| ApiError::bad("Invalid saved Mock data route"))?;
+                    saved
+                        .path()
+                        .trim_matches('/')
+                        .split('/')
+                        .zip(actual.trim_matches('/').split('/'))
+                        .filter_map(|(segment, value)| {
+                            let name = percent_encoding::percent_decode_str(segment)
+                                .decode_utf8()
+                                .ok()?;
+                            (name.as_ref() == format!("{{{}}}", parameter.name))
+                                .then(|| {
+                                    percent_encoding::percent_decode_str(value)
+                                        .decode_utf8()
+                                        .ok()
+                                })
+                                .flatten()
+                                .map(|value| value.into_owned())
+                        })
+                        .collect()
+                }
+            };
+            let [value] = values.as_slice() else {
+                return Err(ApiError::bad("Mock data parameter is missing or ambiguous"));
+            };
+            if value.len() > 512 || value.chars().any(char::is_control) {
+                return Err(ApiError::bad("Mock data parameter exceeds its safe limit"));
+            }
+            Ok(value.clone())
+        })
+        .collect()
+}
+
+fn mock_data_script(
+    binding: &moleapi_core::MockDataBinding,
+    params: &[String],
+) -> Result<String, ApiError> {
+    let mut script = String::from("await (async()=>{const result=await pm.datasets(");
+    script.push_str(&serde_json::to_string(&binding.dataset_id).map_err(|_| ApiError::internal())?);
+    script.push_str(").executeView(");
+    script.push_str(&serde_json::to_string(&binding.view_id).map_err(|_| ApiError::internal())?);
+    script.push(',');
+    script.push_str(&serde_json::to_string(params).map_err(|_| ApiError::internal())?);
+    script.push_str(");const rows=[];for await(const row of result.rows)rows.push(row);");
+    match binding.shape {
+        moleapi_core::MockDataShape::Rows => script.push_str("pm.mock.setBody(rows);"),
+        moleapi_core::MockDataShape::First => script.push_str(
+            "if(rows.length){pm.mock.setBody(rows[0]);}else{pm.mock.setStatus(404);pm.mock.setBody(null);}",
+        ),
+    }
+    script.push_str("})()");
+    Ok(script)
 }
 
 fn path_match(saved: &str, actual: &str) -> Option<usize> {
@@ -644,6 +733,7 @@ async fn serve_selected(
     incoming_headers: &HeaderMap,
     method: &Method,
     body: &[u8],
+    route_path: Option<&str>,
 ) -> Result<axum::response::Response, ApiError> {
     if e.fault_rate_percent > 100 || !(500..=599).contains(&e.fault_status) {
         return Err(ApiError::bad("Invalid saved Mock fault settings"));
@@ -782,19 +872,51 @@ async fn serve_selected(
     } else {
         e.body.clone()
     };
+    if e.mock_data.is_some()
+        && !response_headers
+            .iter()
+            .any(|header| header.enabled && header.key.eq_ignore_ascii_case("content-type"))
+    {
+        response_headers.push(moleapi_core::Pair {
+            id: "mock-data-content-type".into(),
+            key: "Content-Type".into(),
+            value: "application/json".into(),
+            enabled: true,
+            secret: None,
+            local_value: None,
+        });
+    }
     let mut draft = moleapi_script_runtime::MockResponseDraft {
         status: e.status,
         headers: response_headers,
         body: response_body,
     };
-    if !e.mock_script.trim().is_empty() {
+    if is_dynamic(e) {
         if w.data.script_mode != moleapi_core::ScriptMode::V2 {
-            return Err(ApiError::bad("Mock scripts require compatibility v2"));
+            return Err(ApiError::bad("Dynamic Mock requires compatibility v2"));
         }
         let incoming = safe_incoming_request(request, uri, incoming_headers, method, body)?;
-        draft =
-            execution::run_mock_phase(s, owner, w, collection, &incoming, &e.mock_script, draft)
-                .await?;
+        let mut scripts = Vec::new();
+        if let Some(binding) = &e.mock_data {
+            let params = mock_data_parameters(binding, request, route_path, &incoming)?;
+            scripts.push(mock_data_script(binding, &params)?);
+        }
+        if !e.mock_script.trim().is_empty() {
+            scripts.push(e.mock_script.clone());
+        }
+        draft = execution::run_mock_phase(
+            s,
+            owner,
+            w,
+            collection,
+            &incoming,
+            execution::MockPhase {
+                scripts,
+                seed: draft,
+                allow_empty_live: e.mock_data.is_some(),
+            },
+        )
+        .await?;
         let current = owned(s, owner, &w.id).await?;
         if current.revision != w.revision {
             return Err(ApiError::conflict("Workspace changed during Mock script"));

@@ -76,6 +76,7 @@ struct PhaseFailure {
 struct PhaseMode<'a> {
     response: Option<&'a Response>,
     mock: Option<moleapi_script_runtime::MockResponseDraft>,
+    allow_empty_live: bool,
 }
 async fn script_phase(
     s: &AppState,
@@ -86,7 +87,11 @@ async fn script_phase(
     scopes: &VariableScopes,
     phase: PhaseMode<'_>,
 ) -> Result<moleapi_script_runtime::ScriptOutput, PhaseFailure> {
-    let PhaseMode { response, mock } = phase;
+    let PhaseMode {
+        response,
+        mock,
+        allow_empty_live,
+    } = phase;
     let data = &w.data;
     let _permit = s
         .script_slots
@@ -168,6 +173,7 @@ async fn script_phase(
                                 locals: &[],
                                 cancel: &cancel,
                                 deadline,
+                                allow_empty: allow_empty_live,
                             },
                         )),
                     )
@@ -177,6 +183,26 @@ async fn script_phase(
                     format: "json".into(),
                     source: serde_json::to_string(&refreshed.rows)?,
                 };
+                if refreshed.rows.is_empty() {
+                    return Ok((
+                        moleapi_script_runtime::dataset_query::QuerySnapshot {
+                            id: saved.id.clone(),
+                            table_name: saved.table_name.clone(),
+                            columns: refreshed.columns,
+                            rows: Vec::new(),
+                            views: saved
+                                .views
+                                .iter()
+                                .map(|view| moleapi_script_runtime::dataset_query::QueryView {
+                                    id: view.id.clone(),
+                                    sql: view.sql.clone(),
+                                })
+                                .collect(),
+                            live_query: false,
+                        },
+                        std::collections::BTreeSet::new(),
+                    ));
+                }
                 let mut snapshot_dataset = saved.clone();
                 snapshot_dataset.source = Some(source);
                 snapshot_dataset.query = None;
@@ -282,27 +308,37 @@ async fn script_phase(
         }
     })
 }
+pub(crate) struct MockPhase {
+    pub scripts: Vec<String>,
+    pub seed: moleapi_script_runtime::MockResponseDraft,
+    pub allow_empty_live: bool,
+}
 pub(crate) async fn run_mock_phase(
     s: &AppState,
     owner: &str,
     w: &Workspace,
     collection: &Collection,
     request: &RequestSpec,
-    script: &str,
-    seed: moleapi_script_runtime::MockResponseDraft,
+    phase: MockPhase,
 ) -> Result<moleapi_script_runtime::MockResponseDraft, ApiError> {
+    let MockPhase {
+        scripts,
+        seed,
+        allow_empty_live,
+    } = phase;
     let selected_environment = environment(w, None)?;
     let scopes = variables(s, w, Some(collection), selected_environment, &[], &[], &[])?;
     let output = script_phase(
         s,
         owner,
         w,
-        vec![script.into()],
+        scripts,
         request,
         &scopes,
         PhaseMode {
             response: None,
             mock: Some(seed),
+            allow_empty_live,
         },
     )
     .await
@@ -415,6 +451,7 @@ pub(crate) async fn perform_deferred(
             PhaseMode {
                 response: None,
                 mock: None,
+                allow_empty_live: false,
             },
         )
         .await
@@ -604,6 +641,7 @@ pub(crate) async fn perform_deferred(
             PhaseMode {
                 response: Some(&response),
                 mock: None,
+                allow_empty_live: false,
             },
         )
         .await
@@ -729,7 +767,7 @@ pub(crate) async fn prepare_live(
     let mut feedback = moleapi_protocols::PreparedFeedback::default();
     let mut updates = vec![];
     if scripts.iter().any(|s| !s.trim().is_empty()) {
-        let output = script_phase(s, owner, w, scripts, &request, scopes, PhaseMode { response: None, mock: None }).await.map_err(|failure| {
+        let output = script_phase(s, owner, w, scripts, &request, scopes, PhaseMode { response: None, mock: None, allow_empty_live: false }).await.map_err(|failure| {
             scopes.private_values.extend(failure.private_values);
             let mut message = serde_json::json!(failure.error.message);
             if failure.privacy_complete {
@@ -907,6 +945,7 @@ pub(crate) async fn postprocess_data(
             PhaseMode {
                 response: Some(response),
                 mock: None,
+                allow_empty_live: false,
             },
         )
         .await
@@ -978,7 +1017,7 @@ pub(crate) async fn prepare_data_query(
     synthetic.url = "http://data.invalid/query".into();
     synthetic.body_kind = "text".into();
     synthetic.body = selected_sql.into();
-    let output = script_phase(s, owner, w, vec![config.query_pre_script.clone()], &synthetic, scopes, PhaseMode { response: None, mock: None })
+    let output = script_phase(s, owner, w, vec![config.query_pre_script.clone()], &synthetic, scopes, PhaseMode { response: None, mock: None, allow_empty_live: false })
         .await.map_err(|failure| {
             scopes.private_values.extend(failure.private_values);
             if !failure.privacy_complete {

@@ -325,6 +325,63 @@ async fn cancelled_admitted_mock_attempt_still_uses_its_rate_quota() {
 }
 
 #[tokio::test]
+async fn cancelling_data_bound_mock_releases_its_delay_slot_without_replaying_the_call() {
+    let dir = tempfile::tempdir().unwrap();
+    let slots = std::sync::Arc::new(tokio::sync::Semaphore::new(32));
+    let router = moleapi_server::local_with_mock_delay_slots_for_test(
+        &dir.path().join("cancelled-data.db"),
+        std::path::Path::new(env!("CARGO_BIN_EXE_moleapi-server")),
+        slots.clone(),
+    )
+    .await
+    .unwrap();
+    let mut data = example_data();
+    data["script_mode"] = json!("v2");
+    data["datasets"] = json!([{"id":"d","name":"Rows","source":{"format":"json","source":"[{\"value\":\"private-row\"}]"},"views":[{"id":"all","name":"All","sql":"SELECT value FROM data"}]}]);
+    let example = &mut data["collections"][0]["requests"][0]["examples"][0];
+    example["mock_data"] = json!({"dataset_id":"d","view_id":"all"});
+    example["rate_limit_per_minute"] = json!(1);
+    example["delay_ms"] = json!(5_000);
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            None,
+            Some(json!({"id":"w","name":"Rate","data":data}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let running = {
+        let router = router.clone();
+        tokio::spawn(async move { call(&router, "GET", "/api/mock/w/r/e", None, None).await })
+    };
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        while slots.available_permits() != 31 {
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("data-bound Mock never entered its delay");
+    running.abort();
+    assert!(running.await.is_err());
+    tokio::time::timeout(std::time::Duration::from_secs(1), async {
+        while slots.available_permits() != 32 {
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("cancelled data-bound Mock kept its delay slot");
+    let started = std::time::Instant::now();
+    let (status, error) = call(&router, "GET", "/api/mock/w/r/e", None, None).await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    assert!(!error.to_string().contains("private-row"));
+    assert!(started.elapsed() < std::time::Duration::from_millis(250));
+}
+
+#[tokio::test]
 async fn saved_schema_generates_direct_and_routed_json_before_optional_script() {
     let dir = tempfile::tempdir().unwrap();
     let router = local(&dir.path().join("schema.db")).await.unwrap();
@@ -665,7 +722,7 @@ async fn dynamic_mock_queries_owned_dataset_and_sees_only_safe_incoming_request_
     data["script_mode"] = json!("v2");
     data["datasets"] = json!([{"id":"d","name":"Rows","source":{"format":"json","source":"[{\"value\":\"dynamic\"}]"}}]);
     data["collections"][0]["requests"][0]["examples"][0]["mock_script"] = json!(
-        "if(!pm.request.url.includes('safe=yes')||pm.request.url.includes('token=hidden')||pm.request.headers.get('cookie')!==undefined||pm.request.headers.get('x-hop')!==undefined||pm.request.headers.get('x-safe')!=='visible')throw new Error('unsafe incoming Mock request');const result=await pm.datasets('d').executeQuery('SELECT value FROM data');for await(const row of result.rows){pm.mock.setStatus(202);pm.mock.setHeader('x-row',row.value);pm.mock.setBody({value:row.value});}"
+        "if(!pm.request.url.includes('safe=yes')||pm.request.url.includes('token=hidden')||pm.request.url.includes('cookie=hidden')||pm.request.headers.get('cookie')!==undefined||pm.request.headers.get('x-hop')!==undefined||pm.request.headers.get('x-safe')!=='visible')throw new Error('unsafe incoming Mock request');const result=await pm.datasets('d').executeQuery('SELECT value FROM data');for await(const row of result.rows){pm.mock.setStatus(202);pm.mock.setHeader('x-row',row.value);pm.mock.setBody({value:row.value});}"
     );
     assert_eq!(
         call(
@@ -683,7 +740,7 @@ async fn dynamic_mock_queries_owned_dataset_and_sees_only_safe_incoming_request_
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/api/mock/w/r/e?safe=yes&token=hidden")
+                .uri("/api/mock/w/r/e?safe=yes&token=hidden&cookie=hidden")
                 .header("cookie", "private-cookie")
                 .header("connection", "X-Hop")
                 .header("x-hop", "private-hop")
@@ -723,6 +780,192 @@ async fn dynamic_mock_queries_owned_dataset_and_sees_only_safe_incoming_request_
         let body = to_bytes(response.into_body(), 1024).await.unwrap();
         assert!(!String::from_utf8_lossy(&body).contains("leak"));
     }
+}
+
+#[tokio::test]
+async fn selected_mock_can_return_a_saved_dataset_view_without_authored_script() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("data-bound.db")).await.unwrap();
+    let mut data = example_data();
+    data["script_mode"] = json!("v2");
+    data["datasets"] = json!([{"id":"d","name":"Rows","source":{"format":"json","source":"[{\"id\":\"a\"},{\"id\":\"b\"}]"},"views":[{"id":"all","name":"All","sql":"SELECT id FROM data ORDER BY id"}]}]);
+    data["collections"][0]["requests"][0]["examples"][0]["mock_data"] =
+        json!({"dataset_id":"d","view_id":"all","shape":"rows"});
+    let (status, saved) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"w","name":"Data Mock","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/mock/w/r/e")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    assert_eq!(response.headers()["content-type"], "application/json");
+    let body = to_bytes(response.into_body(), 1024).await.unwrap();
+    assert_eq!(
+        serde_json::from_slice::<Value>(&body).unwrap(),
+        json!([{"id":"a"},{"id":"b"}])
+    );
+    let mut changed = saved["data"].clone();
+    changed["collections"][0]["requests"][0]["examples"][0]["mock_script"] =
+        json!("pm.mock.setHeader('x-data','script-ran')");
+    assert_eq!(
+        call(
+            &router,
+            "PUT",
+            "/api/workspaces/w",
+            None,
+            Some(json!({"name":"Data Mock","expected_revision":saved["revision"],"data":changed}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/mock/w/r/e")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.headers()["x-data"], "script-ran");
+    assert_eq!(
+        serde_json::from_slice::<Value>(&to_bytes(response.into_body(), 1024).await.unwrap())
+            .unwrap(),
+        json!([{"id":"a"},{"id":"b"}])
+    );
+}
+
+#[tokio::test]
+async fn data_bound_mock_never_serves_static_body_when_view_output_exceeds_budget() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("data-budget.db")).await.unwrap();
+    let mut data = example_data();
+    data["script_mode"] = json!("v2");
+    let rows = vec![json!({"value":"x".repeat(40_000)}); 20];
+    data["datasets"] = json!([{"id":"d","name":"Rows","source":{"format":"json","source":serde_json::to_string(&rows).unwrap()},"views":[{"id":"expanded","name":"Expanded","sql":"SELECT value AS a, value AS b, value AS c FROM data"}]}]);
+    data["collections"][0]["requests"][0]["examples"][0]["mock_data"] =
+        json!({"dataset_id":"d","view_id":"expanded"});
+    let (status, saved) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"w","name":"Data Mock","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    let (status, error) = call(&router, "GET", "/api/mock/w/r/e", None, None).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{error}");
+    assert!(!error.to_string().contains("static"));
+}
+
+#[tokio::test]
+async fn data_bound_mock_uses_only_one_safe_path_query_and_header_parameter() {
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("data-params.db")).await.unwrap();
+    let mut data = example_data();
+    data["script_mode"] = json!("v2");
+    data["collections"][0]["requests"][0]["url"] = json!("https://example.com/items/{id}");
+    data["datasets"] = json!([{"id":"d","name":"Rows","source":{"format":"json","source":"[{\"id\":\"a\",\"tag\":\"x\",\"mode\":\"fast\",\"value\":\"selected\"}]"},"views":[{"id":"one","name":"One","sql":"SELECT value FROM data WHERE id = ? AND tag = ? AND mode = ?"}]}]);
+    data["collections"][0]["requests"][0]["examples"][0]["mock_data"] = json!({
+        "dataset_id":"d","view_id":"one","shape":"first","parameters":[
+            {"source":"path","name":"id"},{"source":"query","name":"tag"},{"source":"header","name":"x-mode"}
+        ]
+    });
+    let (status, saved) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"w","name":"Data Mock","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/mocks/w/items/a?tag=x")
+                .header("x-mode", "fast")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    assert_eq!(
+        serde_json::from_slice::<Value>(&to_bytes(response.into_body(), 1024).await.unwrap())
+            .unwrap(),
+        json!({"value":"selected"})
+    );
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/mocks/w/items/missing?tag=x")
+                .header("x-mode", "fast")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    assert_eq!(
+        to_bytes(response.into_body(), 1024).await.unwrap().as_ref(),
+        b"null"
+    );
+    for uri in ["/api/mocks/w/items/a?tag=x&tag=x", "/api/mocks/w/items/a"] {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(uri)
+                    .header("x-mode", "fast")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{uri}");
+    }
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/mocks/w/items/a?tag=x")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/mock/w/r/e?tag=x")
+                .header("x-mode", "fast")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 #[tokio::test]
 async fn dynamic_mock_loads_query_backed_dataset_through_host_bridge() {
@@ -797,6 +1040,192 @@ async fn dynamic_mock_loads_query_backed_dataset_through_host_bridge() {
     assert!(
         !String::from_utf8_lossy(&to_bytes(response.into_body(), 1024).await.unwrap())
             .contains("live-private")
+    );
+}
+
+#[tokio::test]
+async fn data_bound_mock_refreshes_query_backed_dataset_only_when_selected() {
+    use base64::Engine;
+    let dir = tempfile::tempdir().unwrap();
+    let router = local(&dir.path().join("bound-live.db")).await.unwrap();
+    let mut data = example_data();
+    data["script_mode"] = json!("v2");
+    data["collections"][0]["requests"][0]["url"] = json!("https://example.com/items");
+    let mut source = data["collections"][0]["requests"][0].clone();
+    source["id"] = json!("data-query");
+    source["url"] = json!("");
+    source["protocol"] = json!({"kind":"data","source":"local_file","file_name":"rows.csv","file_format":"csv","file_base64":base64::engine::general_purpose::STANDARD.encode(b"value\nlive-row\n"),"table_name":"data","sql":"SELECT value FROM data","read_only":true});
+    data["collections"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"id":"sources","name":"Sources","description":"","requests":[source]}));
+    data["datasets"] = json!([{"id":"live","name":"Live","query":{"request_id":"data-query"},"views":[{"id":"all","name":"All","sql":"SELECT value FROM data"}]}]);
+    data["collections"][0]["requests"][0]["examples"][0]["mock_data"] =
+        json!({"dataset_id":"live","view_id":"all","shape":"rows"});
+    let (status, saved) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        None,
+        Some(json!({"id":"w","name":"Dynamic","data":data})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/mock/w/r/e")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    assert_eq!(
+        serde_json::from_slice::<Value>(&to_bytes(response.into_body(), 1024).await.unwrap())
+            .unwrap(),
+        json!([{"value":"live-row"}])
+    );
+    let (_, mut changed) = call(&router, "GET", "/api/workspaces/w", None, None).await;
+    changed["data"]["collections"][1]["requests"][0]["protocol"]["file_base64"] =
+        json!(base64::engine::general_purpose::STANDARD.encode(b"value\n"));
+    changed["data"]["collections"][0]["requests"][0]["examples"][0]["mock_data"]["shape"] =
+        json!("first");
+    assert_eq!(
+        call(
+            &router,
+            "PUT",
+            "/api/workspaces/w",
+            None,
+            Some(json!({"name":"Dynamic","expected_revision":changed["revision"],"data":changed["data"]}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/mock/w/r/e")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    assert_eq!(
+        to_bytes(response.into_body(), 1024).await.unwrap().as_ref(),
+        b"null"
+    );
+    let (_, mut changed) = call(&router, "GET", "/api/workspaces/w", None, None).await;
+    changed["data"]["collections"][0]["requests"][0]["examples"][0]["mock_data"]["shape"] =
+        json!("rows");
+    assert_eq!(call(&router, "PUT", "/api/workspaces/w", None,
+        Some(json!({"name":"Dynamic","expected_revision":changed["revision"],"data":changed["data"]}))).await.0, StatusCode::OK);
+    let (status, rows) = call(&router, "GET", "/api/mock/w/r/e", None, None).await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(rows, json!([]));
+    let (_, mut changed) = call(&router, "GET", "/api/workspaces/w", None, None).await;
+    changed["data"]["collections"][1]["requests"][0]["protocol"]["sql"] =
+        json!("SELECT value FROM missing");
+    assert_eq!(call(&router, "PUT", "/api/workspaces/w", None,
+        Some(json!({"name":"Dynamic","expected_revision":changed["revision"],"data":changed["data"]}))).await.0, StatusCode::OK);
+    let (status, failure) = call(&router, "GET", "/api/mock/w/r/e", None, None).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(!failure.to_string().contains("static") && !failure.to_string().contains("live-row"));
+    let (_, mut changed) = call(&router, "GET", "/api/workspaces/w", None, None).await;
+    changed["data"]["collections"][0]["requests"][0]["examples"][0]["fault_rate_percent"] =
+        json!(100);
+    assert_eq!(
+        call(
+            &router,
+            "PUT",
+            "/api/workspaces/w",
+            None,
+            Some(json!({"name":"Dynamic","expected_revision":changed["revision"],"data":changed["data"]}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/mock/w/r/e")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(
+        to_bytes(response.into_body(), 1024).await.unwrap().as_ref(),
+        b"Simulated Mock failure"
+    );
+    let (_, mut changed) = call(&router, "GET", "/api/workspaces/w", None, None).await;
+    changed["data"]["collections"][0]["requests"][0]["examples"][0]["fault_rate_percent"] =
+        json!(0);
+    changed["data"]["collections"][0]["requests"][0]["examples"][0]["rate_limit_per_minute"] =
+        json!(1);
+    assert_eq!(
+        call(
+            &router,
+            "PUT",
+            "/api/workspaces/w",
+            None,
+            Some(json!({"name":"Dynamic","expected_revision":changed["revision"],"data":changed["data"]}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        call(&router, "GET", "/api/mock/w/r/e", None, None).await.0,
+        StatusCode::BAD_REQUEST
+    );
+    let (status, limited) = call(&router, "GET", "/api/mock/w/r/e", None, None).await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    assert!(!limited.to_string().contains("static"));
+    let (_, mut changed) = call(&router, "GET", "/api/workspaces/w", None, None).await;
+    changed["data"]["collections"][0]["requests"][0]["examples"][0]["fault_rate_percent"] =
+        json!(0);
+    changed["data"]["collections"][0]["requests"][0]["examples"][0]["rate_limit_per_minute"] =
+        json!(0);
+    changed["data"]["collections"][0]["requests"][0]["examples"][0]["mock_match"] =
+        json!({"headers":[{"id":"h","key":"X-Mode","value":"dynamic","enabled":true}]});
+    changed["data"]["collections"][0]["requests"][0]["examples"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"id":"fallback","name":"Static","status":202,"headers":[],"body":"static fallback"}));
+    assert_eq!(
+        call(
+            &router,
+            "PUT",
+            "/api/workspaces/w",
+            None,
+            Some(json!({"name":"Dynamic","expected_revision":changed["revision"],"data":changed["data"]}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/mocks/w/items")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    assert_eq!(
+        to_bytes(response.into_body(), 1024).await.unwrap().as_ref(),
+        b"static fallback"
     );
 }
 #[tokio::test]

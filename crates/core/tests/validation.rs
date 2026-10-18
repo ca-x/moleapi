@@ -136,6 +136,107 @@ fn mock_implementation_scripts_require_explicit_v2_mode() {
 }
 
 #[test]
+fn mock_data_bindings_roundtrip_and_require_a_saved_view() {
+    let mut request = request();
+    request.url = "https://example.com/items/{id}".into();
+    request.examples.push(serde_json::from_value(json!({
+        "id":"e","name":"Data","status":200,"headers":[],"body":"static",
+        "mock_data":{"dataset_id":"d","view_id":"by-id","shape":"first","parameters":[{"source":"path","name":"id"}]}
+    })).unwrap());
+    let mut workspace: WorkspaceData = serde_json::from_value(json!({
+        "schema_version":1,"collections":[],"environments":[],"active_environment_id":null,
+        "datasets":[{"id":"d","name":"Rows","source":{"format":"json","source":"[{\"id\":\"one\"}]"},"views":[{"id":"by-id","name":"By ID","sql":"SELECT id FROM data WHERE id = ?"}]}]
+    })).unwrap();
+    workspace.collections.push(Collection {
+        id: "c".into(),
+        name: "C".into(),
+        description: String::new(),
+        parent_id: None,
+        variables_enabled: None,
+        auth: None,
+        variables: vec![],
+        pre_request_script: String::new(),
+        post_response_script: String::new(),
+        requests: vec![request],
+    });
+    assert!(validate_workspace(&workspace).is_err());
+    workspace.script_mode = ScriptMode::V2;
+    validate_workspace(&workspace).unwrap();
+    let saved = serde_json::to_value(&workspace).unwrap();
+    assert_eq!(
+        saved["collections"][0]["requests"][0]["examples"][0]["mock_data"]["view_id"],
+        "by-id"
+    );
+    let restored: WorkspaceData = serde_json::from_value(saved).unwrap();
+    assert_eq!(restored, workspace);
+    workspace.collections[0].requests[0].examples[0] = serde_json::from_value(json!({
+        "id":"e","name":"Data","status":200,"headers":[],"body":"static",
+        "mock_data":{"dataset_id":"d","view_id":"missing","parameters":[]}
+    }))
+    .unwrap();
+    assert!(validate_workspace(&workspace).is_err());
+    let binding = workspace.collections[0].requests[0].examples[0]
+        .mock_data
+        .as_mut()
+        .unwrap();
+    binding.view_id = "by-id".into();
+    binding.parameters = vec![MockDataParameter {
+        source: MockDataSource::Query,
+        name: "token".into(),
+    }];
+    assert!(validate_workspace(&workspace).is_err());
+    workspace.collections[0].requests[0].examples[0]
+        .mock_data
+        .as_mut()
+        .unwrap()
+        .parameters = vec![MockDataParameter {
+        source: MockDataSource::Query,
+        name: "cookie".into(),
+    }];
+    assert!(validate_workspace(&workspace).is_err());
+    workspace.collections[0].requests[0].examples[0]
+        .mock_data
+        .as_mut()
+        .unwrap()
+        .parameters = vec![MockDataParameter {
+        source: MockDataSource::Header,
+        name: "Authorization".into(),
+    }];
+    assert!(validate_workspace(&workspace).is_err());
+    workspace.collections[0].requests[0].examples[0]
+        .mock_data
+        .as_mut()
+        .unwrap()
+        .parameters = vec![MockDataParameter {
+        source: MockDataSource::Path,
+        name: "missing".into(),
+    }];
+    assert!(validate_workspace(&workspace).is_err());
+    workspace.collections[0].requests[0].examples[0]
+        .mock_data
+        .as_mut()
+        .unwrap()
+        .parameters
+        .clear();
+    workspace.collections[0].requests[0].examples[0]
+        .headers
+        .push(Pair {
+            id: "h".into(),
+            key: "Content-Type".into(),
+            value: "text/plain".into(),
+            enabled: true,
+            secret: None,
+            local_value: None,
+        });
+    assert!(validate_workspace(&workspace).is_err());
+    workspace.collections[0].requests[0].examples[0]
+        .headers
+        .clear();
+    workspace.collections[0].requests[0].examples[0].mock_schema = "{\"type\":\"object\"}".into();
+    assert!(validate_workspace(&workspace).is_err());
+}
+
+#[test]
 fn linked_mock_schema_requires_matching_saved_operation_status_and_media() {
     let source = json!({"openapi":"3.1.0","paths":{"/items":{"get":{"responses":{"200":{"content":{"application/json":{"schema":{"type":"string","example":"linked"}}}}}}}}}).to_string();
     let mut request = request();
