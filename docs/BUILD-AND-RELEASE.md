@@ -61,6 +61,14 @@ CI 为无 FUSE 环境全局设置 `APPIMAGE_EXTRACT_AND_RUN=1`。修复脚本读
 验收。Linux 本机归档/原生界面已验证；其余 OS、安装包实际安装、容器新提交、签名/
 公证以及对应源码的最终发布仍按原有发布门禁确认，不能从资源清单推断通过。
 
+2026-10-18 Linux 安装验收续项：原生桌面工作流在 deb/rpm/AppImage 解包检查后，
+于一次性 Ubuntu runner 通过 apt 实际安装当前构建的唯一 `.deb`，随后从已安装的
+`/usr/bin/moleapi` 和 `/usr/lib/MoleAPI` 运行脚本 worker、原始 JRE 与 Dubbo 检查。
+`scripts/check-installed-linux-deb.py` 拒绝非 GitHub Linux 环境，不能在开发机上
+调用安装操作。5 项合成命令/拒绝测试、脚本编译与 actionlint1.7.7 已在本地通过；
+actionlint 仅需忽略其不认识的现有 GitHub `macos-15-intel` 标签。真实安装仍待本分支固定提交
+的 Linux 原生 CI，图形界面启动、macOS/Windows 安装与签名门禁仍独立开放。
+
 
 2026-10-15 容器原生结果：main ea34ce1 的 Docker run38698102016 已完成 linux/amd64、
 linux/arm64 和 manifest。两个原生镜像均通过固定 JRE21.0.12.1+1 启动及真实归属 API
