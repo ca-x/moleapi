@@ -1,0 +1,46 @@
+# Hosted workspace membership and roles
+
+Status: implementation specification for the first integrated collaboration release, covering `collaboration-002/003/004` and part of `collaboration-001`. Capability boundaries are in `docs/COLLABORATION-CAPABILITY-MAP.md`.
+
+## Objective and assumptions
+
+A hosted workspace owner can invite an existing or future MoleAPI account using a single-use link, assign a role, see active members and revoke access. Members work against the owner's canonical workspace revision; changes are never copied into member-owned documents. Invitations are displayed once for the owner to copy, with optional delivery through separately configured notifications. A standalone offline workspace keeps its current local-only ownership model.
+
+Roles are `owner`, `admin`, `editor`, `viewer`. There is exactly one owner. Admins manage invitations and non-owner members and can edit resources. Editors can edit and execute supported workspace resources. Viewers can browse a safe projection without saved credentials or private response/history data, and cannot invoke request execution, export secrets or change data. Only the owner may delete or transfer the workspace, issue runner credentials, or manage external/public sharing until later policies explicitly delegate those powers.
+
+## Data and consistency
+
+- Add indexed membership and invitation tables across SQLite, PostgreSQL and MySQL. Membership has a unique `(owner_id, workspace_id, member_id)` key, a fresh generation per acceptance, role, revision and timestamps; an index on `member_id` powers cursor-paginated shared-workspace listing. Invitation has random ID, SHA-256 token digest, role, creator, expiry, consumed/revoked state and an owner/workspace key. Tokens are never stored or logged in plaintext. No new role field is embedded in the canonical workspace payload.
+- Create, accept, change role and remove member inside owner/workspace-locked transactions. Acceptance rechecks the active workspace, account and token expiry, enforces a 100-member/20-pending-invitation budget and consumes the token atomically. Same-account retry is idempotent; a different account cannot reuse an accepted token. Workspace deletion invalidates invitations and membership in the same transaction.
+- Record successful invitation and membership mutations and shared workspace writes in the same transaction as the change. Audit entries contain actor ID, canonical owner/workspace pair, action, optional subject ID, outcome and time; they contain no token, request body or secret value. Owner/admin sessions can list the latest 100 entries. Workspace deletion removes its audit entries in the same transaction so a reused workspace ID cannot expose an older workspace's actor history.
+- Each member request resolves the authenticated actor to the canonical owner and current membership. Local in-process admission controls support prompt cancellation, while cross-instance DB generation/revision checks before committing changes or releasing private responses enforce revocation after removal, rejoining or a role change. A member token retains the actor identity for audit; route handlers receive a separate resolved canonical owner. No role may acquire an owner identity by supplying a workspace ID or runner credential.
+- Workspace IDs are unique only under an owner today. Shared routes therefore use the explicit pair `/api/owners/{owner_id}/workspaces/{workspace_id}/…`; invitation acceptance and the shared-workspace picker return both IDs. Existing `/api/workspaces/{id}/…` URLs remain owner-scoped for compatibility. A member cannot use a bare ID to select between different owners with the same workspace ID.
+- Preserve existing owner-only URLs and payloads. New membership fields and tables are additive; old databases migrate without rewriting workspace JSON. A member-scoped read of the workspace returns a role-labelled projection. Viewer responses screen credentials, private variables, saved Data sources, full exports and response history using the existing conservative privacy machinery; unsupported safe projections fail closed instead of returning raw owner data.
+
+## Route permissions
+
+The shared-route policy is explicit and deny by default for non-owners. A table generated from actual Axum routes assigns the minimum role and whether a route returns private data. Initial editor scope includes workspace GET/PUT with CAS, saved request execution, ordinary history/results, collection/scenario operations and Mock editing through the canonical owner. Viewer scope includes projected workspace/document/specification reads and metadata-only status. Membership management requires admin, and cannot alter the owner. Owner-only paths include workspace delete, member role above admin, access tokens, runner credentials, public shares, full backup and account/security settings. Routes outside an explicitly audited table stay owner-only until classified.
+
+Hosted session authentication is required to create/accept invitations and manage roles; personal API tokens may use an existing membership only after the same role check. Agent credentials and anonymous public links never accept invitations. Role changes take effect on the next request and fence in-flight shared execution before it returns a private result. A removed member's open protocol/mock/runner work is cancelled or withheld by current admission and DB checks.
+
+The first shared execution entry point is `POST /api/owners/{owner}/workspaces/{workspace}/run`. Editors and admins run the canonical owner's collection through the existing runner, with the real actor and job ID recorded as a `workspace.run` start event. A concurrent 200 ms membership watcher cancels the request future and its job lease on cross-instance role change/removal; a final membership check withholds private results. Viewer execution and owner-scoped bare-ID routes remain denied. Direct request execution, protocol sessions and other async resources need equivalent fences before their member routes open.
+
+Editors and admins can read the canonical owner's saved history, report summaries/detail and report step responses through explicit owner/workspace routes. Each read checks the current role before loading private data and rechecks the membership revision before returning it. Viewers and removed members receive no history or report data. Report deletion/export and history clearing remain owner-only until their write and export policies are audited.
+
+## Client behavior
+
+- Workspace picker lists owned and shared workspaces with role and owner label, without duplicating IDs across owners. Account switch/logout closes member-scoped drafts, query caches, pending saves and protocol sessions.
+- Member management offers labelled role selection, single-use link copy, expiry/revoke controls and member removal confirmation. It never shows stored token digests. Editors see edit/run controls but no management buttons; viewers see a clear read-only state and no write/run action. The server remains authoritative if a stale client invokes a forbidden action.
+- Sync and offline behavior remain explicit: a shared hosted workspace may be cached only within the member's authenticated account scope. Offline edits to a shared workspace are not silently accepted; reconcile with current membership and revision before upload, showing conflicts and revoked access. Local offline workspaces cannot be invited until migrated to hosted ownership through the existing explicit sync flow.
+
+## Evidence and commands
+
+Required tests: three-database transaction races for accept/consume/revoke and owner deletion; cross-instance role changes during GET/PUT, long request/script/Data execution and public-share operations; every route policy entry with owner/admin/editor/viewer and token/agent distinctions; safe viewer projection and default/full export; account-switch cache fencing; actual 390px English/Chinese invite, accept, edit, viewer denial and revoke flows. Record exact supported permissions per route rather than claiming broad resource parity from one workspace GET test.
+
+Build and test commands: `cargo test -p moleapi-server --test database --test collaboration`, strict `cargo clippy -p moleapi-server --all-targets -- -D warnings`, `npm --prefix web test`, `npm --prefix web run build`, embedded server build and fixed-head Application CI/Docker/native matrices. The final release gate includes a freshly installed desktop and standalone hosted server, not just CI compilation.
+
+Source boundaries: `crates/server/src/entities.rs`, `storage/migration.rs`, `auth.rs`, `workspaces.rs`, a dedicated membership/access module and audited route registration in `lib.rs`; member UI in workbench settings and workspace picker; bilingual catalogs. Existing runner agent scopes and anonymous public routes remain separate principals.
+
+## Outside this integrated slice
+
+Organization/team hierarchies, project-specific custom ACLs, realtime presence, comments, user groups, SSO/SCIM, domain capture, BYOK and cross-organization partner workspaces remain separate matrix work. This specification does not mark the complete collaboration or administration modules finished.

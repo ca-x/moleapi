@@ -155,6 +155,7 @@ pub async fn delete(
     owned(&s, &owner.0, &id).await?;
     let _webhook_gate = s.webhooks.gates.lock(&owner.0, &id).await;
     let tx = s.db.begin().await?;
+    crate::collaboration::cascade(&tx, &owner.0, &id).await?;
     crate::webhooks::cascade(&tx, &owner.0, &id).await?;
     let result = document::Entity::update_many()
         .col_expr(document::Column::Kind, Expr::value("tombstone"))

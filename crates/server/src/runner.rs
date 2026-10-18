@@ -45,6 +45,12 @@ pub struct Run {
     #[serde(default)]
     job_id: Option<String>,
 }
+impl Run {
+    pub(crate) fn ensure_job_id(&mut self) -> &str {
+        self.job_id
+            .get_or_insert_with(|| uuid::Uuid::new_v4().to_string())
+    }
+}
 fn interactive() -> String {
     "interactive".into()
 }

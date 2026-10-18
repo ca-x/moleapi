@@ -64,6 +64,51 @@ async fn identical_storage_auth_cas_tests_on_every_configured_database() {
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{published_workspace}");
+        let invite_path = format!("/api/workspaces/{published_id}/invitations");
+        let (status, invitation) = call(
+            &router,
+            "POST",
+            &invite_path,
+            Some(&a),
+            Some(json!({"role":"viewer","expires_in_days":1})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{invitation}");
+        let (status, accepted) = call(
+            &router_again,
+            "POST",
+            "/api/workspace-invitations/accept",
+            Some(&b),
+            Some(json!({"token":invitation["token"]})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{accepted}");
+        let owner_id = invitation["owner_id"].as_str().unwrap();
+        let shared_path = format!("/api/owners/{owner_id}/workspaces/{published_id}");
+        let (status, projected) = call(&router_again, "GET", &shared_path, Some(&b), None).await;
+        assert_eq!(status, StatusCode::OK, "{projected}");
+        assert_eq!(projected["id"], published_id);
+        assert_eq!(
+            call(
+                &router,
+                "DELETE",
+                &format!(
+                    "{shared_path}/members/{}",
+                    accepted["member_id"].as_str().unwrap()
+                ),
+                Some(&a),
+                None
+            )
+            .await
+            .0,
+            StatusCode::OK
+        );
+        assert_eq!(
+            call(&router_again, "GET", &shared_path, Some(&b), None)
+                .await
+                .0,
+            StatusCode::NOT_FOUND
+        );
         let publications_path = format!("/api/workspaces/{published_id}/doc-publications");
         let publication_input = json!({"title":"Public guides","expected_revision":published_workspace["revision"],"document_ids":["guide"],"idempotency_key":"same-key","appearance":{"theme":"dark","layout":"top"}});
         let (status, publication) = call(

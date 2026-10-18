@@ -218,6 +218,18 @@ export interface Workspace {
   updated_at: string;
   data: WorkspaceData;
 }
+export interface SharedWorkspaceSummary {
+  owner_id: string;
+  owner_username: string;
+  workspace_id: string;
+  workspace_name: string;
+  revision: number;
+  role: "admin" | "editor" | "viewer";
+}
+export interface SharedWorkspacePage {
+  items: SharedWorkspaceSummary[];
+  next_cursor: string | null;
+}
 export interface TestResult {
   id: string;
   name: string;

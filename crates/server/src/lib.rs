@@ -2,6 +2,7 @@ mod a2a;
 mod access_tokens;
 mod auth;
 mod ci;
+mod collaboration;
 mod cookies;
 mod credential_revocations;
 mod data_datasets;
@@ -410,6 +411,7 @@ async fn build(
         .route("/webhooks/listener/start", post(webhooks::listener_start))
         .route("/webhooks/listener/stop", post(webhooks::listener_stop))
         .route("/auth/logout", post(auth::logout))
+        .route("/auth/me", get(auth::me))
         .route(
             "/auth/tokens",
             get(access_tokens::list).post(access_tokens::create),
@@ -421,6 +423,60 @@ async fn build(
         .route(
             "/workspaces",
             get(workspaces::list).post(workspaces::create),
+        )
+        .route("/workspaces/shared", get(collaboration::list_shared))
+        .route(
+            "/workspaces/{id}/invitations",
+            get(collaboration::list_invitations).post(collaboration::create_invitation),
+        )
+        .route(
+            "/workspace-invitations/accept",
+            post(collaboration::accept_invitation),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/invitations",
+            get(collaboration::list_invitations_scoped)
+                .post(collaboration::create_invitation_scoped),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/invitations/{invitation}",
+            axum::routing::delete(collaboration::revoke_invitation),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/members",
+            get(collaboration::list_members),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/audit",
+            get(collaboration::list_audit),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}",
+            get(collaboration::shared_get).put(collaboration::shared_update),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/run",
+            post(collaboration::shared_run),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/history",
+            get(collaboration::shared_history),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/reports",
+            get(collaboration::shared_reports),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/reports/{report}",
+            get(collaboration::shared_report),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/reports/{report}/steps/{position}/response",
+            get(collaboration::shared_report_response),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/members/{member}",
+            axum::routing::patch(collaboration::change_role).delete(collaboration::remove_member),
         )
         .route(
             "/workspaces/{id}",
