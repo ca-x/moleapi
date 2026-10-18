@@ -194,6 +194,12 @@ jobs:
       - name: Smoke extracted Linux deb, rpm and AppImage packages
         if: runner.os == 'Linux'
         run: python scripts/check-linux-desktop-packages.py target/${{ matrix.target }}/release/bundle
+      - name: Verify installed-package checker guards
+        if: runner.os == 'Linux'
+        run: python scripts/test_installed_linux_deb.py
+      - name: Install Linux deb and smoke installed resources
+        if: runner.os == 'Linux'
+        run: python scripts/check-installed-linux-deb.py target/${{ matrix.target }}/release/bundle
       - uses: actions/upload-artifact@v4
         if: ${{ success() || (failure() && runner.os == 'Linux') }}
         with:

@@ -5,6 +5,7 @@ import RequestSearch from "../requests/RequestSearch";
 import SettingsPanel from "../settings/SettingsPanel";
 import InterchangeFields from "../interchange/InterchangeFields";
 import ConnectionFields from "../sync/ConnectionFields";
+import VersionHistory from "../workspaces/VersionHistory";
 import { useWorkbench } from "./context";
 const titles = {
   get "new-workspace"() { return t("新建工作区"); },
@@ -13,11 +14,12 @@ const titles = {
   get export() { return t("导出工作区"); },
   get connect() { return t("连接自托管服务"); },
   get search() { return t("搜索请求"); },
+  get versions() { return t("工作区历史版本"); },
   get settings() { return t("工作台设置"); },
 };
 export default function WorkbenchDialogs() {
   useLanguage();
-  const { modal, setModal, modalBusy, modalError, submitModal, name, setName } =
+  const { modal, setModal, modalBusy, modalError, submitModal, name, setName, accountId, saved } =
     useWorkbench();
   return (
     <Dialog.Root
@@ -34,6 +36,8 @@ export default function WorkbenchDialogs() {
         <Dialog.Description>
           {modal === "connect"
             ? t("登录你自己的服务端，按工作区选择同步。")
+            : modal === "versions"
+              ? t("查看已保存的版本，并将历史内容恢复为新的当前版本。")
             : modal === "search"
               ? t("按名称、方法或 URL 查找当前工作区的请求。")
               : modal === "import"
@@ -42,7 +46,9 @@ export default function WorkbenchDialogs() {
                   ? t("导出当前工作区，可选择是否包含敏感值。")
               : t("管理当前工作区的数据与设置。")}
         </Dialog.Description>
-        {modal === "search" ? (
+        {modal === "versions" ? (
+          <VersionHistory key={`${accountId}:${saved?.id ?? ""}`} />
+        ) : modal === "search" ? (
           <RequestSearch />
         ) : modal === "settings" ? (
           <SettingsPanel />
