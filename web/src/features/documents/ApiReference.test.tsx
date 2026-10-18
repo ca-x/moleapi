@@ -14,13 +14,14 @@ function fixture():WorkspaceData {
   first.id="first";
   first.method="POST";
   first.description="# Guide\n\n## Details\n\n<script>alert(1)</script> ![Remote](https://evil.test/pixel.png)";
-  first.query=[{id:"q1",key:"page",value:"1",enabled:true},{id:"q2",key:"hidden-query",value:"x",enabled:false}];
+  first.query=[{id:"q1",key:"page",value:"",enabled:true},{id:"q2",key:"hidden-query",value:"x",enabled:false},{id:"q3",key:" ",value:"space-key",enabled:true}];
   first.headers=[{id:"h1",key:"X-Trace",value:"owner-only",enabled:true},{id:"h2",key:"hidden-header",value:"x",enabled:false}];
   first.body_kind="json";
   first.body='<img src="https://evil.test/body.png">';
   first.examples=[{id:"e1",name:"Created",status:201,headers:[{id:"eh",key:"Content-Type",value:"application/json",enabled:true}],body:'<script>alert("example")</script>'}];
   const second=newRequest("Second","https://example.test/second");
   second.id="second";
+  second.description="## Starts at two";
   const other=newRequest("Subscription","wss://example.test");
   other.id="other";
   other.protocol={kind:"websocket"};
@@ -35,9 +36,13 @@ it("renders ordered HTTP requests with exact inert source and enabled fields onl
   expect(screen.getByText("1 non-HTTP request omitted from this reference.")).toBeTruthy();
   expect(screen.getByRole("heading",{name:"First"})).toBeTruthy();
   expect(screen.getByRole("heading",{name:/Guide/,level:4})).toBeTruthy();
-  expect(screen.getByRole("heading",{name:"Details",level:4})).toBeTruthy();
+  expect(screen.getByRole("heading",{name:"Details",level:5})).toBeTruthy();
   expect(screen.getByText("https://example.test/items?token=owner-only")).toBeTruthy();
   expect(screen.getByText("page")).toBeTruthy();
+  const pageRow=screen.getByText("page").closest("tr");
+  expect(pageRow?.querySelector("td")?.textContent).toBe("");
+  const spaceRow=Array.from(page.container.querySelectorAll(".api-reference-table-scroll tbody tr")).find(row=>row.querySelector("th")?.textContent===" ");
+  expect(spaceRow?.querySelector("td")?.textContent).toBe("space-key");
   expect(screen.getByText("X-Trace")).toBeTruthy();
   expect(screen.queryByText("hidden-query")).toBeNull();
   expect(screen.queryByText("hidden-header")).toBeNull();
@@ -54,6 +59,7 @@ it("follows the current draft and resets selection when the workspace changes",a
   const page=render(<Theme><ApiReference data={data} scopeKey="owner/first"/></Theme>);
   fireEvent.click(screen.getByRole("button",{name:"GET Second"}));
   expect(screen.getByRole("heading",{name:"Second"})).toBeTruthy();
+  expect(screen.getByRole("heading",{name:"Starts at two",level:4})).toBeTruthy();
   const changed={...data,collections:data.collections.map(collection=>({...collection,requests:collection.requests.filter(request=>request.id!=="second")}))};
   page.rerender(<Theme><ApiReference data={changed} scopeKey="owner/first"/></Theme>);
   expect(screen.getByRole("heading",{name:"First"})).toBeTruthy();
@@ -68,4 +74,22 @@ it("handles a workspace with no HTTP requests",async()=>{
   data.collections[1].requests=[];
   render(<Theme><ApiReference data={data} scopeKey="owner/empty"/></Theme>);
   expect(screen.getByText("No HTTP requests to document yet.")).toBeTruthy();
+});
+
+it("selects the next HTTP request after a selected request is deleted or changes protocol",async()=>{
+  await setLanguage("en");
+  const data=fixture();
+  const third=newRequest("Third","https://example.test/third");
+  third.id="third";
+  data.collections[1].requests.push(third);
+  const page=render(<Theme><ApiReference data={data} scopeKey="owner/workspace"/></Theme>);
+  fireEvent.click(screen.getByRole("button",{name:"GET Second"}));
+  const deleted={...data,collections:data.collections.map(collection=>({...collection,requests:collection.requests.filter(request=>request.id!=="second")}))};
+  page.rerender(<Theme><ApiReference data={deleted} scopeKey="owner/workspace"/></Theme>);
+  expect(screen.getByRole("heading",{name:"Third"})).toBeTruthy();
+  page.rerender(<Theme><ApiReference data={data} scopeKey="owner/other"/></Theme>);
+  fireEvent.click(screen.getByRole("button",{name:"GET Second"}));
+  const changed={...data,collections:data.collections.map(collection=>({...collection,requests:collection.requests.map(request=>request.id==="second"?{...request,protocol:{kind:"sse" as const}}:request)}))};
+  page.rerender(<Theme><ApiReference data={changed} scopeKey="owner/other"/></Theme>);
+  expect(screen.getByRole("heading",{name:"Third"})).toBeTruthy();
 });

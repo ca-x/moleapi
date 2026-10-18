@@ -10,25 +10,31 @@ function authLabel(kind:Auth["kind"]):string {
 }
 
 function PairTable({rows,label,nested=false}:{rows:Pair[];label:string;nested?:boolean}) {
-  const enabled=rows.filter(row=>row.enabled&&row.key.trim());
+  const enabled=rows.filter(row=>row.enabled);
   if(!enabled.length)return null;
   return <section className="api-reference-section">
     <Heading as={nested?"h5":"h3"} size={nested?"2":"3"}>{label}</Heading>
     <div className="api-reference-table-scroll"><table>
       <thead><tr><th scope="col">{t("名称")}</th><th scope="col">{t("示例值")}</th></tr></thead>
-      <tbody>{enabled.map(row=><tr key={row.id}><th scope="row">{row.key}</th><td>{row.value||"—"}</td></tr>)}</tbody>
+      <tbody>{enabled.map(row=><tr key={row.id}><th scope="row">{row.key}</th><td>{row.value}</td></tr>)}</tbody>
     </table></div>
   </section>;
 }
 
 export default function ApiReference({data,scopeKey}:{data:WorkspaceData;scopeKey:string}) {
   useLanguage();
-  const [selectedId,setSelectedId]=useState("");
-  useEffect(()=>setSelectedId(""),[scopeKey]);
+  const [selection,setSelection]=useState({scopeKey,id:"",index:0});
   const groups=data.collections.map(collection=>({collection,requests:collection.requests.filter(request=>!request.protocol||request.protocol.kind==="http")}));
   const entries=groups.flatMap(group=>group.requests.map(request=>({collection:group.collection,request})));
   const omitted=data.collections.reduce((count,collection)=>count+collection.requests.length,0)-entries.length;
-  const selected=entries.find(entry=>entry.request.id===selectedId)??entries[0];
+  const active=selection.scopeKey===scopeKey?selection:{scopeKey,id:"",index:0};
+  const currentIndex=entries.findIndex(entry=>entry.request.id===active.id);
+  const resolvedIndex=currentIndex>=0?currentIndex:Math.min(active.index,entries.length-1);
+  const selected=entries[resolvedIndex];
+  useEffect(()=>{
+    const id=selected?.request.id??"";
+    if(selection.scopeKey!==scopeKey||selection.id!==id||selection.index!==Math.max(0,resolvedIndex))setSelection({scopeKey,id,index:Math.max(0,resolvedIndex)});
+  },[scopeKey,selection,selected?.request.id,resolvedIndex]);
   const request=selected?.request;
   return <div className="api-reference">
     <div className="api-reference-intro">
@@ -40,7 +46,7 @@ export default function ApiReference({data,scopeKey}:{data:WorkspaceData;scopeKe
       <nav className="documents-list api-reference-list" aria-label={t("API 文档请求列表")}>
         {groups.map(({collection,requests})=><section key={collection.id}>
           <Heading as="h3" size="2">{collection.name}</Heading>
-          {requests.length?requests.map(item=><button type="button" key={item.id} className={item.id===request?.id?"selected":""} aria-current={item.id===request?.id?"true":undefined} onClick={()=>setSelectedId(item.id)}>
+          {requests.length?requests.map(item=><button type="button" key={item.id} className={item.id===request?.id?"selected":""} aria-current={item.id===request?.id?"true":undefined} onClick={()=>setSelection({scopeKey,id:item.id,index:entries.findIndex(entry=>entry.request.id===item.id)})}>
             <span>{item.method} {item.name}</span>
           </button>):<Text size="1" color="gray">{t("此目录没有 HTTP 请求。")}</Text>}
         </section>)}
