@@ -28,6 +28,7 @@ export type Modal =
   | "export"
   | "connect"
   | "search"
+  | "versions"
   | "settings"
   | null;
 export type Guard = {
