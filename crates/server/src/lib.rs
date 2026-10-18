@@ -427,6 +427,10 @@ async fn build(
                 .delete(workspaces::delete),
         )
         .route("/workspaces/{id}/versions", get(workspaces::versions))
+        .route(
+            "/workspaces/{id}/versions/{revision}/restore",
+            post(workspaces::restore_version),
+        )
         .route("/workspaces/{id}/ci-preset", post(ci::generate))
         .route(
             "/workspaces/{id}/history",
