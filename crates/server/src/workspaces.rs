@@ -24,7 +24,7 @@ pub struct Update {
 pub struct Revision {
     expected_revision: i64,
 }
-fn validate(name: &str, data: &WorkspaceData) -> Result<(), ApiError> {
+pub(crate) fn validate(name: &str, data: &WorkspaceData) -> Result<(), ApiError> {
     if name.trim().is_empty() || name.len() > 256 {
         return Err(ApiError::bad("Workspace name must be 1–256 bytes"));
     }
@@ -229,10 +229,21 @@ pub async fn restore_version(
     if !s.local {
         moleapi_core::scrub_local_values(&mut current.data);
     }
+    let restored = replace_for_restore(&s, &owner.0, current, request.expected_revision).await?;
+    reconcile_sessions(&s, &owner.0, &restored).await;
+    Ok(Json(restored))
+}
+
+pub(crate) async fn replace_for_restore(
+    state: &AppState,
+    owner: &str,
+    current: Workspace,
+    expected_revision: i64,
+) -> Result<Workspace, ApiError> {
     let mut attempts = 0;
-    let restored = loop {
-        match storage::replace(&s.db, &owner.0, current.clone(), request.expected_revision).await {
-            Ok(Some(restored)) => break restored,
+    loop {
+        match storage::replace(&state.db, owner, current.clone(), expected_revision).await {
+            Ok(Some(restored)) => return Ok(restored),
             Ok(None) => return Err(ApiError::conflict("Workspace revision changed")),
             Err(error) if is_sqlite_busy(&error) && attempts < 3 => {
                 attempts += 1;
@@ -240,9 +251,7 @@ pub async fn restore_version(
             }
             Err(error) => return Err(error.into()),
         }
-    };
-    reconcile_sessions(&s, &owner.0, &restored).await;
-    Ok(Json(restored))
+    }
 }
 
 fn is_sqlite_busy(error: &DbErr) -> bool {
