@@ -2,7 +2,7 @@ import {useEffect,useMemo,useState} from "react";
 import {Button,Heading,Text,TextField,Theme} from "@radix-ui/themes";
 import MarkdownPreview from "./MarkdownPreview";
 import {t,useLanguage} from "../../shared/i18n";
-import {searchPublishedDocuments} from "./publishedSearch";
+import {indexPublishedDocuments,searchPublishedDocuments} from "./publishedSearch";
 
 type PublishedDocument={title:string;folder:string|null;source:string};
 type Snapshot={title:string;documents:PublishedDocument[]};
@@ -37,7 +37,8 @@ export default function PublicDocsPage({id}:{id:string}) {
   },[id]);
   useEffect(()=>{if(snapshot&&status==="ready")document.title=`${snapshot.title} · MoleAPI`;},[snapshot,status,language]);
   const current=snapshot?.documents[selected];
-  const matches=useMemo(()=>snapshot?searchPublishedDocuments(snapshot.documents,query):[],[snapshot,query]);
+  const searchIndex=useMemo(()=>snapshot?indexPublishedDocuments(snapshot.documents):[],[snapshot]);
+  const matches=useMemo(()=>searchPublishedDocuments(searchIndex,query),[searchIndex,query]);
   return <Theme accentColor="cyan" grayColor="slate" radius="medium">
     <main className="published-docs">
       {status==="loading"?<Text role="status">{t("正在加载文档…")}</Text>:status==="missing"?<div className="published-docs-empty"><Heading size="5">{t("文档不可用")}</Heading><Text>{t("此发布版本不存在，或已被撤销。")}</Text></div>:snapshot&&current?<>
