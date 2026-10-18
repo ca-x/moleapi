@@ -126,7 +126,7 @@ pub(crate) async fn refresh(input: Refresh<'_>) -> Result<Dataset, ApiError> {
         if result.truncated
             || !(1..=100).contains(&result.columns.len())
             || result.columns.iter().any(|column| {
-                column.name.is_empty()
+                column.name.trim().is_empty()
                     || column.name.len() > 1024
                     || column.name.contains('\0')
                     || !names.insert(column.name.clone())
