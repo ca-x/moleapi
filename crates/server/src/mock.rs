@@ -1,5 +1,6 @@
 use crate::{
-    ApiError, AppState, auth::Identity, execution, mock_logs, mock_public, workspaces::owned,
+    ApiError, AppState, auth::Identity, execution, mock_logs, mock_public, mock_rate,
+    workspaces::owned,
 };
 use axum::{
     Extension, Json,
@@ -10,9 +11,14 @@ use axum::{
     http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode},
     response::IntoResponse,
 };
+use rand::Rng;
 use serde::Deserialize;
 #[derive(Clone)]
 pub(crate) struct SavedExample;
+#[derive(Clone)]
+struct SimulatedFailure;
+#[derive(Clone)]
+struct SimulatedRateLimit;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -493,6 +499,12 @@ async fn record_outcome(
 
 fn outcome_meta(result: &Result<axum::response::Response, ApiError>) -> (StatusCode, &'static str) {
     match result {
+        Ok(response) if response.extensions().get::<SimulatedRateLimit>().is_some() => {
+            (response.status(), "rate_limited")
+        }
+        Ok(response) if response.extensions().get::<SimulatedFailure>().is_some() => {
+            (response.status(), "simulated_failure")
+        }
         Ok(response) => (response.status(), "served"),
         Err(error) => (error.status, "failed"),
     }
@@ -633,6 +645,59 @@ async fn serve_selected(
     method: &Method,
     body: &[u8],
 ) -> Result<axum::response::Response, ApiError> {
+    if e.fault_rate_percent > 100 || !(500..=599).contains(&e.fault_status) {
+        return Err(ApiError::bad("Invalid saved Mock fault settings"));
+    }
+    if let mock_rate::Admission::Limited {
+        retry_after_seconds,
+    } = mock_rate::admit(s, owner, w, &request.id, e).await?
+    {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::RETRY_AFTER,
+            HeaderValue::from_str(&retry_after_seconds.to_string())
+                .map_err(|_| ApiError::internal())?,
+        );
+        headers.insert(
+            axum::http::header::CONTENT_TYPE,
+            HeaderValue::from_static("text/plain; charset=utf-8"),
+        );
+        headers.insert(
+            axum::http::header::CACHE_CONTROL,
+            HeaderValue::from_static("no-store"),
+        );
+        let mut response = (
+            StatusCode::TOO_MANY_REQUESTS,
+            headers,
+            "Simulated Mock rate limit",
+        )
+            .into_response();
+        response.extensions_mut().insert(SavedExample);
+        response.extensions_mut().insert(SimulatedRateLimit);
+        return Ok(response);
+    }
+    if e.fault_rate_percent > 0
+        && (e.fault_rate_percent == 100
+            || rand::thread_rng().gen_range(0u8..100) < e.fault_rate_percent)
+    {
+        wait_selected_delay(s, owner, w, e.delay_ms).await?;
+        let mut response = (
+            StatusCode::from_u16(e.fault_status)
+                .map_err(|_| ApiError::bad("Invalid Mock fault status"))?,
+            [
+                (
+                    axum::http::header::CONTENT_TYPE,
+                    "text/plain; charset=utf-8",
+                ),
+                (axum::http::header::CACHE_CONTROL, "no-store"),
+            ],
+            "Simulated Mock failure",
+        )
+            .into_response();
+        response.extensions_mut().insert(SavedExample);
+        response.extensions_mut().insert(SimulatedFailure);
+        return Ok(response);
+    }
     let mut response_headers = e.headers.clone();
     enum SchemaSource {
         Inline(String),
@@ -657,6 +722,7 @@ async fn serve_selected(
         None
     };
     let response_body = if let Some(schema_source) = schema_source {
+        let infer_names = e.mock_name_inference;
         let permit = s
             .mock_schema_slots
             .clone()
@@ -668,11 +734,17 @@ async fn serve_selected(
         let (body, media_type) =
             tokio::task::spawn_blocking(move || -> anyhow::Result<(String, String)> {
                 let _permit = permit;
+                let generate = |schema: &str| {
+                    if infer_names {
+                        moleapi_core::generate_mock_schema_with_names(schema)
+                    } else {
+                        moleapi_core::generate_mock_schema(schema)
+                    }
+                };
                 match schema_source {
-                    SchemaSource::Inline(schema) => Ok((
-                        moleapi_core::generate_mock_schema(&schema)?,
-                        "application/json".into(),
-                    )),
+                    SchemaSource::Inline(schema) => {
+                        Ok((generate(&schema)?, "application/json".into()))
+                    }
                     SchemaSource::Linked(spec, pointer, method, status) => {
                         let selected = moleapi_core::OpenapiMockIndex::parse(&spec)?
                             .response_schema(&pointer)?;
@@ -680,10 +752,7 @@ async fn serve_selected(
                             selected.method == method && selected.status == status,
                             "Linked Mock operation changed"
                         );
-                        Ok((
-                            moleapi_core::generate_mock_schema(&selected.schema)?,
-                            selected.media_type,
-                        ))
+                        Ok((generate(&selected.schema)?, selected.media_type))
                     }
                 }
             })
@@ -768,26 +837,36 @@ async fn serve_selected(
         draft.body,
     )
         .into_response();
-    if e.delay_ms > 0 {
-        if e.delay_ms > 30_000 {
-            return Err(ApiError::bad("Mock delay exceeds 30000 ms"));
-        }
-        let _permit = s
-            .mock_delay_slots
-            .clone()
-            .try_acquire_owned()
-            .map_err(|_| ApiError {
-                status: StatusCode::TOO_MANY_REQUESTS,
-                message: "Delayed Mock capacity reached".into(),
-            })?;
-        tokio::time::sleep(std::time::Duration::from_millis(e.delay_ms)).await;
-        let current = owned(s, owner, &w.id).await?;
-        if current.revision != w.revision {
-            return Err(ApiError::conflict("Workspace changed during Mock delay"));
-        }
-    }
+    wait_selected_delay(s, owner, w, e.delay_ms).await?;
     response.extensions_mut().insert(SavedExample);
     Ok(response)
+}
+async fn wait_selected_delay(
+    s: &AppState,
+    owner: &str,
+    workspace: &moleapi_core::Workspace,
+    delay_ms: u64,
+) -> Result<(), ApiError> {
+    if delay_ms == 0 {
+        return Ok(());
+    }
+    if delay_ms > 30_000 {
+        return Err(ApiError::bad("Mock delay exceeds 30000 ms"));
+    }
+    let _permit = s
+        .mock_delay_slots
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| ApiError {
+            status: StatusCode::TOO_MANY_REQUESTS,
+            message: "Delayed Mock capacity reached".into(),
+        })?;
+    tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+    let current = owned(s, owner, &workspace.id).await?;
+    if current.revision != workspace.revision {
+        return Err(ApiError::conflict("Workspace changed during Mock delay"));
+    }
+    Ok(())
 }
 fn safe_incoming_request(
     saved: &moleapi_core::RequestSpec,
