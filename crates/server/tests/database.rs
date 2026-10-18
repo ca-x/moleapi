@@ -52,6 +52,7 @@ async fn identical_storage_auth_cas_tests_on_every_configured_database() {
         let username = format!("user_{prefix}");
         let a = register(&router, &username).await;
         let b = register(&router, &format!("other_{prefix}")).await;
+        verify_workspace_restore(&router, &router_again, &a, &b, &prefix).await;
         let rate_id = format!("rate-{prefix}");
         let mut rate_data = example_data();
         rate_data["collections"][0]["requests"][0]["examples"][0]["rate_limit_per_minute"] =
@@ -500,6 +501,128 @@ async fn identical_storage_auth_cas_tests_on_every_configured_database() {
             StatusCode::NOT_FOUND
         );
     }
+}
+
+async fn verify_workspace_restore(
+    router: &Router,
+    other_instance: &Router,
+    owner: &str,
+    foreign: &str,
+    suffix: &str,
+) {
+    let id = format!("restore-{suffix}");
+    let path = format!("/api/workspaces/{id}");
+    let restore = format!("{path}/versions/1/restore");
+    let (status, created) = call(
+        router,
+        "POST",
+        "/api/workspaces",
+        Some(owner),
+        Some(json!({"id":id,"name":"Before","data":data()})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{created}");
+    let (status, updated) = call(
+        router,
+        "PUT",
+        &path,
+        Some(owner),
+        Some(json!({"name":"After","data":example_data(),"expected_revision":1})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{updated}");
+    let (status, share) = call(
+        router,
+        "POST",
+        &format!("{path}/mock-shares"),
+        Some(owner),
+        Some(json!({"request_id":"r","expires_in_days":7})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{share}");
+    let public = format!("/api/public/mock/{}/e", share["token"].as_str().unwrap());
+    assert_eq!(
+        call(other_instance, "GET", &public, None, None).await.0,
+        StatusCode::CREATED
+    );
+    let missing = format!("{path}/versions/999/restore");
+    for (token, target) in [(foreign, restore.as_str()), (owner, missing.as_str())] {
+        assert_eq!(
+            call(
+                router,
+                "POST",
+                target,
+                Some(token),
+                Some(json!({"expected_revision":2}))
+            )
+            .await
+            .0,
+            StatusCode::NOT_FOUND
+        );
+    }
+    let (status, restored) = call(
+        router,
+        "POST",
+        &restore,
+        Some(owner),
+        Some(json!({"expected_revision":2})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{restored}");
+    assert_eq!(restored["name"], "Before");
+    assert_eq!(restored["revision"], 3);
+    assert_eq!(
+        call(other_instance, "GET", &public, None, None).await.0,
+        StatusCode::NOT_FOUND
+    );
+    let (_, versions) = call(
+        other_instance,
+        "GET",
+        &format!("{path}/versions"),
+        Some(owner),
+        None,
+    )
+    .await;
+    assert_eq!(versions.as_array().unwrap().len(), 2);
+    assert_eq!(versions[0]["name"], "After");
+    assert_eq!(versions[0]["revision"], 2);
+    assert_eq!(
+        call(
+            router,
+            "POST",
+            &restore,
+            Some(owner),
+            Some(json!({"expected_revision":2}))
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    let restore_again = json!({"expected_revision":3});
+    let (first, second) = tokio::join!(
+        call(
+            router,
+            "POST",
+            &restore,
+            Some(owner),
+            Some(restore_again.clone())
+        ),
+        call(
+            other_instance,
+            "POST",
+            &restore,
+            Some(owner),
+            Some(restore_again)
+        )
+    );
+    assert!(
+        (first.0 == StatusCode::OK && second.0 == StatusCode::CONFLICT)
+            || (second.0 == StatusCode::OK && first.0 == StatusCode::CONFLICT),
+        "{first:?} {second:?}"
+    );
+    let (status, latest) = call(other_instance, "GET", &path, Some(owner), None).await;
+    assert_eq!(status, StatusCode::OK, "{latest}");
+    assert_eq!(latest["revision"], 4);
 }
 
 #[tokio::test]
