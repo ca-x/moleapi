@@ -4,7 +4,7 @@
 
 2026-10-14 构建修复：桌面 FileHandle 继承 Tauri Resource，关闭权限应为 `core:resources:allow-close`；模型生成器的固定哈希要求 `vendor/model-engine/engine.js` 在 Windows 保持 LF（CRLF 哈希与失败日志完全一致）；macOS x64 使用官方 `macos-15-intel` runner，避免 ARM runner 的首次 Rosetta 翻译超过 worker 启动预算。Windows 桌面前次任务因 hosted runner 失联而终止，缺失日志不视作代码成功或失败证明。actionlint 和模拟 core.autocrlf Windows checkout 的模型哈希检查通过；本机缺少 JavaScriptCore/WebKitGTK 4.1，完整桌面验证由新的原生平台 Actions 任务执行。
 
-2026-10-14 原生平台结果：提交 `e9c14cd109ba2f0f0cc6c0e6353d312c8a2256ae` 的 [Server and desktop builds / 38483899443](https://github.com/ca-x/moleapi/actions/runs/38483899443) 已成功完成。独立服务端 Linux x64/arm64、macOS x64/arm64、Windows x64 共5个构建，以及桌面 Linux x64（deb/rpm/AppImage）、macOS x64/arm64（dmg）、Windows x64（NSIS/MSI）共4个打包构建全部成功；每个平台的 worker 检查和 artifact 上传步骤均成功。提交 `746e50a` 的 Application CI / 38487325358 与 Docker / 38487325380 也已成功。这些是对应历史提交的构建证据，不能替代当前主分支检查、实际安装验收、签名或公证；当前主分支的远程构建仍在队列中。
+2026-10-14 原生平台结果：提交 `e9c14cd109ba2f0f0cc6c0e6353d312c8a2256ae` 的 [Server and desktop builds / 38483899443](https://github.com/ca-x/moleapi/actions/runs/38483899443) 已成功完成。独立服务端 Linux x64/arm64、macOS x64/arm64、Windows x64 共5个构建，以及桌面 Linux x64（deb/rpm/AppImage）、macOS x64/arm64（dmg）、Windows x64（NSIS/MSI）共4个打包构建全部成功；每个平台的 worker 检查和 artifact 上传步骤均成功。提交 `746e50a` 的 Application CI / 38487325358 与 Docker / 38487325380 也已成功。这些是对应历史提交的构建证据；较新的 Linux deb 实际安装结果见下文，其他平台和最终发行门禁仍需各自验证。
 
 | 产物 | 目标平台/架构 | 安装/分发形式 |
 | --- | --- | --- |
@@ -58,8 +58,28 @@ CI 为无 FUSE 环境全局设置 `APPIMAGE_EXTRACT_AND_RUN=1`。修复脚本读
 发行验证用 scripts/check-bundled-java.py：在清空外部 Java 配置、使 PATH 不可用后，
 启动真实独立服务端，通过归属校验 API 生成 Go 文件并检查原始规范未变。
 `--runtime-only` 可检查桌面打包资源与实际 JVM。Docker CI 同时执行真实 JRE/生成 API
-验收。Linux 本机归档/原生界面已验证；其余 OS、安装包实际安装、容器新提交、签名/
+验收。Linux 本机归档/原生界面已验证；其余 OS、macOS/Windows 安装、容器新提交、签名/
 公证以及对应源码的最终发布仍按原有发布门禁确认，不能从资源清单推断通过。
+
+2026-10-18 Linux 安装验收续项：原生桌面工作流在 deb/rpm/AppImage 解包检查后，
+于一次性 Ubuntu runner 通过 apt 实际安装当前构建的唯一 `.deb`，随后从已安装的
+`/usr/bin/moleapi` 和 `/usr/lib/MoleAPI` 运行脚本 worker、原始 JRE 与 Dubbo 检查。
+`scripts/check-installed-linux-deb.py` 会在普通非 CI/非 Linux 环境中先拒绝执行；
+环境变量可人为伪造，因此开发机不得用模拟 CI 环境运行此脚本。5 项合成命令/拒绝测试、脚本编译与 actionlint1.7.7 已在本地通过；
+actionlint 仅需忽略其不认识的现有 GitHub `macos-15-intel` 标签。固定提交的真实安装结果见下；
+图形界面启动、macOS/Windows 安装与签名门禁仍独立开放。
+
+固定提交 `75f0dc7` 的原生 run `39101519571` 在 Linux 已通过实际 deb/RPM/AppImage
+解包、脚本 worker、原始 JRE 和 Dubbo 检查，但真实安装步骤在 apt 执行前被检查脚本
+拦下：脚本误认为 deb 的 `Package` 字段为 `moleapi`。此前同配置构建的原始 deb 控制文件
+实为 `Package: mole-api`，而其安装后可执行文件仍为 `/usr/bin/moleapi`。检查脚本和
+合成测试现分别使用包管理器名称与可执行文件路径；本次失败不能记作安装通过。
+
+修正后的固定提交 `7037adc` 在 [原生构建 run 39107002562](https://github.com/ca-x/moleapi/actions/runs/39107002562)
+的 Linux 桌面作业中通过：apt 从本次生成的 deb 安装 `mole-api`，`dpkg-query` 确认安装状态，
+随后从已安装的 `/usr/bin/moleapi` 与 `/usr/lib/MoleAPI` 通过脚本 worker、原始 JRE 和
+Dubbo worker 检查。对应 Application CI 的源码、检查和三数据库作业亦通过。此证据只覆盖
+该提交的 Linux deb 安装及资源自检；图形界面、其他安装格式和平台仍待实际验收。
 
 
 2026-10-15 容器原生结果：main ea34ce1 的 Docker run38698102016 已完成 linux/amd64、
