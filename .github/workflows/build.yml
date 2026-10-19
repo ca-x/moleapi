@@ -246,7 +246,7 @@ jobs:
           notes="docs/releases/${GITHUB_REF_NAME}.md"
           test -f "$notes"
           mapfile -d '' assets < <(find "$RUNNER_TEMP/release-assets" -maxdepth 1 -type f -print0 | sort -z)
-          test "${#assets[@]}" -eq 13
+          test "${#assets[@]}" -eq 14
           gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
             --draft --prerelease --latest=false --verify-tag \
             --title "MoleAPI $GITHUB_REF_NAME" --notes-file "$notes"

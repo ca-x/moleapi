@@ -15,7 +15,7 @@ SERVER_TARGETS = {
     "aarch64-apple-darwin",
     "x86_64-pc-windows-msvc",
 }
-EXPECTED = {".tar.gz": 5, ".deb": 1, ".rpm": 1, ".AppImage": 1, ".dmg": 2, ".exe": 1, ".msi": 1}
+EXPECTED = {".tar.gz": 5, ".deb": 1, ".rpm": 1, ".AppImage": 1, ".dmg": 2, ".exe": 1, ".msi": 2}
 
 
 def kind(name: str) -> str | None:

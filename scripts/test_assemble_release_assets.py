@@ -18,14 +18,14 @@ class ReleaseAssetsTest(unittest.TestCase):
         desktop.mkdir()
         for target in SERVER_TARGETS:
             (server / f"moleapi-server-{target}.tar.gz").write_bytes(target.encode())
-        for name in ("linux.deb", "linux.rpm", "linux.AppImage", "mac-intel.dmg", "mac-arm.dmg", "windows.exe", "windows.msi"):
+        for name in ("linux.deb", "linux.rpm", "linux.AppImage", "mac-intel.dmg", "mac-arm.dmg", "windows.exe", "windows-en-US.msi", "windows-zh-CN.msi"):
             (desktop / name).write_bytes(name.encode())
 
     def test_stages_complete_matrix_with_matching_checksums(self):
         staged = assemble(self.source, self.output)
-        self.assertEqual(len(staged), 12)
+        self.assertEqual(len(staged), 13)
         lines = (self.output / "SHA256SUMS").read_text().splitlines()
-        self.assertEqual(len(lines), 12)
+        self.assertEqual(len(lines), 13)
         for path in staged:
             self.assertIn(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}", lines)
 
