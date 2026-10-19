@@ -13,6 +13,7 @@ use axum::{
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use moleapi_core::{Workspace, WorkspaceData};
+use moleapi_protocols::{EventBatch, SendMessage, SessionSummary};
 use rand::RngCore;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, EntityTrait, PaginatorTrait,
@@ -69,11 +70,49 @@ pub struct SharedUpdate {
     data: WorkspaceData,
     expected_revision: i64,
 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SharedSessionCreate {
+    request_id: String,
+    environment_id: Option<String>,
+    expected_revision: i64,
+}
+#[derive(Deserialize)]
+pub(crate) struct SessionCursor {
+    #[serde(default)]
+    after: u64,
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Access {
     role: Role,
     revision: i64,
     generation: uuid::Uuid,
+}
+
+#[derive(Clone)]
+pub(crate) struct MemberLive {
+    owner: String,
+    workspace: String,
+    actor: String,
+    admission: Access,
+    revision: i64,
+}
+impl MemberLive {
+    pub(crate) async fn check(&self, state: &AppState, actor: &str) -> Result<(), ApiError> {
+        if actor != self.actor {
+            return Err(ApiError::not_found());
+        }
+        let (workspace, current) = access(&state.db, actor, &self.owner, &self.workspace).await?;
+        if current != self.admission || current.role == Role::Viewer {
+            return Err(ApiError::not_found());
+        }
+        if workspace.revision != self.revision {
+            return Err(ApiError::conflict(
+                "Workspace changed during shared session",
+            ));
+        }
+        Ok(())
+    }
 }
 
 fn hosted_session(
@@ -511,6 +550,237 @@ pub async fn shared_execute_draft(
         ));
     }
     result
+}
+
+pub async fn shared_session_create(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Identity>,
+    headers: HeaderMap,
+    Path((owner, workspace)): Path<(String, String)>,
+    Json(input): Json<SharedSessionCreate>,
+) -> Result<Json<SessionSummary>, ApiError> {
+    if state.local {
+        return Err(ApiError::not_found());
+    }
+    let tx = state.db.begin().await?;
+    let canonical = lock_workspace(&tx, &owner, &workspace).await?;
+    let (_, admission) = access(&tx, &actor.0, &owner, &workspace).await?;
+    if admission.role == Role::Viewer {
+        return Err(ApiError::forbidden(
+            "Viewer cannot connect to this workspace",
+        ));
+    }
+    if canonical.revision != input.expected_revision {
+        return Err(ApiError::conflict("Workspace revision changed"));
+    }
+    let request = canonical
+        .data
+        .collections
+        .iter()
+        .flat_map(|collection| &collection.requests)
+        .find(|request| request.id == input.request_id)
+        .cloned()
+        .ok_or_else(ApiError::not_found)?;
+    if !matches!(
+        request.protocol,
+        moleapi_core::Protocol::Sse | moleapi_core::Protocol::Websocket
+    ) {
+        return Err(ApiError::bad(
+            "Shared live sessions support saved SSE and WebSocket requests",
+        ));
+    }
+    record_event_result(
+        &tx,
+        &owner,
+        &workspace,
+        &actor.0,
+        "protocol.session.start",
+        Some(&input.request_id),
+        "started",
+    )
+    .await?;
+    tx.commit().await?;
+    let member = MemberLive {
+        owner: owner.clone(),
+        workspace: workspace.clone(),
+        actor: actor.0.clone(),
+        admission,
+        revision: canonical.revision,
+    };
+    let Json(summary) = crate::protocols::create_as(
+        state.clone(),
+        Identity(owner.clone()),
+        &actor.0,
+        headers.clone(),
+        crate::protocols::Create {
+            workspace_id: workspace,
+            request,
+            environment_id: input.environment_id,
+            locals: Vec::new(),
+        },
+        Some(&member),
+    )
+    .await?;
+    {
+        let mut sessions = state.member_protocol_sessions.lock().unwrap();
+        sessions.retain(|id, entry| state.protocol_sessions.summary(&entry.owner, id).is_ok());
+        sessions.insert(summary.id.clone(), member.clone());
+    }
+    if let Err(error) = member.check(&state, &actor.0).await {
+        state
+            .member_protocol_sessions
+            .lock()
+            .unwrap()
+            .remove(&summary.id);
+        let _ = state.protocol_sessions.remove(&owner, &summary.id).await;
+        return Err(error);
+    }
+    let session_id = summary.id.clone();
+    tokio::spawn(async move {
+        let period = std::time::Duration::from_millis(200);
+        let mut ticks = tokio::time::interval_at(tokio::time::Instant::now() + period, period);
+        ticks.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            ticks.tick().await;
+            if member.check(&state, &member.actor).await.is_err()
+                || crate::auth::still_authenticated(&state, &member.actor, &headers)
+                    .await
+                    .is_err()
+            {
+                state
+                    .member_protocol_sessions
+                    .lock()
+                    .unwrap()
+                    .remove(&session_id);
+                let _ = state
+                    .protocol_sessions
+                    .remove(&member.owner, &session_id)
+                    .await;
+                break;
+            }
+            match state.protocol_sessions.summary(&member.owner, &session_id) {
+                Ok(summary) if summary.state.live() => {}
+                _ => break,
+            }
+        }
+    });
+    Ok(Json(summary))
+}
+
+async fn member_session(
+    state: &AppState,
+    actor: &str,
+    owner: &str,
+    workspace: &str,
+    id: &str,
+) -> Result<MemberLive, ApiError> {
+    let member = state
+        .member_protocol_sessions
+        .lock()
+        .unwrap()
+        .get(id)
+        .cloned()
+        .ok_or_else(ApiError::not_found)?;
+    if member.owner != owner || member.workspace != workspace {
+        return Err(ApiError::not_found());
+    }
+    member.check(state, actor).await?;
+    let summary = state
+        .protocol_sessions
+        .summary(owner, id)
+        .map_err(crate::protocols::error)?;
+    if summary.workspace_id != workspace {
+        return Err(ApiError::not_found());
+    }
+    Ok(member)
+}
+
+pub async fn shared_session_get(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Identity>,
+    Path((owner, workspace, id)): Path<(String, String, String)>,
+) -> Result<Json<SessionSummary>, ApiError> {
+    let member = member_session(&state, &actor.0, &owner, &workspace, &id).await?;
+    let summary = state
+        .protocol_sessions
+        .summary(&owner, &id)
+        .map_err(crate::protocols::error)?;
+    member.check(&state, &actor.0).await?;
+    Ok(Json(summary))
+}
+
+pub async fn shared_session_events(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Identity>,
+    Path((owner, workspace, id)): Path<(String, String, String)>,
+    Query(cursor): Query<SessionCursor>,
+) -> Result<Json<EventBatch>, ApiError> {
+    let member = member_session(&state, &actor.0, &owner, &workspace, &id).await?;
+    let batch = state
+        .protocol_sessions
+        .events(&owner, &id, cursor.after)
+        .map_err(crate::protocols::error)?;
+    member.check(&state, &actor.0).await?;
+    Ok(Json(batch))
+}
+
+pub async fn shared_session_send(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Identity>,
+    Path((owner, workspace, id)): Path<(String, String, String)>,
+    Json(message): Json<SendMessage>,
+) -> Result<Json<Value>, ApiError> {
+    let member = member_session(&state, &actor.0, &owner, &workspace, &id).await?;
+    let summary = state
+        .protocol_sessions
+        .summary(&owner, &id)
+        .map_err(crate::protocols::error)?;
+    if summary.protocol != "websocket"
+        || !matches!(
+            message,
+            SendMessage::Text { .. } | SendMessage::Binary { .. } | SendMessage::Ping { .. }
+        )
+    {
+        return Err(ApiError::bad(
+            "Shared session send supports WebSocket text, binary and Ping",
+        ));
+    }
+    state
+        .protocol_sessions
+        .send(&owner, &id, message)
+        .map_err(crate::protocols::error)?;
+    member.check(&state, &actor.0).await?;
+    Ok(Json(json!({"ok":true})))
+}
+
+pub async fn shared_session_close(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Identity>,
+    Path((owner, workspace, id)): Path<(String, String, String)>,
+) -> Result<Json<SessionSummary>, ApiError> {
+    let member = member_session(&state, &actor.0, &owner, &workspace, &id).await?;
+    let summary = state
+        .protocol_sessions
+        .close(&owner, &id)
+        .await
+        .map_err(crate::protocols::error)?;
+    member.check(&state, &actor.0).await?;
+    Ok(Json(summary))
+}
+
+pub async fn shared_session_delete(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Identity>,
+    Path((owner, workspace, id)): Path<(String, String, String)>,
+) -> Result<Json<Value>, ApiError> {
+    member_session(&state, &actor.0, &owner, &workspace, &id).await?;
+    state
+        .protocol_sessions
+        .remove(&owner, &id)
+        .await
+        .map_err(crate::protocols::error)?;
+    state.member_protocol_sessions.lock().unwrap().remove(&id);
+    Ok(Json(json!({"ok":true})))
 }
 
 pub async fn shared_mock(

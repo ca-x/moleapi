@@ -98,6 +98,8 @@ struct AppState {
     script_worker: PathBuf,
     protocol_sessions: Arc<moleapi_protocols::SessionManager>,
     protocol_admission: Arc<protocol_admission::AdmissionGates>,
+    member_protocol_sessions:
+        Arc<std::sync::Mutex<std::collections::HashMap<String, collaboration::MemberLive>>>,
     data_sessions: Arc<
         std::sync::Mutex<
             std::collections::HashMap<String, std::sync::Weak<protocols::DataCompletionContext>>,
@@ -346,6 +348,7 @@ async fn build(
         script_worker,
         protocol_sessions: moleapi_protocols::SessionManager::new(),
         protocol_admission: Arc::new(protocol_admission::AdmissionGates::default()),
+        member_protocol_sessions: Arc::default(),
         data_sessions: Arc::default(),
         a2a_sources: Arc::new(a2a::Sources::default()),
         webhooks: Arc::new(webhooks::Hub::default()),
@@ -465,6 +468,26 @@ async fn build(
         .route(
             "/owners/{owner}/workspaces/{workspace}/execute-draft",
             post(collaboration::shared_execute_draft),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/sessions",
+            post(collaboration::shared_session_create),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/sessions/{id}",
+            get(collaboration::shared_session_get).delete(collaboration::shared_session_delete),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/sessions/{id}/events",
+            get(collaboration::shared_session_events),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/sessions/{id}/send",
+            post(collaboration::shared_session_send),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/sessions/{id}/close",
+            post(collaboration::shared_session_close),
         )
         .route(
             "/owners/{owner}/workspaces/{workspace}/mock/{request}/{example}",

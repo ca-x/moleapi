@@ -23,8 +23,8 @@ const workspace: Workspace = { id: "w", name: "Team", revision: 3, updated_at: "
 const summary = (role: SharedWorkspaceSummary["role"]): SharedWorkspaceSummary => ({ owner_id: "owner-id", owner_username: "owner", workspace_id: "w", workspace_name: "Team", revision: 3, role });
 let client: QueryClient;
 function view(role: SharedWorkspaceSummary["role"]) { return <QueryClientProvider client={client}><Theme><SharedWorkspaceView accountId="member" selected={summary(role)} dark={false} onClose={vi.fn()} onDirtyChange={vi.fn()} /></Theme></QueryClientProvider>; }
-beforeEach(async () => { await setLanguage("zh-CN"); client = new QueryClient({ defaultOptions: { queries: { retry: false } } }); vi.mocked(token).mockReturnValue("session-member"); vi.mocked(api).mockReset(); vi.mocked(api).mockResolvedValue(workspace); vi.mocked(previewSharedMock).mockReset(); });
-afterEach(() => { cleanup(); client.clear(); });
+beforeEach(async () => { vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} }); await setLanguage("zh-CN"); client = new QueryClient({ defaultOptions: { queries: { retry: false } } }); vi.mocked(token).mockReturnValue("session-member"); vi.mocked(api).mockReset(); vi.mocked(api).mockResolvedValue(workspace); vi.mocked(previewSharedMock).mockReset(); });
+afterEach(() => { cleanup(); client.clear(); vi.unstubAllGlobals(); });
 
 it("keeps viewer resources read-only and hides private execution controls", async () => {
   render(view("viewer"));
@@ -35,6 +35,34 @@ it("keeps viewer resources read-only and hides private execution controls", asyn
   expect(screen.queryByRole("button", { name: "Mock 预览" })).toBeNull();
   expect(screen.queryByRole("tab", { name: /参数/ })).toBeNull();
   expect(api).toHaveBeenCalledWith(base);
+});
+
+it("connects a saved shared WebSocket, sends a message and keeps viewer controls absent", async () => {
+  const first = workspace.data.collections[0];
+  const request = { ...first.requests[0], protocol: { kind: "websocket" as const }, url: "ws://127.0.0.1/socket" };
+  const saved: Workspace = { ...workspace, data: { ...workspace.data, collections: [{ ...first, requests: [request] }] } };
+  const session = { id: "live-a", workspace_id: "w", request_id: request.id, protocol: "websocket", url: "ws://127.0.0.1/socket", state: "open", reason: null, created_at: "now", updated_at: "now", received_bytes: 5, sent_bytes: 0, event_count: 1, handshake: null };
+  let revoked = false;
+  vi.mocked(api).mockImplementation((path, method) => {
+    if (path === `${base}/sessions` && method === "POST") return Promise.resolve(session);
+    if (path === `${base}/sessions/live-a`) return revoked ? Promise.reject(Object.assign(new Error("Revoked"), { status: 404 })) : Promise.resolve(session);
+    if (path.startsWith(`${base}/sessions/live-a/events`)) return Promise.resolve({ events: [{ cursor: 1, received_at: "now", direction: "incoming", message: { kind: "text", text: "hello" } }], next_cursor: 1, earliest_cursor: 1, dropped_count: 0 });
+    if (path.endsWith("/send")) return Promise.resolve({ ok: true });
+    return Promise.resolve(saved);
+  });
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "连接" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/sessions`, "POST", { request_id: request.id, environment_id: saved.data.active_environment_id, expected_revision: 3 }));
+  expect((await screen.findAllByText("hello")).length).toBeGreaterThan(0);
+  fireEvent.change(screen.getByLabelText("消息正文"), { target: { value: "member echo" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/sessions/live-a/send`, "POST", { kind: "text", text: "member echo" }));
+  revoked = true;
+  await waitFor(() => expect(screen.queryAllByText("hello")).toHaveLength(0), { timeout: 3000 });
+  cleanup();
+  render(view("viewer"));
+  await screen.findByText("ws://127.0.0.1/socket");
+  expect(screen.queryByRole("button", { name: "连接" })).toBeNull();
 });
 
 it("shows only projected Markdown to a viewer and keeps member publication controls absent", async () => {

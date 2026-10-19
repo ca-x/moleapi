@@ -12,18 +12,18 @@ use std::sync::Arc;
 type SharedMask = Arc<std::sync::RwLock<Arc<Redactor>>>;
 #[derive(Deserialize)]
 pub struct Create {
-    workspace_id: String,
-    request: RequestSpec,
-    environment_id: Option<String>,
+    pub(crate) workspace_id: String,
+    pub(crate) request: RequestSpec,
+    pub(crate) environment_id: Option<String>,
     #[serde(default)]
-    locals: Vec<VariableUpdate>,
+    pub(crate) locals: Vec<VariableUpdate>,
 }
 #[derive(Deserialize)]
 pub struct Cursor {
     #[serde(default)]
     after: u64,
 }
-fn error(e: anyhow::Error) -> ApiError {
+pub(crate) fn error(e: anyhow::Error) -> ApiError {
     let text = e.to_string();
     if text == "Session not found" {
         ApiError::not_found()
@@ -76,10 +76,22 @@ pub async fn create(
     headers: axum::http::HeaderMap,
     Json(c): Json<Create>,
 ) -> Result<Json<SessionSummary>, ApiError> {
-    let admission = s.protocol_admission.owner(&owner.0)?;
+    let actor = owner.0.clone();
+    create_as(s, owner, &actor, headers, c, None).await
+}
+
+pub(crate) async fn create_as(
+    s: AppState,
+    owner: Identity,
+    actor: &str,
+    headers: axum::http::HeaderMap,
+    c: Create,
+    member: Option<&crate::collaboration::MemberLive>,
+) -> Result<Json<SessionSummary>, ApiError> {
+    let admission = s.protocol_admission.owner(actor)?;
     let generation = {
         let generation = admission.lock().await;
-        crate::auth::still_authenticated(&s, &owner.0, &headers).await?;
+        crate::auth::still_authenticated(&s, actor, &headers).await?;
         *generation
     };
     let w = owned(&s, &owner.0, &c.workspace_id).await?;
@@ -262,7 +274,10 @@ pub async fn create(
     if *admitted_generation != generation {
         return Err(ApiError::unauthorized());
     }
-    crate::auth::still_authenticated(&s, &owner.0, &headers).await?;
+    crate::auth::still_authenticated(&s, actor, &headers).await?;
+    if let Some(member) = member {
+        member.check(&s, actor).await?;
+    }
     let mut summary = s
         .protocol_sessions
         .register(
@@ -460,6 +475,12 @@ pub async fn create(
     }
     summary.variable_updates = updates;
     summary.request_updates = request_updates;
+    if let Some(member) = member
+        && let Err(error) = member.check(&s, actor).await
+    {
+        let _ = s.protocol_sessions.remove(&owner.0, &summary.id).await;
+        return Err(error);
+    }
     Ok(Json(summary))
 }
 async fn save_data_completion(

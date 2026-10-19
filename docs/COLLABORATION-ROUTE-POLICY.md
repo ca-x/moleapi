@@ -43,6 +43,11 @@ This inventory covers every `.route` registered in `crates/server/src/lib.rs` at
 | `/owners/{owner}/workspaces/{workspace}/run` | POST editor | outbound requests, private results and saved report |
 | `/owners/{owner}/workspaces/{workspace}/requests/{request}/execute` | POST editor | canonical saved request execution and private response |
 | `/owners/{owner}/workspaces/{workspace}/execute-draft` | POST editor | HTTP draft execution under canonical collection and expected revision |
+| `/owners/{owner}/workspaces/{workspace}/sessions` | POST editor | canonical saved SSE/WebSocket connection under expected revision |
+| `/owners/{owner}/workspaces/{workspace}/sessions/{id}` | GET/DELETE editor, creator only | bound live session summary and removal |
+| `/owners/{owner}/workspaces/{workspace}/sessions/{id}/events` | GET editor, creator only | bounded private live events |
+| `/owners/{owner}/workspaces/{workspace}/sessions/{id}/send` | POST editor, creator only | WebSocket text/binary/Ping outbound message |
+| `/owners/{owner}/workspaces/{workspace}/sessions/{id}/close` | POST editor, creator only | close bound live connection |
 | `/owners/{owner}/workspaces/{workspace}/mock/{request}/{example}` | GET editor | saved Mock example preview and call record |
 | `/owners/{owner}/workspaces/{workspace}/mock-calls` | GET editor | Mock call metadata |
 | `/owners/{owner}/workspaces/{workspace}/history` | GET editor | saved redacted response history |
@@ -149,6 +154,6 @@ This inventory covers every `.route` registered in `crates/server/src/lib.rs` at
 | `/hooks/{token}` | Public / unauthenticated | Existing public contract |
 | `/docs/{id}` | Public / unauthenticated | Existing public contract |
 
-Inventory: 144 route patterns; 17 explicit member-facing patterns; 8 public patterns. A route without an explicit shared policy is unavailable through owner-scoped member URLs.
+Inventory: 149 route patterns; 22 explicit member-facing patterns; 8 public patterns. A route without an explicit shared policy is unavailable through owner-scoped member URLs.
 
-The workspace-scoped routes currently supported for members are the explicit owner/workspace pair above. Shared collection, canonical saved-request, finite HTTP draft and saved Mock example execution poll membership every 200 ms and withhold results after a role change or removal; draft execution also fences canonical workspace revision. The actor is recorded before execution. Shared history/report/Mock-call reads recheck membership before returning private data. Protocol sessions, public Mock share management, exports, credentials and other resource routes remain closed to members until their actor attribution, cancellation and response fencing are implemented and tested.
+The workspace-scoped routes currently supported for members are the explicit owner/workspace pair above. Shared collection, canonical saved-request, finite HTTP draft and saved Mock example execution poll membership every 200 ms and withhold results after a role change or removal; draft execution also fences canonical workspace revision. Saved SSE/WebSocket member sessions bind the creator, poll role/revision/credential changes every 200 ms and recheck before returning summaries/events or acknowledging sends. The actor is recorded before execution. Shared history/report/Mock-call reads recheck membership before returning private data. Other protocol sessions, public Mock share management, exports, credentials and resource routes remain closed to members until their actor attribution, cancellation and response fencing are implemented and tested.

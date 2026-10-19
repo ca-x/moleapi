@@ -1,5 +1,14 @@
 mod common;
+use axum::{
+    extract::{
+        OriginalUri,
+        ws::{Message, WebSocketUpgrade},
+    },
+    routing::get,
+};
 use common::*;
+use futures_util::StreamExt;
+use std::time::Duration;
 
 #[test]
 fn every_registered_route_has_an_explicit_collaboration_inventory_entry() {
@@ -1239,6 +1248,427 @@ async fn editor_run_is_audited_and_cross_instance_removal_withholds_its_result()
             && event["subject_id"] == "fast"
     }));
     release.notify_one();
+    server.abort();
+}
+
+#[tokio::test]
+async fn shared_websocket_session_binds_actor_and_closes_after_cross_instance_role_change() {
+    let (seen, mut received_urls) = tokio::sync::mpsc::channel(4);
+    let (closed, mut peer_closed) = tokio::sync::mpsc::channel(4);
+    let fixture = Router::new().route(
+        "/socket",
+        get(
+            move |upgrade: WebSocketUpgrade, OriginalUri(uri): OriginalUri| {
+                let seen = seen.clone();
+                let closed = closed.clone();
+                async move {
+                    let _ = seen.send(uri.to_string()).await;
+                    upgrade.on_upgrade(move |mut socket| async move {
+                        while let Some(Ok(message)) = socket.recv().await {
+                            if matches!(message, Message::Close(_)) {
+                                break;
+                            }
+                            if socket.send(message).await.is_err() {
+                                break;
+                            }
+                        }
+                        let _ = closed.send(()).await;
+                    })
+                }
+            },
+        ),
+    );
+    let (url, server) = serve(fixture).await;
+    let ws_url = url.replacen("http", "ws", 1);
+    let dir = tempfile::tempdir().unwrap();
+    let db = moleapi_server::sqlite_database_url(&dir.path().join("shared-live.db")).unwrap();
+    let mut options = config(db.clone(), true);
+    options.allow_private_network = true;
+    let first = hosted(options.clone()).await.unwrap();
+    let second = hosted(options).await.unwrap();
+    let owner = register(&first, "liveowner").await;
+    let editor = register(&first, "liveeditor").await;
+    let other = register(&first, "liveother").await;
+    let viewer = register(&first, "liveviewer").await;
+    let mut source = example_data();
+    source["collections"][0]["requests"][0]["url"] =
+        json!(format!("{ws_url}/socket?region={{{{region}}}}"));
+    source["collections"][0]["requests"][0]["protocol"] = json!({"kind":"websocket"});
+    source["global_variables"] =
+        json!([{"id":"region","key":"region","value":"team","enabled":true}]);
+    let (status, created) = call(
+        &first,
+        "POST",
+        "/api/workspaces",
+        Some(&owner),
+        Some(json!({"id":"w","name":"Live","data":source})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{created}");
+    let owner_id = call(&first, "GET", "/api/auth/me", Some(&owner), None)
+        .await
+        .1["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let base = format!("/api/owners/{owner_id}/workspaces/w");
+    let mut member_ids = Vec::new();
+    for (token, role) in [(&editor, "editor"), (&other, "editor"), (&viewer, "viewer")] {
+        let (status, invitation) = call(
+            &first,
+            "POST",
+            "/api/workspaces/w/invitations",
+            Some(&owner),
+            Some(json!({"role":role,"expires_in_days":1})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{invitation}");
+        let (status, accepted) = call(
+            &second,
+            "POST",
+            "/api/workspace-invitations/accept",
+            Some(token),
+            Some(json!({"token":invitation["token"]})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{accepted}");
+        member_ids.push(accepted["member_id"].as_str().unwrap().to_owned());
+    }
+    let create_path = format!("{base}/sessions");
+    let input = json!({"request_id":"r","expected_revision":1});
+    assert_eq!(
+        call(
+            &first,
+            "POST",
+            &create_path,
+            Some(&viewer),
+            Some(input.clone())
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        call(
+            &first,
+            "POST",
+            &create_path,
+            Some(&editor),
+            Some(json!({"request_id":"r","expected_revision":0}))
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        call(
+            &first,
+            "POST",
+            &create_path,
+            Some(&editor),
+            Some(json!({"request_id":"missing","expected_revision":1}))
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    let (status, opened) = call(&first, "POST", &create_path, Some(&editor), Some(input)).await;
+    assert_eq!(status, StatusCode::OK, "{opened}");
+    let id = opened["id"].as_str().unwrap();
+    let path = format!("{create_path}/{id}");
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(5), received_urls.recv())
+            .await
+            .unwrap()
+            .unwrap(),
+        "/socket?region=team"
+    );
+    assert_eq!(
+        call(
+            &first,
+            "GET",
+            &format!("/api/sessions/{id}"),
+            Some(&editor),
+            None
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        call(&first, "GET", &path, Some(&other), None).await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        call(&first, "GET", &path, Some(&viewer), None).await.0,
+        StatusCode::NOT_FOUND
+    );
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let (_, summary) = call(&first, "GET", &path, Some(&editor), None).await;
+            if summary["state"] == "open" {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        call(
+            &first,
+            "POST",
+            &format!("{path}/send"),
+            Some(&editor),
+            Some(json!({"kind":"text","text":"shared echo"}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let (status, batch) = call(
+                &first,
+                "GET",
+                &format!("{path}/events?after=0"),
+                Some(&editor),
+                None,
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK, "{batch}");
+            if batch["events"].as_array().unwrap().iter().any(|event| {
+                event["direction"] == "incoming" && event["message"]["text"] == "shared echo"
+            }) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let audit = call(&first, "GET", &format!("{base}/audit"), Some(&owner), None)
+        .await
+        .1;
+    assert!(
+        audit
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|event| event["action"] == "protocol.session.start"
+                && event["actor_id"] == member_ids[0])
+    );
+    assert!(!audit.to_string().contains("shared echo"));
+    assert_eq!(
+        call(
+            &second,
+            "PATCH",
+            &format!("{base}/members/{}", member_ids[0]),
+            Some(&owner),
+            Some(json!({"role":"viewer","expected_revision":1}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if call(&first, "GET", &path, Some(&editor), None).await.0 == StatusCode::NOT_FOUND {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    tokio::time::timeout(Duration::from_secs(5), peer_closed.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        call(
+            &first,
+            "GET",
+            &format!("{path}/events"),
+            Some(&editor),
+            None
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    server.abort();
+}
+
+#[tokio::test]
+async fn shared_sse_session_withholds_private_events_after_workspace_revision_and_logout() {
+    let fixture = Router::new().route(
+        "/events",
+        get(|| async {
+            (
+                [("content-type", "text/event-stream")],
+                Body::from_stream(
+                    futures_util::stream::once(async {
+                        Ok::<_, std::io::Error>("data: private-live-sentinel\n\n")
+                    })
+                    .chain(futures_util::stream::pending()),
+                ),
+            )
+        }),
+    );
+    let (url, server) = serve(fixture).await;
+    let dir = tempfile::tempdir().unwrap();
+    let db = moleapi_server::sqlite_database_url(&dir.path().join("shared-sse.db")).unwrap();
+    let mut options = config(db.clone(), true);
+    options.allow_private_network = true;
+    let first = hosted(options.clone()).await.unwrap();
+    let second = hosted(options).await.unwrap();
+    let owner = register(&first, "sseowner").await;
+    let member = register(&first, "ssemember").await;
+    let mut source = example_data();
+    source["collections"][0]["requests"][0]["url"] = json!(format!("{url}/events"));
+    source["collections"][0]["requests"][0]["protocol"] = json!({"kind":"sse"});
+    source["global_variables"] = json!([{"id":"private","key":"api_key","value":"private-live-sentinel","enabled":true,"secret":true}]);
+    let (status, canonical) = call(
+        &first,
+        "POST",
+        "/api/workspaces",
+        Some(&owner),
+        Some(json!({"id":"w","name":"Live","data":source})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{canonical}");
+    let (_, invite) = call(
+        &first,
+        "POST",
+        "/api/workspaces/w/invitations",
+        Some(&owner),
+        Some(json!({"role":"editor","expires_in_days":1})),
+    )
+    .await;
+    let (_, accepted) = call(
+        &second,
+        "POST",
+        "/api/workspace-invitations/accept",
+        Some(&member),
+        Some(json!({"token":invite["token"]})),
+    )
+    .await;
+    let base = format!(
+        "/api/owners/{}/workspaces/w/sessions",
+        accepted["owner_id"].as_str().unwrap()
+    );
+    let (status, opened) = call(
+        &first,
+        "POST",
+        &base,
+        Some(&member),
+        Some(json!({"request_id":"r","expected_revision":1})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{opened}");
+    let path = format!("{base}/{}", opened["id"].as_str().unwrap());
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let (status, batch) = call(
+                &first,
+                "GET",
+                &format!("{path}/events"),
+                Some(&member),
+                None,
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK, "{batch}");
+            if batch["events"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|event| event["message"]["kind"] == "sse")
+            {
+                assert!(batch.to_string().contains("private-live-sentinel"));
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(
+        !call(&first, "GET", &path, Some(&member), None)
+            .await
+            .1
+            .to_string()
+            .contains("private-live-sentinel")
+    );
+    assert_eq!(
+        call(
+            &first,
+            "POST",
+            &format!("{path}/send"),
+            Some(&member),
+            Some(json!({"kind":"text","text":"denied"}))
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    let (status, updated) = call(
+        &second,
+        "PUT",
+        "/api/workspaces/w",
+        Some(&owner),
+        Some(json!({"name":"Changed","data":canonical["data"],"expected_revision":1})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{updated}");
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if call(&first, "GET", &path, Some(&member), None).await.0 == StatusCode::NOT_FOUND {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        call(
+            &first,
+            "GET",
+            &format!("{path}/events"),
+            Some(&member),
+            None
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    let (status, opened) = call(
+        &first,
+        "POST",
+        &base,
+        Some(&member),
+        Some(json!({"request_id":"r","expected_revision":2})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{opened}");
+    let path = format!("{base}/{}", opened["id"].as_str().unwrap());
+    assert_eq!(
+        call(&second, "POST", "/api/auth/logout", Some(&member), None)
+            .await
+            .0,
+        StatusCode::OK
+    );
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if call(&first, "GET", &path, Some(&member), None).await.0 == StatusCode::UNAUTHORIZED {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
     server.abort();
 }
 

@@ -366,6 +366,7 @@ mod tests {
             oauth2_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(8)),
             oauth2_flows: std::sync::Arc::default(),
             protocol_sessions: moleapi_protocols::SessionManager::new(),
+            member_protocol_sessions: std::sync::Arc::default(),
             a2a_sources: std::sync::Arc::new(crate::a2a::Sources::default()),
             webhooks: std::sync::Arc::new(crate::webhooks::Hub::default()),
             protocol_admission: std::sync::Arc::new(

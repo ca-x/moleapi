@@ -19,6 +19,7 @@ import { validateMarkdownDocuments } from "../documents/validation";
 import { hasChanges } from "./draft";
 import SharedDocumentsPanel from "./SharedDocumentsPanel";
 import SharedVariablesPanel from "./SharedVariablesPanel";
+import SharedLiveSessionPanel from "./SharedLiveSessionPanel";
 
 type Tab = "resources" | "history" | "reports" | "mock" | "documents" | "variables";
 type RunResult = { passed: number; failed: number; cancelled: boolean; report_id?: string };
@@ -92,6 +93,7 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
   const collection = draft?.data.collections.find((item) => item.id === collectionId) ?? draft?.data.collections[0];
   const request = collection?.requests.find((item) => item.id === requestId) ?? collection?.requests[0];
   const httpRequest = !!request && (!request.protocol?.kind || request.protocol.kind === "http");
+  const liveRequest = request?.protocol?.kind === "sse" || request?.protocol?.kind === "websocket";
   const example = request?.examples.find((item) => item.id === exampleId) ?? request?.examples[0];
   const statusPending = !!example && exampleStatusInput !== String(example.status);
   useEffect(() => { setExampleStatusInput(example ? String(example.status) : ""); }, [collection?.id, request?.id, example?.id, example?.status]);
@@ -266,7 +268,8 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
               </Tabs.Root>}
             </Flex> : <Flex direction="column" gap="1"><Text weight="medium">{request.method} {request.name}</Text><Text size="2" style={{ overflowWrap: "anywhere" }}>{request.url}</Text><Text size="2" color="gray">{request.description}</Text></Flex>)}
           </>}
-          {canEdit && request && <Flex direction="column" gap="2">
+          {canEdit && request && liveRequest && saved && <SharedLiveSessionPanel key={`${scope}/${request.id}/${saved.revision}/${dirty}`} base={base} request={request} revision={saved.revision} environmentId={saved.data.active_environment_id} dirty={dirty} saving={saving} conflict={!!conflict} dark={dark} />}
+          {canEdit && request && !liveRequest && <Flex direction="column" gap="2">
             {dirty && httpRequest ? <><Button loading={sending} disabled={sending || saving || !!conflict} onClick={() => void sendDraftRequest()}>{t("发送草稿请求")}</Button><Text size="1" color="gray">{t("草稿请求仅供本次执行，保存后才会更新工作区。")}</Text></> : <Button loading={sending} disabled={sending || dirty} onClick={() => void sendSavedRequest()}>{t("发送已保存请求")}</Button>}
             {requestResponse && <><Text role="status" size="2">{responseSource === "draft" ? t("草稿请求执行结果") : t("已保存请求执行结果")}: {requestResponse.status} {requestResponse.status_text} · {requestResponse.elapsed_ms} ms</Text><TextArea aria-label={t("响应正文预览")} readOnly value={requestResponse.body.slice(0, 16 * 1024)} />{requestResponse.body.length > 16 * 1024 && <Text size="1" color="gray">{t("仅显示响应正文前 16 KiB。")}</Text>}</>}
           </Flex>}
