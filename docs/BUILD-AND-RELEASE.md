@@ -4,6 +4,8 @@
 
 2026-10-14 构建修复：桌面 FileHandle 继承 Tauri Resource，关闭权限应为 `core:resources:allow-close`；模型生成器的固定哈希要求 `vendor/model-engine/engine.js` 在 Windows 保持 LF（CRLF 哈希与失败日志完全一致）；macOS x64 使用官方 `macos-15-intel` runner，避免 ARM runner 的首次 Rosetta 翻译超过 worker 启动预算。Windows 桌面前次任务因 hosted runner 失联而终止，缺失日志不视作代码成功或失败证明。actionlint 和模拟 core.autocrlf Windows checkout 的模型哈希检查通过；本机缺少 JavaScriptCore/WebKitGTK 4.1，完整桌面验证由新的原生平台 Actions 任务执行。
 
+`v0.2.0-beta.1` 预发布的 Windows MSI 要求应用版本的预发布段为纯数字；Tauri 在原始 `0.2.0-beta.1` 上生成 NSIS 后会于 MSI 阶段拒绝打包。Windows 原生构建使用 `desktop/tauri.windows-preview.json` 将安装包元数据覆盖为 `0.2.0-1`，其余平台与 Rust/Web 版本仍为 `0.2.0-beta.1`。此映射必须由 Windows NSIS/MSI 实际构建验证，不可从配置解析推断安装包已成功。
+
 2026-10-14 原生平台结果：提交 `e9c14cd109ba2f0f0cc6c0e6353d312c8a2256ae` 的 [Server and desktop builds / 38483899443](https://github.com/ca-x/moleapi/actions/runs/38483899443) 已成功完成。独立服务端 Linux x64/arm64、macOS x64/arm64、Windows x64 共5个构建，以及桌面 Linux x64（deb/rpm/AppImage）、macOS x64/arm64（dmg）、Windows x64（NSIS/MSI）共4个打包构建全部成功；每个平台的 worker 检查和 artifact 上传步骤均成功。提交 `746e50a` 的 Application CI / 38487325358 与 Docker / 38487325380 也已成功。这些是对应历史提交的构建证据；较新的 Linux deb 实际安装结果见下文，其他平台和最终发行门禁仍需各自验证。
 
 | 产物 | 目标平台/架构 | 安装/分发形式 |
@@ -19,7 +21,7 @@ CI 分层：
 
 1. pull_request/push 执行 Rust 格式、Clippy、单元/接口测试、前端类型检查/测试/生产构建。
 2. 默认分支/手动构建平台矩阵，上传服务端二进制与桌面安装包供验证。
-3. v* tag 先完整验证，再生成 GitHub Release 及校验和，发布版本 Docker 镜像。
+3. v* tag 构建原生包并校验完整产物矩阵，生成 SHA256SUMS 后创建附带安装包的 GitHub 草稿预发布；Docker 工作流独立烟测并发布双架构版本镜像。仅在两条 tag 流水线均通过并回读 Release 产物与镜像 manifest 后公开预发布。
 4. Docker 多阶段先构建本地前端，再编译嵌入资源的服务端；运行镜像不依赖 Node，不需要挂载静态前端目录。SQLite 与用户文件使用持久化数据卷。
 5. Tauri frontendDist、字体、CodeMirror 语言包等均为本地产物，不从 CDN 加载。安装包包含独立本地数据存储和执行引擎，不要求另装服务端。
 6. macOS/Windows 签名与 Tauri updater 需要真实证书/密钥；没有这些凭据时，构建只能如实标明签名状态，不能宣称已完成公证或签名。发布流程不得输出 secrets。
