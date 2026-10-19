@@ -230,6 +230,30 @@ async fn watch_access(
     }
 }
 
+async fn watch_access_revision(
+    state: &AppState,
+    actor: &str,
+    owner: &str,
+    workspace: &str,
+    admission: Access,
+    revision: i64,
+) -> ApiError {
+    let period = std::time::Duration::from_millis(200);
+    let mut check = tokio::time::interval_at(tokio::time::Instant::now() + period, period);
+    check.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    loop {
+        check.tick().await;
+        match access(&state.db, actor, owner, workspace).await {
+            Ok((current_workspace, current)) if current == admission => {
+                if current_workspace.revision != revision {
+                    return ApiError::conflict("Workspace changed during draft execution");
+                }
+            }
+            _ => return ApiError::not_found(),
+        }
+    }
+}
+
 pub async fn shared_get(
     State(state): State<AppState>,
     Extension(actor): Extension<Identity>,
@@ -401,6 +425,90 @@ pub async fn shared_execute(
     let (_, current) = access(&state.db, &actor.0, &owner, &workspace).await?;
     if current != admission {
         return Err(ApiError::not_found());
+    }
+    result
+}
+
+pub async fn shared_execute_draft(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Identity>,
+    Path((owner, workspace)): Path<(String, String)>,
+    Json(input): Json<crate::execution::ExecuteDraft>,
+) -> Result<Json<moleapi_core::Response>, ApiError> {
+    if state.local {
+        return Err(ApiError::not_found());
+    }
+    let tx = state.db.begin().await?;
+    let canonical = lock_workspace(&tx, &owner, &workspace).await?;
+    let (_, admission) = access(&tx, &actor.0, &owner, &workspace).await?;
+    if admission.role == Role::Viewer {
+        return Err(ApiError::forbidden("Viewer cannot execute this workspace"));
+    }
+    if canonical.revision != input.expected_workspace_revision {
+        return Err(ApiError::conflict("Workspace revision changed"));
+    }
+    if input.request.protocol != moleapi_core::Protocol::Http {
+        return Err(ApiError::bad("Draft execution supports HTTP requests only"));
+    }
+    if input.request.id.trim().is_empty() {
+        return Err(ApiError::bad("Draft request ID is required"));
+    }
+    if !canonical
+        .data
+        .collections
+        .iter()
+        .any(|collection| collection.id == input.collection_id)
+        || canonical.data.collections.iter().any(|collection| {
+            collection.id != input.collection_id
+                && collection
+                    .requests
+                    .iter()
+                    .any(|request| request.id == input.request.id)
+        })
+    {
+        return Err(ApiError::not_found());
+    }
+    moleapi_core::validate_request(&input.request, true)
+        .map_err(|error| ApiError::bad(error.to_string()))?;
+    record_event_result(
+        &tx,
+        &owner,
+        &workspace,
+        &actor.0,
+        "request.draft.execute",
+        Some(&input.request.id),
+        "started",
+    )
+    .await?;
+    tx.commit().await?;
+    let run = crate::execution::execute(
+        State(state.clone()),
+        Extension(Identity(owner.clone())),
+        Json(input.into_execute(workspace.clone())),
+    );
+    let watch = watch_access_revision(
+        &state,
+        &actor.0,
+        &owner,
+        &workspace,
+        admission,
+        canonical.revision,
+    );
+    tokio::pin!(run);
+    tokio::pin!(watch);
+    let result = tokio::select! {
+        biased;
+        error = &mut watch => return Err(error),
+        result = &mut run => result,
+    };
+    let (current_workspace, current) = access(&state.db, &actor.0, &owner, &workspace).await?;
+    if current != admission {
+        return Err(ApiError::not_found());
+    }
+    if current_workspace.revision != canonical.revision {
+        return Err(ApiError::conflict(
+            "Workspace changed during draft execution",
+        ));
     }
     result
 }

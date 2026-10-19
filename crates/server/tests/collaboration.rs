@@ -1288,6 +1288,413 @@ async fn editor_http_settings_save_to_owner_and_execute_on_the_wire() {
 }
 
 #[tokio::test]
+async fn editor_draft_http_executes_without_saving_and_rejects_invalid_admission() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let mut settings = config(
+        moleapi_server::sqlite_database_url(&dir.path().join("shared-draft.db")).unwrap(),
+        true,
+    );
+    settings.allow_private_network = true;
+    let router = hosted(settings).await.unwrap();
+    let owner = register(&router, "draftowner").await;
+    let editor = register(&router, "drafteditor").await;
+    let viewer = register(&router, "draftviewer").await;
+    let foreign = register(&router, "draftforeign").await;
+    let calls = Arc::new(AtomicUsize::new(0));
+    let (url, fixture) = serve(Router::new().route(
+        "/echo",
+        axum::routing::post({
+            let calls = calls.clone();
+            move |uri: axum::http::Uri, headers: axum::http::HeaderMap, body: String| {
+                let calls = calls.clone();
+                async move {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    axum::Json(json!({"query":uri.query(),"body":body,"parent_auth":headers.get("authorization").and_then(|value| value.to_str().ok()) == Some("Bearer parent-token")}))
+                }
+            }
+        }),
+    ))
+    .await;
+    let mut source = example_data();
+    source["collections"][0]["variables"] =
+        json!([{"id":"parent-var","key":"parent_value","value":"from-parent","enabled":true}]);
+    source["collections"][0]["auth"] =
+        json!({"kind":"bearer","token":"parent-token","username":"","password":""});
+    let mut other = source["collections"][0].clone();
+    other["id"] = json!("other-collection");
+    other["requests"][0]["id"] = json!("other-request");
+    source["collections"].as_array_mut().unwrap().push(other);
+    let (status, created) = call(
+        &router,
+        "POST",
+        "/api/workspaces",
+        Some(&owner),
+        Some(json!({"id":"w","name":"Draft workspace","data":source})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{created}");
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            "/api/workspaces",
+            Some(&foreign),
+            Some(json!({"id":"w","name":"Foreign workspace","data":example_data()})),
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let mut invitations = Vec::new();
+    for role in ["editor", "viewer"] {
+        invitations.push(
+            call(
+                &router,
+                "POST",
+                "/api/workspaces/w/invitations",
+                Some(&owner),
+                Some(json!({"role":role,"expires_in_days":1})),
+            )
+            .await
+            .1,
+        );
+    }
+    let (_, accepted) = call(
+        &router,
+        "POST",
+        "/api/workspace-invitations/accept",
+        Some(&editor),
+        Some(json!({"token":invitations[0]["token"]})),
+    )
+    .await;
+    let (_, _) = call(
+        &router,
+        "POST",
+        "/api/workspace-invitations/accept",
+        Some(&viewer),
+        Some(json!({"token":invitations[1]["token"]})),
+    )
+    .await;
+    let owner_id = accepted["owner_id"].as_str().unwrap();
+    let editor_id = accepted["member_id"].as_str().unwrap();
+    let draft_path = format!("/api/owners/{owner_id}/workspaces/w/execute-draft");
+    let (_, canonical) = call(&router, "GET", "/api/workspaces/w", Some(&owner), None).await;
+    let mut request = canonical["data"]["collections"][0]["requests"][0].clone();
+    request["method"] = json!("POST");
+    request["url"] = json!(format!("{url}/echo"));
+    request["body_kind"] = json!("json");
+    request["body"] = json!(r#"{"draft":true}"#);
+    request["query"] = json!([{"id":"q","key":"source","value":"draft","enabled":true}]);
+    let payload = json!({"request":request,"collection_id":"c","expected_workspace_revision":canonical["revision"]});
+    let (status, response) = call(
+        &router,
+        "POST",
+        &draft_path,
+        Some(&editor),
+        Some(payload.clone()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    let wire: serde_json::Value = serde_json::from_str(response["body"].as_str().unwrap()).unwrap();
+    assert_eq!(wire["query"], "source=draft");
+    assert_eq!(wire["body"], r#"{"draft":true}"#);
+    let (_, unchanged) = call(&router, "GET", "/api/workspaces/w", Some(&owner), None).await;
+    assert_eq!(unchanged["revision"], canonical["revision"]);
+    assert_eq!(unchanged["data"], canonical["data"]);
+    let mut new_payload = payload.clone();
+    new_payload["request"]["id"] = json!("new-unsaved-request");
+    new_payload["request"]["auth"] =
+        json!({"kind":"inherit","token":"","username":"","password":""});
+    new_payload["request"]["body"] = json!(r#"{"from":"{{parent_value}}"}"#);
+    let (status, new_response) = call(
+        &router,
+        "POST",
+        &draft_path,
+        Some(&editor),
+        Some(new_payload),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{new_response}");
+    let new_wire: serde_json::Value =
+        serde_json::from_str(new_response["body"].as_str().unwrap()).unwrap();
+    assert_eq!(new_wire["body"], r#"{"from":"from-parent"}"#);
+    assert_eq!(new_wire["parent_auth"], true);
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    let (status, history) = call(
+        &router,
+        "GET",
+        &format!("/api/owners/{owner_id}/workspaces/w/history"),
+        Some(&editor),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{history}");
+    assert_eq!(history.as_array().unwrap().len(), 2);
+    assert!(!history.to_string().contains("parent-token"));
+    let (status, audit) = call(
+        &router,
+        "GET",
+        &format!("/api/owners/{owner_id}/workspaces/w/audit"),
+        Some(&owner),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{audit}");
+    assert_eq!(
+        audit
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|event| event["actor_id"] == editor_id
+                && event["action"] == "request.draft.execute")
+            .count(),
+        2
+    );
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            &draft_path,
+            Some(&viewer),
+            Some(payload.clone())
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    let mut stale = payload.clone();
+    stale["expected_workspace_revision"] = json!(0);
+    assert_eq!(
+        call(&router, "POST", &draft_path, Some(&editor), Some(stale))
+            .await
+            .0,
+        StatusCode::CONFLICT
+    );
+    let mut collision = payload.clone();
+    collision["request"]["id"] = json!("other-request");
+    assert_eq!(
+        call(&router, "POST", &draft_path, Some(&editor), Some(collision))
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+    let mut missing_collection = payload.clone();
+    missing_collection["collection_id"] = json!("missing");
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            &draft_path,
+            Some(&editor),
+            Some(missing_collection),
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    let (_, foreign_identity) = call(&router, "GET", "/api/auth/me", Some(&foreign), None).await;
+    assert_eq!(
+        call(
+            &router,
+            "POST",
+            &format!(
+                "/api/owners/{}/workspaces/w/execute-draft",
+                foreign_identity["id"].as_str().unwrap()
+            ),
+            Some(&editor),
+            Some(payload.clone()),
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    let mut protocol = payload.clone();
+    protocol["request"]["protocol"] = json!({"kind":"sse"});
+    assert_eq!(
+        call(&router, "POST", &draft_path, Some(&editor), Some(protocol))
+            .await
+            .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    fixture.abort();
+}
+
+#[tokio::test]
+async fn draft_http_withholds_result_after_cross_instance_role_or_revision_change() {
+    use std::sync::Arc;
+    let dir = tempfile::tempdir().unwrap();
+    let mut settings = config(
+        moleapi_server::sqlite_database_url(&dir.path().join("draft-fence.db")).unwrap(),
+        true,
+    );
+    settings.allow_private_network = true;
+    let first = hosted(settings.clone()).await.unwrap();
+    let second = hosted(settings).await.unwrap();
+    let owner = register(&first, "fenceowner").await;
+    let member = register(&first, "fencemember").await;
+    let role_started = Arc::new(tokio::sync::Notify::new());
+    let role_release = Arc::new(tokio::sync::Notify::new());
+    let revision_started = Arc::new(tokio::sync::Notify::new());
+    let revision_release = Arc::new(tokio::sync::Notify::new());
+    let (url, fixture) = serve(
+        Router::new()
+            .route(
+                "/slow-role",
+                axum::routing::post({
+                    let started = role_started.clone();
+                    let release = role_release.clone();
+                    move || {
+                        let started = started.clone();
+                        let release = release.clone();
+                        async move {
+                            started.notify_one();
+                            release.notified().await;
+                            "private-draft-reply"
+                        }
+                    }
+                }),
+            )
+            .route(
+                "/slow-revision",
+                axum::routing::post({
+                    let started = revision_started.clone();
+                    let release = revision_release.clone();
+                    move || {
+                        let started = started.clone();
+                        let release = release.clone();
+                        async move {
+                            started.notify_one();
+                            release.notified().await;
+                            "private-draft-reply"
+                        }
+                    }
+                }),
+            ),
+    )
+    .await;
+    let (_, created) = call(
+        &first,
+        "POST",
+        "/api/workspaces",
+        Some(&owner),
+        Some(json!({"id":"w","name":"Fence","data":example_data()})),
+    )
+    .await;
+    let (_, invitation) = call(
+        &first,
+        "POST",
+        "/api/workspaces/w/invitations",
+        Some(&owner),
+        Some(json!({"role":"editor","expires_in_days":1})),
+    )
+    .await;
+    let (_, accepted) = call(
+        &first,
+        "POST",
+        "/api/workspace-invitations/accept",
+        Some(&member),
+        Some(json!({"token":invitation["token"]})),
+    )
+    .await;
+    let owner_id = accepted["owner_id"].as_str().unwrap();
+    let member_id = accepted["member_id"].as_str().unwrap();
+    let draft_path = format!("/api/owners/{owner_id}/workspaces/w/execute-draft");
+    let role_path = format!("/api/owners/{owner_id}/workspaces/w/members/{member_id}");
+    let mut request = created["data"]["collections"][0]["requests"][0].clone();
+    request["method"] = json!("POST");
+    request["url"] = json!(format!("{url}/slow-role"));
+    request["timeout_ms"] = json!(10000);
+    let payload = json!({"request":request,"collection_id":"c","expected_workspace_revision":created["revision"]});
+    let first_for_task = first.clone();
+    let member_for_task = member.clone();
+    let path_for_task = draft_path.clone();
+    let payload_for_task = payload.clone();
+    let pending_role = tokio::spawn(async move {
+        call(
+            &first_for_task,
+            "POST",
+            &path_for_task,
+            Some(&member_for_task),
+            Some(payload_for_task),
+        )
+        .await
+    });
+    tokio::time::timeout(std::time::Duration::from_secs(3), role_started.notified())
+        .await
+        .unwrap();
+    assert_eq!(
+        call(
+            &second,
+            "PATCH",
+            &role_path,
+            Some(&owner),
+            Some(json!({"role":"viewer","expected_revision":1}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let (status, withheld) = tokio::time::timeout(std::time::Duration::from_secs(3), pending_role)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(status, StatusCode::NOT_FOUND, "{withheld}");
+    assert!(!withheld.to_string().contains("private-draft-reply"));
+    role_release.notify_one();
+    assert_eq!(
+        call(
+            &second,
+            "PATCH",
+            &role_path,
+            Some(&owner),
+            Some(json!({"role":"editor","expected_revision":2}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let first_for_task = first.clone();
+    let member_for_task = member.clone();
+    let path_for_task = draft_path.clone();
+    let mut revision_payload = payload;
+    revision_payload["request"]["url"] = json!(format!("{url}/slow-revision"));
+    let pending_revision = tokio::spawn(async move {
+        call(
+            &first_for_task,
+            "POST",
+            &path_for_task,
+            Some(&member_for_task),
+            Some(revision_payload),
+        )
+        .await
+    });
+    tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        revision_started.notified(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        call(&second, "PUT", &format!("/api/owners/{owner_id}/workspaces/w"), Some(&owner), Some(json!({"name":"Changed","expected_revision":created["revision"],"data":created["data"]}))).await.0,
+        StatusCode::OK
+    );
+    let (status, withheld) =
+        tokio::time::timeout(std::time::Duration::from_secs(3), pending_revision)
+            .await
+            .unwrap()
+            .unwrap();
+    assert_eq!(status, StatusCode::CONFLICT, "{withheld}");
+    assert!(!withheld.to_string().contains("private-draft-reply"));
+    revision_release.notify_one();
+    fixture.abort();
+}
+
+#[tokio::test]
 async fn rejoining_with_same_role_cannot_restore_an_in_flight_request() {
     use std::sync::Arc;
     let dir = tempfile::tempdir().unwrap();

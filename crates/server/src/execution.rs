@@ -11,6 +11,8 @@ use serde::Deserialize;
 pub struct Execute {
     workspace_id: String,
     request: RequestSpec,
+    #[serde(default)]
+    collection_id: Option<String>,
     environment_id: Option<String>,
     #[serde(default)]
     expected_workspace_revision: Option<i64>,
@@ -32,6 +34,34 @@ pub struct ExecuteSaved {
     #[serde(default)]
     locals: Vec<VariableUpdate>,
 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExecuteDraft {
+    pub(crate) request: RequestSpec,
+    pub(crate) collection_id: String,
+    pub(crate) expected_workspace_revision: i64,
+    environment_id: Option<String>,
+    #[serde(default)]
+    variables: Vec<Pair>,
+    #[serde(default)]
+    data: Vec<Pair>,
+    #[serde(default)]
+    locals: Vec<VariableUpdate>,
+}
+impl ExecuteDraft {
+    pub(crate) fn into_execute(self, workspace_id: String) -> Execute {
+        Execute {
+            workspace_id,
+            request: self.request,
+            collection_id: Some(self.collection_id),
+            environment_id: self.environment_id,
+            expected_workspace_revision: Some(self.expected_workspace_revision),
+            variables: self.variables,
+            data: self.data,
+            locals: self.locals,
+        }
+    }
+}
 impl ExecuteSaved {
     pub(crate) fn into_execute(
         self,
@@ -42,6 +72,7 @@ impl ExecuteSaved {
         Execute {
             workspace_id,
             request,
+            collection_id: None,
             environment_id: self.environment_id,
             expected_workspace_revision: Some(revision),
             variables: self.variables,
@@ -745,12 +776,31 @@ pub async fn execute(
         return Err(ApiError::not_found());
     }
     let e = environment(&w, c.environment_id.as_deref())?;
-    let collection = w.data.collections.iter().find(|collection| {
-        collection
-            .requests
-            .iter()
-            .any(|request| request.id == c.request.id)
-    });
+    let collection = if let Some(collection_id) = c.collection_id.as_deref() {
+        if w.data.collections.iter().any(|collection| {
+            collection.id != collection_id
+                && collection
+                    .requests
+                    .iter()
+                    .any(|request| request.id == c.request.id)
+        }) {
+            return Err(ApiError::not_found());
+        }
+        Some(
+            w.data
+                .collections
+                .iter()
+                .find(|collection| collection.id == collection_id)
+                .ok_or_else(ApiError::not_found)?,
+        )
+    } else {
+        w.data.collections.iter().find(|collection| {
+            collection
+                .requests
+                .iter()
+                .any(|request| request.id == c.request.id)
+        })
+    };
     let mut scopes = variables(&s, &w, collection, e, &c.data, &c.variables, &c.locals)?;
     Ok(Json(
         perform(&s, &owner.0, &w, &c.request, collection, &mut scopes).await?,

@@ -4,7 +4,7 @@ import { Button, Callout, Flex, Heading, Tabs, Text, TextArea, TextField } from 
 import { api, previewSharedMock, token } from "../../shared/api";
 import { t, useLanguage } from "../../shared/i18n";
 import { liveError } from "../../shared/i18n/errors";
-import { id } from "../../shared/model";
+import { id, newRequest } from "../../shared/model";
 import type { ApiResponse, Example, HistoryEntry, RequestSpec, RunReportPage, SharedWorkspaceSummary, Workspace } from "../../shared/types";
 import { Choice, Editor, Field, PairEditor } from "../../shared/ui";
 import RequestAuthEditor from "../authentication/RequestAuthEditor";
@@ -47,6 +47,7 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
   const [sending, setSending] = useState(false);
   const sendGeneration = useRef(0);
   const [requestResponse, setRequestResponse] = useState<ApiResponse | null>(null);
+  const [responseSource, setResponseSource] = useState<"saved" | "draft" | null>(null);
   const [mocking, setMocking] = useState(false);
   const [mockPreview, setMockPreview] = useState<{ status: number; body: string } | null>(null);
   const mockGeneration = useRef(0);
@@ -57,7 +58,7 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
   const latest = useRef(scope);
   latest.current = scope;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  useEffect(() => { setDraft(null); setSaved(null); setLoadedScope(""); setConflict(null); setCollectionId(""); setRequestId(""); setExampleId(""); setTab("resources"); setRequestEditorTab("query"); setError(""); setRunResult(null); setRequestResponse(null); setMockPreview(null); setSaving(false); setRunning(false); setSending(false); setMocking(false); }, [scope]);
+  useEffect(() => { setDraft(null); setSaved(null); setLoadedScope(""); setConflict(null); setCollectionId(""); setRequestId(""); setExampleId(""); setTab("resources"); setRequestEditorTab("query"); setError(""); setRunResult(null); setRequestResponse(null); setResponseSource(null); setMockPreview(null); setSaving(false); setRunning(false); setSending(false); setMocking(false); }, [scope]);
   const current = (origin: string) => mounted.current && latest.current === origin && token() === credential;
   const workspace = useQuery({
     queryKey: ["shared-workspace", accountId, owner, workspaceId, selected.role, epoch],
@@ -67,11 +68,11 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
   const reports = useQuery({ queryKey: ["shared-reports", accountId, owner, workspaceId, epoch], queryFn: () => api<RunReportPage>(`${base}/reports`), enabled: !!credential && selected.role !== "viewer" && tab === "reports" && !workspace.error, retry: false });
   const mockCalls = useQuery({ queryKey: ["shared-mock-calls", accountId, owner, workspaceId, epoch], queryFn: () => api<MockCall[]>(`${base}/mock-calls`), enabled: !!credential && selected.role !== "viewer" && tab === "mock" && !workspace.error, retry: false });
   useEffect(() => {
-    if (workspace.error || !workspace.data) { if (workspace.error) { sendGeneration.current += 1; runGeneration.current += 1; mockGeneration.current += 1; setSending(false); setRunning(false); setMocking(false); setDraft(null); setSaved(null); setLoadedScope(""); setRunResult(null); setRequestResponse(null); setMockPreview(null); } return; }
+    if (workspace.error || !workspace.data) { if (workspace.error) { sendGeneration.current += 1; runGeneration.current += 1; mockGeneration.current += 1; setSending(false); setRunning(false); setMocking(false); setDraft(null); setSaved(null); setLoadedScope(""); setRunResult(null); setRequestResponse(null); setResponseSource(null); setMockPreview(null); } return; }
     if (!saved) { setDraft(workspace.data); setSaved(workspace.data); setLoadedScope(scope); return; }
     if (workspace.data.revision !== saved.revision) {
-      if (hasChanges({ draft, saved })) { mockGeneration.current += 1; setMocking(false); setMockPreview(null); setConflict(workspace.data); }
-      else { sendGeneration.current += 1; runGeneration.current += 1; mockGeneration.current += 1; setSending(false); setRunning(false); setMocking(false); setRequestResponse(null); setRunResult(null); setMockPreview(null); setDraft(workspace.data); setSaved(workspace.data); setConflict(null); }
+      if (hasChanges({ draft, saved })) { invalidateDraftResults(); setConflict(workspace.data); }
+      else { invalidateDraftResults(); setDraft(workspace.data); setSaved(workspace.data); setConflict(null); }
     }
   }, [workspace.data, workspace.error, draft, saved, scope]);
   const canEdit = selected.role !== "viewer";
@@ -80,16 +81,18 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
   useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
   const collection = draft?.data.collections.find((item) => item.id === collectionId) ?? draft?.data.collections[0];
   const request = collection?.requests.find((item) => item.id === requestId) ?? collection?.requests[0];
+  const httpRequest = !!request && (!request.protocol?.kind || request.protocol.kind === "http");
   const example = request?.examples.find((item) => item.id === exampleId) ?? request?.examples[0];
   const statusPending = !!example && exampleStatusInput !== String(example.status);
   useEffect(() => { setExampleStatusInput(example ? String(example.status) : ""); }, [collection?.id, request?.id, example?.id, example?.status]);
   useEffect(() => { runGeneration.current += 1; setRunning(false); setRunResult(null); }, [collection?.id]);
-  useEffect(() => { sendGeneration.current += 1; setSending(false); setRequestResponse(null); }, [collection?.id, request?.id]);
+  useEffect(() => { sendGeneration.current += 1; setSending(false); setRequestResponse(null); setResponseSource(null); }, [collection?.id, request?.id]);
   useEffect(() => { mockGeneration.current += 1; setMocking(false); setMockPreview(null); }, [collection?.id, request?.id, example?.id]);
   function invalidateDraftResults() {
     sendGeneration.current += 1;
     setSending(false);
     setRequestResponse(null);
+    setResponseSource(null);
     runGeneration.current += 1;
     setRunning(false);
     setRunResult(null);
@@ -104,6 +107,13 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
   }
   function updateSelectedRequest(patch: Partial<RequestSpec>) {
     updateRequest((item) => ({ ...item, ...patch }));
+  }
+  function addHttpRequest() {
+    if (!canEdit || !collection) return;
+    const next = newRequest();
+    invalidateDraftResults();
+    setDraft((currentDraft) => currentDraft ? ({ ...currentDraft, data: { ...currentDraft.data, collections: currentDraft.data.collections.map((item) => item.id === collection.id ? { ...item, requests: [...item.requests, next] } : item) } }) : null);
+    setRequestId(next.id);
   }
   function updateExample(change: (example: Example) => Example) {
     if (!example) return;
@@ -146,7 +156,19 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
     setSending(true); setError(""); setRequestResponse(null);
     try {
       const response = await api<ApiResponse>(`${base}/requests/${encodeURIComponent(requestId)}/execute`, "POST", {});
-      if (current(origin) && sendGeneration.current === generation) { setRequestResponse(response); void client.invalidateQueries({ queryKey: ["shared-history", accountId, owner, workspaceId] }); }
+      if (current(origin) && sendGeneration.current === generation) { setRequestResponse(response); setResponseSource("saved"); void client.invalidateQueries({ queryKey: ["shared-history", accountId, owner, workspaceId] }); }
+    } catch (cause) { if (current(origin) && sendGeneration.current === generation) setError(liveError(cause)); }
+    finally { if (current(origin) && sendGeneration.current === generation) setSending(false); }
+  }
+  async function sendDraftRequest() {
+    if (!canEdit || !httpRequest || !request || !collection || !saved || !dirty || sending || saving || conflict || !current(scope)) return;
+    const origin = scope;
+    const generation = ++sendGeneration.current;
+    const snapshot = structuredClone(request);
+    setSending(true); setError(""); setRequestResponse(null); setResponseSource(null);
+    try {
+      const response = await api<ApiResponse>(`${base}/execute-draft`, "POST", { request: snapshot, collection_id: collection.id, expected_workspace_revision: saved.revision });
+      if (current(origin) && sendGeneration.current === generation) { setRequestResponse(response); setResponseSource("draft"); void client.invalidateQueries({ queryKey: ["shared-history", accountId, owner, workspaceId] }); }
     } catch (cause) { if (current(origin) && sendGeneration.current === generation) setError(liveError(cause)); }
     finally { if (current(origin) && sendGeneration.current === generation) setSending(false); }
   }
@@ -174,7 +196,7 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
         {canEdit ? <Field label={t("工作区名称")}><TextField.Root value={draft.name} onChange={(event) => { invalidateDraftResults(); setDraft((currentDraft) => currentDraft ? { ...currentDraft, name: event.target.value } : null); }} /></Field> : <Text size="2">{draft.name}</Text>}
         {draft.data.collections.length === 0 ? <Text size="2" color="gray">{t("此工作区还没有集合")}</Text> : <>
           <Choice label={t("集合")} value={collection?.id ?? ""} onChange={(value) => { setCollectionId(value); setRequestId(""); }} options={draft.data.collections.map((item) => ({ value: item.id, label: item.name }))} />
-          {collection && <Flex align="center" justify="between" gap="2" wrap="wrap"><Heading size="3">{collection.name}</Heading>{canEdit && <Button loading={running} disabled={running || dirty || collection.requests.length === 0} onClick={() => void runCollection()}>{t("运行集合")}</Button>}</Flex>}
+          {collection && <Flex align="center" justify="between" gap="2" wrap="wrap"><Heading size="3">{collection.name}</Heading>{canEdit && <Flex gap="2" wrap="wrap"><Button variant="outline" onClick={addHttpRequest}>{t("新增 HTTP 请求")}</Button><Button loading={running} disabled={running || dirty || collection.requests.length === 0} onClick={() => void runCollection()}>{t("运行集合")}</Button></Flex>}</Flex>}
           {canEdit && dirty && <Text size="1" color="gray">{t("先保存修改，再运行集合。")}</Text>}
           {runResult && <Text role="status" size="2">{t("通过")}: {runResult.passed} · {t("失败")}: {runResult.failed}</Text>}
           {collection && collection.requests.length > 0 && <>
@@ -211,8 +233,8 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
             </Flex> : <Flex direction="column" gap="1"><Text weight="medium">{request.method} {request.name}</Text><Text size="2" style={{ overflowWrap: "anywhere" }}>{request.url}</Text><Text size="2" color="gray">{request.description}</Text></Flex>)}
           </>}
           {canEdit && request && <Flex direction="column" gap="2">
-            <Button loading={sending} disabled={sending || dirty} onClick={() => void sendSavedRequest()}>{t("发送已保存请求")}</Button>
-            {requestResponse && <><Text role="status" size="2">{requestResponse.status} {requestResponse.status_text} · {requestResponse.elapsed_ms} ms</Text><TextArea aria-label={t("响应正文预览")} readOnly value={requestResponse.body.slice(0, 16 * 1024)} />{requestResponse.body.length > 16 * 1024 && <Text size="1" color="gray">{t("仅显示响应正文前 16 KiB。")}</Text>}</>}
+            {dirty && httpRequest ? <><Button loading={sending} disabled={sending || saving || !!conflict} onClick={() => void sendDraftRequest()}>{t("发送草稿请求")}</Button><Text size="1" color="gray">{t("草稿请求仅供本次执行，保存后才会更新工作区。")}</Text></> : <Button loading={sending} disabled={sending || dirty} onClick={() => void sendSavedRequest()}>{t("发送已保存请求")}</Button>}
+            {requestResponse && <><Text role="status" size="2">{responseSource === "draft" ? t("草稿请求执行结果") : t("已保存请求执行结果")}: {requestResponse.status} {requestResponse.status_text} · {requestResponse.elapsed_ms} ms</Text><TextArea aria-label={t("响应正文预览")} readOnly value={requestResponse.body.slice(0, 16 * 1024)} />{requestResponse.body.length > 16 * 1024 && <Text size="1" color="gray">{t("仅显示响应正文前 16 KiB。")}</Text>}</>}
           </Flex>}
         </>}
         {canEdit && <Button loading={saving} disabled={!dirty || saving || !!conflict} onClick={() => void save()}>{t("保存共享工作区")}</Button>}

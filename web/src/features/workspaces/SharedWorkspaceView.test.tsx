@@ -234,7 +234,8 @@ it("saves shared HTTP query, headers, JSON body and auth in one canonical revisi
   fireEvent.mouseDown(screen.getByRole("tab", { name: /鉴权/ }), { button: 0 });
   fireEvent.change(screen.getByLabelText("鉴权类型"), { target: { value: "bearer" } });
   fireEvent.change(screen.getByLabelText("Token"), { target: { value: "member-secret" } });
-  expect(screen.getByRole("button", { name: "发送已保存请求" })).toHaveProperty("disabled", true);
+  expect(screen.queryByRole("button", { name: "发送已保存请求" })).toBeNull();
+  expect(screen.getByRole("button", { name: "发送草稿请求" })).toHaveProperty("disabled", false);
   fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
   await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.objectContaining({ expected_revision: 3 })));
   const saved = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
@@ -304,6 +305,71 @@ it("executes only the selected saved request through its scoped route", async ()
   fireEvent.click(await screen.findByRole("button", { name: "发送已保存请求" }));
   await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/requests/${encodeURIComponent(requestId)}/execute`, "POST", {}));
   expect((await screen.findByLabelText("响应正文预览") as HTMLTextAreaElement).value).toBe("shared-reply");
+});
+
+it("executes an edited HTTP draft without saving it", async () => {
+  const first = workspace.data.collections[0].requests[0];
+  vi.mocked(api).mockImplementation((_path, method) => Promise.resolve(method === "POST" ? { status: 200, status_text: "OK", elapsed_ms: 3, body: "draft-wire" } : workspace));
+  render(view("editor"));
+  fireEvent.change(await screen.findByLabelText("请求地址"), { target: { value: "https://draft.example/" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送草稿请求" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/execute-draft`, "POST", expect.objectContaining({ collection_id: workspace.data.collections[0].id, expected_workspace_revision: 3, request: expect.objectContaining({ id: first.id, url: "https://draft.example/" }) })));
+  expect(screen.getByText(/草稿请求执行结果: 200 OK/)).toBeTruthy();
+  expect((screen.getByLabelText("响应正文预览") as HTMLTextAreaElement).value).toBe("draft-wire");
+  expect(vi.mocked(api).mock.calls.some(([, method]) => method === "PUT")).toBe(false);
+});
+
+it("runs a new unsaved HTTP request in its collection and then saves it", async () => {
+  vi.mocked(api).mockImplementation((_path, method, body) => Promise.resolve(method === "POST" ? { status: 200, status_text: "OK", elapsed_ms: 3, body: "new-draft" } : method === "PUT" ? { ...workspace, revision: 4, data: (body as { data: Workspace["data"] }).data } : workspace));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "新增 HTTP 请求" }));
+  fireEvent.change(screen.getByLabelText("请求名称"), { target: { value: "New draft" } });
+  fireEvent.change(screen.getByLabelText("请求地址"), { target: { value: "https://new.example/" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送草稿请求" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/execute-draft`, "POST", expect.objectContaining({ collection_id: workspace.data.collections[0].id, expected_workspace_revision: 3, request: expect.objectContaining({ name: "New draft", url: "https://new.example/" }) })));
+  const draft = vi.mocked(api).mock.calls.find(([path, method]) => path === `${base}/execute-draft` && method === "POST")?.[2] as { request: { id: string } };
+  expect(draft.request.id).not.toBe(workspace.data.collections[0].requests[0].id);
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.objectContaining({ expected_revision: 3 })));
+  const saved = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
+  expect(saved.data.collections[0].requests.some((request) => request.id === draft.request.id && request.name === "New draft")).toBe(true);
+});
+
+it("stops marking a newly saved draft dirty after canonical server defaults are returned", async () => {
+  vi.mocked(api).mockImplementation((_path, method, body) => {
+    if (method === "PUT") {
+      const data = structuredClone((body as { data: Workspace["data"] }).data);
+      const created = data.collections[0].requests.at(-1)!;
+      created.protocol = { kind: "http" };
+      created.pre_request_script = "";
+      created.post_response_script = "";
+      return Promise.resolve({ ...workspace, revision: 4, data });
+    }
+    return Promise.resolve(workspace);
+  });
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "新增 HTTP 请求" }));
+  fireEvent.change(screen.getByLabelText("请求地址"), { target: { value: "https://new.example/" } });
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.anything()));
+  await waitFor(() => expect(screen.getByRole("button", { name: "保存共享工作区" })).toHaveProperty("disabled", true));
+  expect(screen.queryByRole("button", { name: "发送草稿请求" })).toBeNull();
+  expect(screen.getByRole("button", { name: "发送已保存请求" })).toBeTruthy();
+});
+
+it("withholds a delayed draft result after the owner advances the workspace revision", async () => {
+  let finish!: (value: unknown) => void;
+  vi.mocked(api).mockImplementation((_path, method) => method === "POST" ? new Promise((resolve) => { finish = resolve; }) : Promise.resolve(workspace));
+  render(view("editor"));
+  fireEvent.change(await screen.findByLabelText("请求地址"), { target: { value: "https://draft.example/" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送草稿请求" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/execute-draft`, "POST", expect.anything()));
+  const remote = { ...workspace, revision: 4 };
+  await act(async () => client.setQueryData(["shared-workspace", "member", "owner-id", "w", "editor", 0], remote));
+  expect(await screen.findByText("共享工作区已被其他成员更新。选择要保留的版本。")).toBeTruthy();
+  await act(async () => finish({ status: 200, status_text: "OK", elapsed_ms: 3, body: "private-old-draft" }));
+  expect(screen.queryByLabelText("响应正文预览")).toBeNull();
+  expect(screen.getByRole("button", { name: "发送草稿请求" })).toHaveProperty("disabled", true);
 });
 
 it("does not show a previous request's delayed response after selection changes", async () => {

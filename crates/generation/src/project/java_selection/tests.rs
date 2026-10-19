@@ -106,12 +106,19 @@ async fn invalid_bounded_and_timed_out_probes_do_not_create_a_preference() {
         "/usr/bin/head -c 17000 /dev/zero",
     );
     assert!(
-        runtime
-            .select_native_java(large, &preference)
+        read_version(tokio::io::repeat(0))
             .await
             .unwrap_err()
             .to_string()
             .contains("limit")
+    );
+    // A loaded test runner can hit the process watchdog before this script's
+    // bounded output is consumed. Both outcomes must reject the selection.
+    assert!(
+        runtime
+            .select_native_java(large, &preference)
+            .await
+            .is_err()
     );
     let slow = executable(directory.path(), "slow", "exec /bin/sleep 20");
     assert!(
