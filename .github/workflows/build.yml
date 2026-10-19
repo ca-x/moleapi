@@ -212,6 +212,46 @@ jobs:
             target/${{ matrix.target }}/release/bundle/**/*.exe
             target/${{ matrix.target }}/release/bundle/**/*.msi
           if-no-files-found: warn
+  release-assets:
+    needs: [server, desktop]
+    if: startsWith(github.ref, 'refs/tags/v') && needs.server.result == 'success' && needs.desktop.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: server-*
+          path: ${{ runner.temp }}/release-input/server
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          path: ${{ runner.temp }}/release-input/desktop
+      - name: Verify and stage the exact release matrix
+        run: |
+          python scripts/test_assemble_release_assets.py
+          python scripts/assemble_release_assets.py "$RUNNER_TEMP/release-input" "$RUNNER_TEMP/release-assets"
+          cd "$RUNNER_TEMP/release-assets"
+          sha256sum --check SHA256SUMS
+      - name: Create draft prerelease with verified assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          notes="docs/releases/${GITHUB_REF_NAME}.md"
+          test -f "$notes"
+          mapfile -d '' assets < <(find "$RUNNER_TEMP/release-assets" -maxdepth 1 -type f -print0 | sort -z)
+          test "${#assets[@]}" -eq 13
+          gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
+            --draft --prerelease --latest=false --verify-tag \
+            --title "MoleAPI $GITHUB_REF_NAME" --notes-file "$notes"
+          gh release view "$GITHUB_REF_NAME" --json isDraft,assets \
+            --jq '{draft:.isDraft,assets:[.assets[].name]}' >> "$GITHUB_STEP_SUMMARY"
   objc-qa:
     if: github.event_name == 'workflow_dispatch' && inputs.objc_qa == true
     timeout-minutes: 180

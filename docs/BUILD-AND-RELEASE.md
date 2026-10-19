@@ -19,7 +19,7 @@ CI 分层：
 
 1. pull_request/push 执行 Rust 格式、Clippy、单元/接口测试、前端类型检查/测试/生产构建。
 2. 默认分支/手动构建平台矩阵，上传服务端二进制与桌面安装包供验证。
-3. v* tag 先完整验证，再生成 GitHub Release 及校验和，发布版本 Docker 镜像。
+3. v* tag 构建原生包并校验完整产物矩阵，生成 SHA256SUMS 后创建附带安装包的 GitHub 草稿预发布；Docker 工作流独立烟测并发布双架构版本镜像。仅在两条 tag 流水线均通过并回读 Release 产物与镜像 manifest 后公开预发布。
 4. Docker 多阶段先构建本地前端，再编译嵌入资源的服务端；运行镜像不依赖 Node，不需要挂载静态前端目录。SQLite 与用户文件使用持久化数据卷。
 5. Tauri frontendDist、字体、CodeMirror 语言包等均为本地产物，不从 CDN 加载。安装包包含独立本地数据存储和执行引擎，不要求另装服务端。
 6. macOS/Windows 签名与 Tauri updater 需要真实证书/密钥；没有这些凭据时，构建只能如实标明签名状态，不能宣称已完成公证或签名。发布流程不得输出 secrets。
