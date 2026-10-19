@@ -125,6 +125,95 @@ it("closes a document deletion confirmation when the owner changes that document
   expect(screen.getByRole("button", { name: "保存共享工作区" })).toHaveProperty("disabled", true);
 });
 
+it("shows projected shared variables to a viewer without editing or private values", async () => {
+  const projected: Workspace = { ...workspace, data: { ...workspace.data, global_variables: [{ id: "secret", key: "token", value: "", enabled: true, secret: true }, { id: "inferred", key: "api_key", value: "", enabled: true, secret: false }, { id: "public", key: "region", value: "west", enabled: true }], environments: [{ id: "dev", name: "Dev", variables: [{ id: "env", key: "host", value: "local", enabled: true }] }], active_environment_id: "dev" } };
+  vi.mocked(api).mockResolvedValue(projected);
+  render(view("viewer"));
+  fireEvent.click(await screen.findByRole("button", { name: "环境变量" }));
+  expect(screen.getByText("host")).toBeTruthy();
+  expect(screen.getByText("这里只显示工作区共享值；私密值已隐藏。")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "新建环境" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "保存共享工作区" })).toBeNull();
+  fireEvent.mouseDown(screen.getByRole("tab", { name: /项目全局/ }), { button: 0 });
+  expect(screen.getByText("私密值已隐藏")).toBeTruthy();
+  expect(screen.getByText("空值或已隐藏")).toBeTruthy();
+  expect(screen.getByText("west")).toBeTruthy();
+  expect(screen.queryByLabelText("共享值")).toBeNull();
+});
+
+it("saves shared environment, project and collection variables through owner CAS", async () => {
+  const first = workspace.data.collections[0];
+  const seeded: Workspace = { ...workspace, data: { ...workspace.data, global_variables: [{ id: "global", key: "region", value: "old", enabled: true, local_value: "owner-local" }], collections: [{ ...first, variables: [{ id: "collection", key: "scope", value: "old", enabled: true, local_value: "owner-local" }] }], environments: workspace.data.environments.map((item) => ({ ...item, variables: item.variables.map((row) => ({ ...row, local_value: "owner-local" })) })) } };
+  vi.mocked(api).mockImplementation((_path, method, body) => Promise.resolve(method === "PUT" ? { ...seeded, revision: 4, data: (body as { data: Workspace["data"] }).data } : seeded));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "环境变量" }));
+  fireEvent.change(screen.getByLabelText("环境名称"), { target: { value: "Team dev" } });
+  fireEvent.change(screen.getAllByLabelText("共享值")[0], { target: { value: "https://shared.example" } });
+  fireEvent.mouseDown(screen.getByRole("tab", { name: /项目全局/ }), { button: 0 });
+  fireEvent.change(screen.getByLabelText("共享值"), { target: { value: "west" } });
+  fireEvent.mouseDown(screen.getByRole("tab", { name: /集合变量/ }), { button: 0 });
+  fireEvent.change(screen.getByLabelText("共享值"), { target: { value: "team" } });
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.objectContaining({ expected_revision: 3 })));
+  const saved = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
+  expect(saved.data.environments[0].name).toBe("Team dev");
+  expect(saved.data.environments[0].variables[0].value).toBe("https://shared.example");
+  expect(saved.data.global_variables?.[0].value).toBe("west");
+  expect(saved.data.collections[0].variables?.[0].value).toBe("team");
+  expect(saved.data.global_variables?.[0].local_value).toBeUndefined();
+  expect(saved.data.collections[0].variables?.[0].local_value).toBeUndefined();
+  expect(saved.data.environments[0].variables[0].local_value).toBeUndefined();
+});
+
+it("creates and selects a shared environment, then confirms its draft removal", async () => {
+  vi.mocked(api).mockResolvedValue(workspace);
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "环境变量" }));
+  fireEvent.click(screen.getByRole("button", { name: "新建环境" }));
+  fireEvent.change(screen.getByLabelText("环境名称"), { target: { value: "Staging" } });
+  expect(screen.getByRole("button", { name: "保存共享工作区" })).toHaveProperty("disabled", false);
+  fireEvent.click(screen.getByRole("button", { name: "删除当前环境" }));
+  expect(screen.getByText("删除「Staging」？保存工作区后生效。")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "取消" }));
+  expect((screen.getByLabelText("环境名称") as HTMLInputElement).value).toBe("Staging");
+  fireEvent.click(screen.getByRole("button", { name: "删除当前环境" }));
+  fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
+  expect((screen.getByLabelText("环境") as HTMLSelectElement).value).toBe("local");
+  expect(screen.getByRole("button", { name: "保存共享工作区" })).toHaveProperty("disabled", true);
+});
+
+it("closes environment deletion confirmation after a remote revision", async () => {
+  vi.mocked(api).mockResolvedValue(workspace);
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "环境变量" }));
+  fireEvent.click(screen.getByRole("button", { name: "删除当前环境" }));
+  expect(screen.getByText("删除「Local development」？保存工作区后生效。")).toBeTruthy();
+  const remote: Workspace = { ...workspace, revision: 4, data: { ...workspace.data, environments: [{ ...workspace.data.environments[0], name: "Owner renamed" }] } };
+  await act(async () => client.setQueryData(["shared-workspace", "member", "owner-id", "w", "editor", 0], remote));
+  await waitFor(() => expect(screen.queryByRole("button", { name: "确认删除" })).toBeNull());
+  expect(screen.getByText("Owner renamed")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "保存共享工作区" })).toHaveProperty("disabled", true);
+});
+
+it("closes a stale environment deletion confirmation when a dirty draft conflicts", async () => {
+  vi.mocked(api).mockImplementation((_path, method, body) => Promise.resolve(method === "PUT" ? { ...workspace, revision: 5, data: (body as { data: Workspace["data"] }).data } : workspace));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "环境变量" }));
+  fireEvent.change(screen.getByLabelText("环境名称"), { target: { value: "Member edit" } });
+  fireEvent.click(screen.getByRole("button", { name: "删除当前环境" }));
+  expect(screen.getByRole("button", { name: "确认删除" })).toBeTruthy();
+  const remote: Workspace = { ...workspace, revision: 4, data: { ...workspace.data, environments: [{ ...workspace.data.environments[0], name: "Owner edit" }] } };
+  await act(async () => client.setQueryData(["shared-workspace", "member", "owner-id", "w", "editor", 0], remote));
+  expect(await screen.findByText("共享工作区已被其他成员更新。选择要保留的版本。")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "确认删除" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "保留我的修改" }));
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.objectContaining({ expected_revision: 4 })));
+  const saved = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
+  expect(saved.data.environments[0].name).toBe("Member edit");
+  expect(saved.data.environments).toHaveLength(1);
+});
+
 it("keeps a shared Markdown draft through a remote revision conflict", async () => {
   const withDocument: Workspace = { ...workspace, data: { ...workspace.data, documents: [{ id: "doc", name: "Guide", source: "# Original", secret: true }] } };
   vi.mocked(api).mockImplementation((_path, method, body) => Promise.resolve(method === "PUT" ? { ...withDocument, revision: 5, data: (body as { data: Workspace["data"] }).data } : withDocument));
@@ -132,9 +221,12 @@ it("keeps a shared Markdown draft through a remote revision conflict", async () 
   fireEvent.click(await screen.findByRole("button", { name: "文档" }));
   fireEvent.mouseDown(screen.getByRole("tab", { name: /编辑/ }), { button: 0 });
   fireEvent.change(screen.getByLabelText("Markdown 正文"), { target: { value: "# Member draft" } });
+  fireEvent.click(screen.getByRole("button", { name: "删除文档" }));
+  expect(screen.getByRole("button", { name: "确认删除" })).toBeTruthy();
   const remote = { ...withDocument, revision: 4, data: { ...withDocument.data, documents: [{ id: "doc", name: "Guide", source: "# Owner change", secret: true }] } };
   await act(async () => client.setQueryData(["shared-workspace", "member", "owner-id", "w", "editor", 0], remote));
   expect(await screen.findByText("共享工作区已被其他成员更新。选择要保留的版本。")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "确认删除" })).toBeNull();
   expect((screen.getByLabelText("Markdown 正文") as HTMLTextAreaElement).value).toBe("# Member draft");
   expect(screen.getByRole("button", { name: "保存共享工作区" })).toHaveProperty("disabled", true);
   fireEvent.click(screen.getByRole("button", { name: "保留我的修改" }));

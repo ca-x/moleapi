@@ -41,6 +41,8 @@ A successful shared preview carries `x-moleapi-mock-preview: saved-example`, reg
 
 Shared Markdown documents use the canonical workspace CAS data path. Viewers see only the already screened workspace projection and can safely preview its nonprivate sources; editors/admins can create, edit, move, mark backup privacy, preview and remove documents in a local draft before saving. The same document validation gates every member Save entry point. Internal request links can select only a request in the same projected workspace. Public document publication and password/appearance controls remain owner-only.
 
+Shared project, collection and environment variables also use the canonical workspace CAS data path. Viewers see only the privacy-projected values. Editors/admins can edit shared rows and create, rename, select and remove environments; a deletion needs confirmation and remains a draft until Save. Member local overrides and owned variable-file routes are separate account state and do not appear in this editor. This does not introduce a team-level variable scope.
+
 ## Client behavior
 
 - Workspace picker lists owned and shared workspaces with role and owner label, without duplicating IDs across owners. Account switch/logout closes member-scoped drafts, query caches, pending saves and protocol sessions.

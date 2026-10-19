@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertDialog, Button, Card, Checkbox, Flex, Heading, Tabs, Text, TextField } from "@radix-ui/themes";
 import { t, useLanguage } from "../../shared/i18n";
 import { id } from "../../shared/model";
@@ -6,13 +6,14 @@ import type { MarkdownDocument, WorkspaceData } from "../../shared/types";
 import { Choice, Editor, Field } from "../../shared/ui";
 import MarkdownPreview from "../documents/MarkdownPreview";
 
-export default function SharedDocumentsPanel({ data, canEdit, dark, dirty, saving, canSave, onChange, onSave, onOpenRequest }: {
+export default function SharedDocumentsPanel({ data, canEdit, dark, dirty, saving, canSave, conflictRevision, onChange, onSave, onOpenRequest }: {
   data: WorkspaceData;
   canEdit: boolean;
   dark: boolean;
   dirty: boolean;
   saving: boolean;
   canSave: boolean;
+  conflictRevision: number | null;
   onChange: (documents: MarkdownDocument[]) => void;
   onSave: () => void;
   onOpenRequest: (id: string) => void;
@@ -22,6 +23,7 @@ export default function SharedDocumentsPanel({ data, canEdit, dark, dirty, savin
   const [selectedId, setSelectedId] = useState("");
   const [mode, setMode] = useState("preview");
   const [deleting, setDeleting] = useState<MarkdownDocument | null>(null);
+  useEffect(() => { setDeleting(null); }, [conflictRevision]);
   const selected = documents.find((document) => document.id === selectedId) ?? documents[0];
   const requestIds = new Set(data.collections.flatMap((collection) => collection.requests.map((request) => request.id)));
   function update(patch: Partial<MarkdownDocument>) {
@@ -50,6 +52,6 @@ export default function SharedDocumentsPanel({ data, canEdit, dark, dirty, savin
       </Card>}
     </>}
     {canEdit && <Button loading={saving} disabled={!dirty || !canSave} onClick={onSave}>{t("保存共享工作区")}</Button>}
-    <AlertDialog.Root open={!!deleting} onOpenChange={(open) => { if (!open) setDeleting(null); }}><AlertDialog.Content><AlertDialog.Title>{t("删除文档")}</AlertDialog.Title><AlertDialog.Description>{t("删除「{{value0}}」？保存工作区后生效。", { value0: deleting?.name ?? "" })}</AlertDialog.Description><Flex justify="end" gap="3" mt="4"><AlertDialog.Cancel><Button variant="soft" color="gray">{t("取消")}</Button></AlertDialog.Cancel><Button color="red" onClick={() => { if (deleting) onChange(documents.filter((document) => document.id !== deleting.id)); setDeleting(null); setSelectedId(""); }}>{t("确认删除")}</Button></Flex></AlertDialog.Content></AlertDialog.Root>
+    <AlertDialog.Root open={!!deleting && conflictRevision === null} onOpenChange={(open) => { if (!open) setDeleting(null); }}><AlertDialog.Content><AlertDialog.Title>{t("删除文档")}</AlertDialog.Title><AlertDialog.Description>{t("删除「{{value0}}」？保存工作区后生效。", { value0: deleting?.name ?? "" })}</AlertDialog.Description><Flex justify="end" gap="3" mt="4"><AlertDialog.Cancel><Button variant="soft" color="gray">{t("取消")}</Button></AlertDialog.Cancel><Button color="red" onClick={() => { if (deleting) onChange(documents.filter((document) => document.id !== deleting.id)); setDeleting(null); setSelectedId(""); }}>{t("确认删除")}</Button></Flex></AlertDialog.Content></AlertDialog.Root>
   </section>;
 }

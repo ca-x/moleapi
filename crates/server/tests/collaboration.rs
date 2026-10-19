@@ -542,6 +542,13 @@ async fn viewer_gets_safe_projection_and_editor_writes_canonical_workspace() {
     let mut source = example_data();
     source["global_variables"] =
         json!([{"id":"s","key":"secret","value":"private-sentinel","enabled":true,"secret":true}]);
+    source["collections"][0]["variables"] = json!([
+        {"id":"collection-private","key":"collection_token","value":"private-collection-sentinel","enabled":true,"secret":true}
+    ]);
+    source["environments"] = json!([{"id":"team-dev","name":"Team dev","variables":[
+        {"id":"environment-private","key":"environment_token","value":"private-environment-sentinel","enabled":true,"secret":true}
+    ]}]);
+    source["active_environment_id"] = json!("team-dev");
     source["documents"] = json!([
         {"id":"private-doc","name":"Private guide","source":"private-document-sentinel","secret":true},
         {"id":"public-doc","name":"Public guide","source":"# Public guide","secret":false}
@@ -578,6 +585,8 @@ async fn viewer_gets_safe_projection_and_editor_writes_canonical_workspace() {
     let (status, viewer) = call(&router, "GET", &shared_path, Some(&member), None).await;
     assert_eq!(status, StatusCode::OK, "{viewer}");
     assert!(!viewer.to_string().contains("private-sentinel"));
+    assert!(!viewer.to_string().contains("private-collection-sentinel"));
+    assert!(!viewer.to_string().contains("private-environment-sentinel"));
     assert!(!viewer.to_string().contains("private-document-sentinel"));
     assert!(viewer.to_string().contains("# Public guide"));
     assert_eq!(
@@ -618,6 +627,27 @@ async fn viewer_gets_safe_projection_and_editor_writes_canonical_workspace() {
     let mut edited_data = editor["data"].clone();
     edited_data["collections"][0]["requests"][0]["examples"][0]["body"] = json!("edited by member");
     edited_data["documents"][0]["source"] = json!("# Edited member document");
+    edited_data["global_variables"][0]["value"] = json!("shared-global");
+    edited_data["global_variables"][0]["local_value"] = json!("member-local-sentinel");
+    edited_data["collections"][0]["variables"][0]["value"] = json!("shared-collection");
+    edited_data["environments"][0]["name"] = json!("Renamed team dev");
+    edited_data["environments"][0]["variables"][0]["value"] = json!("shared-environment");
+    let mut invalid_data = edited_data.clone();
+    invalid_data["global_variables"][0]["key"] = json!("");
+    assert_eq!(
+        call(
+            &router,
+            "PUT",
+            &shared_path,
+            Some(&member),
+            Some(
+                json!({"name":"Invalid","expected_revision":editor["revision"],"data":invalid_data})
+            )
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
     let (status, updated) = call(
         &router,
         "PUT",
@@ -627,6 +657,18 @@ async fn viewer_gets_safe_projection_and_editor_writes_canonical_workspace() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{updated}");
+    assert_eq!(
+        call(
+            &router,
+            "PUT",
+            &shared_path,
+            Some(&member),
+            Some(json!({"name":"Stale","expected_revision":editor["revision"],"data":edited_data}))
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
     let (status, preview) = call(
         &router,
         "GET",
@@ -644,6 +686,24 @@ async fn viewer_gets_safe_projection_and_editor_writes_canonical_workspace() {
     assert_eq!(
         owner_workspace["data"]["documents"][0]["source"],
         "# Edited member document"
+    );
+    assert_eq!(owner_workspace["revision"], updated["revision"]);
+    assert_eq!(
+        owner_workspace["data"]["global_variables"][0]["value"],
+        "shared-global"
+    );
+    assert!(owner_workspace["data"]["global_variables"][0]["local_value"].is_null());
+    assert_eq!(
+        owner_workspace["data"]["collections"][0]["variables"][0]["value"],
+        "shared-collection"
+    );
+    assert_eq!(
+        owner_workspace["data"]["environments"][0]["name"],
+        "Renamed team dev"
+    );
+    assert_eq!(
+        owner_workspace["data"]["environments"][0]["variables"][0]["value"],
+        "shared-environment"
     );
     let (status, audit) = call(&router, "GET", &audit_path, Some(&owner), None).await;
     assert_eq!(status, StatusCode::OK, "{audit}");
