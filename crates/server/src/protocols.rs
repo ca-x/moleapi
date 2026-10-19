@@ -10,6 +10,40 @@ use moleapi_protocols::{
 use serde::Deserialize;
 use std::sync::Arc;
 type SharedMask = Arc<std::sync::RwLock<Arc<Redactor>>>;
+pub(crate) struct SessionCreateGuard {
+    sessions: Arc<moleapi_protocols::SessionManager>,
+    owner: String,
+    id: String,
+    armed: bool,
+}
+impl SessionCreateGuard {
+    fn new(state: &AppState, owner: &str, id: &str) -> Self {
+        Self {
+            sessions: state.protocol_sessions.clone(),
+            owner: owner.into(),
+            id: id.into(),
+            armed: true,
+        }
+    }
+    pub(crate) fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+impl Drop for SessionCreateGuard {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+            let sessions = self.sessions.clone();
+            let owner = self.owner.clone();
+            let id = self.id.clone();
+            runtime.spawn(async move {
+                let _ = sessions.remove(&owner, &id).await;
+            });
+        }
+    }
+}
 #[derive(Deserialize)]
 pub struct Create {
     pub(crate) workspace_id: String,
@@ -77,7 +111,9 @@ pub async fn create(
     Json(c): Json<Create>,
 ) -> Result<Json<SessionSummary>, ApiError> {
     let actor = owner.0.clone();
-    create_as(s, owner, &actor, headers, c, None).await
+    let (summary, mut guard) = create_as(s, owner, &actor, headers, c, None).await?;
+    guard.disarm();
+    Ok(Json(summary))
 }
 
 pub(crate) async fn create_as(
@@ -87,7 +123,7 @@ pub(crate) async fn create_as(
     headers: axum::http::HeaderMap,
     c: Create,
     member: Option<&crate::collaboration::MemberLive>,
-) -> Result<Json<SessionSummary>, ApiError> {
+) -> Result<(SessionSummary, SessionCreateGuard), ApiError> {
     let admission = s.protocol_admission.owner(actor)?;
     let generation = {
         let generation = admission.lock().await;
@@ -295,6 +331,7 @@ pub(crate) async fn create_as(
             feedback,
         )
         .map_err(error)?;
+    let guard = SessionCreateGuard::new(&s, &owner.0, &summary.id);
     // Registration comes first: concurrent deletion can now cancel the connecting record.
     match check(&s, &owner.0, &summary.id).await {
         Ok(_) => {}
@@ -481,7 +518,7 @@ pub(crate) async fn create_as(
         let _ = s.protocol_sessions.remove(&owner.0, &summary.id).await;
         return Err(error);
     }
-    Ok(Json(summary))
+    Ok((summary, guard))
 }
 async fn save_data_completion(
     context: &DataCompletionContext,

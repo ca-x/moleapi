@@ -32,6 +32,8 @@ export default function SharedLiveSessionPanel({ base, request, revision, enviro
   const generation = useRef(0);
   const credential = useRef(token());
   const sessionId = session?.id;
+  const stateRef = useRef(session?.state);
+  stateRef.current = session?.state;
   function fail(cause: unknown) {
     setError(liveError(cause));
     if (cause && typeof cause === "object" && "status" in cause && [401, 403, 404, 409].includes(Number(cause.status))) {
@@ -67,7 +69,7 @@ export default function SharedLiveSessionPanel({ base, request, revision, enviro
     return () => {
       generation.current++;
       clearTimeout(timer);
-      if (credential.current) void fetch(`${path}/close`, { method: "POST", headers: { Authorization: `Bearer ${credential.current}` } }).catch(() => {});
+      if (credential.current && (stateRef.current === "open" || stateRef.current === "connecting")) void fetch(`${path}/close`, { method: "POST", headers: { Authorization: `Bearer ${credential.current}` } }).catch(() => {});
     };
   }, [base, sessionId]);
   async function connect() {
@@ -88,6 +90,13 @@ export default function SharedLiveSessionPanel({ base, request, revision, enviro
     catch (cause) { fail(cause); }
     finally { setBusy(false); }
   }
+  async function reset() {
+    if (!sessionId || busy) return;
+    setBusy(true); setError("");
+    try { await api(`${base}/sessions/${encodeURIComponent(sessionId)}`, "DELETE"); setSession(null); setEvents([]); setDropped(0); cursor.current = 0; }
+    catch (cause) { fail(cause); }
+    finally { setBusy(false); }
+  }
   async function send() {
     if (!sessionId || session?.state !== "open" || sending) return;
     const message: SendMessage = mode === "text" ? { kind: "text", text: payload } : { kind: mode, base64: payload };
@@ -101,7 +110,7 @@ export default function SharedLiveSessionPanel({ base, request, revision, enviro
       <Heading size="3">{t("实时会话")}</Heading>
       {error && <Callout.Root color="red" role="alert"><Callout.Text>{error}</Callout.Text></Callout.Root>}
       {!session && <><Button loading={busy} disabled={busy || dirty || saving || conflict} onClick={() => void connect()}>{t("连接")}</Button>{dirty && <Text size="1" color="gray">{t("先保存修改，再连接实时会话。")}</Text>}</>}
-      {session && <><Flex gap="2" align="center" wrap="wrap"><Text role="status" size="2">{t("状态")}: {session.state}</Text>{(session.state === "open" || session.state === "connecting") && <Button variant="soft" color="gray" loading={busy} onClick={() => void close()}>{t("断开")}</Button>}</Flex>
+      {session && <><Flex gap="2" align="center" wrap="wrap"><Text role="status" size="2">{t("状态")}: {({ connecting: t("连接中"), open: t("已连接"), closed: t("已关闭"), error: t("连接失败") })[session.state]}</Text>{(session.state === "open" || session.state === "connecting") ? <Button variant="soft" color="gray" loading={busy} onClick={() => void close()}>{t("断开")}</Button> : <Button variant="soft" disabled={busy || dirty || saving || conflict} onClick={() => void reset()}>{t("重新连接")}</Button>}</Flex>
         {session.reason && <Text size="2" color="gray">{session.reason}</Text>}
         {session.protocol === "websocket" && session.state === "open" && <Flex direction="column" gap="2"><Choice label={t("消息类型")} value={mode} onChange={(value) => setMode(value as typeof mode)} options={[{ value: "text", label: t("文本") }, { value: "binary", label: "Base64" }, { value: "ping", label: "Ping Base64" }]} /><Field label={mode === "text" ? t("消息正文") : "Base64"}><TextArea value={payload} onChange={(event) => setPayload(event.target.value)} /></Field><Button loading={sending} disabled={sending} onClick={() => void send()}>{t("发送消息")}</Button></Flex>}
         <SessionEventPane events={events} dropped={dropped} dark={dark} sessionId={sessionId} protocolLabel={session.protocol.toUpperCase()} />

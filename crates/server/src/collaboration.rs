@@ -589,16 +589,6 @@ pub async fn shared_session_create(
             "Shared live sessions support saved SSE and WebSocket requests",
         ));
     }
-    record_event_result(
-        &tx,
-        &owner,
-        &workspace,
-        &actor.0,
-        "protocol.session.start",
-        Some(&input.request_id),
-        "started",
-    )
-    .await?;
     tx.commit().await?;
     let member = MemberLive {
         owner: owner.clone(),
@@ -607,7 +597,7 @@ pub async fn shared_session_create(
         admission,
         revision: canonical.revision,
     };
-    let Json(summary) = crate::protocols::create_as(
+    let (summary, mut guard) = crate::protocols::create_as(
         state.clone(),
         Identity(owner.clone()),
         &actor.0,
@@ -621,19 +611,25 @@ pub async fn shared_session_create(
         Some(&member),
     )
     .await?;
+    member.check(&state, &actor.0).await?;
+    let audit = state.db.begin().await?;
+    record_event_result(
+        &audit,
+        &owner,
+        &member.workspace,
+        &actor.0,
+        "protocol.session.start",
+        Some(&input.request_id),
+        "started",
+    )
+    .await?;
+    audit.commit().await?;
+    member.check(&state, &actor.0).await?;
+    crate::auth::still_authenticated(&state, &actor.0, &headers).await?;
     {
         let mut sessions = state.member_protocol_sessions.lock().unwrap();
         sessions.retain(|id, entry| state.protocol_sessions.summary(&entry.owner, id).is_ok());
         sessions.insert(summary.id.clone(), member.clone());
-    }
-    if let Err(error) = member.check(&state, &actor.0).await {
-        state
-            .member_protocol_sessions
-            .lock()
-            .unwrap()
-            .remove(&summary.id);
-        let _ = state.protocol_sessions.remove(&owner, &summary.id).await;
-        return Err(error);
     }
     let session_id = summary.id.clone();
     tokio::spawn(async move {
@@ -660,10 +656,20 @@ pub async fn shared_session_create(
             }
             match state.protocol_sessions.summary(&member.owner, &session_id) {
                 Ok(summary) if summary.state.live() => {}
-                _ => break,
+                _ => {
+                    // Match the protocol manager's ten-minute terminal retention.
+                    tokio::time::sleep(std::time::Duration::from_secs(10 * 60 + 30)).await;
+                    state
+                        .member_protocol_sessions
+                        .lock()
+                        .unwrap()
+                        .remove(&session_id);
+                    break;
+                }
             }
         }
     });
+    guard.disarm();
     Ok(Json(summary))
 }
 

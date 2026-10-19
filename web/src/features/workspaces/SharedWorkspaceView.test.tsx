@@ -45,9 +45,11 @@ it("connects a saved shared WebSocket, sends a message and keeps viewer controls
   let revoked = false;
   vi.mocked(api).mockImplementation((path, method) => {
     if (path === `${base}/sessions` && method === "POST") return Promise.resolve(session);
+    if (path === `${base}/sessions/live-a` && method === "DELETE") return Promise.resolve({ ok: true });
     if (path === `${base}/sessions/live-a`) return revoked ? Promise.reject(Object.assign(new Error("Revoked"), { status: 404 })) : Promise.resolve(session);
     if (path.startsWith(`${base}/sessions/live-a/events`)) return Promise.resolve({ events: [{ cursor: 1, received_at: "now", direction: "incoming", message: { kind: "text", text: "hello" } }], next_cursor: 1, earliest_cursor: 1, dropped_count: 0 });
     if (path.endsWith("/send")) return Promise.resolve({ ok: true });
+    if (path.endsWith("/close")) return Promise.resolve({ ...session, state: "closed" });
     return Promise.resolve(saved);
   });
   render(view("editor"));
@@ -57,6 +59,11 @@ it("connects a saved shared WebSocket, sends a message and keeps viewer controls
   fireEvent.change(screen.getByLabelText("消息正文"), { target: { value: "member echo" } });
   fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
   await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/sessions/live-a/send`, "POST", { kind: "text", text: "member echo" }));
+  fireEvent.click(screen.getByRole("button", { name: "断开" }));
+  fireEvent.click(await screen.findByRole("button", { name: "重新连接" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/sessions/live-a`, "DELETE"));
+  fireEvent.click(await screen.findByRole("button", { name: "连接" }));
+  await screen.findByRole("button", { name: "发送消息" });
   revoked = true;
   await waitFor(() => expect(screen.queryAllByText("hello")).toHaveLength(0), { timeout: 3000 });
   cleanup();
