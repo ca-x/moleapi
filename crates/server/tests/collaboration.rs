@@ -1084,6 +1084,14 @@ async fn editor_run_is_audited_and_cross_instance_removal_withholds_its_result()
             .iter()
             .any(|call| { call["request_id"] == "fast" && call["example_id"] == "e" })
     );
+    let audit_path = format!("{shared_path}/audit");
+    let (_, before_mock) = call(&second, "GET", &audit_path, Some(&owner), None).await;
+    let preview_before = before_mock
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|event| event["action"] == "mock.preview")
+        .count();
     let first_for_mock = first.clone();
     let member_for_mock = member.clone();
     let mock_path_for_task = mock_path.clone();
@@ -1097,7 +1105,6 @@ async fn editor_run_is_audited_and_cross_instance_removal_withholds_its_result()
         )
         .await
     });
-    let audit_path = format!("{shared_path}/audit");
     tokio::time::timeout(std::time::Duration::from_secs(3), async {
         loop {
             let (_, events) = call(&second, "GET", &audit_path, Some(&owner), None).await;
@@ -1107,7 +1114,7 @@ async fn editor_run_is_audited_and_cross_instance_removal_withholds_its_result()
                 .iter()
                 .filter(|event| event["action"] == "mock.preview")
                 .count()
-                >= 2
+                > preview_before
             {
                 break;
             }
