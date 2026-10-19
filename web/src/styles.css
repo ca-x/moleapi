@@ -151,6 +151,22 @@ a:focus-visible {
 .shared-request-tabs + .rt-TabsContent {
   padding-top: 12px;
 }
+.shared-documents {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: min(100%, 760px);
+  min-width: 0;
+}
+.shared-document-card,
+.shared-document-card .markdown-preview {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.shared-document-card .markdown-preview {
+  overflow-x: auto;
+}
 .app-header {
   grid-column: 1 / -1;
   display: flex;

@@ -542,6 +542,10 @@ async fn viewer_gets_safe_projection_and_editor_writes_canonical_workspace() {
     let mut source = example_data();
     source["global_variables"] =
         json!([{"id":"s","key":"secret","value":"private-sentinel","enabled":true,"secret":true}]);
+    source["documents"] = json!([
+        {"id":"private-doc","name":"Private guide","source":"private-document-sentinel","secret":true},
+        {"id":"public-doc","name":"Public guide","source":"# Public guide","secret":false}
+    ]);
     let (status, workspace) = call(
         &router,
         "POST",
@@ -574,6 +578,8 @@ async fn viewer_gets_safe_projection_and_editor_writes_canonical_workspace() {
     let (status, viewer) = call(&router, "GET", &shared_path, Some(&member), None).await;
     assert_eq!(status, StatusCode::OK, "{viewer}");
     assert!(!viewer.to_string().contains("private-sentinel"));
+    assert!(!viewer.to_string().contains("private-document-sentinel"));
+    assert!(viewer.to_string().contains("# Public guide"));
     assert_eq!(
         call(&router, "GET", &audit_path, Some(&member), None)
             .await
@@ -608,8 +614,10 @@ async fn viewer_gets_safe_projection_and_editor_writes_canonical_workspace() {
     let (status, editor) = call(&router, "GET", &shared_path, Some(&member), None).await;
     assert_eq!(status, StatusCode::OK, "{editor}");
     assert!(editor.to_string().contains("private-sentinel"));
+    assert!(editor.to_string().contains("private-document-sentinel"));
     let mut edited_data = editor["data"].clone();
     edited_data["collections"][0]["requests"][0]["examples"][0]["body"] = json!("edited by member");
+    edited_data["documents"][0]["source"] = json!("# Edited member document");
     let (status, updated) = call(
         &router,
         "PUT",
@@ -632,6 +640,11 @@ async fn viewer_gets_safe_projection_and_editor_writes_canonical_workspace() {
     let (status, owner_preview) = call(&router, "GET", "/api/mock/w/r/e", Some(&owner), None).await;
     assert_eq!(status, StatusCode::CREATED, "{owner_preview}");
     assert_eq!(owner_preview["raw"], "edited by member");
+    let (_, owner_workspace) = call(&router, "GET", "/api/workspaces/w", Some(&owner), None).await;
+    assert_eq!(
+        owner_workspace["data"]["documents"][0]["source"],
+        "# Edited member document"
+    );
     let (status, audit) = call(&router, "GET", &audit_path, Some(&owner), None).await;
     assert_eq!(status, StatusCode::OK, "{audit}");
     assert!(

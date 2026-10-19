@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { api, previewSharedMock, token } from "../../shared/api";
 import { setLanguage } from "../../shared/i18n";
 import { initialData } from "../../shared/model";
+import { formatRequestLink } from "../documents/internalLinks";
 import type { SharedWorkspaceSummary, Workspace } from "../../shared/types";
 import SharedWorkspaceView from "./SharedWorkspaceView";
 
@@ -34,6 +35,113 @@ it("keeps viewer resources read-only and hides private execution controls", asyn
   expect(screen.queryByRole("button", { name: "Mock 预览" })).toBeNull();
   expect(screen.queryByRole("tab", { name: /参数/ })).toBeNull();
   expect(api).toHaveBeenCalledWith(base);
+});
+
+it("shows only projected Markdown to a viewer and keeps member publication controls absent", async () => {
+  const safe: Workspace = { ...workspace, data: { ...workspace.data, documents: [{ id: "private-doc", name: "Private", source: "", secret: true }, { id: "public-doc", name: "Public", source: "# Safe heading", secret: false }] } };
+  vi.mocked(api).mockResolvedValue(safe);
+  render(view("viewer"));
+  fireEvent.click(await screen.findByRole("button", { name: "文档" }));
+  expect(screen.getByText("此文档正文未向查看者开放。")).toBeTruthy();
+  fireEvent.change(screen.getByLabelText("文档"), { target: { value: "public-doc" } });
+  expect(screen.getByRole("heading", { name: "Safe heading" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "新建文档" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "删除文档" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "保存共享工作区" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "发布" })).toBeNull();
+});
+
+it("opens only a request in the current shared workspace from a Markdown link", async () => {
+  const requestId = workspace.data.collections[0].requests[0].id;
+  const linked: Workspace = { ...workspace, data: { ...workspace.data, documents: [{ id: "guide", name: "Guide", source: `[Open request](${formatRequestLink(requestId)}) [Unknown](moleapi://request/foreign-id)`, secret: false }] } };
+  vi.mocked(api).mockResolvedValue(linked);
+  render(view("viewer"));
+  fireEvent.click(await screen.findByRole("button", { name: "文档" }));
+  expect(screen.queryByRole("button", { name: "Unknown" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Open request" }));
+  expect(screen.getByText(workspace.data.collections[0].requests[0].url)).toBeTruthy();
+});
+
+it("creates, previews and saves a private shared Markdown document through CAS", async () => {
+  vi.mocked(api).mockImplementation((_path, method, body) => Promise.resolve(method === "PUT" ? { ...workspace, revision: 4, data: (body as { data: Workspace["data"] }).data } : workspace));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "文档" }));
+  fireEvent.click(screen.getByRole("button", { name: "新建文档" }));
+  fireEvent.change(screen.getByLabelText("文档标题"), { target: { value: "Team guide" } });
+  fireEvent.change(screen.getByLabelText("Markdown 正文"), { target: { value: "# Team guide\n\nSafe **details**" } });
+  fireEvent.mouseDown(screen.getByRole("tab", { name: /预览/ }), { button: 0 });
+  expect(screen.getAllByRole("heading", { name: "Team guide" }).length).toBeGreaterThan(1);
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.objectContaining({ expected_revision: 3 })));
+  const saved = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
+  expect(saved.data.documents?.[0]).toMatchObject({ name: "Team guide", source: "# Team guide\n\nSafe **details**", secret: true });
+});
+
+it("blocks every shared Save entry while a Markdown document has an invalid title", async () => {
+  const withDocument: Workspace = { ...workspace, data: { ...workspace.data, documents: [{ id: "doc", name: "Valid", source: "", secret: true }] } };
+  vi.mocked(api).mockImplementation((path) => Promise.resolve(path.endsWith("/mock-calls") ? [] : withDocument));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "文档" }));
+  fireEvent.change(screen.getByLabelText("文档标题"), { target: { value: " Invalid" } });
+  const documentError = "文档「 Invalid」的标题须为 1–128 个字符，不能含首尾空格或控制字符。";
+  expect(screen.getByText(documentError)).toBeTruthy();
+  expect(screen.getByRole("button", { name: "保存共享工作区" })).toHaveProperty("disabled", true);
+  fireEvent.click(screen.getByRole("button", { name: "资源" }));
+  expect(screen.getByText(documentError)).toBeTruthy();
+  expect(screen.getByRole("button", { name: "保存共享工作区" })).toHaveProperty("disabled", true);
+  fireEvent.click(screen.getByRole("button", { name: "Mock 预览" }));
+  expect(screen.getByText(documentError)).toBeTruthy();
+  expect(screen.getByRole("button", { name: "保存共享工作区" })).toHaveProperty("disabled", true);
+  expect(vi.mocked(api).mock.calls.some(([, method]) => method === "PUT")).toBe(false);
+});
+
+it("asks before removing a shared document and preserves the draft on cancel", async () => {
+  const withDocument: Workspace = { ...workspace, data: { ...workspace.data, documents: [{ id: "doc", name: "Team guide", source: "# Guide", secret: true }] } };
+  vi.mocked(api).mockResolvedValue(withDocument);
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "文档" }));
+  fireEvent.click(screen.getByRole("button", { name: "删除文档" }));
+  expect(screen.getByText("删除「Team guide」？保存工作区后生效。")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "取消" }));
+  expect(screen.getByRole("heading", { name: "Team guide" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "删除文档" }));
+  fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
+  expect(screen.getByText("还没有 Markdown 文档。")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "保存共享工作区" })).toHaveProperty("disabled", false);
+});
+
+it("closes a document deletion confirmation when the owner changes that document", async () => {
+  const withDocument: Workspace = { ...workspace, data: { ...workspace.data, documents: [{ id: "doc", name: "Old guide", source: "# Old", secret: true }] } };
+  vi.mocked(api).mockResolvedValue(withDocument);
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "文档" }));
+  fireEvent.click(screen.getByRole("button", { name: "删除文档" }));
+  expect(screen.getByText("删除「Old guide」？保存工作区后生效。")).toBeTruthy();
+  const remote: Workspace = { ...withDocument, revision: 4, data: { ...withDocument.data, documents: [{ id: "doc", name: "New guide", source: "# New", secret: true }] } };
+  await act(async () => client.setQueryData(["shared-workspace", "member", "owner-id", "w", "editor", 0], remote));
+  await waitFor(() => expect(screen.queryByText("删除「Old guide」？保存工作区后生效。")).toBeNull());
+  expect(screen.getByRole("heading", { name: "New guide" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "确认删除" })).toBeNull();
+  expect(screen.getByRole("button", { name: "保存共享工作区" })).toHaveProperty("disabled", true);
+});
+
+it("keeps a shared Markdown draft through a remote revision conflict", async () => {
+  const withDocument: Workspace = { ...workspace, data: { ...workspace.data, documents: [{ id: "doc", name: "Guide", source: "# Original", secret: true }] } };
+  vi.mocked(api).mockImplementation((_path, method, body) => Promise.resolve(method === "PUT" ? { ...withDocument, revision: 5, data: (body as { data: Workspace["data"] }).data } : withDocument));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "文档" }));
+  fireEvent.mouseDown(screen.getByRole("tab", { name: /编辑/ }), { button: 0 });
+  fireEvent.change(screen.getByLabelText("Markdown 正文"), { target: { value: "# Member draft" } });
+  const remote = { ...withDocument, revision: 4, data: { ...withDocument.data, documents: [{ id: "doc", name: "Guide", source: "# Owner change", secret: true }] } };
+  await act(async () => client.setQueryData(["shared-workspace", "member", "owner-id", "w", "editor", 0], remote));
+  expect(await screen.findByText("共享工作区已被其他成员更新。选择要保留的版本。")).toBeTruthy();
+  expect((screen.getByLabelText("Markdown 正文") as HTMLTextAreaElement).value).toBe("# Member draft");
+  expect(screen.getByRole("button", { name: "保存共享工作区" })).toHaveProperty("disabled", true);
+  fireEvent.click(screen.getByRole("button", { name: "保留我的修改" }));
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.objectContaining({ expected_revision: 4 })));
+  const saved = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
+  expect(saved.data.documents?.[0].source).toBe("# Member draft");
 });
 
 it("previews a saved shared Mock example and loads its calls for an editor", async () => {
