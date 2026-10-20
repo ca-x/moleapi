@@ -298,7 +298,7 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
         {reports.error && <Callout.Root color="red" role="alert"><Callout.Text>{liveError(reports.error)}</Callout.Text></Callout.Root>}
         {!reports.error && reports.data?.items.length === 0 && <Text size="2" color="gray">{t("暂无测试报告")}</Text>}
         {!reports.error && !!reports.data?.items.length && <Choice label={t("报告导出格式")} value={reportFormat} disabled={!!exportingReport} onChange={setReportFormat} options={[{ value: "html", label: "HTML" }, { value: "json", label: "JSON" }, { value: "csv", label: "CSV" }, { value: "junit", label: "JUnit XML" }]} />}
-        {!reports.error && reports.data?.items.map((item) => <Flex key={item.id} justify="between" align="center" gap="2" wrap="wrap"><Text size="2">{item.collection_name}</Text><Text size="2">{t("通过")}: {item.summary.passed} · {t("失败")}: {item.summary.failed}</Text><Button variant="soft" disabled={!!exportingReport} loading={exportingReport === item.id} onClick={() => void downloadReport(item.id)}>{t("下载脱敏报告")}</Button></Flex>)}
+        {!reports.error && reports.data?.items.map((item) => <Flex key={item.id} justify="between" align="center" gap="2" wrap="wrap"><Text size="2">{item.collection_name}</Text><Text size="2">{t("通过")}: {item.summary.passed} · {t("失败")}: {item.summary.failed}</Text><Button variant="outline" color="gray" disabled={!!exportingReport} loading={exportingReport === item.id} onClick={() => void downloadReport(item.id)}>{t("下载脱敏报告")}</Button></Flex>)}
       </Flex>}
       {tab === "mock" && canEdit && <Flex direction="column" gap="3">
         <Heading size="3">{t("Mock 示例预览")}</Heading>
