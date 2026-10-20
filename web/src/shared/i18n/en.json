@@ -1,4 +1,9 @@
 {
+  "新增 SOAP 请求": "Add SOAP request",
+  "共享 SOAP 客户端": "Shared SOAP client",
+  "先保存工作区，再导入或读取 SOAP 定义。": "Save the workspace before importing or reading SOAP definitions.",
+  "SOAP 操作已取消": "SOAP operation cancelled",
+  "先保存服务定义，再发送 SOAP 请求。": "Save the service definition before sending a SOAP request.",
   "新增 MQTT 请求": "Add MQTT request",
   "共享 MQTT 请求设置": "Shared MQTT request settings",
   "共享 MQTT 实时消息": "Shared MQTT live messages",

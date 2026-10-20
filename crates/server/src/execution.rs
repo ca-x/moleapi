@@ -49,6 +49,9 @@ pub struct ExecuteDraft {
     locals: Vec<VariableUpdate>,
 }
 impl ExecuteDraft {
+    pub(crate) fn has_scope_overrides(&self) -> bool {
+        !self.variables.is_empty() || !self.data.is_empty() || !self.locals.is_empty()
+    }
     pub(crate) fn into_execute(self, workspace_id: String) -> Execute {
         Execute {
             workspace_id,
@@ -63,6 +66,9 @@ impl ExecuteDraft {
     }
 }
 impl ExecuteSaved {
+    pub(crate) fn has_scope_overrides(&self) -> bool {
+        !self.variables.is_empty() || !self.data.is_empty() || !self.locals.is_empty()
+    }
     pub(crate) fn into_execute(
         self,
         workspace_id: String,

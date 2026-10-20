@@ -24,6 +24,8 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::future::Future;
 
+mod soap;
+pub use soap::{shared_soap_import, shared_soap_import_url, shared_soap_schema};
 mod grpc;
 pub use grpc::{shared_grpc_import, shared_grpc_reflect, shared_grpc_schema};
 mod graphql;
@@ -527,9 +529,38 @@ pub async fn shared_run(
     Ok(result)
 }
 
+async fn watch_authenticated_revision(
+    state: &AppState,
+    actor: &str,
+    owner: &str,
+    workspace: &str,
+    admission: Access,
+    revision: i64,
+    headers: &HeaderMap,
+) -> ApiError {
+    let period = std::time::Duration::from_millis(200);
+    let mut ticks = tokio::time::interval_at(tokio::time::Instant::now() + period, period);
+    ticks.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    loop {
+        ticks.tick().await;
+        if let Err(error) = crate::auth::still_authenticated(state, actor, headers).await {
+            return error;
+        }
+        match access(&state.db, actor, owner, workspace).await {
+            Ok((canonical, current)) if current == admission => {
+                if canonical.revision != revision {
+                    return ApiError::conflict("Workspace changed during shared operation");
+                }
+            }
+            _ => return ApiError::not_found(),
+        }
+    }
+}
+
 pub async fn shared_execute(
     State(state): State<AppState>,
     Extension(actor): Extension<Identity>,
+    headers: HeaderMap,
     Path((owner, workspace, request_id)): Path<(String, String, String)>,
     Json(input): Json<crate::execution::ExecuteSaved>,
 ) -> Result<Json<moleapi_core::Response>, ApiError> {
@@ -550,6 +581,10 @@ pub async fn shared_execute(
         .find(|request| request.id == request_id)
         .cloned()
         .ok_or_else(ApiError::not_found)?;
+    let soap = request.protocol.is_soap();
+    if soap && input.has_scope_overrides() {
+        return Err(ApiError::bad("Shared SOAP uses canonical workspace scopes"));
+    }
     record_event_result(
         &tx,
         &owner,
@@ -567,10 +602,33 @@ pub async fn shared_execute(
         Json(input.into_execute(workspace.clone(), request, canonical.revision)),
     );
     let watch = async {
+        if soap {
+            return watch_authenticated_revision(
+                &state,
+                &actor.0,
+                &owner,
+                &workspace,
+                admission,
+                canonical.revision,
+                &headers,
+            )
+            .await;
+        }
         watch_access(&state, &actor.0, &owner, &workspace, admission).await;
         ApiError::not_found()
     };
     let final_check = async {
+        if soap {
+            return finish_specification_preview(
+                &state.db,
+                &actor.0,
+                &owner,
+                &workspace,
+                (admission, canonical.revision),
+                crate::auth::still_authenticated(&state, &actor.0, &headers),
+            )
+            .await;
+        }
         let (_, current) = access(&state.db, &actor.0, &owner, &workspace).await?;
         if current != admission {
             return Err(ApiError::not_found());
@@ -583,6 +641,7 @@ pub async fn shared_execute(
 pub async fn shared_execute_draft(
     State(state): State<AppState>,
     Extension(actor): Extension<Identity>,
+    headers: HeaderMap,
     Path((owner, workspace)): Path<(String, String)>,
     Json(input): Json<crate::execution::ExecuteDraft>,
 ) -> Result<Json<moleapi_core::Response>, ApiError> {
@@ -600,10 +659,14 @@ pub async fn shared_execute_draft(
     }
     if input.request.protocol != moleapi_core::Protocol::Http
         && !input.request.protocol.is_graphql()
+        && !input.request.protocol.is_soap()
     {
         return Err(ApiError::bad(
-            "Draft execution supports HTTP and GraphQL requests only",
+            "Draft execution supports HTTP, GraphQL and SOAP requests only",
         ));
+    }
+    if input.request.protocol.is_soap() && input.has_scope_overrides() {
+        return Err(ApiError::bad("Shared SOAP uses canonical workspace scopes"));
     }
     if input.request.protocol.is_graphql()
         && moleapi_core::graphql_is_subscription(&input.request)
@@ -649,27 +712,23 @@ pub async fn shared_execute_draft(
         Extension(Identity(owner.clone())),
         Json(input.into_execute(workspace.clone())),
     );
-    let watch = watch_access_revision(
+    let watch = watch_authenticated_revision(
         &state,
         &actor.0,
         &owner,
         &workspace,
         admission,
         canonical.revision,
-        "Workspace changed during draft execution",
+        &headers,
     );
-    let final_check = async {
-        let (current_workspace, current) = access(&state.db, &actor.0, &owner, &workspace).await?;
-        if current != admission {
-            return Err(ApiError::not_found());
-        }
-        if current_workspace.revision != canonical.revision {
-            return Err(ApiError::conflict(
-                "Workspace changed during draft execution",
-            ));
-        }
-        Ok(())
-    };
+    let final_check = finish_specification_preview(
+        &state.db,
+        &actor.0,
+        &owner,
+        &workspace,
+        (admission, canonical.revision),
+        crate::auth::still_authenticated(&state, &actor.0, &headers),
+    );
     with_access_watch(run, watch, final_check).await
 }
 

@@ -33,6 +33,7 @@ import SharedScenariosPanel from "./SharedScenariosPanel";
 import SharedGraphQLWorkbench from "./SharedGraphQLWorkbench";
 import { mqttConfig } from "../mqtt/model";
 import SharedMqttRequestEditor from "./SharedMqttRequestEditor";
+import SharedSoapWorkbench from "./SharedSoapWorkbench";
 import SharedGrpcWorkbench from "./SharedGrpcWorkbench";
 import SharedTcpRequestEditor from "./SharedTcpRequestEditor";
 import SharedSocketIoRequestEditor from "./SharedSocketIoRequestEditor";
@@ -137,6 +138,7 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
   const collection = draft?.data.collections.find((item) => item.id === collectionId) ?? draft?.data.collections[0];
   const request = collection?.requests.find((item) => item.id === requestId) ?? collection?.requests[0];
   const selectedRequestRef = useRef(request?.id); selectedRequestRef.current = request?.id;
+  const soapRequest = request?.protocol?.kind === "soap";
   const mqttRequest = request?.protocol?.kind === "mqtt";
   const mqttWebsocket = mqttRequest && /^wss?:/i.test(request?.url ?? "");
   const grpcRequest = request?.protocol?.kind === "grpc";
@@ -189,9 +191,10 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
     setDraft((currentDraft) => currentDraft ? { ...currentDraft, data } : null);
     setCollectionId(selectedId); setRequestId("");
   }
-  function addHttpRequest(kind: "http" | "data" | "graphql" | "sse" | "websocket" | "tcp" | "socketio" | "grpc" | "mqtt" = "http") {
+  function addHttpRequest(kind: "http" | "data" | "graphql" | "sse" | "websocket" | "tcp" | "socketio" | "grpc" | "mqtt" | "soap" = "http") {
     if (!canEdit || !collection) return;
     const next = newRequest();
+    if (kind === "soap") { next.protocol = { kind:"soap",version:"1.1",service:"",port:"",operation:"",action:"" }; next.method="POST"; next.body_kind="text"; next.body=""; next.name="SOAP"; next.url=""; }
     if (kind === "mqtt") { next.protocol = mqttConfig(); next.name = "MQTT"; next.url = ""; }
     if (kind === "grpc") { next.protocol = { kind: "grpc", service: "", method: "", message_source: "{}" }; next.method = "POST"; next.name = "gRPC"; next.url = ""; }
     if (kind === "socketio") { next.protocol = socketIoConfig(); next.name = "Socket.IO"; next.url = ""; }
@@ -232,6 +235,13 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
       specifications: existing ? now.data.specifications : [...(now.data.specifications ?? []), selectedSpec],
       collections: now.data.collections.map((item) => ({ ...item, requests: item.requests.map((entry) => entry.id === targetId ? { ...entry, specification_id: selectedSpec.id } : entry) })),
     } } : null);
+    return selectedSpec.id;
+  }
+  function attachSoapSchema(specification: Specification) {
+    if (!canEdit || !draft || !request || selectedRequestRef.current !== request.id || request.protocol?.kind !== "soap" || dirty || saving || conflict || !datasetContextCurrent() || specification.kind !== "wsdl") return;
+    const existing=draft.data.specifications?.find(s=>s.kind===specification.kind&&s.source===specification.source),selectedSpec=existing??specification,targetId=request.id;
+    invalidateDraftResults();
+    setDraft(currentDraft=>currentDraft?({...currentDraft,data:{...currentDraft.data,specifications:existing?currentDraft.data.specifications:[...(currentDraft.data.specifications??[]),selectedSpec],collections:currentDraft.data.collections.map(c=>({...c,requests:c.requests.map(r=>r.id===targetId&&r.protocol?.kind==="soap"?({...r,specification_id:selectedSpec.id,protocol:{...r.protocol,service:"",port:"",operation:"",action:""}}):r)}))}}):null);
     return selectedSpec.id;
   }
   function attachGrpcSchema(specification: Specification) {
@@ -379,7 +389,7 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
     finally { if (current(origin) && sendGeneration.current === generation) setSending(false); }
   }
   async function sendDraftRequest() {
-    if (!canEdit || !httpRequest || !request || !collection || !saved || !dirty || sending || saving || conflict || !current(scope)) return;
+    if (!canEdit || !(httpRequest || soapRequest) || !request || !collection || !saved || !dirty || sending || saving || conflict || !current(scope)) return;
     const origin = scope;
     const generation = ++sendGeneration.current;
     const snapshot = structuredClone(request);
@@ -430,7 +440,7 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
         {canEdit && <Button variant="outline" onClick={() => setCollectionSettings({ kind: "create", parent_id: null })}>{t("新建集合")}</Button>}
         {draft.data.collections.length === 0 ? <Text size="2" color="gray">{t("此工作区还没有集合")}</Text> : <>
           <Choice label={t("集合")} value={collection?.id ?? ""} onChange={(value) => { setCollectionId(value); setRequestId(""); }} options={draft.data.collections.map((item) => ({ value: item.id, label: item.name }))} />
-          {collection && <Flex align="center" justify="between" gap="2" wrap="wrap"><Heading size="3">{collection.name}</Heading>{canEdit && <Flex gap="2" wrap="wrap"><Button variant="outline" onClick={() => setCollectionSettings({ kind: "edit", id: collection.id })}>{t("集合与目录设置")}</Button><Button variant="outline" onClick={() => setCollectionSettings({ kind: "create", parent_id: collection.id })}>{t("新建目录")}</Button><Button variant="outline" onClick={() => addHttpRequest()}>{t("新增 HTTP 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("data")}>{t("新增 Data 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("graphql")}>{t("新增 GraphQL 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("sse")}>{t("新增 SSE 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("websocket")}>{t("新增 WebSocket 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("tcp")}>{t("新增 TCP 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("socketio")}>{t("新增 Socket.IO 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("mqtt")}>{t("新增 MQTT 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("grpc")}>{t("新增 gRPC 请求")}</Button><Button loading={running} disabled={running || dirty || !runOptionsValid || collection.requests.length === 0} onClick={() => void runCollection()}>{t("运行集合")}</Button></Flex>}</Flex>}
+          {collection && <Flex align="center" justify="between" gap="2" wrap="wrap"><Heading size="3">{collection.name}</Heading>{canEdit && <Flex gap="2" wrap="wrap"><Button variant="outline" onClick={() => setCollectionSettings({ kind: "edit", id: collection.id })}>{t("集合与目录设置")}</Button><Button variant="outline" onClick={() => setCollectionSettings({ kind: "create", parent_id: collection.id })}>{t("新建目录")}</Button><Button variant="outline" onClick={() => addHttpRequest()}>{t("新增 HTTP 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("data")}>{t("新增 Data 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("graphql")}>{t("新增 GraphQL 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("sse")}>{t("新增 SSE 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("websocket")}>{t("新增 WebSocket 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("tcp")}>{t("新增 TCP 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("socketio")}>{t("新增 Socket.IO 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("soap")}>{t("新增 SOAP 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("mqtt")}>{t("新增 MQTT 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("grpc")}>{t("新增 gRPC 请求")}</Button><Button loading={running} disabled={running || dirty || !runOptionsValid || collection.requests.length === 0} onClick={() => void runCollection()}>{t("运行集合")}</Button></Flex>}</Flex>}
           {canEdit && collection && <SharedResourceActions key={`${scope}/${saved?.revision}/${conflict?.revision ?? ""}`} data={draft.data} workspaceName={draft.name} collectionId={collection.id} requestId={request?.id} onChange={applyResourceChange} />}
           {canEdit && dirty && <Text size="1" color="gray">{t("先保存修改，再运行集合。")}</Text>}
           {runResult && <Text role="status" size="2">{t("通过")}: {runResult.passed} · {t("失败")}: {runResult.failed}{runResult.cancelled && <> · {t("已取消")}</>}</Text>}
@@ -439,7 +449,7 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
             {request && (canEdit ? <Flex direction="column" gap="3">
               <Field label={t("请求名称")}><TextField.Root value={request.name} onChange={(event) => updateSelectedRequest({ name: event.target.value })} /></Field>
               {request.protocol?.kind !== "data" && <Flex className="shared-request-line" gap="2" wrap="wrap">
-                {!graphqlRequest && !httpLiveRequest && !tcpRequest && !grpcRequest && !mqttRequest && <Choice label={t("方法")} value={request.method} onChange={(method) => updateSelectedRequest({ method })} options={["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].map((value) => ({ value, label: value }))} />}
+                {!graphqlRequest && !httpLiveRequest && !tcpRequest && !grpcRequest && !mqttRequest && !soapRequest && <Choice label={t("方法")} value={request.method} onChange={(method) => updateSelectedRequest({ method })} options={["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].map((value) => ({ value, label: value }))} />}
                 <Field label={t("请求地址")}><TextField.Root value={request.url} onChange={(event) => updateSelectedRequest({ url: event.target.value })} /></Field>
               </Flex>}
               <Field label={t("描述")}><TextArea value={request.description} onChange={(event) => updateSelectedRequest({ description: event.target.value })} /></Field>
@@ -448,14 +458,14 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
               {mqttRequest && <SharedMqttRequestEditor key={`${scope}/${request.id}/${saved?.revision}/${conflict?.revision ?? ""}`} scope={`${scope}/${request.id}/${saved?.revision}/${conflict?.revision ?? ""}`} request={request} dark={dark} disabled={saving || !!conflict} isCurrent={() => datasetContextCurrent() && selectedRequestRef.current === request.id && !conflict} onChange={updateSelectedRequest} />}
               {socketIoRequest && <SharedSocketIoRequestEditor key={`${scope}/${request.id}/${saved?.revision}/${conflict?.revision ?? ""}`} scope={`${scope}/${request.id}/${saved?.revision}/${conflict?.revision ?? ""}`} request={request} dark={dark} disabled={saving || !!conflict} isCurrent={() => datasetContextCurrent() && selectedRequestRef.current === request.id && !conflict} onChange={updateSelectedRequest} />}
               {tcpRequest && <SharedTcpRequestEditor key={`${scope}/${request.id}/${saved?.revision}/${conflict?.revision ?? ""}`} request={request} scope={`${scope}/${request.id}/${saved?.revision}/${conflict?.revision ?? ""}`} dark={dark} disabled={saving || !!conflict} isCurrent={() => datasetContextCurrent() && selectedRequestRef.current === request.id && !conflict} onChange={updateSelectedRequest} />}
-              {(httpRequest || graphqlRequest || httpLiveRequest || grpcRequest || mqttRequest) && <Tabs.Root key={`${collection.id}/${request.id}/${saved?.revision}`} value={mqttRequest && (["query", "body", "assertions"].includes(requestEditorTab) || (requestEditorTab === "headers" && !mqttWebsocket)) ? "auth" : ((graphqlRequest || httpLiveRequest || grpcRequest) && requestEditorTab === "body") || ((httpLiveRequest || grpcRequest) && requestEditorTab === "assertions") || (grpcRequest && requestEditorTab === "query") ? "headers" : requestEditorTab} onValueChange={setRequestEditorTab}>
+              {(httpRequest || graphqlRequest || httpLiveRequest || grpcRequest || mqttRequest || soapRequest) && <Tabs.Root key={`${collection.id}/${request.id}/${saved?.revision}`} value={soapRequest && requestEditorTab === "body" ? "headers" : mqttRequest && (["query", "body", "assertions"].includes(requestEditorTab) || (requestEditorTab === "headers" && !mqttWebsocket)) ? "auth" : ((graphqlRequest || httpLiveRequest || grpcRequest) && requestEditorTab === "body") || ((httpLiveRequest || grpcRequest) && requestEditorTab === "assertions") || (grpcRequest && requestEditorTab === "query") ? "headers" : requestEditorTab} onValueChange={setRequestEditorTab}>
                 <Tabs.List className="shared-request-tabs">
                   {[
                     { value: "query", label: t("参数") }, { value: "headers", label: t("请求头") },
                     { value: "body", label: t("请求体") }, { value: "auth", label: t("鉴权") },
                     { value: "assertions", label: t("断言") }, { value: "scripts", label: t("脚本") },
                     { value: "network", label: t("网络设置") },
-                  ].filter((tab) => (!graphqlRequest || tab.value !== "body") && (!httpLiveRequest || !["body", "assertions"].includes(tab.value)) && (!grpcRequest || !["query", "body", "assertions"].includes(tab.value)) && (!mqttRequest || (!["query", "body", "assertions"].includes(tab.value) && (tab.value !== "headers" || mqttWebsocket)))).map(({ value, label }) => <Tabs.Trigger key={value} value={value}>{label}</Tabs.Trigger>)}
+                  ].filter((tab) => (!(graphqlRequest || soapRequest) || tab.value !== "body") && (!httpLiveRequest || !["body", "assertions"].includes(tab.value)) && (!grpcRequest || !["query", "body", "assertions"].includes(tab.value)) && (!mqttRequest || (!["query", "body", "assertions"].includes(tab.value) && (tab.value !== "headers" || mqttWebsocket)))).map(({ value, label }) => <Tabs.Trigger key={value} value={value}>{label}</Tabs.Trigger>)}
                 </Tabs.List>
                 <Tabs.Content value="query"><PairEditor rows={request.query} onChange={(query) => updateSelectedRequest({ query })} keyLabel={t("参数名")} valueLabel={t("参数值")} /></Tabs.Content>
                 <Tabs.Content value="headers"><PairEditor rows={request.headers} onChange={(headers) => updateSelectedRequest({ headers })} keyLabel="Header" valueLabel={t("值")} secrets /></Tabs.Content>
@@ -476,10 +486,11 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
               </Tabs.Root>}
             </Flex> : <Flex direction="column" gap="1"><Text weight="medium">{request.method} {request.name}</Text><Text size="2" style={{ overflowWrap: "anywhere" }}>{request.url}</Text><Text size="2" color="gray">{request.description}</Text></Flex>)}
           </>}
+          {canEdit && request && soapRequest && saved && collection && <SharedSoapWorkbench key={`${scope}/${request.id}/${saved.revision}/${conflict?.revision??""}`} scope={`${scope}/${request.id}/${saved.revision}/${conflict?.revision??""}`} base={base} request={request} saved={saved} data={draft.data} dark={dark} dirty={dirty} saving={saving} conflict={!!conflict} isCurrent={()=>datasetContextCurrent()&&selectedRequestRef.current===request.id&&!conflict} onChange={updateSelectedRequest} onAttach={attachSoapSchema} response={requestResponse} sending={sending} onSend={()=>void (dirty?sendDraftRequest():sendSavedRequest())} />}
           {canEdit && request && grpcRequest && saved && <SharedGrpcWorkbench key={`${scope}/${request.id}/${saved.revision}/${conflict?.revision ?? ""}`} scope={`${scope}/${request.id}/${saved.revision}/${conflict?.revision ?? ""}`} base={base} request={request} saved={saved} data={draft.data} dark={dark} dirty={dirty} saving={saving} conflict={!!conflict} isCurrent={() => datasetContextCurrent() && selectedRequestRef.current === request.id && !conflict} onChange={updateSelectedRequest} onAttach={attachGrpcSchema} />}
           {canEdit && request && graphqlRequest && saved && collection && <SharedGraphQLWorkbench key={`${scope}/${request.id}/${saved.revision}/${conflict?.revision ?? ""}`} scope={`${scope}/${request.id}/${saved.revision}/${conflict?.revision ?? ""}`} base={base} request={request} saved={saved} data={draft.data} collectionId={collection.id} dark={dark} dirty={dirty} saving={saving} conflict={!!conflict} isCurrent={() => datasetContextCurrent() && selectedRequestRef.current === request.id} onChange={updateSelectedRequest} onAttach={attachGraphQLSchema} />}
           {canEdit && request && liveRequest && !grpcRequest && saved && <SharedLiveSessionPanel key={`${scope}/${request.id}/${saved.revision}/${dirty}`} base={base} request={request} revision={saved.revision} environmentId={saved.data.active_environment_id} dirty={dirty} saving={saving} conflict={!!conflict} dark={dark} isCurrent={() => datasetContextCurrent() && selectedRequestRef.current === request.id && !conflict} onSaveResultDataset={saveResultDataset} />}
-          {canEdit && request && !liveRequest && !graphqlRequest && <Flex direction="column" gap="2">
+          {canEdit && request && !liveRequest && !graphqlRequest && !soapRequest && <Flex direction="column" gap="2">
             {dirty && httpRequest ? <><Button loading={sending} disabled={sending || saving || !!conflict} onClick={() => void sendDraftRequest()}>{t("发送草稿请求")}</Button><Text size="1" color="gray">{t("草稿请求仅供本次执行，保存后才会更新工作区。")}</Text></> : <Button loading={sending} disabled={sending || dirty} onClick={() => void sendSavedRequest()}>{t("发送已保存请求")}</Button>}
             {requestResponse && <><Text role="status" size="2">{responseSource === "draft" ? t("草稿请求执行结果") : t("已保存请求执行结果")}: {requestResponse.status} {requestResponse.status_text} · {requestResponse.elapsed_ms} ms</Text><TextArea aria-label={t("响应正文预览")} readOnly value={requestResponse.body.slice(0, 16 * 1024)} />{requestResponse.body.length > 16 * 1024 && <Text size="1" color="gray">{t("仅显示响应正文前 16 KiB。")}</Text>}</>}
           </Flex>}

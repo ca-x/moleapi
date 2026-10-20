@@ -42,14 +42,17 @@ This inventory covers every `.route` registered in `crates/server/src/lib.rs` at
 | `/owners/{owner}/workspaces/{workspace}` | GET viewer; PUT editor | workspace; viewer projection |
 | `/owners/{owner}/workspaces/{workspace}/run` | POST editor | outbound requests, private results and saved report |
 | `/owners/{owner}/workspaces/{workspace}/run/cancel` | POST editor, creator only | instance-local cancellation keyed by actor and membership epoch; early cancellation and actor audit |
-| `/owners/{owner}/workspaces/{workspace}/requests/{request}/execute` | POST editor | canonical saved request execution and private response |
-| `/owners/{owner}/workspaces/{workspace}/execute-draft` | POST editor | HTTP or GraphQL query/mutation draft execution under canonical collection and expected revision |
+| `/owners/{owner}/workspaces/{workspace}/requests/{request}/execute` | POST editor | canonical saved request execution and private response; SOAP additionally fences credentials/revision and rejects scope overrides |
+| `/owners/{owner}/workspaces/{workspace}/execute-draft` | POST editor | HTTP, GraphQL query/mutation or SOAP draft execution under canonical collection, credential/member/revision fences; SOAP rejects scope overrides |
 | `/owners/{owner}/workspaces/{workspace}/sessions` | POST editor | canonical saved SSE/WebSocket/Data/TCP/Socket.IO/gRPC/MQTT/GraphQL subscription connection under expected revision |
 | `/owners/{owner}/workspaces/{workspace}/sessions/{id}` | GET/DELETE editor, creator only | bound live session summary and removal |
 | `/owners/{owner}/workspaces/{workspace}/sessions/{id}/events` | GET editor, creator only | bounded private live events |
 | `/owners/{owner}/workspaces/{workspace}/sessions/{id}/send` | POST editor, creator only | WebSocket text/binary/Ping, Data query/schema/cancel, TCP send/half-close, Socket.IO emit/listen/ACK, gRPC message/half-close or MQTT publish/subscribe/unsubscribe/abort; Data/TCP/Socket.IO/gRPC/MQTT commands record actor-only audit, canonical session scripts/snapshots and creator fences retained |
 | `/owners/{owner}/workspaces/{workspace}/sessions/{id}/close` | POST editor, creator only | close bound live connection |
 | `/owners/{owner}/workspaces/{workspace}/mock/{request}/{example}` | GET editor | saved Mock example preview and call record |
+| `/owners/{owner}/workspaces/{workspace}/soap/import` | POST editor | saved SOAP request/revision-bound bounded WSDL/XSD candidate; canonical owner collection/env/request private screening, actor audit, credential/member/revision fences; no persistence |
+| `/owners/{owner}/workspaces/{workspace}/soap/import-url` | POST editor | explicit checked/bounded source URL fetch with same admission/privacy/fences, no automatic imports or local overrides |
+| `/owners/{owner}/workspaces/{workspace}/soap/schema` | POST editor | canonical saved SOAP request-linked WSDL schema, expected revision, actor audit and credential/member/revision release fence |
 | `/owners/{owner}/workspaces/{workspace}/grpc/import` | POST editor | saved gRPC request-bound Proto candidate, expected revision, actor audit, credential/member/version watcher and final fence; no persistence |
 | `/owners/{owner}/workspaces/{workspace}/grpc/schema` | POST editor | saved request-linked protobuf source, expected revision, actor audit and credential/member/version final fence |
 | `/owners/{owner}/workspaces/{workspace}/grpc/reflect` | POST editor | canonical saved request/environment reflection, actor credentials with owner resources, empty locals, actor audit and credential/member/version watcher/final fence; candidate only |

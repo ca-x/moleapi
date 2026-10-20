@@ -498,6 +498,18 @@ async fn build(
             get(collaboration::shared_mock),
         )
         .route(
+            "/owners/{owner}/workspaces/{workspace}/soap/import",
+            post(collaboration::shared_soap_import),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/soap/import-url",
+            post(collaboration::shared_soap_import_url),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/soap/schema",
+            post(collaboration::shared_soap_schema),
+        )
+        .route(
             "/owners/{owner}/workspaces/{workspace}/grpc/import",
             post(collaboration::shared_grpc_import),
         )

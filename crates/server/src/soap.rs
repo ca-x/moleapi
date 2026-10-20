@@ -37,10 +37,10 @@ pub struct Schema {
 }
 #[derive(Serialize)]
 pub struct SchemaResult {
-    specification: Specification,
+    pub(crate) specification: Specification,
     schema: SoapSchema,
 }
-fn compile(specification: Specification) -> Result<SchemaResult, ApiError> {
+pub(crate) fn compile(specification: Specification) -> Result<SchemaResult, ApiError> {
     let schema =
         moleapi_core::soap_schema(&specification).map_err(|e| ApiError::bad(e.to_string()))?;
     Ok(SchemaResult {
@@ -65,7 +65,7 @@ pub async fn import(
     screen(&candidate, &scopes.private_values)?;
     Ok(Json(compile(candidate)?))
 }
-fn screen(
+pub(crate) fn screen(
     spec: &Specification,
     values: &std::collections::BTreeSet<String>,
 ) -> Result<(), ApiError> {
@@ -138,17 +138,35 @@ pub async fn import_url(
     Json(c): Json<ImportUrl>,
 ) -> Result<Json<SchemaResult>, ApiError> {
     let w = owned(&s, &owner.0, &c.workspace_id).await?;
-    if !(1..=120_000).contains(&c.timeout_ms) {
+    let source = fetch_source(&s, &c.url, c.verify_tls, c.timeout_ms).await?;
+    let spec = Specification {
+        id: uuid::Uuid::new_v4().to_string(),
+        name: c.name,
+        kind: "wsdl".into(),
+        dialect: "wsdl1.1".into(),
+        source,
+    };
+    let scopes = source_scopes(&s, &w, &c.scopes)?;
+    screen(&spec, &scopes.private_values)?;
+    Ok(Json(compile(spec)?))
+}
+pub(crate) async fn fetch_source(
+    s: &AppState,
+    url: &str,
+    verify_tls: bool,
+    timeout_ms: u64,
+) -> Result<String, ApiError> {
+    if !(1..=120_000).contains(&timeout_ms) {
         return Err(ApiError::bad("Timeout must be 1..120000ms"));
     }
-    let url = moleapi_core::valid_url(&c.url).map_err(|e| ApiError::bad(e.to_string()))?;
-    let body = tokio::time::timeout(std::time::Duration::from_millis(c.timeout_ms), async {
+    let url = moleapi_core::valid_url(url).map_err(|e| ApiError::bad(e.to_string()))?;
+    let body = tokio::time::timeout(std::time::Duration::from_millis(timeout_ms), async {
         let client = moleapi_core::checked_client(
             &url,
             moleapi_core::NetworkPolicy {
                 allow_private_network: s.local || s.config.allow_private_network,
             },
-            c.verify_tls,
+            verify_tls,
         )
         .await?;
         let response = client.get(url).send().await?;
@@ -173,24 +191,14 @@ pub async fn import_url(
     .await
     .map_err(|_| ApiError::bad("WSDL URL import timed out"))?
     .map_err(|e| ApiError::bad(e.to_string()))?;
-    let source = serde_json::to_string(&moleapi_core::SoapSource {
+    serde_json::to_string(&moleapi_core::SoapSource {
         entry_file: "service.wsdl".into(),
         files: vec![moleapi_core::SoapFile {
             path: "service.wsdl".into(),
             content: body,
         }],
     })
-    .map_err(|_| ApiError::internal())?;
-    let spec = Specification {
-        id: uuid::Uuid::new_v4().to_string(),
-        name: c.name,
-        kind: "wsdl".into(),
-        dialect: "wsdl1.1".into(),
-        source,
-    };
-    let scopes = source_scopes(&s, &w, &c.scopes)?;
-    screen(&spec, &scopes.private_values)?;
-    Ok(Json(compile(spec)?))
+    .map_err(|_| ApiError::internal())
 }
 pub(crate) fn validate_selected(
     data: &moleapi_core::WorkspaceData,

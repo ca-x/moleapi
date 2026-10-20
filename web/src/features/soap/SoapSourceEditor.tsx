@@ -1,0 +1,302 @@
+import type { ErrorCopy } from "../../shared/i18n/errors";
+import { LocalizedError, errorCopy } from "../../shared/i18n/errors";
+import { t, useLanguage, translateCopy } from "../../shared/i18n";
+import { useEffect, useRef, useState } from "react";
+import {
+  Button,
+  Callout,
+  Checkbox,
+  Dialog,
+  Flex,
+  Text,
+  TextField,
+} from "@radix-ui/themes";
+import { Plus, Trash2, Download, Upload } from "lucide-react";
+import { id } from "../../shared/model";
+import { Choice, Editor, Field, ToolButton } from "../../shared/ui";
+import { checkSoapFiles, pickSoapFiles } from "./files";
+import type { SoapSchemaResult, SoapSource } from "./types";
+import type { Specification } from "../../shared/types";
+import type { SoapSchema } from "./types";
+export type SoapImportInput = { name: string; source: string } | { name: string; url: string; verify_tls: boolean; timeout_ms: number };
+export interface SoapSourceController { specification?: Specification; guard: () => () => boolean; attach: (specification: Specification, schema: SoapSchema) => void; }
+export default function SoapSourceEditor({
+  open,
+  onOpenChange,
+  source, dark, importSource,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  source: SoapSourceController; dark: boolean; importSource: (input: SoapImportInput) => Promise<SoapSchemaResult>;
+}) {
+  useLanguage();
+  const [name, setName] = useState(t("SOAP 服务定义"));
+  const [files, setFiles] = useState<
+    { id: string; path: string; content: string }[]
+  >([]);
+  const [selected, setSelected] = useState("");
+  const [entry, setEntry] = useState("");
+  const [url, setUrl] = useState("");
+  const [verify, setVerify] = useState(true);
+  const [error, setError] = useState<ErrorCopy>("");
+  const [pending, setPending] = useState<number | null>(null);
+  const opened = useRef(open);
+  const epoch = useRef(0);
+  if (opened.current !== open) {
+    opened.current = open;
+    epoch.current++;
+  }
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!open) return;
+    let initial: SoapSource | undefined;
+    try {
+      const parsed = JSON.parse(source.specification?.source || "{}");
+      if (
+        typeof parsed.entry_file === "string" &&
+        Array.isArray(parsed.files) &&
+        parsed.files.every(
+          (item: { path?: unknown; content?: unknown }) =>
+            typeof item.path === "string" && typeof item.content === "string",
+        )
+      )
+        initial = parsed;
+    } catch {
+      /* Invalid sources are reported by Rust schema loader. */
+    }
+    const rows = (initial?.files || []).map((item) => ({ ...item, id: id() }));
+    setFiles(rows);
+    setSelected(rows[0]?.id || "");
+    setEntry(initial?.entry_file || "");
+    setName(source.specification?.name || t("SOAP 服务定义"));
+    setError("");
+    setUrl("");
+  }, [open]);
+  const busy = pending === epoch.current;
+  const file = files.find((item) => item.id === selected);
+  function change(patch: Partial<(typeof files)[number]>) {
+    setFiles((rows) =>
+      rows.map((item) => (item.id === selected ? { ...item, ...patch } : item)),
+    );
+  }
+  async function pick() {
+    if (busy) return;
+    const context = source.guard();
+    const generation = epoch.current;
+    const current = () =>
+      context() &&
+      mounted.current &&
+      opened.current &&
+      epoch.current === generation;
+    if (!current()) return;
+    setPending(generation);
+    setError("");
+    try {
+      const values = await pickSoapFiles();
+      if (!values || !current()) return;
+      const next = values.map((value) => ({ ...value, id: id() }));
+      setFiles((rows) => [
+        ...rows.filter((row) => !next.some((value) => value.path === row.path)),
+        ...next,
+      ]);
+      setSelected(next[0].id);
+      if (!entry)
+        setEntry(
+          next.find((value) => value.path.endsWith(".wsdl"))?.path ||
+            next[0].path,
+        );
+    } catch (caught) {
+      if (current()) setError(errorCopy(caught));
+    } finally {
+      if (mounted.current)
+        setPending((value) => (value === generation ? null : value));
+    }
+  }
+  async function validate(fromUrl = false) {
+    if (busy || !source.guard()()) return;
+    const context = source.guard();
+    const generation = epoch.current;
+    const current = () =>
+      context() &&
+      mounted.current &&
+      opened.current &&
+      epoch.current === generation;
+    if (!current()) return;
+    setPending(generation);
+    setError("");
+    try {
+      if (
+        !fromUrl &&
+        (!files.length || !files.some((file) => file.path === entry))
+      )
+        throw new LocalizedError(
+          "选择一个 WSDL 入口文件，并提供所引用的 XSD/WSDL 依赖。",
+        );
+      if (!fromUrl) checkSoapFiles(files);
+      const candidate = await importSource(fromUrl ? { name: name.trim() || t("SOAP 服务定义"), url, verify_tls: verify, timeout_ms: 30000 } : { name: name.trim() || t("SOAP 服务定义"), source: JSON.stringify({ entry_file: entry, files: files.map(({path,content}) => ({path,content})) }) });
+      if (!current()) return;
+      source.attach(candidate.specification, candidate.schema);
+      onOpenChange(false);
+    } catch (caught) {
+      if (current()) setError(errorCopy(caught));
+    } finally {
+      if (mounted.current)
+        setPending((value) => (value === generation ? null : value));
+    }
+  }
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Content maxWidth="980px" className="grpc-source-dialog">
+        <Dialog.Title>{t("WSDL / XSD 来源")}</Dialog.Title>
+        <Dialog.Description size="2"> {t("原始定义保留在工作区。相对路径与 import 一致；引用的依赖文件需一并提供。")} </Dialog.Description>
+        <Flex gap="3" mt="4" align="end" wrap="wrap">
+          <Field label={t("WSDL 名称")}>
+            <TextField.Root
+              value={name}
+              disabled={busy}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </Field>
+          <Button
+            variant="soft"
+            color="gray"
+            disabled={busy}
+            onClick={() => void pick()}
+          >
+            <Upload size={14} /> {t("导入文件")} </Button>
+          <Button
+            variant="outline"
+            color="gray"
+            disabled={busy}
+            onClick={() => {
+              const row = {
+                id: id(),
+                path: "source" + (files.length + 1) + ".wsdl",
+                content: "",
+              };
+              setFiles((rows) => [...rows, row]);
+              setSelected(row.id);
+              if (!entry) setEntry(row.path);
+            }}
+          >
+            <Plus size={14} /> {t("添加文件")} </Button>
+        </Flex>
+        <Flex gap="3" mt="3" align="end" wrap="wrap">
+          <Field label="WSDL URL">
+            <TextField.Root
+              value={url}
+              disabled={busy}
+              placeholder="https://service.example.com/service?wsdl"
+              onChange={(event) => setUrl(event.target.value)}
+            />
+          </Field>
+          <label className="checkbox-label">
+            <Checkbox
+              checked={verify}
+              disabled={busy}
+              onCheckedChange={(value) => setVerify(value === true)}
+            /> {t("验证 TLS")} </label>
+          <Button
+            variant="soft"
+            disabled={busy || !url}
+            onClick={() => void validate(true)}
+          >
+            <Download size={14} /> {t("读取 URL 定义")} </Button>
+        </Flex>
+        {error && (
+          <Callout.Root color="red" role="alert" mt="3">
+            <Callout.Text>{translateCopy(error)}</Callout.Text>
+          </Callout.Root>
+        )}
+        <div className="grpc-source-grid">
+          <div className="grpc-source-files" aria-label={t("WSDL / XSD 文件")}>
+            {files.map((item) => (
+              <button
+                className={
+                  "grpc-file-row " + (item.id === selected ? "selected" : "")
+                }
+                key={item.id}
+                disabled={busy}
+                aria-pressed={item.id === selected}
+                onClick={() => setSelected(item.id)}
+              >
+                {item.path}
+              </button>
+            ))}
+          </div>
+          {file && (
+            <div className="grpc-source-editor">
+              <Flex gap="3" align="end" mb="3">
+                <Field label={t("WSDL / XSD 相对路径")}>
+                  <TextField.Root
+                    value={file.path}
+                    disabled={busy}
+                    onChange={(event) => {
+                      if (entry === file.path) setEntry(event.target.value);
+                      change({ path: event.target.value });
+                    }}
+                  />
+                </Field>
+                <ToolButton
+                  label={t("移除定义文件")}
+                  disabled={busy}
+                  onClick={() => {
+                    setFiles((rows) =>
+                      rows.filter((item) => item.id !== file.id),
+                    );
+                    setSelected(
+                      files.find((item) => item.id !== file.id)?.id || "",
+                    );
+                  }}
+                >
+                  <Trash2 size={14} />
+                </ToolButton>
+              </Flex>
+              <Editor
+                key={file.id}
+                value={file.content}
+                onChange={(content) => change({ content })}
+                dark={dark}
+                language="xml"
+                readOnly={busy}
+                height="360px"
+                label={t("WSDL / XSD 文件内容")}
+              />
+            </div>
+          )}
+        </div>
+        <Flex gap="3" align="center" mt="3">
+          <Choice
+            value={files.some((file) => file.path === entry) ? entry : "none"}
+            label={t("入口 WSDL")}
+            disabled={busy}
+            onChange={(value) => setEntry(value === "none" ? "" : value)}
+            options={[
+              { value: "none", label: t("选择入口 WSDL") },
+              ...files
+                .filter((item) => item.path.endsWith(".wsdl") && item.path)
+                .map((item) => ({ value: item.path, label: item.path })),
+            ]}
+          />
+          <Text size="1" color="gray"> {t("读取 URL 时不会自动下载外部 import；缺少依赖时请在文件列表中补齐。")} </Text>
+        </Flex>
+        <Flex gap="3" justify="end" mt="4">
+          <Dialog.Close>
+            <Button variant="soft" color="gray"> {t("取消")} </Button>
+          </Dialog.Close>
+          <Button
+            loading={busy}
+            disabled={!files.length}
+            onClick={() => void validate()}
+          > {t("验证并使用定义")} </Button>
+        </Flex>
+      </Dialog.Content>
+    </Dialog.Root>
+  );
+}

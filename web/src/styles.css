@@ -1447,3 +1447,13 @@ kbd {
 .shared-mqtt .protocol-events { height:360px; flex:none; min-height:0; }
 .shared-mqtt .protocol-event-list { min-width:0; }
 .shared-mqtt .protocol-event-list .rt-ScrollAreaViewport > div { width:100%; min-width:0!important; }
+
+.shared-soap { min-width:0; max-width:100%; }
+.shared-soap .soap-workbench { height:auto; overflow:visible; }
+.shared-soap .grpc-tabs { flex:none; min-height:0; }
+.shared-soap .grpc-tabs > .rt-TabsContent[data-state="active"] { flex:none; overflow:visible; }
+.shared-soap .grpc-tabs > .rt-TabsContent > .code-editor { flex:none; min-height:0; height:240px; }
+.shared-soap .response-pane-fill { min-height:320px; }
+.shared-soap .rt-CalloutRoot[role="alert"] { grid-template-columns:minmax(0,1fr); }
+.shared-soap .rt-CalloutRoot[role="alert"] > .code-editor { min-width:0; max-width:100%; width:100%; }
+.shared-soap .rt-CalloutRoot[role="alert"] .rt-CalloutText { color:var(--red-12); }

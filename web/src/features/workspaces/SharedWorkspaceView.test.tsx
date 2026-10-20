@@ -2062,3 +2062,38 @@ it("saves shared MQTT configuration explicitly and keeps live publish and subscr
   expect((screen.getByRole("button", { name: "保存共享工作区" }) as HTMLButtonElement).disabled).toBe(true);
   expect(vi.mocked(api).mock.calls.every(([path]) => path.startsWith(base))).toBe(true);
 });
+
+it("stages shared WSDL, saves the binding explicitly and sends a temporary SOAP XML draft with a real Fault view", async () => {
+  let canonical = structuredClone(workspace);
+  const template = '<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><Echo xmlns="urn:demo"><name>template</name></Echo></s:Body></s:Envelope>';
+  const schema = { services: [{ name: "Service", ports: [{ name: "Port", binding: "EchoBinding", version: "1.1", address: "http://fixture.test", operations: [{ name: "Echo", action: "Echo", template, fields: [] }] }] }] };
+  vi.mocked(api).mockImplementation((path, method, body) => {
+    if (path === base && method === "PUT") { canonical = { ...canonical, revision: canonical.revision + 1, data: (body as Workspace).data }; return Promise.resolve(canonical); }
+    if (path === `${base}/soap/import`) return Promise.resolve({ specification: { id: "wsdl-member", name: "Shared WSDL", kind: "wsdl", dialect: "wsdl1.1", source: (body as { source: string }).source }, schema });
+    if (path === `${base}/soap/schema`) return Promise.resolve({ specification: canonical.data.specifications?.find((s) => s.id === "wsdl-member"), schema });
+    if (path === `${base}/execute-draft`) return Promise.resolve({ status: 500, status_text: "Server Error", body: "<Fault>Actual fault</Fault>", headers: [{ key: "Content-Type", value: "text/xml", enabled: true }], elapsed_ms: 1, size_bytes: 27, logs: [], tests: [], soap_fault: { version: "1.1", code: "Server", reason: "Actual fault", detail: "<details>fixture</details>" } });
+    return Promise.resolve(canonical);
+  });
+  render(view("editor")); fireEvent.click(await screen.findByRole("button", { name: "新增 SOAP 请求" }));
+  expect((screen.getByRole("button", { name: "WSDL / XSD 来源" }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" })); await waitFor(() => expect(canonical.revision).toBe(4));
+  fireEvent.click(await screen.findByRole("button", { name: "WSDL / XSD 来源" })); fireEvent.click(await screen.findByRole("button", { name: "添加文件" }));
+  fireEvent.change(screen.getByLabelText("WSDL / XSD 文件内容"), { target: { value: '<definitions xmlns="http://schemas.xmlsoap.org/wsdl/" />' } });
+  fireEvent.click(screen.getByRole("button", { name: "验证并使用定义" })); await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(canonical.data.specifications ?? []).toHaveLength(0);
+  fireEvent.change(screen.getByLabelText("SOAP Service"), { target: { value: "Service" } });
+  fireEvent.change(screen.getByLabelText("SOAP Port"), { target: { value: "Port" } });
+  fireEvent.change(screen.getByLabelText("SOAP Operation"), { target: { value: "Echo" } });
+  fireEvent.click(screen.getByRole("button", { name: "使用 WSDL Endpoint" }));
+  fireEvent.click(screen.getByRole("button", { name: "生成 XML 模板" }));
+  expect((screen.getByRole("button", { name: "发送草稿请求" }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" })); await waitFor(() => expect(canonical.revision).toBe(5));
+  expect(canonical.data.collections[0].requests.at(-1)).toMatchObject({ method: "POST", body_kind: "text", body: template, specification_id: "wsdl-member", protocol: { kind: "soap", service: "Service", port: "Port", operation: "Echo", action: "Echo" } });
+  fireEvent.change(screen.getByLabelText("SOAP XML 草稿"), { target: { value: template.replace("template", "temporary") } });
+  fireEvent.click(screen.getByRole("button", { name: "发送草稿请求" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/execute-draft`, "POST", expect.objectContaining({ request: expect.objectContaining({ body: template.replace("template", "temporary") }), expected_workspace_revision: 5 })));
+  fireEvent.mouseDown(screen.getByRole("tab", { name: /HTTP \/ XML 响应/ }), { button: 0 });
+  expect(await screen.findByText("Server: Actual fault")).toBeTruthy();
+  expect(canonical.data.collections[0].requests.at(-1)?.body).toBe(template);
+  expect(vi.mocked(api).mock.calls.every(([path]) => path.startsWith(base))).toBe(true);
+});
