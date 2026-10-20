@@ -2261,5 +2261,14 @@
   "草稿请求执行结果": "Draft request result",
   "已保存请求执行结果": "Saved request result",
   "此文档正文未向查看者开放。": "This document's contents are unavailable to viewers.",
-  "文档存在无效内容，请先修正。": "Fix the invalid document before saving."
+  "文档存在无效内容，请先修正。": "Fix the invalid document before saving.",
+  "移动请求": "Move request",
+  "目标集合": "Destination collection",
+  "请求 ID 已存在。": "The request ID already exists.",
+  "移动后，请求仍须位于其场景的集合子树中。": "The request must stay within its scenario collection subtree after moving.",
+  "所选资源仍被场景或数据集引用。请先更新引用，再删除。": "Scenarios or datasets still reference this resource. Update those references before deleting.",
+  "将「{{value0}}」移动到所选集合？保存后生效。": "Move “{{value0}}” to the selected collection? Takes effect after saving.",
+  "删除范围：{{collections}} 个集合，{{requests}} 个请求；{{documents}} 篇文档移至工作区根目录。": "Removes {{collections}} collections and {{requests}} requests. Moves {{documents}} documents to the workspace root.",
+  "另有 {{count}} 项。": "{{count}} more items.",
+  "确认移动": "Confirm move"
 }

@@ -1065,3 +1065,96 @@ it("keeps collection creation and settings absent for a viewer", async () => {
   expect(screen.queryByRole("button", { name: "新建目录" })).toBeNull();
   expect(screen.queryByRole("button", { name: "集合与目录设置" })).toBeNull();
 });
+
+it("duplicates a shared request with a new identity and saves the same authored contents", async () => {
+  vi.mocked(api).mockImplementation((_path, method, body) => Promise.resolve(method === "PUT" ? { ...workspace, revision: 4, data: (body as { data: Workspace["data"] }).data } : workspace));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "复制请求" }));
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.anything()));
+  const sent = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
+  const copy = sent.data.collections[0].requests.at(-1)!;
+  expect(copy.id).not.toBe(workspace.data.collections[0].requests[0].id);
+  expect({ ...copy, id: "", name: "" }).toEqual({ ...workspace.data.collections[0].requests[0], id: "", name: "" });
+});
+
+it("stages shared request deletion only after confirmation and persists only on Save", async () => {
+  vi.mocked(api).mockImplementation((_path, method, body) => Promise.resolve(method === "PUT" ? { ...workspace, revision: 4, data: (body as { data: Workspace["data"] }).data } : workspace));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "删除请求" }));
+  fireEvent.click(screen.getByRole("button", { name: "取消" }));
+  expect(screen.getByLabelText("请求名称")).toHaveProperty("value", workspace.data.collections[0].requests[0].name);
+  fireEvent.click(screen.getByRole("button", { name: "删除请求" }));
+  fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
+  expect(vi.mocked(api).mock.calls.some(([, method]) => method === "PUT")).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.anything()));
+  const sent = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
+  expect(sent.data.collections[0].requests.map((request) => request.id)).toEqual(workspace.data.collections[0].requests.slice(1).map((request) => request.id));
+});
+
+it("moves a shared request to a selected collection while preserving its identity and contents", async () => {
+  const shared = structuredClone(workspace);
+  shared.data.collections.push({ id: "target", name: "Destination", description: "", requests: [] });
+  vi.mocked(api).mockImplementation((_path, method, body) => Promise.resolve(method === "PUT" ? { ...shared, revision: 4, data: (body as { data: Workspace["data"] }).data } : shared));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "移动请求" }));
+  fireEvent.change(screen.getByLabelText("目标集合"), { target: { value: "target" } });
+  fireEvent.click(screen.getByRole("button", { name: "确认移动" }));
+  expect(await screen.findByRole("heading", { name: "Destination" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.anything()));
+  const sent = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
+  expect(sent.data.collections[1].requests).toEqual([workspace.data.collections[0].requests[0]]);
+  expect(sent.data.collections[0].requests).toEqual(workspace.data.collections[0].requests.slice(1));
+});
+
+it("reviews subtree deletion and reparents its documents only on canonical Save", async () => {
+  const shared = structuredClone(workspace); const rootId = shared.data.collections[0].id;
+  shared.data.collections.push({ id: "child", name: "Child", parent_id: rootId, description: "", requests: [] }, { id: "other", name: "Other", description: "", requests: [] });
+  shared.data.documents = [{ id: "doc", name: "Guide", source: "retained", collection_id: "child" }];
+  vi.mocked(api).mockImplementation((_path, method, body) => Promise.resolve(method === "PUT" ? { ...shared, revision: 4, data: (body as { data: Workspace["data"] }).data } : shared));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "删除集合" }));
+  expect(screen.getByText("删除范围：2 个集合，2 个请求；1 篇文档移至工作区根目录。")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
+  expect(vi.mocked(api).mock.calls.some(([, method]) => method === "PUT")).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.anything()));
+  const sent = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
+  expect(sent.data.collections.map((collection) => collection.id)).toEqual(["other"]);
+  expect(sent.data.documents?.[0]).toMatchObject({ source: "retained", collection_id: null });
+});
+
+it("names structural dependencies and keeps referenced resources unchanged", async () => {
+  const shared = structuredClone(workspace);
+  shared.data.scenarios = [{ id: "suite", name: "Uses this request", description: "", collection_id: shared.data.collections[0].id, steps: [{ id: "step", request_id: shared.data.collections[0].requests[0].id, name: "Step", group: "", enabled: true }] }];
+  vi.mocked(api).mockResolvedValue(shared);
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "删除请求" }));
+  expect(screen.getByText(/Uses this request/)).toBeTruthy();
+  expect(screen.getByRole("button", { name: "确认删除" })).toHaveProperty("disabled", true);
+  expect(vi.mocked(api).mock.calls.some(([, method]) => method === "PUT")).toBe(false);
+});
+
+it.each(["account", "credential", "role", "selection", "revision", "conflict", "draft"] as const)("discards a pending resource deletion after %s changes", async (boundary) => {
+  const { rerender } = render(view("editor"));
+  await screen.findByRole("button", { name: "删除请求" });
+  if (boundary === "conflict") fireEvent.change(screen.getByLabelText("工作区名称"), { target: { value: "Dirty" } });
+  fireEvent.click(screen.getByRole("button", { name: "删除请求" }));
+  expect(screen.getByRole("alertdialog")).toBeTruthy();
+  if (boundary === "account") rerender(view("editor", "another-account"));
+  if (boundary === "credential") { vi.mocked(token).mockReturnValue("other-credential"); rerender(view("editor")); }
+  if (boundary === "role") rerender(view("viewer"));
+  if (boundary === "selection") fireEvent.change(screen.getByLabelText("请求"), { target: { value: workspace.data.collections[0].requests[1].id } });
+  if (boundary === "draft") fireEvent.change(screen.getByLabelText("工作区名称"), { target: { value: "Later edit" } });
+  if (boundary === "revision" || boundary === "conflict") await act(async () => client.setQueryData(["shared-workspace", "member", "owner-id", "w", "editor", 0], { ...workspace, revision: 4 }));
+  await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+  expect(vi.mocked(api).mock.calls.some(([, method]) => method === "PUT")).toBe(false);
+});
+
+it("keeps all shared resource actions absent for viewers", async () => {
+  render(view("viewer"));
+  await screen.findByLabelText("请求");
+  for (const name of ["复制请求", "移动请求", "删除请求", "删除集合"]) expect(screen.queryByRole("button", { name })).toBeNull();
+});

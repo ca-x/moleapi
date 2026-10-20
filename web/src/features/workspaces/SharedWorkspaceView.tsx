@@ -28,6 +28,7 @@ import MockMatchingEditor from "../requests/MockMatchingEditor";
 import MockScriptEditor from "../requests/MockScriptEditor";
 import { mockRouteInfo } from "../requests/mockRouteInfo";
 import SharedCollectionSettingsDialog from "./SharedCollectionSettingsDialog";
+import SharedResourceActions from "./SharedResourceActions";
 import type { CollectionSettingsTarget } from "../collections/CollectionSettingsFields";
 
 type Tab = "resources" | "history" | "reports" | "mock" | "documents" | "variables";
@@ -141,6 +142,12 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
   }
   function updateSelectedRequest(patch: Partial<RequestSpec>) {
     updateRequest((item) => ({ ...item, ...patch }));
+  }
+  function applyResourceChange(data: WorkspaceData, selectedCollection: string, selectedRequest: string) {
+    if (!canEdit || !current(scope)) return;
+    invalidateDraftResults();
+    setDraft((currentDraft) => currentDraft ? { ...currentDraft, data } : null);
+    setCollectionId(selectedCollection); setRequestId(selectedRequest); setExampleId("");
   }
   function applyCollectionSettings(data: WorkspaceData, selectedId: string) {
     if (!canEdit || !current(scope)) return;
@@ -301,6 +308,7 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
         {draft.data.collections.length === 0 ? <Text size="2" color="gray">{t("此工作区还没有集合")}</Text> : <>
           <Choice label={t("集合")} value={collection?.id ?? ""} onChange={(value) => { setCollectionId(value); setRequestId(""); }} options={draft.data.collections.map((item) => ({ value: item.id, label: item.name }))} />
           {collection && <Flex align="center" justify="between" gap="2" wrap="wrap"><Heading size="3">{collection.name}</Heading>{canEdit && <Flex gap="2" wrap="wrap"><Button variant="outline" onClick={() => setCollectionSettings({ kind: "edit", id: collection.id })}>{t("集合与目录设置")}</Button><Button variant="outline" onClick={() => setCollectionSettings({ kind: "create", parent_id: collection.id })}>{t("新建目录")}</Button><Button variant="outline" onClick={addHttpRequest}>{t("新增 HTTP 请求")}</Button><Button loading={running} disabled={running || dirty || collection.requests.length === 0} onClick={() => void runCollection()}>{t("运行集合")}</Button>{running && <Button variant="outline" color="gray" loading={stoppingRun} disabled={stoppingRun} onClick={() => void stopCollection()}>{t("停止集合运行")}</Button>}</Flex>}</Flex>}
+          {canEdit && collection && <SharedResourceActions key={`${scope}/${saved?.revision}/${conflict?.revision ?? ""}`} data={draft.data} workspaceName={draft.name} collectionId={collection.id} requestId={request?.id} onChange={applyResourceChange} />}
           {canEdit && dirty && <Text size="1" color="gray">{t("先保存修改，再运行集合。")}</Text>}
           {runResult && <Text role="status" size="2">{t("通过")}: {runResult.passed} · {t("失败")}: {runResult.failed}{runResult.cancelled && <> · {t("已取消")}</>}</Text>}
           {collection && collection.requests.length > 0 && <>
