@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { api, previewSharedMock, token } from "../../shared/api";
 import { setLanguage } from "../../shared/i18n";
 import { initialData } from "../../shared/model";
+import { dataConfig } from "../data/model";
 import { formatRequestLink } from "../documents/internalLinks";
 import { saveProjectFile } from "../generation/saveProjectFile";
 import type { SharedWorkspaceSummary, Workspace } from "../../shared/types";
@@ -1357,4 +1358,67 @@ it("does not let a late Stop acknowledgment change a newer job's busy state",asy
   await act(async()=>stops[0]({cancelled:true}));expect(screen.getByRole("button",{name:"停止集合运行"})).toHaveProperty("disabled",true);
   await act(async()=>stops[1]({cancelled:true}));expect(screen.getByRole("button",{name:"停止集合运行"})).toHaveProperty("disabled",false);
   await act(async()=>finishes[1]({passed:0,failed:0,cancelled:true}));expect(screen.queryByRole("button",{name:"停止集合运行"})).toBeNull();
+});
+
+it("creates a shared literal dataset and read-only view through member preview and canonical CAS",async()=>{
+  vi.mocked(api).mockImplementation((path,method,body)=>Promise.resolve(path.endsWith("/dataset/preview")?{columns:["id"],rows:[{id:7}]}:method==="PUT"?{...workspace,revision:4,data:(body as {data:Workspace["data"]}).data}:workspace));
+  render(view("editor"));fireEvent.click(await screen.findByRole("button",{name:"工作区数据集"}));fireEvent.click(screen.getByRole("button",{name:"新建数据集"}));
+  fireEvent.change(screen.getByRole("textbox",{name:"数据集名称"}),{target:{value:"Member rows"}});
+  fireEvent.change(screen.getByRole("textbox",{name:"测试数据源"}),{target:{value:'[{"id":7}]'}});
+  fireEvent.click(screen.getByRole("button",{name:"添加视图"}));fireEvent.change(screen.getByRole("textbox",{name:"视图名称"}),{target:{value:"All rows"}});fireEvent.change(screen.getByRole("textbox",{name:"视图 SQL"}),{target:{value:"SELECT id FROM data"}});
+  fireEvent.click(screen.getByRole("button",{name:"应用数据集修改"}));await waitFor(()=>expect(api).toHaveBeenCalledWith(`${base}/dataset/preview`,"POST",{expected_revision:3,dataset:{format:"json",source:'[{"id":7}]'}}));
+  expect(vi.mocked(api).mock.calls.some(([,method])=>method==="PUT")).toBe(false);
+  fireEvent.click(screen.getByRole("button",{name:"保存共享工作区"}));await waitFor(()=>expect(api).toHaveBeenCalledWith(base,"PUT",expect.anything()));
+  const sent=vi.mocked(api).mock.calls.find(([path,method])=>path===base&&method==="PUT")?.[2] as {data:Workspace["data"]};
+  expect(sent.data.datasets?.[0]).toMatchObject({name:"Member rows",secret:true,source:{format:"json",source:'[{"id":7}]'},views:[{name:"All rows",sql:"SELECT id FROM data"}]});
+  expect(vi.mocked(api).mock.calls.every(([path])=>path===base||path.startsWith(`${base}/`))).toBe(true);
+});
+
+it("stages a private Data query dataset without copying SQL or calling a preview route",async()=>{
+  const shared=structuredClone(workspace);shared.data.collections[0].requests[0].protocol={...dataConfig(),sql:"SELECT private_column FROM records"};shared.data.collections[0].requests[0].url="postgresql://member:dataset-query-secret@localhost/test";
+  vi.mocked(api).mockImplementation((_path,method,body)=>Promise.resolve(method==="PUT"?{...shared,revision:4,data:(body as {data:Workspace["data"]}).data}:shared));
+  render(view("editor"));fireEvent.click(await screen.findByRole("button",{name:"工作区数据集"}));fireEvent.click(screen.getByRole("button",{name:"新建数据集"}));
+  fireEvent.change(screen.getByRole("textbox",{name:"数据集名称"}),{target:{value:"Fresh rows"}});fireEvent.change(screen.getByLabelText("数据集来源"),{target:{value:"query"}});
+  fireEvent.change(screen.getByLabelText("选择只读 Data 请求"),{target:{value:shared.data.collections[0].requests[0].id}});
+  fireEvent.click(screen.getByRole("button",{name:"应用数据集修改"}));fireEvent.click(screen.getByRole("button",{name:"保存共享工作区"}));await waitFor(()=>expect(api).toHaveBeenCalledWith(base,"PUT",expect.anything()));
+  const sent=vi.mocked(api).mock.calls.find(([path,method])=>path===base&&method==="PUT")?.[2] as {data:Workspace["data"]};
+  expect(sent.data.datasets?.[0]).toMatchObject({secret:true,query:{request_id:shared.data.collections[0].requests[0].id}});expect(sent.data.datasets?.[0].source).toBeUndefined();expect(JSON.stringify(sent.data.datasets)).not.toContain("private_column");
+  expect(vi.mocked(api).mock.calls.some(([path])=>path.includes("preview"))).toBe(false);
+});
+
+function withBoundDataset():Workspace{
+  const shared=structuredClone(workspace);shared.data.script_mode="v2";
+  shared.data.datasets=[{id:"dataset",name:"Bound rows",description:"",secret:true,source:{format:"json",source:'[{"id":7}]'},views:[{id:"view",name:"All rows",sql:"SELECT id FROM data"}]}];
+  shared.data.collections[0].requests[0].examples=[{id:"example",name:"Bound example",status:200,headers:[],body:"static",mock_data:{dataset_id:"dataset",view_id:"view",shape:"rows",parameters:[]}}];return shared;
+}
+
+it("names Mock dependencies before dataset or view removal and retains original source on Cancel",async()=>{
+  const shared=withBoundDataset();vi.mocked(api).mockResolvedValue(shared);render(view("editor"));fireEvent.click(await screen.findByRole("button",{name:"工作区数据集"}));
+  fireEvent.click(screen.getByRole("button",{name:"删除数据集"}));expect(screen.getByText(/Bound example/)).toBeTruthy();expect(screen.getByRole("button",{name:"确认删除"})).toHaveProperty("disabled",true);
+  fireEvent.click(screen.getByRole("button",{name:"取消"}));fireEvent.click(screen.getByRole("button",{name:"编辑数据集"}));fireEvent.click(screen.getByRole("button",{name:"删除视图"}));
+  expect(screen.getByRole("button",{name:"应用数据集修改"})).toHaveProperty("disabled",true);expect(screen.getByText(/Bound example/)).toBeTruthy();fireEvent.click(screen.getByRole("button",{name:"取消"}));
+  expect(screen.getByRole("button",{name:"保存共享工作区"})).toHaveProperty("disabled",true);expect(vi.mocked(api).mock.calls.some(([,method])=>method==="PUT")).toBe(false);
+});
+
+it("can clear a Mock binding then delete its dataset in one canonical draft",async()=>{
+  const shared=withBoundDataset();vi.mocked(api).mockImplementation((path,method,body)=>Promise.resolve(path.endsWith("/mock-calls")?[]:method==="PUT"?{...shared,revision:4,data:(body as {data:Workspace["data"]}).data}:shared));
+  render(view("editor"));fireEvent.click(await screen.findByRole("button",{name:"Mock 预览"}));fireEvent.change(screen.getByLabelText("Mock 正文来源"),{target:{value:"static"}});
+  fireEvent.click(screen.getByRole("button",{name:"工作区数据集"}));fireEvent.click(screen.getByRole("button",{name:"删除数据集"}));fireEvent.click(screen.getByRole("button",{name:"确认删除"}));
+  fireEvent.click(screen.getByRole("button",{name:"保存共享工作区"}));await waitFor(()=>expect(api).toHaveBeenCalledWith(base,"PUT",expect.anything()));
+  const sent=vi.mocked(api).mock.calls.find(([path,method])=>path===base&&method==="PUT")?.[2] as {data:Workspace["data"]};expect(sent.data.datasets).toEqual([]);expect(sent.data.collections[0].requests[0].examples[0].mock_data).toBeUndefined();expect(sent.data.collections[0].requests[0].examples[0].body).toBe("static");
+});
+
+it.each(["edit","account","credential","role","revision","conflict"] as const)("discards a delayed dataset Apply after %s changes",async(boundary)=>{
+  let finish!:(value:unknown)=>void;vi.mocked(api).mockImplementation((path)=>path.endsWith("/dataset/preview")?new Promise(resolve=>{finish=resolve;}):Promise.resolve(workspace));
+  const {rerender}=render(view("editor"));await screen.findByRole("button",{name:"工作区数据集"});if(boundary==="conflict")fireEvent.change(screen.getByLabelText("工作区名称"),{target:{value:"Dirty"}});
+  fireEvent.click(screen.getByRole("button",{name:"工作区数据集"}));fireEvent.click(screen.getByRole("button",{name:"新建数据集"}));fireEvent.change(screen.getByRole("textbox",{name:"数据集名称"}),{target:{value:"Old form"}});fireEvent.change(screen.getByRole("textbox",{name:"测试数据源"}),{target:{value:'[{"id":7}]'}});fireEvent.click(screen.getByRole("button",{name:"应用数据集修改"}));await waitFor(()=>expect(finish).toBeTypeOf("function"));
+  if(boundary==="edit")fireEvent.change(screen.getByRole("textbox",{name:"数据集名称"}),{target:{value:"Later form"}});
+  if(boundary==="account")rerender(view("editor","other-account"));if(boundary==="credential"){vi.mocked(token).mockReturnValue("new-token");rerender(view("editor"));}if(boundary==="role")rerender(view("viewer"));
+  if(boundary==="revision"||boundary==="conflict")await act(async()=>client.setQueryData(["shared-workspace","member","owner-id","w","editor",0],{...workspace,revision:4}));
+  await act(async()=>finish({columns:["id"],rows:[{id:7}]}));expect(screen.queryByText("Old form")).toBeNull();expect(vi.mocked(api).mock.calls.some(([,method])=>method==="PUT")).toBe(false);
+  if(boundary==="edit")expect(screen.getByRole("textbox",{name:"数据集名称"})).toHaveProperty("value","Later form");
+});
+
+it("hides shared dataset data and mutation controls from viewers",async()=>{
+  render(view("viewer"));await screen.findByLabelText("请求");expect(screen.queryByRole("button",{name:"工作区数据集"})).toBeNull();expect(screen.queryByRole("button",{name:"新建数据集"})).toBeNull();
 });

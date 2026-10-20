@@ -498,6 +498,10 @@ async fn build(
             get(collaboration::shared_mock),
         )
         .route(
+            "/owners/{owner}/workspaces/{workspace}/dataset/preview",
+            post(collaboration::shared_dataset_preview),
+        )
+        .route(
             "/owners/{owner}/workspaces/{workspace}/mock-schema/validate",
             post(collaboration::shared_validate_mock_schema),
         )

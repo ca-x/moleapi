@@ -50,6 +50,7 @@ This inventory covers every `.route` registered in `crates/server/src/lib.rs` at
 | `/owners/{owner}/workspaces/{workspace}/sessions/{id}/send` | POST editor, creator only | WebSocket text/binary/Ping outbound message |
 | `/owners/{owner}/workspaces/{workspace}/sessions/{id}/close` | POST editor, creator only | close bound live connection |
 | `/owners/{owner}/workspaces/{workspace}/mock/{request}/{example}` | GET editor | saved Mock example preview and call record |
+| `/owners/{owner}/workspaces/{workspace}/dataset/preview` | Editor/admin session | Bounded literal CSV/JSON preview; canonical revision and membership admission/final fences, actor audit without source |
 | `/owners/{owner}/workspaces/{workspace}/mock-schema/validate` | Editor/admin session | Canonical saved HTTP/spec Schema validation; actor admission audit without source/pointer, membership and workspace revision fences before metadata response |
 | `/owners/{owner}/workspaces/{workspace}/mocks/{*path}` | ANY editor | bounded saved Mock routing and selected script execution; actor audit plus membership/revision fences |
 | `/owners/{owner}/workspaces/{workspace}/mock-calls` | GET editor | Mock call metadata |

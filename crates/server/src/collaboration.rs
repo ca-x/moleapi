@@ -929,6 +929,65 @@ pub async fn shared_mock(
     Ok(response)
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SharedDatasetPreview {
+    dataset: moleapi_core::DatasetSource,
+    expected_revision: i64,
+}
+
+pub async fn shared_dataset_preview(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Identity>,
+    Path((owner, workspace)): Path<(String, String)>,
+    Json(input): Json<SharedDatasetPreview>,
+) -> Result<Json<moleapi_core::Dataset>, ApiError> {
+    if state.local {
+        return Err(ApiError::not_found());
+    }
+    let tx = state.db.begin().await?;
+    let canonical = lock_workspace(&tx, &owner, &workspace).await?;
+    let (_, admission) = access(&tx, &actor.0, &owner, &workspace).await?;
+    if admission.role == Role::Viewer {
+        return Err(ApiError::forbidden("Viewer cannot preview datasets"));
+    }
+    if canonical.revision != input.expected_revision {
+        return Err(ApiError::conflict(
+            "Workspace changed before dataset preview",
+        ));
+    }
+    record_event_result(
+        &tx,
+        &owner,
+        &workspace,
+        &actor.0,
+        "dataset.preview",
+        None,
+        "started",
+    )
+    .await?;
+    tx.commit().await?;
+    let result = crate::runner::preview(
+        State(state.clone()),
+        Extension(Identity(owner.clone())),
+        Json(crate::runner::Preview {
+            workspace_id: workspace.clone(),
+            dataset: input.dataset,
+        }),
+    )
+    .await;
+    let (current_workspace, current) = access(&state.db, &actor.0, &owner, &workspace).await?;
+    if current != admission {
+        return Err(ApiError::not_found());
+    }
+    if current_workspace.revision != canonical.revision {
+        return Err(ApiError::conflict(
+            "Workspace changed during dataset preview",
+        ));
+    }
+    result
+}
+
 pub async fn shared_validate_mock_schema(
     State(state): State<AppState>,
     Extension(actor): Extension<Identity>,

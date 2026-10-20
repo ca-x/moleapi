@@ -59,8 +59,8 @@ fn interactive() -> String {
 }
 #[derive(Deserialize)]
 pub struct Preview {
-    workspace_id: String,
-    dataset: DatasetSource,
+    pub(crate) workspace_id: String,
+    pub(crate) dataset: DatasetSource,
 }
 pub async fn preview(
     State(s): State<AppState>,
