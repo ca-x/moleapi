@@ -498,6 +498,10 @@ async fn build(
             get(collaboration::shared_mock),
         )
         .route(
+            "/owners/{owner}/workspaces/{workspace}/mocks/{*path}",
+            axum::routing::any(collaboration::shared_mock_dispatch),
+        )
+        .route(
             "/owners/{owner}/workspaces/{workspace}/mock-calls",
             get(collaboration::shared_mock_calls),
         )

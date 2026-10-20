@@ -8,7 +8,7 @@ use crate::{
 };
 use axum::{
     Extension, Json,
-    extract::{OriginalUri, Path, Query, State},
+    extract::{OriginalUri, Path, Query, Request, State},
     http::HeaderMap,
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -276,6 +276,7 @@ async fn watch_access_revision(
     workspace: &str,
     admission: Access,
     revision: i64,
+    revision_error: &'static str,
 ) -> ApiError {
     let period = std::time::Duration::from_millis(200);
     let mut check = tokio::time::interval_at(tokio::time::Instant::now() + period, period);
@@ -285,7 +286,7 @@ async fn watch_access_revision(
         match access(&state.db, actor, owner, workspace).await {
             Ok((current_workspace, current)) if current == admission => {
                 if current_workspace.revision != revision {
-                    return ApiError::conflict("Workspace changed during draft execution");
+                    return ApiError::conflict(revision_error);
                 }
             }
             _ => return ApiError::not_found(),
@@ -601,6 +602,7 @@ pub async fn shared_execute_draft(
         &workspace,
         admission,
         canonical.revision,
+        "Workspace changed during draft execution",
     );
     tokio::pin!(run);
     tokio::pin!(watch);
@@ -925,6 +927,65 @@ pub async fn shared_mock(
         axum::http::HeaderValue::from_static("saved-example"),
     );
     Ok(response)
+}
+
+pub async fn shared_mock_dispatch(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Identity>,
+    Path((owner, workspace, path)): Path<(String, String, String)>,
+    OriginalUri(uri): OriginalUri,
+    incoming: Request,
+) -> Result<axum::response::Response, ApiError> {
+    if state.local {
+        return Err(ApiError::not_found());
+    }
+    let tx = state.db.begin().await?;
+    let canonical = lock_workspace(&tx, &owner, &workspace).await?;
+    let (_, admission) = access(&tx, &actor.0, &owner, &workspace).await?;
+    if admission.role == Role::Viewer {
+        return Err(ApiError::forbidden("Viewer cannot route Mock requests"));
+    }
+    record_event_result(
+        &tx,
+        &owner,
+        &workspace,
+        &actor.0,
+        "mock.route",
+        None,
+        "started",
+    )
+    .await?;
+    tx.commit().await?;
+    let dispatch = crate::mock::dispatch(
+        State(state.clone()),
+        Extension(Identity(owner.clone())),
+        Path((workspace.clone(), path)),
+        OriginalUri(uri),
+        incoming,
+    );
+    let watch = watch_access_revision(
+        &state,
+        &actor.0,
+        &owner,
+        &workspace,
+        admission,
+        canonical.revision,
+        "Workspace changed during Mock routing",
+    );
+    tokio::pin!(dispatch);
+    tokio::pin!(watch);
+    let result = tokio::select! {biased;
+        error = &mut watch => return Err(error),
+        result = &mut dispatch => result,
+    };
+    let (current_workspace, current) = access(&state.db, &actor.0, &owner, &workspace).await?;
+    if current != admission {
+        return Err(ApiError::not_found());
+    }
+    if current_workspace.revision != canonical.revision {
+        return Err(ApiError::conflict("Workspace changed during Mock routing"));
+    }
+    result
 }
 
 pub async fn shared_mock_calls(

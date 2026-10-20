@@ -4,13 +4,16 @@ import { Badge, Button, Card, Checkbox, Dialog, Flex, Select, Text, TextArea, Te
 import { Trash2 } from "lucide-react";
 import { api, native, previewMock, token } from "../../shared/api";
 import { safeMessage } from "../../shared/model";
-import { Editor, Field, PairEditor, ToolButton } from "../../shared/ui";
+import { Editor, Field, ToolButton } from "../../shared/ui";
 import type { RequestSpec, SavedDataset, Specification } from "../../shared/types";
 import MockCallActivity from "./MockCallActivity";
 import MockPublicShares from "./MockPublicShares";
 import {openapiMockChoices} from "./openapiMockChoices";
 import MockTrafficControls from "./MockTrafficControls";
 import SchemaEditorDialog from "./MockSchemaDialog";
+import MockMatchingEditor from "./MockMatchingEditor";
+import MockScriptEditor from "./MockScriptEditor";
+import { mockRouteInfo } from "./mockRouteInfo";
 
 type DataBinding=NonNullable<RequestSpec["examples"][number]["mock_data"]>;
 
@@ -81,14 +84,7 @@ export default function ExamplesEditor({
       return merged;
     })});
   };
-  let routePath="";
-  let routeHasQuery=request.query.some(row=>row.enabled);
-  try{
-    const savedUrl=new URL(request.url);
-    routePath=savedUrl.pathname.replace(/%7B/gi,"{").replace(/%7D/gi,"}");
-    routeHasQuery=routeHasQuery||savedUrl.search!=="";
-    if(routePath.split("/").some(segment=>/[{}]/.test(segment)&&!/^[{][A-Za-z_][A-Za-z0-9_]{0,63}[}]$/.test(segment)))routePath="";
-  }catch{routePath="";}
+  const { path: routePath, hasSavedQuery: routeHasQuery } = mockRouteInfo(request);
   const previewExample=(exampleId:string)=>{
     if(!workspaceId||dirty)return;
     const scope=`${workspaceId}/${request.id}/${exampleId}`;
@@ -197,16 +193,8 @@ export default function ExamplesEditor({
           {dirty && <Text size="1" color="gray">{t("先保存工作区，再预览 Mock。")}</Text>}
           {error===`${workspaceId}/${request.id}/${example.id}` && <Text role="alert" size="1" color="red">{t("Mock 预览失败，请检查脚本与数据源。")}</Text>}
           {!dirty && preview?.scope===`${workspaceId}/${request.id}/${example.id}` && preview.fingerprint===JSON.stringify(example) && <Field label={t("Mock 预览结果")} hint={`${t("状态码")}: ${preview.status}`}><TextArea readOnly rows={5} value={preview.body.slice(0,64*1024)} /></Field>}
-          {!example.mock_match ? <Button variant="soft" color="gray" onClick={()=>patchExample(example.id,{mock_match:{priority:0,query:[],headers:[],body:""}})}>{t("添加 Mock 匹配条件")}</Button> : <div>
-            <Text size="1" color="gray">{t("匹配条件全部满足时选中此示例；空正文只匹配无正文请求。")}</Text>
-            <Field label={t("匹配优先级")}><TextField.Root type="number" min="0" max="100" value={example.mock_match.priority} onChange={event=>patchExample(example.id,{mock_match:{...example.mock_match!,priority:Number(event.target.value)}})}/></Field>
-            <Field label={t("查询参数条件")}><PairEditor rows={example.mock_match.query??[]} onChange={query=>patchExample(example.id,{mock_match:{...example.mock_match!,query}})} keyLabel={t("参数名")} valueLabel={t("参数值")} secrets/></Field>
-            <Field label={t("请求头条件")}><PairEditor rows={example.mock_match.headers??[]} onChange={headers=>patchExample(example.id,{mock_match:{...example.mock_match!,headers}})} keyLabel="Header" valueLabel={t("值")} secrets/></Field>
-            <Text as="label" size="2"><Checkbox checked={example.mock_match.body!==undefined} onCheckedChange={checked=>patchExample(example.id,{mock_match:{...example.mock_match!,body:checked===true?"":undefined}})}/>{t("匹配正文")}</Text>
-            {example.mock_match.body!==undefined && <Field label={t("精确匹配正文")}><TextArea value={example.mock_match.body} onChange={event=>patchExample(example.id,{mock_match:{...example.mock_match!,body:event.target.value}})} rows={3}/></Field>}
-            <Button variant="ghost" color="red" onClick={()=>patchExample(example.id,{mock_match:undefined})}>{t("移除匹配条件")}</Button>
-          </div>}
-          {asyncMock ? <Field label={t("Mock 实现脚本")} hint={t("使用 pm.mock 设置状态、响应头与正文；可通过 pm.datasets(ID) 查询工作区数据集。") }><Editor label={t("Mock 实现脚本")} value={example.mock_script??""} onChange={mock_script=>{setPreview(null);setError("");update({examples:request.examples.map(item=>item.id===example.id?{...item,mock_script}:item)});}} dark={dark} language="javascript" height="180px"/></Field> : <Text size="1" color="gray">{t("在工作区设置中启用 v2 脚本模式后可编辑动态 Mock。")}</Text>}
+          <MockMatchingEditor rule={example.mock_match} onChange={(mock_match) => patchExample(example.id, { mock_match })} />
+          <MockScriptEditor script={example.mock_script ?? ""} enabled={!!asyncMock} dark={dark} onChange={(mock_script) => { setPreview(null); setError(""); update({ examples: request.examples.map((item) => item.id === example.id ? { ...item, mock_script } : item) }); }} />
         </Card>
       ))}
       {workspaceId&&!dirty&&<MockCallActivity workspaceId={workspaceId} requestId={request.id}/>}

@@ -23,6 +23,9 @@ import SharedVariablesPanel from "./SharedVariablesPanel";
 import SharedLiveSessionPanel from "./SharedLiveSessionPanel";
 import MockTrafficControls from "../requests/MockTrafficControls";
 import SharedMockSchemaControls from "./SharedMockSchemaControls";
+import MockMatchingEditor from "../requests/MockMatchingEditor";
+import MockScriptEditor from "../requests/MockScriptEditor";
+import { mockRouteInfo } from "../requests/mockRouteInfo";
 
 type Tab = "resources" | "history" | "reports" | "mock" | "documents" | "variables";
 type RunResult = { passed: number; failed: number; cancelled: boolean; report_id?: string };
@@ -101,6 +104,7 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
   const collection = draft?.data.collections.find((item) => item.id === collectionId) ?? draft?.data.collections[0];
   const request = collection?.requests.find((item) => item.id === requestId) ?? collection?.requests[0];
   const httpRequest = !!request && (!request.protocol?.kind || request.protocol.kind === "http");
+  const matchRoutePath = request ? mockRouteInfo(request).path : "";
   const liveRequest = request?.protocol?.kind === "sse" || request?.protocol?.kind === "websocket";
   const example = request?.examples.find((item) => item.id === exampleId) ?? request?.examples[0];
   const statusPending = !!example && exampleStatusInput !== String(example.status);
@@ -338,6 +342,9 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
           {statusPending && <Text role="alert" size="1" color="red">{t("状态码必须为 200 到 599。")}</Text>}
           <Field label={t("响应正文")}><TextArea value={example.body} onChange={(event) => updateExample((item) => ({ ...item, body: event.target.value }))} /></Field>
           <div><Text as="p" size="2" weight="medium">{t("响应头")}</Text><PairEditor rows={example.headers} onChange={(headers) => updateExample((item) => ({ ...item, headers }))} keyLabel="Header" valueLabel={t("值")} secrets /></div>
+          {request && matchRoutePath ? <Text as="p" size="1" color="gray" style={{ overflowWrap: "anywhere" }}>{t("匹配路由")}: <code>{`${request.method} ${base}/mocks${matchRoutePath}`}</code></Text> : <Text size="1" color="gray">{t("Mock 匹配路由需要字面量 HTTP URL；路径变量使用单层 {name}。")}</Text>}
+          <MockMatchingEditor rule={example.mock_match} onChange={(mock_match) => updateExample((item) => ({ ...item, mock_match }))} />
+          <MockScriptEditor script={example.mock_script ?? ""} enabled={draft.data.script_mode === "v2"} dark={dark} onChange={(mock_script) => updateExample((item) => ({ ...item, mock_script }))} />
           <Button variant="outline" color="red" onClick={() => { updateRequest((item) => ({ ...item, examples: item.examples.filter((entry) => entry.id !== example.id) })); setExampleId(""); }}>{t("删除示例")}</Button>
         </Flex>}
         {example && <Button loading={mocking} disabled={mocking || dirty || statusPending || !!conflict} onClick={() => void previewExample()}>{t("预览已保存 Mock 示例")}</Button>}

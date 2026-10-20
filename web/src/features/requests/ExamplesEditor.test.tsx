@@ -224,6 +224,15 @@ it("edits a saved example's Mock matching rule and shows its routed URL",async()
   expect(update.mock.lastCall?.[0].examples[0].mock_match).toBeUndefined();
 });
 
+it.each(["ftp://example.test/items", "https://{{host}}/items"])("does not advertise an unroutable saved URL %s", async (url) => {
+  await setLanguage("en");
+  const request = newRequest("R", url);
+  request.examples = [{ id: "e", name: "Example", status: 200, headers: [], body: "static" }];
+  render(<Theme><ExamplesEditor request={request} update={vi.fn()} dark={false} workspaceId="w" /></Theme>);
+  expect(screen.queryByText(/GET \/api\/mocks\/w\//)).toBeNull();
+  expect(screen.getByText("Mock matching needs a literal HTTP URL. Use a single {name} segment for path variables.")).toBeTruthy();
+});
+
 it("loads saved match rules when empty condition arrays were omitted from JSON",async()=>{
   await setLanguage("en");
   const request=newRequest("R","https://example.test/items");

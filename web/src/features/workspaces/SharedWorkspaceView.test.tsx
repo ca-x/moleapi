@@ -459,6 +459,37 @@ it.each(["linked", "data"] as const)("preserves an existing %s source until expl
   expect(example.body).toBe("retained static");
 });
 
+it("saves shared Mock scripts and match conditions without replacing other example fields", async () => {
+  const first = workspace.data.collections[0].requests[0];
+  const example = { id: "behavior", name: "Behavior", status: 202, headers: [], body: "static body", mock_schema: '{"type":"object"}', fault_rate_percent: 7, mock_match: { priority: 1, query: [{ id: "q", key: "mode", value: "old", enabled: true }], headers: [{ id: "h", key: "X-Mode", value: "old", enabled: true }], body: "" } };
+  const saved: Workspace = { ...workspace, data: { ...workspace.data, script_mode: "v2", collections: [{ ...workspace.data.collections[0], requests: [{ ...first, method: "POST", url: "https://example.test/items/{id}", examples: [example] }] }] } };
+  vi.mocked(api).mockImplementation((path, method, body) => path.endsWith("/mock-calls") ? Promise.resolve([]) : Promise.resolve(method === "PUT" ? { ...saved, revision: 4, data: (body as { data: Workspace["data"] }).data } : saved));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "Mock 预览" }));
+  expect(screen.getByText(/POST \/api\/owners\/owner-id\/workspaces\/w\/mocks\/items\/\{id\}/)).toBeTruthy();
+  fireEvent.change(screen.getByLabelText("匹配优先级"), { target: { value: "9" } });
+  fireEvent.change(screen.getByLabelText("参数值"), { target: { value: "fast" } });
+  fireEvent.change(screen.getByLabelText("值"), { target: { value: "yes" } });
+  fireEvent.change(screen.getByLabelText("精确匹配正文"), { target: { value: "hello" } });
+  const script = "pm.mock.setBody('member script')";
+  fireEvent.change(screen.getByRole("textbox", { name: /Mock 实现脚本/ }), { target: { value: script } });
+  expect(screen.getByRole("button", { name: "预览已保存 Mock 示例" })).toHaveProperty("disabled", true);
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.objectContaining({ expected_revision: 3 })));
+  const sent = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
+  expect(sent.data.collections[0].requests[0].examples[0]).toMatchObject({ mock_script: script, body: "static body", mock_schema: example.mock_schema, fault_rate_percent: 7, mock_match: { priority: 9, body: "hello", query: [{ value: "fast" }], headers: [{ value: "yes" }] } });
+});
+
+it("keeps Mock script editing unavailable in a v1 shared workspace", async () => {
+  const first = workspace.data.collections[0].requests[0];
+  const saved: Workspace = { ...workspace, data: { ...workspace.data, script_mode: "v1", collections: [{ ...workspace.data.collections[0], requests: [{ ...first, examples: [{ id: "e", name: "Static", status: 200, body: "static", headers: [] }] }] }] } };
+  vi.mocked(api).mockImplementation((path) => Promise.resolve(path.endsWith("/mock-calls") ? [] : saved));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "Mock 预览" }));
+  expect(screen.queryByRole("textbox", { name: /Mock 实现脚本/ })).toBeNull();
+  expect(screen.getByText("在工作区设置中启用 v2 脚本模式后可编辑动态 Mock。")).toBeTruthy();
+});
+
 it("adds and removes a shared response example within the unsaved draft", async () => {
   vi.mocked(api).mockImplementation((path) => Promise.resolve(path.endsWith("/mock-calls") ? [] : workspace));
   render(view("editor"));
