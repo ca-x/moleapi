@@ -747,6 +747,55 @@ fn generated_openapi_and_postman_exports_are_importable() {
 }
 
 #[test]
+fn default_export_screens_private_values_copied_into_display_metadata() {
+    let mut data = import("curl", "curl https://example.test").unwrap().data;
+    let secret = "private-display-metadata";
+    data.global_variables = serde_json::from_value(json!([
+        {"id":"private","key":"credential","value":secret,"enabled":true,"secret":true}
+    ]))
+    .unwrap();
+    data.environments = serde_json::from_value(json!([
+        {"id":"env","name":format!("Environment {secret}"),"variables":[]}
+    ]))
+    .unwrap();
+    data.active_environment_id = Some("env".into());
+    data.specifications = serde_json::from_value(json!([
+        {"id":"spec","name":format!("Specification {secret}"),"kind":"openapi","dialect":"3.0","source":"{}"}
+    ])).unwrap();
+    let collection = &mut data.collections[0];
+    collection.name = format!("Collection {secret}");
+    collection.description = format!("Description {secret}");
+    let request = &mut collection.requests[0];
+    request.name = format!("Request {secret}");
+    request.description = format!("Description {secret}");
+    request.examples = serde_json::from_value(json!([
+        {"id":"example","name":format!("Example {secret}"),"status":200,"headers":[],"body":"{}"}
+    ]))
+    .unwrap();
+    let mut source = workspace(data);
+    source.name = format!("Workspace {secret}");
+    moleapi_core::validate_workspace(&source.data).unwrap();
+    let safe = export(&source, "moleapi", false).unwrap();
+    assert!(
+        !safe.content.contains(secret),
+        "private display value leaked"
+    );
+    let projected: Workspace = serde_json::from_str(&safe.content).unwrap();
+    moleapi_core::validate_workspace(&projected.data).unwrap();
+    assert!(
+        projected.data.collections[0].requests[0]
+            .name
+            .contains("[REDACTED]")
+    );
+    let exact: Workspace =
+        serde_json::from_str(&export(&source, "moleapi", true).unwrap().content).unwrap();
+    assert_eq!(
+        serde_json::to_value(exact).unwrap(),
+        serde_json::to_value(source).unwrap()
+    );
+}
+
+#[test]
 fn live_protocol_config_roundtrips_in_moleapi_and_cannot_silently_disappear_in_other_formats() {
     let mut source = workspace(import("postman", &postman().to_string()).unwrap().data);
     let request = &mut source.data.collections[0].requests[0];

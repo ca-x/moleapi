@@ -1299,11 +1299,18 @@ pub async fn list_shared(
             else {
                 continue;
             };
+            let privacy = moleapi_formats::RunReportPrivacy::new(&workspace);
+            let workspace_name = privacy.screen(&workspace.name, 256);
+            let workspace_name = if workspace_name.trim().is_empty() {
+                "[REDACTED]".into()
+            } else {
+                workspace_name
+            };
             result.push(json!({
                 "owner_id":membership.owner_id,
                 "owner_username":owner_account.username,
                 "workspace_id":membership.workspace_id,
-                "workspace_name":workspace.name,
+                "workspace_name":workspace_name,
                 "revision":workspace.revision,
                 "role":membership.role,
             }));

@@ -558,6 +558,13 @@ async fn viewer_gets_safe_projection_and_editor_writes_canonical_workspace() {
         {"id":"environment-private","key":"environment_token","value":"private-environment-sentinel","enabled":true,"secret":true}
     ]}]);
     source["active_environment_id"] = json!("team-dev");
+    source["collections"][0]["name"] = json!("Collection private-sentinel");
+    source["collections"][0]["description"] = json!("Description private-sentinel");
+    source["collections"][0]["requests"][0]["name"] = json!("Request private-sentinel");
+    source["collections"][0]["requests"][0]["description"] = json!("Description private-sentinel");
+    source["collections"][0]["requests"][0]["examples"][0]["name"] =
+        json!("Example private-sentinel");
+    source["environments"][0]["name"] = json!("Environment private-sentinel");
     source["documents"] = json!([
         {"id":"private-doc","name":"Private guide","source":"private-document-sentinel","secret":true},
         {"id":"public-doc","name":"Public guide","source":"# Public guide","secret":false}
@@ -567,7 +574,7 @@ async fn viewer_gets_safe_projection_and_editor_writes_canonical_workspace() {
         "POST",
         "/api/workspaces",
         Some(&owner),
-        Some(json!({"id":"w","name":"Team","data":source})),
+        Some(json!({"id":"w","name":"Team private-sentinel","data":source})),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{workspace}");
@@ -598,6 +605,16 @@ async fn viewer_gets_safe_projection_and_editor_writes_canonical_workspace() {
     assert!(!viewer.to_string().contains("private-environment-sentinel"));
     assert!(!viewer.to_string().contains("private-document-sentinel"));
     assert!(viewer.to_string().contains("# Public guide"));
+    let (status, shared_list) = call(
+        &router,
+        "GET",
+        "/api/workspaces/shared",
+        Some(&member),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{shared_list}");
+    assert!(!shared_list.to_string().contains("private-sentinel"));
     assert_eq!(
         call(&router, "GET", &audit_path, Some(&member), None)
             .await
