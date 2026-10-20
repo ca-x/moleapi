@@ -24,6 +24,8 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::future::Future;
 
+mod grpc;
+pub use grpc::{shared_grpc_import, shared_grpc_reflect, shared_grpc_schema};
 mod graphql;
 pub use graphql::{shared_graphql_introspect, shared_graphql_schema};
 
@@ -708,9 +710,10 @@ pub async fn shared_session_create(
             | moleapi_core::Protocol::Graphql { .. }
             | moleapi_core::Protocol::Tcp { .. }
             | moleapi_core::Protocol::Socketio { .. }
+            | moleapi_core::Protocol::Grpc { .. }
     ) {
         return Err(ApiError::bad(
-            "Shared live sessions support saved SSE, WebSocket, Data, TCP, Socket.IO and GraphQL subscriptions",
+            "Shared live sessions support saved SSE, WebSocket, Data, TCP, Socket.IO, gRPC and GraphQL subscriptions",
         ));
     }
     if request.protocol.is_graphql()
@@ -878,6 +881,10 @@ pub async fn shared_session_send(
             message,
             SendMessage::Text { .. } | SendMessage::Binary { .. } | SendMessage::Ping { .. }
         ),
+        "grpc" => matches!(
+            message,
+            SendMessage::GrpcMessage { .. } | SendMessage::GrpcHalfClose
+        ),
         "socketio" => matches!(
             message,
             SendMessage::SocketioEmit { .. }
@@ -901,7 +908,10 @@ pub async fn shared_session_send(
             "Message is unavailable for this shared session protocol",
         ));
     }
-    if matches!(summary.protocol.as_str(), "data" | "tcp" | "socketio") {
+    if matches!(
+        summary.protocol.as_str(),
+        "data" | "tcp" | "socketio" | "grpc"
+    ) {
         let action = match &message {
             SendMessage::DataQuery { .. } => "protocol.data.query",
             SendMessage::DataCancel { .. } => "protocol.data.cancel",
@@ -910,6 +920,8 @@ pub async fn shared_session_send(
             SendMessage::SocketioEmit { .. } => "protocol.socketio.emit",
             SendMessage::SocketioListen { .. } => "protocol.socketio.listen",
             SendMessage::SocketioAck { .. } => "protocol.socketio.ack",
+            SendMessage::GrpcMessage { .. } => "protocol.grpc.message",
+            SendMessage::GrpcHalfClose => "protocol.grpc.half_close",
             _ => "protocol.data.schema",
         };
         let audit = state.db.begin().await?;

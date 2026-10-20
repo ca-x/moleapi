@@ -498,6 +498,18 @@ async fn build(
             get(collaboration::shared_mock),
         )
         .route(
+            "/owners/{owner}/workspaces/{workspace}/grpc/import",
+            post(collaboration::shared_grpc_import),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/grpc/schema",
+            post(collaboration::shared_grpc_schema),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/grpc/reflect",
+            post(collaboration::shared_grpc_reflect),
+        )
+        .route(
             "/owners/{owner}/workspaces/{workspace}/graphql/introspect",
             post(collaboration::shared_graphql_introspect),
         )

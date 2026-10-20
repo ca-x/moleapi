@@ -1970,3 +1970,51 @@ it("authors shared Socket.IO configuration and keeps emitted messages and listen
   expect(canonical.data.collections[0].requests.at(-1)?.protocol).toMatchObject({ arguments_source: '["saved"]', attachments_base64: [], request_ack: false });
   expect((screen.getByRole("button", { name: "保存共享工作区" }) as HTMLButtonElement).disabled).toBe(true);
 });
+
+it("stages a shared Proto definition, saves explicitly and keeps gRPC stream messages local", async () => {
+  let canonical = structuredClone(workspace);
+  const schema: import("../grpc/types").GrpcSchema = { services: [{ name: "demo.EchoService", methods: [{ name: "Bidi", full_name: "demo.EchoService.Bidi", input_type: "demo.Echo", output_type: "demo.Echo", client_streaming: true, server_streaming: true, input_template: { text: "" } }] }] };
+  const session = { id: "grpc-a", protocol: "grpc", state: "open", client_half_closed: false, url: "http://fixture.test", received_bytes: 0, sent_bytes: 0, handshake: null };
+  vi.mocked(api).mockImplementation((path, method, body) => {
+    if (path === base && method === "PUT") { canonical = { ...canonical, revision: canonical.revision + 1, data: (body as Workspace).data }; return Promise.resolve(canonical); }
+    if (path === `${base}/grpc/import`) return Promise.resolve({ specification: { id: "proto-member", name: "Member Proto", kind: "protobuf", dialect: "proto3", source: (body as { source: string }).source }, schema });
+    if (path === `${base}/grpc/schema`) return Promise.resolve({ specification: canonical.data.specifications?.find((s) => s.id === "proto-member"), schema });
+    if (path === `${base}/sessions` || path === `${base}/sessions/grpc-a`) return Promise.resolve(session);
+    if (path.startsWith(`${base}/sessions/grpc-a/events`)) return Promise.resolve({ events: [{ cursor: 1, received_at: "now", direction: "incoming", message: { kind: "grpc_message", message: { text: "first" } } }], next_cursor: 1, earliest_cursor: 1, dropped_count: 0 });
+    if (path.endsWith("/send")) return Promise.resolve({ ok: true });
+    return Promise.resolve(canonical);
+  });
+  render(view("editor")); fireEvent.click(await screen.findByRole("button", { name: "新增 gRPC 请求" }));
+  fireEvent.change(screen.getByLabelText("请求地址"), { target: { value: "http://fixture.test" } });
+  expect((screen.getByRole("button", { name: "导入 Proto" }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(canonical.revision).toBe(4));
+  fireEvent.click(await screen.findByRole("button", { name: "导入 Proto" }));
+  fireEvent.click(await screen.findByRole("button", { name: "新建文件" }));
+  fireEvent.change(screen.getByLabelText("相对虚拟路径"), { target: { value: "service.proto" } });
+  fireEvent.change(screen.getByLabelText("Proto 文件内容"), { target: { value: 'syntax = "proto3"; package demo; message Echo { string text=1; } service EchoService { rpc Bidi(stream Echo) returns(stream Echo); }' } });
+  fireEvent.click(screen.getByRole("button", { name: "验证并使用定义" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(canonical.data.specifications ?? []).toHaveLength(0);
+  expect(canonical.revision).toBe(4);
+  fireEvent.change(screen.getByLabelText("gRPC 服务"), { target: { value: "demo.EchoService" } });
+  fireEvent.change(screen.getByLabelText("gRPC 方法"), { target: { value: "Bidi" } });
+  fireEvent.change(screen.getByLabelText("gRPC 请求消息"), { target: { value: '{"text":"first"}' } });
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(canonical.revision).toBe(5));
+  const request = canonical.data.collections[0].requests.at(-1)!;
+  expect(request).toMatchObject({ method: "POST", specification_id: "proto-member", protocol: { kind: "grpc", service: "demo.EchoService", method: "Bidi", message_source: '{"text":"first"}' } });
+  await waitFor(() => expect((screen.getByRole("button", { name: "连接" }) as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(screen.getByRole("button", { name: "连接" }));
+  const live = within(await screen.findByRole("region", { name: "共享 gRPC 实时调用" }));
+  expect(vi.mocked(api).mock.calls.some(([path]) => path.endsWith("/send"))).toBe(false);
+  fireEvent.change(live.getByLabelText("gRPC 请求消息"), { target: { value: '{"text":"second"}' } });
+  fireEvent.click(live.getByRole("button", { name: "发送消息" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/sessions/grpc-a/send`, "POST", { kind: "grpc_message", message_source: '{"text":"second"}' }));
+  fireEvent.click(live.getByRole("button", { name: "结束发送" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/sessions/grpc-a/send`, "POST", { kind: "grpc_half_close" }));
+  expect((live.getByRole("button", { name: "发送消息" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(canonical.data.collections[0].requests.at(-1)?.protocol).toMatchObject({ message_source: '{"text":"first"}' });
+  expect((screen.getByRole("button", { name: "保存共享工作区" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(vi.mocked(api).mock.calls.every(([path]) => path.startsWith(base))).toBe(true);
+});

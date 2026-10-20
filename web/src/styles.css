@@ -1432,3 +1432,9 @@ kbd {
 .shared-socketio .grpc-tabs { flex:none; min-height:0; }
 .shared-socketio .grpc-tabs > .rt-TabsContent[data-state="active"] { flex:none; overflow:visible; }
 .shared-socketio .grpc-tabs > .rt-TabsContent > .code-editor { flex:none; min-height:0; }
+
+.shared-grpc { min-width:0; max-width:100%; }
+.shared-grpc .grpc-workbench { height:auto; }
+.shared-grpc .grpc-tabs { flex:none; min-height:0; }
+.shared-grpc .grpc-tabs > .rt-TabsContent[data-state="active"] { flex:none; overflow:visible; }
+.shared-grpc .grpc-tabs > .rt-TabsContent > .code-editor { flex:none; min-height:0; }

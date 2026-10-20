@@ -6,8 +6,8 @@ use moleapi_core::{GrpcSchema, Protocol, RequestSpec, Specification, VariableUpd
 use serde::{Deserialize, Serialize};
 #[derive(Deserialize)]
 pub struct SchemaSource {
-    workspace_id: String,
-    specification_id: String,
+    pub(crate) workspace_id: String,
+    pub(crate) specification_id: String,
 }
 #[derive(Serialize)]
 pub struct SchemaResult {
@@ -40,9 +40,9 @@ pub async fn schema(
 }
 #[derive(Deserialize)]
 pub struct Import {
-    workspace_id: String,
-    name: String,
-    source: String,
+    pub(crate) workspace_id: String,
+    pub(crate) name: String,
+    pub(crate) source: String,
 }
 pub async fn import(
     State(s): State<AppState>,
@@ -60,11 +60,11 @@ pub async fn import(
 }
 #[derive(Deserialize)]
 pub struct Reflect {
-    workspace_id: String,
-    request: RequestSpec,
-    environment_id: Option<String>,
+    pub(crate) workspace_id: String,
+    pub(crate) request: RequestSpec,
+    pub(crate) environment_id: Option<String>,
     #[serde(default)]
-    locals: Vec<VariableUpdate>,
+    pub(crate) locals: Vec<VariableUpdate>,
 }
 #[derive(Serialize)]
 pub struct ReflectResult {
@@ -81,10 +81,20 @@ pub async fn reflect(
     headers: axum::http::HeaderMap,
     Json(c): Json<Reflect>,
 ) -> Result<Json<ReflectResult>, ApiError> {
-    let admission = s.protocol_admission.owner(&owner.0)?;
+    let actor = owner.0.clone();
+    reflect_as(s, owner, &actor, headers, c).await
+}
+pub(crate) async fn reflect_as(
+    s: AppState,
+    owner: Identity,
+    actor: &str,
+    headers: axum::http::HeaderMap,
+    c: Reflect,
+) -> Result<Json<ReflectResult>, ApiError> {
+    let admission = s.protocol_admission.owner(actor)?;
     let generation = {
         let guard = admission.lock().await;
-        crate::auth::still_authenticated(&s, &owner.0, &headers).await?;
+        crate::auth::still_authenticated(&s, actor, &headers).await?;
         *guard
     };
     let w = owned(&s, &owner.0, &c.workspace_id).await?;
@@ -131,7 +141,7 @@ pub async fn reflect(
         if *guard != generation {
             return Err(ApiError::unauthorized());
         }
-        crate::auth::still_authenticated(&s, &owner.0, &headers).await?;
+        crate::auth::still_authenticated(&s, actor, &headers).await?;
         owned(&s, &owner.0, &c.workspace_id).await?;
         let lease = s
             .protocol_sessions
@@ -155,7 +165,7 @@ pub async fn reflect(
     let reflected = tokio::select! {
         biased;
         _ = lease.cancelled() => {
-            crate::auth::still_authenticated(&s, &owner.0, &headers).await?;
+            crate::auth::still_authenticated(&s, actor, &headers).await?;
             owned(&s, &owner.0, &c.workspace_id).await?;
             return Err(ApiError::bad("Reflection cancelled after owner/workspace lifecycle changed"));
         },
@@ -234,7 +244,7 @@ pub async fn reflect(
     if *guard != generation {
         return Err(ApiError::unauthorized());
     }
-    crate::auth::still_authenticated(&s, &owner.0, &headers).await?;
+    crate::auth::still_authenticated(&s, actor, &headers).await?;
     owned(&s, &owner.0, &c.workspace_id).await?;
     Ok(Json(ReflectResult {
         result,

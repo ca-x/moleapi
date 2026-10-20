@@ -10,11 +10,13 @@ import type { SaveSharedResultDataset } from "./SharedResultDatasetDialog";
 import SharedDataSessionControls from "./SharedDataSessionControls";
 import SharedTcpSessionControls from "./SharedTcpSessionControls";
 import SharedSocketIoSessionControls from "./SharedSocketIoSessionControls";
+import SharedGrpcSessionControls from "./SharedGrpcSessionControls";
+import type { GrpcSchema } from "../grpc/types";
 import SessionEventPane from "../protocols/SessionEventPane";
 import SessionHandshake from "../protocols/SessionHandshake";
 import type { EventBatch, ProtocolEvent, ProtocolSession, SendMessage } from "../protocols/types";
 
-export default function SharedLiveSessionPanel({ base, request, revision, environmentId, dirty, saving, conflict, dark, isCurrent, onSaveResultDataset }: {
+export default function SharedLiveSessionPanel({ base, request, revision, environmentId, dirty, saving, conflict, dark, isCurrent, onSaveResultDataset, grpcSchema = null, connectDisabled = false }: {
   base: string;
   request: RequestSpec;
   revision: number;
@@ -25,6 +27,8 @@ export default function SharedLiveSessionPanel({ base, request, revision, enviro
   dark: boolean;
   isCurrent: () => boolean;
   onSaveResultDataset: SaveSharedResultDataset;
+  grpcSchema?: GrpcSchema | null;
+  connectDisabled?: boolean;
 }) {
   useLanguage();
   const [session, setSession] = useState<ProtocolSession | null>(null);
@@ -36,7 +40,7 @@ export default function SharedLiveSessionPanel({ base, request, revision, enviro
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<ReturnType<typeof liveError>>("");
   const mounted = useRef(true);
-  const admission = useRef({ isCurrent, dirty, saving, conflict }); admission.current = { isCurrent, dirty, saving, conflict };
+  const admission = useRef({ isCurrent, dirty, saving, conflict, connectDisabled }); admission.current = { isCurrent, dirty, saving, conflict, connectDisabled };
   const currentContext = () => mounted.current && admission.current.isCurrent() && !admission.current.dirty && !admission.current.conflict;
   const allowed = () => currentContext() && !admission.current.saving;
   const cursor = useRef(0);
@@ -94,7 +98,7 @@ export default function SharedLiveSessionPanel({ base, request, revision, enviro
     };
   }, [base, sessionId]);
   async function connect() {
-    if (busy || session || !allowed()) return;
+    if (busy || session || !allowed() || admission.current.connectDisabled) return;
     const current = generation.current;
     setBusy(true); setError(""); setEvents([]); setDropped(0); cursor.current = 0;
     try {
@@ -136,12 +140,13 @@ export default function SharedLiveSessionPanel({ base, request, revision, enviro
     <Flex direction="column" gap="3">
       <Heading size="3">{t("实时会话")}</Heading>
       {error && <Callout.Root color="red" role="alert"><Callout.Text>{error}</Callout.Text></Callout.Root>}
-      {!session && <><Button loading={busy} disabled={busy || dirty || saving || conflict} onClick={() => void connect()}>{t("连接")}</Button>{dirty && <Text size="1" color="gray">{t("先保存修改，再连接实时会话。")}</Text>}</>}
+      {!session && <><Button loading={busy} disabled={busy || dirty || saving || conflict || connectDisabled} onClick={() => void connect()}>{t("连接")}</Button>{dirty && <Text size="1" color="gray">{t("先保存修改，再连接实时会话。")}</Text>}</>}
       {session && <><Flex gap="2" align="center" wrap="wrap"><Text role="status" size="2">{t("状态")}: {({ connecting: t("连接中"), open: t("已连接"), closed: t("已关闭"), error: t("连接失败") })[session.state]}</Text>{(session.state === "open" || session.state === "connecting") ? <Button variant="soft" color="gray" loading={busy} onClick={() => void close()}>{t("断开")}</Button> : <Button variant="soft" disabled={busy || dirty || saving || conflict} onClick={() => void reset()}>{t("重新连接")}</Button>}</Flex>
         {session.reason && <Text size="2" color="gray">{session.reason}</Text>}
         {session.protocol === "websocket" && session.state === "open" && <Flex direction="column" gap="2"><Choice label={t("消息类型")} value={mode} onChange={(value) => setMode(value as typeof mode)} options={[{ value: "text", label: t("文本") }, { value: "binary", label: "Base64" }, { value: "ping", label: "Ping Base64" }]} /><Field label={mode === "text" ? t("消息正文") : "Base64"}><TextArea value={payload} onChange={(event) => setPayload(event.target.value)} /></Field><Button loading={sending} disabled={sending} onClick={() => void send()}>{t("发送消息")}</Button></Flex>}
         {session.protocol === "tcp" && request.protocol?.kind === "tcp" && <SharedTcpSessionControls key={sessionId} session={session} initial={request.protocol.message} dark={dark} sending={sending} isCurrent={allowed} send={sendData} />}
-        {session.protocol === "socketio" && request.protocol?.kind === "socketio" ? <SharedSocketIoSessionControls key={sessionId} config={request.protocol} channel={{ session, events, dropped, error: "", busy, sending, send: sendData, close }} dark={dark} isCurrent={allowed} /> :
+        {session.protocol === "grpc" && request.protocol?.kind === "grpc" ? <SharedGrpcSessionControls key={sessionId} request={request} schema={grpcSchema} channel={{ session, events, dropped, error: "", busy, sending, send: sendData, close }} dark={dark} isCurrent={allowed} /> :
+        session.protocol === "socketio" && request.protocol?.kind === "socketio" ? <SharedSocketIoSessionControls key={sessionId} config={request.protocol} channel={{ session, events, dropped, error: "", busy, sending, send: sendData, close }} dark={dark} isCurrent={allowed} /> :
         session.protocol === "data" && request.protocol?.kind === "data" ? <SharedDataSessionControls key={sessionId} sessionId={sessionId!} config={request.protocol} events={events} dropped={dropped} open={session.state === "open"} sending={sending} dark={dark} send={sendData} onSaveResultDataset={onSaveResultDataset} /> : <Tabs.Root defaultValue="events"><Tabs.List><Tabs.Trigger value="events">{t("消息")}</Tabs.Trigger>{session.protocol !== "tcp" && <Tabs.Trigger value="handshake">{t("握手")}</Tabs.Trigger>}</Tabs.List><Tabs.Content value="events"><SessionEventPane events={events} dropped={dropped} dark={dark} sessionId={sessionId} protocolLabel={session.protocol.toUpperCase()} /></Tabs.Content><Tabs.Content value="handshake"><SessionHandshake session={session} /></Tabs.Content></Tabs.Root>}
       </>}
     </Flex>
