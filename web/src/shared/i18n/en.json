@@ -1,4 +1,8 @@
 {
+  "新增 MQTT 请求": "Add MQTT request",
+  "共享 MQTT 请求设置": "Shared MQTT request settings",
+  "共享 MQTT 实时消息": "Shared MQTT live messages",
+  "消息与订阅修改仅用于当前连接，不会自动保存到共享请求。": "Message and subscription changes apply only to this connection and are not saved to the shared request.",
   "新增 gRPC 请求": "Add gRPC request",
   "共享 gRPC 客户端": "Shared gRPC client",
   "共享 gRPC 实时调用": "Shared gRPC live call",

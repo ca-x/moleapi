@@ -3,23 +3,23 @@ import { useEffect, useRef, useState } from "react";
 import { Button, Checkbox, Flex, Text, TextField } from "@radix-ui/themes";
 import { Plus, Trash2 } from "lucide-react";
 import { Choice, Field, ToolButton } from "../../shared/ui";
-import { useWorkbench } from "../workbench/context";
+import type { MqttChannel } from "./MqttClient";
 import type { MqttConfig, MqttSubscription } from "./types";
 import { mqttSubscription } from "./model";
 import MqttPropertyEditor from "./MqttPropertyEditor";
 export default function MqttSubscriptions({
   value,
   update,
-  identity,
+  identity, channel, isCurrent, disabled = false,
 }: {
   value: MqttConfig;
   update: (patch: Partial<MqttConfig>) => void;
   identity: string;
+  channel?: MqttChannel; isCurrent: () => boolean; disabled?: boolean;
 }) {
   useLanguage();
-  const state = useWorkbench();
-  const latest = useRef(state);
-  latest.current = state;
+  const latest = useRef({ value, channel, isCurrent, disabled, update });
+  latest.current = { value, channel, isCurrent, disabled, update };
   const [draft, setDraft] = useState(() => mqttSubscription());
   const [pending, setPending] = useState(false);
   const scope = useRef(identity);
@@ -35,10 +35,11 @@ export default function MqttSubscriptions({
     setDraft(mqttSubscription());
     setPending(false);
   }, [identity]);
-  const session = state.protocolSession.session;
+  const session = channel?.session;
   const active = !!session && ["connecting", "open"].includes(session.state);
   const open = session?.state === "open";
-  const blocked = pending || state.protocolSession.sending || (active && !open);
+  const blocked = disabled || pending || channel?.sending || (!!channel && !open);
+  function current(origin = identity) { return mounted.current && scope.current === origin && !latest.current.disabled && latest.current.isCurrent(); }
   const v5 = value.version === "5";
   const patch = (changes: Partial<MqttSubscription>) =>
     setDraft((old) => ({ ...old, ...changes }));
@@ -47,36 +48,35 @@ export default function MqttSubscriptions({
     enabled: boolean,
     remove = false,
   ) {
-    if (blocked || !subscription.filter.trim()) return;
+    if (blocked || !current() || !subscription.filter.trim()) return;
     const origin = identity;
     const snapshot = { ...structuredClone(subscription), enabled };
     setPending(true);
     try {
       if (
         active &&
-        !(await state.protocolSession.send(
+        !(await latest.current.channel!.send(
           enabled
             ? { kind: "mqtt_subscribe", subscription: snapshot }
             : { kind: "mqtt_unsubscribe", filter: snapshot.filter },
         ))
       )
         return;
-      if (!mounted.current || scope.current !== origin) return;
-      const current = latest.current.request?.protocol;
-      if (current?.kind !== "mqtt") return;
-      const index = current.subscriptions.findIndex(
+      if (!current(origin)) return;
+      const config = latest.current.value;
+      const index = config.subscriptions.findIndex(
         (item) => item.filter === snapshot.filter,
       );
       const subscriptions = remove
-        ? current.subscriptions.filter(
+        ? config.subscriptions.filter(
             (item) => item.filter !== snapshot.filter,
           )
         : index < 0
-          ? [...current.subscriptions, snapshot]
-          : current.subscriptions.map((item, key) =>
+          ? [...config.subscriptions, snapshot]
+          : config.subscriptions.map((item, key) =>
               key === index ? snapshot : item,
             );
-      update({ subscriptions });
+      latest.current.update({ subscriptions });
       setDraft(mqttSubscription());
     } finally {
       if (mounted.current && scope.current === origin) setPending(false);

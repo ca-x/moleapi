@@ -711,9 +711,10 @@ pub async fn shared_session_create(
             | moleapi_core::Protocol::Tcp { .. }
             | moleapi_core::Protocol::Socketio { .. }
             | moleapi_core::Protocol::Grpc { .. }
+            | moleapi_core::Protocol::Mqtt { .. }
     ) {
         return Err(ApiError::bad(
-            "Shared live sessions support saved SSE, WebSocket, Data, TCP, Socket.IO, gRPC and GraphQL subscriptions",
+            "Shared live sessions support saved SSE, WebSocket, Data, TCP, Socket.IO, gRPC, MQTT and GraphQL subscriptions",
         ));
     }
     if request.protocol.is_graphql()
@@ -881,6 +882,13 @@ pub async fn shared_session_send(
             message,
             SendMessage::Text { .. } | SendMessage::Binary { .. } | SendMessage::Ping { .. }
         ),
+        "mqtt" => matches!(
+            message,
+            SendMessage::MqttPublish { .. }
+                | SendMessage::MqttSubscribe { .. }
+                | SendMessage::MqttUnsubscribe { .. }
+                | SendMessage::MqttAbort
+        ),
         "grpc" => matches!(
             message,
             SendMessage::GrpcMessage { .. } | SendMessage::GrpcHalfClose
@@ -910,7 +918,7 @@ pub async fn shared_session_send(
     }
     if matches!(
         summary.protocol.as_str(),
-        "data" | "tcp" | "socketio" | "grpc"
+        "data" | "tcp" | "socketio" | "grpc" | "mqtt"
     ) {
         let action = match &message {
             SendMessage::DataQuery { .. } => "protocol.data.query",
@@ -922,6 +930,10 @@ pub async fn shared_session_send(
             SendMessage::SocketioAck { .. } => "protocol.socketio.ack",
             SendMessage::GrpcMessage { .. } => "protocol.grpc.message",
             SendMessage::GrpcHalfClose => "protocol.grpc.half_close",
+            SendMessage::MqttPublish { .. } => "protocol.mqtt.publish",
+            SendMessage::MqttSubscribe { .. } => "protocol.mqtt.subscribe",
+            SendMessage::MqttUnsubscribe { .. } => "protocol.mqtt.unsubscribe",
+            SendMessage::MqttAbort => "protocol.mqtt.abort",
             _ => "protocol.data.schema",
         };
         let audit = state.db.begin().await?;

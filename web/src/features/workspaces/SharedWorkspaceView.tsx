@@ -31,6 +31,8 @@ import SharedCollectionSettingsDialog from "./SharedCollectionSettingsDialog";
 import SharedResourceActions from "./SharedResourceActions";
 import SharedScenariosPanel from "./SharedScenariosPanel";
 import SharedGraphQLWorkbench from "./SharedGraphQLWorkbench";
+import { mqttConfig } from "../mqtt/model";
+import SharedMqttRequestEditor from "./SharedMqttRequestEditor";
 import SharedGrpcWorkbench from "./SharedGrpcWorkbench";
 import SharedTcpRequestEditor from "./SharedTcpRequestEditor";
 import SharedSocketIoRequestEditor from "./SharedSocketIoRequestEditor";
@@ -135,6 +137,8 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
   const collection = draft?.data.collections.find((item) => item.id === collectionId) ?? draft?.data.collections[0];
   const request = collection?.requests.find((item) => item.id === requestId) ?? collection?.requests[0];
   const selectedRequestRef = useRef(request?.id); selectedRequestRef.current = request?.id;
+  const mqttRequest = request?.protocol?.kind === "mqtt";
+  const mqttWebsocket = mqttRequest && /^wss?:/i.test(request?.url ?? "");
   const grpcRequest = request?.protocol?.kind === "grpc";
   const graphqlRequest = request?.protocol?.kind === "graphql";
   const httpRequest = !!request && (!request.protocol?.kind || request.protocol.kind === "http");
@@ -143,7 +147,7 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
   const httpLiveRequest = request?.protocol?.kind === "sse" || request?.protocol?.kind === "websocket" || socketIoRequest;
   const tcpRequest = request?.protocol?.kind === "tcp";
   const websocketRequest = request?.protocol?.kind === "websocket" || socketIoRequest;
-  const liveRequest = request?.protocol?.kind === "sse" || request?.protocol?.kind === "websocket" || request?.protocol?.kind === "data" || tcpRequest || socketIoRequest || grpcRequest;
+  const liveRequest = request?.protocol?.kind === "sse" || request?.protocol?.kind === "websocket" || request?.protocol?.kind === "data" || tcpRequest || socketIoRequest || grpcRequest || mqttRequest;
   const example = request?.examples.find((item) => item.id === exampleId) ?? request?.examples[0];
   useEffect(() => { linkedSchemaGeneration.current += 1; setLinkingSchema(false); }, [scope, collection?.id, request?.id, example?.id, tab]);
   const statusPending = !!example && exampleStatusInput !== String(example.status);
@@ -185,9 +189,10 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
     setDraft((currentDraft) => currentDraft ? { ...currentDraft, data } : null);
     setCollectionId(selectedId); setRequestId("");
   }
-  function addHttpRequest(kind: "http" | "data" | "graphql" | "sse" | "websocket" | "tcp" | "socketio" | "grpc" = "http") {
+  function addHttpRequest(kind: "http" | "data" | "graphql" | "sse" | "websocket" | "tcp" | "socketio" | "grpc" | "mqtt" = "http") {
     if (!canEdit || !collection) return;
     const next = newRequest();
+    if (kind === "mqtt") { next.protocol = mqttConfig(); next.name = "MQTT"; next.url = ""; }
     if (kind === "grpc") { next.protocol = { kind: "grpc", service: "", method: "", message_source: "{}" }; next.method = "POST"; next.name = "gRPC"; next.url = ""; }
     if (kind === "socketio") { next.protocol = socketIoConfig(); next.name = "Socket.IO"; next.url = ""; }
     if (kind === "tcp") { next.protocol = tcpConfig(); next.name = "TCP"; next.url = ""; }
@@ -425,7 +430,7 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
         {canEdit && <Button variant="outline" onClick={() => setCollectionSettings({ kind: "create", parent_id: null })}>{t("新建集合")}</Button>}
         {draft.data.collections.length === 0 ? <Text size="2" color="gray">{t("此工作区还没有集合")}</Text> : <>
           <Choice label={t("集合")} value={collection?.id ?? ""} onChange={(value) => { setCollectionId(value); setRequestId(""); }} options={draft.data.collections.map((item) => ({ value: item.id, label: item.name }))} />
-          {collection && <Flex align="center" justify="between" gap="2" wrap="wrap"><Heading size="3">{collection.name}</Heading>{canEdit && <Flex gap="2" wrap="wrap"><Button variant="outline" onClick={() => setCollectionSettings({ kind: "edit", id: collection.id })}>{t("集合与目录设置")}</Button><Button variant="outline" onClick={() => setCollectionSettings({ kind: "create", parent_id: collection.id })}>{t("新建目录")}</Button><Button variant="outline" onClick={() => addHttpRequest()}>{t("新增 HTTP 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("data")}>{t("新增 Data 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("graphql")}>{t("新增 GraphQL 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("sse")}>{t("新增 SSE 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("websocket")}>{t("新增 WebSocket 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("tcp")}>{t("新增 TCP 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("socketio")}>{t("新增 Socket.IO 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("grpc")}>{t("新增 gRPC 请求")}</Button><Button loading={running} disabled={running || dirty || !runOptionsValid || collection.requests.length === 0} onClick={() => void runCollection()}>{t("运行集合")}</Button></Flex>}</Flex>}
+          {collection && <Flex align="center" justify="between" gap="2" wrap="wrap"><Heading size="3">{collection.name}</Heading>{canEdit && <Flex gap="2" wrap="wrap"><Button variant="outline" onClick={() => setCollectionSettings({ kind: "edit", id: collection.id })}>{t("集合与目录设置")}</Button><Button variant="outline" onClick={() => setCollectionSettings({ kind: "create", parent_id: collection.id })}>{t("新建目录")}</Button><Button variant="outline" onClick={() => addHttpRequest()}>{t("新增 HTTP 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("data")}>{t("新增 Data 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("graphql")}>{t("新增 GraphQL 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("sse")}>{t("新增 SSE 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("websocket")}>{t("新增 WebSocket 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("tcp")}>{t("新增 TCP 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("socketio")}>{t("新增 Socket.IO 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("mqtt")}>{t("新增 MQTT 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("grpc")}>{t("新增 gRPC 请求")}</Button><Button loading={running} disabled={running || dirty || !runOptionsValid || collection.requests.length === 0} onClick={() => void runCollection()}>{t("运行集合")}</Button></Flex>}</Flex>}
           {canEdit && collection && <SharedResourceActions key={`${scope}/${saved?.revision}/${conflict?.revision ?? ""}`} data={draft.data} workspaceName={draft.name} collectionId={collection.id} requestId={request?.id} onChange={applyResourceChange} />}
           {canEdit && dirty && <Text size="1" color="gray">{t("先保存修改，再运行集合。")}</Text>}
           {runResult && <Text role="status" size="2">{t("通过")}: {runResult.passed} · {t("失败")}: {runResult.failed}{runResult.cancelled && <> · {t("已取消")}</>}</Text>}
@@ -434,22 +439,23 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
             {request && (canEdit ? <Flex direction="column" gap="3">
               <Field label={t("请求名称")}><TextField.Root value={request.name} onChange={(event) => updateSelectedRequest({ name: event.target.value })} /></Field>
               {request.protocol?.kind !== "data" && <Flex className="shared-request-line" gap="2" wrap="wrap">
-                {!graphqlRequest && !httpLiveRequest && !tcpRequest && !grpcRequest && <Choice label={t("方法")} value={request.method} onChange={(method) => updateSelectedRequest({ method })} options={["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].map((value) => ({ value, label: value }))} />}
+                {!graphqlRequest && !httpLiveRequest && !tcpRequest && !grpcRequest && !mqttRequest && <Choice label={t("方法")} value={request.method} onChange={(method) => updateSelectedRequest({ method })} options={["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].map((value) => ({ value, label: value }))} />}
                 <Field label={t("请求地址")}><TextField.Root value={request.url} onChange={(event) => updateSelectedRequest({ url: event.target.value })} /></Field>
               </Flex>}
               <Field label={t("描述")}><TextArea value={request.description} onChange={(event) => updateSelectedRequest({ description: event.target.value })} /></Field>
               {httpRequest && <SharedRequestSpecification key={`${scope}/${collection.id}/${request.id}/${saved?.revision}`} request={request} specifications={draft.data.specifications ?? []} onChange={updateSelectedRequest} />}
               {request.protocol?.kind === "data" && <SharedDataRequestEditor key={`${scope}/${collection.id}/${request.id}/${saved?.revision}/${conflict?.revision ?? ""}`} request={request} dark={dark} isCurrent={() => datasetContextCurrent() && !conflict} onChange={updateSelectedRequest} />}
+              {mqttRequest && <SharedMqttRequestEditor key={`${scope}/${request.id}/${saved?.revision}/${conflict?.revision ?? ""}`} scope={`${scope}/${request.id}/${saved?.revision}/${conflict?.revision ?? ""}`} request={request} dark={dark} disabled={saving || !!conflict} isCurrent={() => datasetContextCurrent() && selectedRequestRef.current === request.id && !conflict} onChange={updateSelectedRequest} />}
               {socketIoRequest && <SharedSocketIoRequestEditor key={`${scope}/${request.id}/${saved?.revision}/${conflict?.revision ?? ""}`} scope={`${scope}/${request.id}/${saved?.revision}/${conflict?.revision ?? ""}`} request={request} dark={dark} disabled={saving || !!conflict} isCurrent={() => datasetContextCurrent() && selectedRequestRef.current === request.id && !conflict} onChange={updateSelectedRequest} />}
               {tcpRequest && <SharedTcpRequestEditor key={`${scope}/${request.id}/${saved?.revision}/${conflict?.revision ?? ""}`} request={request} scope={`${scope}/${request.id}/${saved?.revision}/${conflict?.revision ?? ""}`} dark={dark} disabled={saving || !!conflict} isCurrent={() => datasetContextCurrent() && selectedRequestRef.current === request.id && !conflict} onChange={updateSelectedRequest} />}
-              {(httpRequest || graphqlRequest || httpLiveRequest || grpcRequest) && <Tabs.Root key={`${collection.id}/${request.id}/${saved?.revision}`} value={((graphqlRequest || httpLiveRequest || grpcRequest) && requestEditorTab === "body") || ((httpLiveRequest || grpcRequest) && requestEditorTab === "assertions") || (grpcRequest && requestEditorTab === "query") ? "headers" : requestEditorTab} onValueChange={setRequestEditorTab}>
+              {(httpRequest || graphqlRequest || httpLiveRequest || grpcRequest || mqttRequest) && <Tabs.Root key={`${collection.id}/${request.id}/${saved?.revision}`} value={mqttRequest && (["query", "body", "assertions"].includes(requestEditorTab) || (requestEditorTab === "headers" && !mqttWebsocket)) ? "auth" : ((graphqlRequest || httpLiveRequest || grpcRequest) && requestEditorTab === "body") || ((httpLiveRequest || grpcRequest) && requestEditorTab === "assertions") || (grpcRequest && requestEditorTab === "query") ? "headers" : requestEditorTab} onValueChange={setRequestEditorTab}>
                 <Tabs.List className="shared-request-tabs">
                   {[
                     { value: "query", label: t("参数") }, { value: "headers", label: t("请求头") },
                     { value: "body", label: t("请求体") }, { value: "auth", label: t("鉴权") },
                     { value: "assertions", label: t("断言") }, { value: "scripts", label: t("脚本") },
                     { value: "network", label: t("网络设置") },
-                  ].filter((tab) => (!graphqlRequest || tab.value !== "body") && (!httpLiveRequest || !["body", "assertions"].includes(tab.value)) && (!grpcRequest || !["query", "body", "assertions"].includes(tab.value))).map(({ value, label }) => <Tabs.Trigger key={value} value={value}>{label}</Tabs.Trigger>)}
+                  ].filter((tab) => (!graphqlRequest || tab.value !== "body") && (!httpLiveRequest || !["body", "assertions"].includes(tab.value)) && (!grpcRequest || !["query", "body", "assertions"].includes(tab.value)) && (!mqttRequest || (!["query", "body", "assertions"].includes(tab.value) && (tab.value !== "headers" || mqttWebsocket)))).map(({ value, label }) => <Tabs.Trigger key={value} value={value}>{label}</Tabs.Trigger>)}
                 </Tabs.List>
                 <Tabs.Content value="query"><PairEditor rows={request.query} onChange={(query) => updateSelectedRequest({ query })} keyLabel={t("参数名")} valueLabel={t("参数值")} /></Tabs.Content>
                 <Tabs.Content value="headers"><PairEditor rows={request.headers} onChange={(headers) => updateSelectedRequest({ headers })} keyLabel="Header" valueLabel={t("值")} secrets /></Tabs.Content>
@@ -459,13 +465,13 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
                     {["binary", "multipart"].includes(request.body_kind) ? <RequestBodyEditor key={`${scope}/${collection.id}/${request.id}/${saved?.revision}/${request.body_kind}`} kind={request.body_kind} value={request.body} change={(body) => updateSelectedRequest({ body })} busy={saving || sending || running} dark={dark} /> : request.body_kind === "none" ? <Text size="2" color="gray">{t("此请求不发送 Body。")}</Text> : <Editor label={t("请求正文")} value={request.body} onChange={(body) => updateSelectedRequest({ body })} dark={dark} jsonMode={request.body_kind === "json"} height="210px" />}
                   </Flex>
                 </Tabs.Content>
-                <Tabs.Content value="auth"><RequestAuthEditor auth={request.auth} change={(auth) => updateSelectedRequest({ auth })} dark={dark} collectionId={collection?.id ?? null} tokenManagement={false} {...authenticationEligibility(request)} /></Tabs.Content>
+                <Tabs.Content value="auth">{mqttRequest ? <Flex direction="column" gap="3"><Choice label={t("鉴权类型")} value={request.auth.kind} onChange={(kind) => updateSelectedRequest({ auth: { ...request.auth, kind: kind as RequestSpec["auth"]["kind"] } })} options={[{ value: "inherit", label: t("继承父级鉴权") }, { value: "none", label: "No Auth" }, { value: "basic", label: "Basic Auth" }]} />{request.auth.kind === "basic" && <><Field label={t("用户名")}><TextField.Root value={request.auth.username} autoComplete="off" onChange={(event) => updateSelectedRequest({ auth: { ...request.auth, username: event.target.value } })} /></Field><Field label={t("密码")}><TextField.Root type="password" autoComplete="off" value={request.auth.password} onChange={(event) => updateSelectedRequest({ auth: { ...request.auth, password: event.target.value } })} /></Field></>}</Flex> : <RequestAuthEditor auth={request.auth} change={(auth) => updateSelectedRequest({ auth })} dark={dark} collectionId={collection?.id ?? null} tokenManagement={false} {...authenticationEligibility(request)} />}</Tabs.Content>
                 <Tabs.Content value="assertions"><AssertionsEditor request={request} update={updateSelectedRequest} dark={dark} /><ExtractionsEditor request={request} update={updateSelectedRequest} /></Tabs.Content>
                 <Tabs.Content value="scripts"><RequestScripts request={request} update={updateSelectedRequest} dark={dark} /></Tabs.Content>
-                <Tabs.Content value="network"><Flex direction="column" gap="3"><NetworkSettings key={`${scope}/${collection.id}/${request.id}/${saved?.revision}/${conflict?.revision ?? ""}`} value={request.network} change={(network) => { if (datasetContextCurrent() && selectedRequestRef.current === request.id && !conflict) updateSelectedRequest({ network }); }} disabled={saving || !!conflict} ntlm={request.auth.kind === "ntlm"} websocket={websocketRequest} grpc={grpcRequest} />
+                <Tabs.Content value="network"><Flex direction="column" gap="3"><NetworkSettings key={`${scope}/${collection.id}/${request.id}/${saved?.revision}/${conflict?.revision ?? ""}`} value={request.network} change={(network) => { if (datasetContextCurrent() && selectedRequestRef.current === request.id && !conflict) updateSelectedRequest({ network }); }} disabled={saving || !!conflict} ntlm={request.auth.kind === "ntlm"} websocket={websocketRequest} grpc={grpcRequest} mqtt={mqttRequest} />
                   <Field label={t("请求超时 (ms)")}><TextField.Root type="number" min="100" max="120000" value={request.timeout_ms} onChange={(event) => updateSelectedRequest({ timeout_ms: Number(event.target.value) })} /></Field>
                   <label className="checkbox-label"><Checkbox checked={request.verify_tls} onCheckedChange={(value) => updateSelectedRequest({ verify_tls: value === true })} />{t("验证 TLS 证书")}</label>
-                  {!grpcRequest && <label className="checkbox-label"><Checkbox checked={request.follow_redirects} onCheckedChange={(value) => updateSelectedRequest({ follow_redirects: value === true })} />{t("自动跟随重定向")}</label>}
+                  {!grpcRequest && !mqttRequest && <label className="checkbox-label"><Checkbox checked={request.follow_redirects} onCheckedChange={(value) => updateSelectedRequest({ follow_redirects: value === true })} />{t("自动跟随重定向")}</label>}
                 </Flex></Tabs.Content>
               </Tabs.Root>}
             </Flex> : <Flex direction="column" gap="1"><Text weight="medium">{request.method} {request.name}</Text><Text size="2" style={{ overflowWrap: "anywhere" }}>{request.url}</Text><Text size="2" color="gray">{request.description}</Text></Flex>)}

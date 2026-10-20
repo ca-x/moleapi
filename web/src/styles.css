@@ -1438,3 +1438,12 @@ kbd {
 .shared-grpc .grpc-tabs { flex:none; min-height:0; }
 .shared-grpc .grpc-tabs > .rt-TabsContent[data-state="active"] { flex:none; overflow:visible; }
 .shared-grpc .grpc-tabs > .rt-TabsContent > .code-editor { flex:none; min-height:0; }
+
+.shared-mqtt { min-width:0; max-width:100%; }
+.shared-mqtt .mqtt-workbench { height:auto; }
+.shared-mqtt .grpc-tabs { flex:none; min-height:0; }
+.shared-mqtt .grpc-tabs > .rt-TabsContent[data-state="active"] { flex:none; overflow:visible; }
+.shared-mqtt .mqtt-message-editor .code-editor { flex:none; height:240px; min-height:0; }
+.shared-mqtt .protocol-events { height:360px; flex:none; min-height:0; }
+.shared-mqtt .protocol-event-list { min-width:0; }
+.shared-mqtt .protocol-event-list .rt-ScrollAreaViewport > div { width:100%; min-width:0!important; }

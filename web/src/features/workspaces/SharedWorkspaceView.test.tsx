@@ -1008,6 +1008,7 @@ it("creates the first collection in an empty shared workspace only after Apply a
   const shared: Workspace = { ...workspace, data: { ...workspace.data, collections: [] } };
   vi.mocked(api).mockImplementation((_path, method, body) => Promise.resolve(method === "PUT" ? { ...shared, revision: 4, data: (body as { data: Workspace["data"] }).data } : shared));
   render(view("editor"));
+  await screen.findByRole("textbox", { name: "工作区名称" });
   fireEvent.click(await screen.findByRole("button", { name: "新建集合" }));
   fireEvent.change(screen.getByRole("textbox", { name: "名称" }), { target: { value: "First collection" } });
   expect(vi.mocked(api).mock.calls.some(([, method]) => method === "PUT")).toBe(false);
@@ -2015,6 +2016,49 @@ it("stages a shared Proto definition, saves explicitly and keeps gRPC stream mes
   await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/sessions/grpc-a/send`, "POST", { kind: "grpc_half_close" }));
   expect((live.getByRole("button", { name: "发送消息" }) as HTMLButtonElement).disabled).toBe(true);
   expect(canonical.data.collections[0].requests.at(-1)?.protocol).toMatchObject({ message_source: '{"text":"first"}' });
+  expect((screen.getByRole("button", { name: "保存共享工作区" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(vi.mocked(api).mock.calls.every(([path]) => path.startsWith(base))).toBe(true);
+});
+
+it("saves shared MQTT configuration explicitly and keeps live publish and subscriptions local", async () => {
+  let canonical = structuredClone(workspace);
+  const session = { id: "mqtt-a", protocol: "mqtt", state: "open", url: "mqtt://fixture.test:1883", received_bytes: 0, sent_bytes: 0, handshake: null };
+  vi.mocked(api).mockImplementation((path, method, body) => {
+    if (path === base && method === "PUT") { canonical = { ...canonical, revision: canonical.revision + 1, data: (body as Workspace).data }; return Promise.resolve(canonical); }
+    if (path === `${base}/sessions` || path === `${base}/sessions/mqtt-a`) return Promise.resolve(session);
+    if (path.startsWith(`${base}/sessions/mqtt-a/events`)) return Promise.resolve({ events: [], next_cursor: 0, earliest_cursor: 0, dropped_count: 0 });
+    if (path.endsWith("/send")) return Promise.resolve({ ok: true });
+    return Promise.resolve(canonical);
+  });
+  render(view("editor")); fireEvent.click(await screen.findByRole("button", { name: "新增 MQTT 请求" }));
+  fireEvent.change(screen.getByLabelText("请求地址"), { target: { value: "mqtt://fixture.test:1883" } });
+  const source = within(screen.getByRole("region", { name: "共享 MQTT 请求设置" }));
+  fireEvent.change(source.getByLabelText("MQTT 消息 Topic"), { target: { value: "saved/topic" } });
+  fireEvent.change(source.getByLabelText("MQTT 消息 Payload"), { target: { value: "saved payload" } });
+  fireEvent.change(source.getByLabelText("消息名称"), { target: { value: "Shared template" } });
+  fireEvent.click(source.getByRole("button", { name: "保存新消息" }));
+  expect(canonical.revision).toBe(3);
+  expect((screen.getByRole("button", { name: "连接" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.queryByRole("tab", { name: "请求体" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(canonical.revision).toBe(4));
+  const protocol = structuredClone(canonical.data.collections[0].requests.at(-1)!.protocol);
+  expect(protocol).toMatchObject({ kind: "mqtt", message: { topic: "saved/topic", payload_source: "saved payload" }, saved_messages: [{ name: "Shared template" }] });
+  await waitFor(() => expect((screen.getByRole("button", { name: "连接" }) as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(screen.getByRole("button", { name: "连接" }));
+  const live = within(await screen.findByRole("region", { name: "共享 MQTT 实时消息" }));
+  expect(vi.mocked(api).mock.calls.some(([path]) => path.endsWith("/send"))).toBe(false);
+  expect(live.queryByRole("tab", { name: "连接设置" })).toBeNull();
+  expect(live.queryByRole("tab", { name: "Last Will" })).toBeNull();
+  expect(live.queryByRole("button", { name: "保存新消息" })).toBeNull();
+  fireEvent.change(live.getByLabelText("MQTT 消息 Payload"), { target: { value: "temporary payload" } });
+  fireEvent.click(live.getByRole("button", { name: "发布" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/sessions/mqtt-a/send`, "POST", expect.objectContaining({ kind: "mqtt_publish", message: expect.objectContaining({ topic: "saved/topic", payload_source: "temporary payload" }) })));
+  fireEvent.mouseDown(live.getByRole("tab", { name: /Topics/ }), { button: 0 });
+  fireEvent.change(live.getByLabelText("Topic Filter"), { target: { value: "live/#" } });
+  fireEvent.click(live.getByRole("button", { name: "添加订阅" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/sessions/mqtt-a/send`, "POST", expect.objectContaining({ kind: "mqtt_subscribe", subscription: expect.objectContaining({ filter: "live/#" }) })));
+  expect(canonical.data.collections[0].requests.at(-1)!.protocol).toEqual(protocol);
   expect((screen.getByRole("button", { name: "保存共享工作区" }) as HTMLButtonElement).disabled).toBe(true);
   expect(vi.mocked(api).mock.calls.every(([path]) => path.startsWith(base))).toBe(true);
 });
