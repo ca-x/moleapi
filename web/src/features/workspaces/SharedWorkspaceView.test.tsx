@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Theme } from "@radix-ui/themes";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { api, pickFile, previewSharedMock, token } from "../../shared/api";
+import { api, pickFile, previewSharedMock, saveFile, token } from "../../shared/api";
 import { setLanguage } from "../../shared/i18n";
 import { initialData } from "../../shared/model";
 import { dataConfig } from "../data/model";
@@ -14,7 +14,7 @@ import type { SharedWorkspaceSummary, Workspace } from "../../shared/types";
 import SharedWorkspaceView from "./SharedWorkspaceView";
 
 const graphqlEditors = vi.hoisted(() => ({ last: null as null | ((patch: Partial<import("../../shared/types").GraphQLConfig>) => void) }));
-vi.mock("../../shared/api", () => ({ api: vi.fn(), pickFile: vi.fn(), previewSharedMock: vi.fn(), token: vi.fn() }));
+vi.mock("../../shared/api", () => ({ api: vi.fn(), pickFile: vi.fn(), previewSharedMock: vi.fn(), saveFile: vi.fn(), token: vi.fn() }));
 vi.mock("../graphql/GraphQLIDE", async () => {
   const { useState } = await import("react");
   return { default: ({ config, onChange, fetcher }: { config: import("../../shared/types").GraphQLConfig; onChange: (patch: Partial<import("../../shared/types").GraphQLConfig>) => void; fetcher: (params: { query: string; variables: Record<string, unknown>; operationName?: string }) => Promise<unknown> }) => {
@@ -2096,4 +2096,47 @@ it("stages shared WSDL, saves the binding explicitly and sends a temporary SOAP 
   expect(await screen.findByText("Server: Actual fault")).toBeTruthy();
   expect(canonical.data.collections[0].requests.at(-1)?.body).toBe(template);
   expect(vi.mocked(api).mock.calls.every(([path]) => path.startsWith(base))).toBe(true);
+});
+
+it("imports and explicitly saves shared MCP config, exports via member route and keeps calls and callbacks local", async () => {
+  let canonical=structuredClone(workspace);
+  const session={id:"mcp-a",protocol:"mcp",state:"open",url:"http://fixture.test/mcp",received_bytes:0,sent_bytes:0,handshake:null};
+  const events=[{cursor:1,received_at:"now",direction:"incoming",message:{kind:"mcp_capabilities",tools:[{name:"echo",inputSchema:{type:"object"}}],resources:[],resource_templates:[],prompts:[]}},{cursor:2,received_at:"now",direction:"incoming",message:{kind:"mcp_callback",callback_id:"roots-a",method:"roots/list",params:{}}}];
+  vi.mocked(saveFile).mockReset();vi.mocked(saveFile).mockResolvedValue(undefined);
+  vi.mocked(api).mockImplementation((path,method,body)=>{
+    if(path===base&&method==="PUT"){canonical={...canonical,revision:canonical.revision+1,data:(body as Workspace).data};return Promise.resolve(canonical);}
+    if(path===`${base}/mcp/config/export`)return Promise.resolve(canonical.data.collections[0].requests.at(-1));
+    if(path===`${base}/sessions`||path===`${base}/sessions/mcp-a`)return Promise.resolve(session);
+    if(path.startsWith(`${base}/sessions/mcp-a/events`))return Promise.resolve({events,next_cursor:2,earliest_cursor:1,dropped_count:0});
+    if(path.endsWith('/send'))return Promise.resolve({ok:true});return Promise.resolve(canonical);
+  });
+  render(view('editor'));fireEvent.click(await screen.findByRole('button',{name:'新增 MCP 请求'}));
+  fireEvent.click(screen.getByRole('button',{name:'Host 配置'}));
+  const input='{ "mcpServers": { "Fixture": { "url": "http://fixture.test/mcp", "headers": {"X-Origin":"canonical"}, "vendor": true } } }';
+  fireEvent.change(await screen.findByLabelText('MCP Host JSON'),{target:{value:input}});fireEvent.click(screen.getByRole('button',{name:'验证配置'}));fireEvent.click(screen.getByRole('button',{name:'使用所选配置'}));
+  const confirm=await screen.findByRole('alertdialog');fireEvent.click(within(confirm).getByRole('button',{name:'使用所选配置'}));await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull());
+  expect(canonical.revision).toBe(3);expect(vi.mocked(api).mock.calls.some(([,method])=>method==='PUT')).toBe(false);
+  fireEvent.change(screen.getByLabelText('MCP 方法名称'),{target:{value:'echo'}});fireEvent.change(screen.getByLabelText('MCP JSON 参数'),{target:{value:'{"text":"saved"}'}});
+  fireEvent.click(screen.getByRole('button',{name:'保存共享工作区'}));await waitFor(()=>expect(canonical.revision).toBe(4));
+  const saved=structuredClone(canonical.data.collections[0].requests.at(-1)!);expect(saved).toMatchObject({url:'http://fixture.test/mcp',protocol:{kind:'mcp',name:'echo',arguments_source:'{"text":"saved"}',config_source:expect.stringContaining('"vendor": true')}});
+  fireEvent.click(screen.getByRole('button',{name:'Host 配置'}));fireEvent.click(await screen.findByRole('button',{name:'导出 Host 配置'}));
+  await waitFor(()=>expect(api).toHaveBeenCalledWith(`${base}/mcp/config/export`,'POST',{request_id:saved.id,expected_revision:4,include_secrets:false,host_name:saved.name}));await waitFor(()=>expect(saveFile).toHaveBeenCalled());fireEvent.click(screen.getByRole('button',{name:'关闭'}));
+  fireEvent.click(screen.getByRole('button',{name:'连接'}));const live=within(await screen.findByRole('region',{name:'共享 MCP 实时调用'}));expect(live.queryByRole('button',{name:'Host 配置'})).toBeNull();
+  expect(vi.mocked(api).mock.calls.some(([path])=>path.endsWith('/send'))).toBe(false);
+  fireEvent.change(live.getByLabelText('MCP JSON 参数'),{target:{value:'{"text":"temporary"}'}});fireEvent.click(live.getByRole('button',{name:'运行'}));
+  await waitFor(()=>expect(api).toHaveBeenCalledWith(`${base}/sessions/mcp-a/send`,'POST',expect.objectContaining({kind:'mcp_request',method:'tools/call',name:'echo',arguments_source:'{"text":"temporary"}'})));
+  fireEvent.click(live.getByRole('button',{name:/停止/}));await waitFor(()=>expect(api).toHaveBeenCalledWith(`${base}/sessions/mcp-a/send`,'POST',expect.objectContaining({kind:'mcp_cancel'})));
+  fireEvent.click(live.getByRole('button',{name:/处理回调/}));fireEvent.change(await screen.findByLabelText('MCP 回调响应'),{target:{value:'{"roots":[]}'}});fireEvent.click(screen.getByRole('button',{name:'发送响应'}));
+  await waitFor(()=>expect(api).toHaveBeenCalledWith(`${base}/sessions/mcp-a/send`,'POST',{kind:'mcp_callback',callback_id:'roots-a',result:{roots:[]}}));
+  expect(canonical.data.collections[0].requests.at(-1)).toEqual(saved);expect((screen.getByRole('button',{name:'保存共享工作区'}) as HTMLButtonElement).disabled).toBe(true);
+  expect(vi.mocked(api).mock.calls.every(([path])=>path.startsWith(base))).toBe(true);
+});
+
+it("switches shared MCP HTTP auth to STDIO settings without leaving hidden HTTP controls mounted",async()=>{
+  render(view('editor'));fireEvent.click(await screen.findByRole('button',{name:'新增 MCP 请求'}));
+  fireEvent.mouseDown(screen.getByRole('tab',{name:/鉴权/}),{button:0});expect(screen.getByLabelText('鉴权类型')).toBeTruthy();
+  fireEvent.change(screen.getByLabelText('MCP 传输'),{target:{value:'stdio'}});
+  expect(screen.queryByLabelText('鉴权类型')).toBeNull();expect(screen.queryByRole('tab',{name:'请求头'})).toBeNull();
+  fireEvent.mouseDown(screen.getByRole('tab',{name:/网络设置/}),{button:0});expect(screen.queryByLabelText('HTTP 版本')).toBeNull();expect(screen.queryByLabelText('验证 TLS 证书')).toBeNull();
+  expect(screen.getByLabelText('请求超时 (ms)')).toBeTruthy();
 });

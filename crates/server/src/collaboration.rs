@@ -24,6 +24,8 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::future::Future;
 
+mod mcp;
+pub use mcp::shared_mcp_config_export;
 mod soap;
 pub use soap::{shared_soap_import, shared_soap_import_url, shared_soap_schema};
 mod grpc;
@@ -771,9 +773,10 @@ pub async fn shared_session_create(
             | moleapi_core::Protocol::Socketio { .. }
             | moleapi_core::Protocol::Grpc { .. }
             | moleapi_core::Protocol::Mqtt { .. }
+            | moleapi_core::Protocol::Mcp { .. }
     ) {
         return Err(ApiError::bad(
-            "Shared live sessions support saved SSE, WebSocket, Data, TCP, Socket.IO, gRPC, MQTT and GraphQL subscriptions",
+            "Shared live sessions support saved SSE, WebSocket, Data, TCP, Socket.IO, gRPC, MQTT, MCP and GraphQL subscriptions",
         ));
     }
     if request.protocol.is_graphql()
@@ -941,6 +944,12 @@ pub async fn shared_session_send(
             message,
             SendMessage::Text { .. } | SendMessage::Binary { .. } | SendMessage::Ping { .. }
         ),
+        "mcp" => matches!(
+            message,
+            SendMessage::McpRequest { .. }
+                | SendMessage::McpCallback { .. }
+                | SendMessage::McpCancel { .. }
+        ),
         "mqtt" => matches!(
             message,
             SendMessage::MqttPublish { .. }
@@ -977,7 +986,7 @@ pub async fn shared_session_send(
     }
     if matches!(
         summary.protocol.as_str(),
-        "data" | "tcp" | "socketio" | "grpc" | "mqtt"
+        "data" | "tcp" | "socketio" | "grpc" | "mqtt" | "mcp"
     ) {
         let action = match &message {
             SendMessage::DataQuery { .. } => "protocol.data.query",
@@ -993,6 +1002,9 @@ pub async fn shared_session_send(
             SendMessage::MqttSubscribe { .. } => "protocol.mqtt.subscribe",
             SendMessage::MqttUnsubscribe { .. } => "protocol.mqtt.unsubscribe",
             SendMessage::MqttAbort => "protocol.mqtt.abort",
+            SendMessage::McpRequest { .. } => "protocol.mcp.request",
+            SendMessage::McpCallback { .. } => "protocol.mcp.callback",
+            SendMessage::McpCancel { .. } => "protocol.mcp.cancel",
             _ => "protocol.data.schema",
         };
         let audit = state.db.begin().await?;

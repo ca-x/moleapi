@@ -35,7 +35,7 @@ it("default host export uses centralized redaction and discards a late owner's r
   vi.mocked(api).mockImplementation(()=>new Promise(done=>{resolve=done;}));
   const view=render(<McpConfigDialog open onOpenChange={vi.fn()}/>);
   fireEvent.click(screen.getByRole("button",{name:"导出 Host 配置"}));
-  expect(api).toHaveBeenCalledWith("/api/workspaces/workspace/export","POST",{format:"moleapi",include_secrets:false});
+  expect(api).toHaveBeenCalledWith("/api/workspaces/workspace/mcp/config/export","POST",{request_id:"request",include_secrets:false,host_name:"MCP"});
   state.accountId="second";view.rerender(<McpConfigDialog open onOpenChange={vi.fn()}/>);
   await act(async()=>{resolve({content:"{}"});});
   expect(saveFile).not.toHaveBeenCalled();

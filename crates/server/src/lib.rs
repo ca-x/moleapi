@@ -16,6 +16,7 @@ mod generation_projects;
 mod graphql;
 mod grpc;
 mod history;
+mod mcp_config;
 mod mock;
 mod mock_logs;
 mod mock_public;
@@ -498,6 +499,10 @@ async fn build(
             get(collaboration::shared_mock),
         )
         .route(
+            "/owners/{owner}/workspaces/{workspace}/mcp/config/export",
+            post(collaboration::shared_mcp_config_export),
+        )
+        .route(
             "/owners/{owner}/workspaces/{workspace}/soap/import",
             post(collaboration::shared_soap_import),
         )
@@ -789,6 +794,10 @@ async fn build(
         .route("/a2a/cards/discover", post(a2a::discover))
         .route("/graphql/introspect", post(graphql::introspect))
         .route("/graphql/schema", post(graphql::schema))
+        .route(
+            "/workspaces/{workspace}/mcp/config/export",
+            post(mcp_config::export),
+        )
         .route("/grpc/schema", post(grpc::schema))
         .route("/grpc/import", post(grpc::import))
         .route("/grpc/reflect", post(grpc::reflect))

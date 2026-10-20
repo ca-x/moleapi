@@ -1457,3 +1457,12 @@ kbd {
 .shared-soap .rt-CalloutRoot[role="alert"] { grid-template-columns:minmax(0,1fr); }
 .shared-soap .rt-CalloutRoot[role="alert"] > .code-editor { min-width:0; max-width:100%; width:100%; }
 .shared-soap .rt-CalloutRoot[role="alert"] .rt-CalloutText { color:var(--red-12); }
+
+.shared-mcp { min-width:0; max-width:100%; }
+.shared-mcp .mcp-workbench { height:auto; overflow:visible; }
+.shared-mcp .mcp-tabs { flex:none; min-height:0; }
+.shared-mcp .mcp-tabs > .rt-TabsContent[data-state="active"] { flex:none; overflow:visible; }
+.shared-mcp .mcp-tabs > .rt-TabsContent > .code-editor { flex:none; height:240px; }
+.shared-mcp .protocol-events { height:360px; flex:none; min-height:0; }
+.shared-mcp .protocol-event-list { min-width:0; }
+.shared-mcp .protocol-event-list .rt-ScrollAreaViewport > div { width:100%; min-width:0!important; }

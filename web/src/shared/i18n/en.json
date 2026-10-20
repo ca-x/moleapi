@@ -1,4 +1,10 @@
 {
+  "新增 MCP 请求": "Add MCP request",
+  "共享 MCP 请求设置": "Shared MCP request settings",
+  "共享 MCP 实时调用": "Shared MCP live calls",
+  "能力选择与参数修改仅用于当前连接，不会自动保存到共享请求。": "Capability selection and argument edits apply only to this connection and are not saved to the shared request.",
+  "先保存工作区，再导出 MCP 配置。": "Save the workspace before exporting an MCP configuration.",
+  "MCP 操作已取消": "MCP operation cancelled",
   "新增 SOAP 请求": "Add SOAP request",
   "共享 SOAP 客户端": "Shared SOAP client",
   "先保存工作区，再导入或读取 SOAP 定义。": "Save the workspace before importing or reading SOAP definitions.",
