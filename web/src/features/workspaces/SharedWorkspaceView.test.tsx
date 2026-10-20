@@ -1262,3 +1262,99 @@ it("stops a running saved scenario using the original member job ID",async()=>{
 it("hides scenario editing and execution from viewers",async()=>{
   render(view("viewer"));await screen.findByLabelText("请求");expect(screen.queryByRole("button",{name:"工作区测试场景"})).toBeNull();expect(screen.queryByRole("button",{name:"运行已保存场景"})).toBeNull();
 });
+
+it.each(["edit", "selection", "delete", "save", "remote"] as const)("keeps the active creator job stoppable after %s invalidates its inline result", async (change) => {
+  const shared=structuredClone(workspace);shared.data.collections.push({id:"other",name:"Other",description:"",requests:[{...shared.data.collections[0].requests[0],id:"other-request"}]});
+  let finish!:(value:unknown)=>void;
+  vi.mocked(api).mockImplementation((path,method,body)=>{
+    if(path===`${base}/run`)return new Promise(resolve=>{finish=resolve;});
+    if(path===`${base}/run/cancel`)return Promise.resolve({cancelled:true});
+    if(method==="PUT")return Promise.resolve({...shared,revision:4,name:(body as {name:string}).name,data:(body as {data:Workspace["data"]}).data});
+    return Promise.resolve(shared);
+  });
+  render(view("editor"));fireEvent.click(await screen.findByRole("button",{name:"运行集合"}));
+  await waitFor(()=>expect(finish).toBeTypeOf("function"));
+  const job=vi.mocked(api).mock.calls.find(([path])=>path===`${base}/run`)?.[2] as {job_id:string};
+  if(change==="edit"||change==="save")fireEvent.change(screen.getByLabelText("工作区名称"),{target:{value:"Edited while running"}});
+  if(change==="save"){fireEvent.click(screen.getByRole("button",{name:"保存共享工作区"}));await waitFor(()=>expect(api).toHaveBeenCalledWith(base,"PUT",expect.anything()));}
+  if(change==="selection")fireEvent.change(screen.getByLabelText("集合"),{target:{value:"other"}});
+  if(change==="delete"){fireEvent.click(screen.getByRole("button",{name:"删除集合"}));fireEvent.click(screen.getByRole("button",{name:"确认删除"}));}
+  if(change==="remote")await act(async()=>client.setQueryData(["shared-workspace","member","owner-id","w","editor",0],{...shared,revision:4}));
+  expect(screen.getByRole("button",{name:"停止集合运行"})).toBeTruthy();
+  expect(screen.getByRole("button",{name:"运行集合"})).toHaveProperty("disabled",true);
+  fireEvent.click(screen.getByRole("button",{name:"停止集合运行"}));
+  await waitFor(()=>expect(api).toHaveBeenCalledWith(`${base}/run/cancel`,"POST",{job_id:job.job_id}));
+  expect(screen.getByRole("button",{name:"停止集合运行"})).toBeTruthy();
+  await act(async()=>finish({passed:17,failed:0,cancelled:true}));
+  await waitFor(()=>expect(screen.queryByRole("button",{name:"停止集合运行"})).toBeNull());
+  expect(screen.queryByText(/17/)).toBeNull();
+  expect(vi.mocked(api).mock.calls.filter(([path])=>path===`${base}/run`)).toHaveLength(1);
+});
+
+it("keeps one active Stop across every shared page and after deleting the last collection",async()=>{
+  let finish!:(value:unknown)=>void;
+  vi.mocked(api).mockImplementation((path)=>path===`${base}/run`?new Promise(resolve=>{finish=resolve;}):Promise.resolve(path.endsWith("/history")||path.endsWith("/mock-calls")?[]:path.endsWith("/reports")?{items:[],next_cursor:null}:workspace));
+  render(view("editor"));fireEvent.click(await screen.findByRole("button",{name:"运行集合"}));await waitFor(()=>expect(finish).toBeTypeOf("function"));
+  for(const name of ["文档","环境变量","工作区测试场景","执行历史","测试报告","Mock 预览","资源"]){fireEvent.click(screen.getByRole("button",{name}));expect(screen.getAllByRole("button",{name:"停止集合运行"})).toHaveLength(1);}
+  fireEvent.click(screen.getByRole("button",{name:"删除集合"}));fireEvent.click(screen.getByRole("button",{name:"确认删除"}));
+  expect(screen.getByText("此工作区还没有集合")).toBeTruthy();expect(screen.getByRole("button",{name:"停止集合运行"})).toBeTruthy();
+  await act(async()=>finish({passed:0,failed:0,cancelled:true}));
+});
+
+it.each(["success","failure"] as const)("releases an invalidated job after actual %s and permits a later saved run",async(outcome)=>{
+  let finish!:(value:unknown)=>void;let fail!:(error:Error)=>void;let runs=0;
+  vi.mocked(api).mockImplementation((path,method,body)=>{
+    if(path===`${base}/run`){runs++;return runs===1?new Promise((resolve,reject)=>{finish=resolve;fail=reject;}):Promise.resolve({passed:1,failed:0,cancelled:false});}
+    return Promise.resolve(method==="PUT"?{...workspace,revision:4,name:(body as {name:string}).name}:workspace);
+  });
+  render(view("editor"));fireEvent.click(await screen.findByRole("button",{name:"运行集合"}));await waitFor(()=>expect(finish).toBeTypeOf("function"));
+  fireEvent.change(screen.getByLabelText("工作区名称"),{target:{value:"Changed"}});
+  await act(async()=>{if(outcome==="success")finish({passed:19,failed:0,cancelled:false});else fail(new Error("old failure"));});
+  expect(screen.queryByRole("button",{name:"停止集合运行"})).toBeNull();expect(screen.queryByText(/19|old failure/)).toBeNull();
+  fireEvent.click(screen.getByRole("button",{name:"保存共享工作区"}));await waitFor(()=>expect(screen.getByRole("button",{name:"运行集合"})).toHaveProperty("disabled",false));
+  fireEvent.click(screen.getByRole("button",{name:"运行集合"}));await waitFor(()=>expect(runs).toBe(2));expect(await screen.findByText(/通过: 1/)).toBeTruthy();
+});
+
+it("refreshes saved reports after a same-scope run whose inline result was invalidated",async()=>{
+  let finish!:(value:unknown)=>void;let completed=false;
+  vi.mocked(api).mockImplementation((path)=>{
+    if(path===`${base}/run`)return new Promise(resolve=>{finish=resolve;});
+    if(path===`${base}/reports`)return Promise.resolve({items:completed?[{id:"report",collection_name:"Saved after edit",summary:{passed:1,failed:0}}]:[],next_cursor:null});
+    return Promise.resolve(workspace);
+  });
+  render(view("editor"));fireEvent.click(await screen.findByRole("button",{name:"运行集合"}));await waitFor(()=>expect(finish).toBeTypeOf("function"));
+  fireEvent.change(screen.getByLabelText("工作区名称"),{target:{value:"Edited"}});fireEvent.click(screen.getByRole("button",{name:"测试报告"}));await screen.findByText("暂无测试报告");
+  completed=true;await act(async()=>finish({passed:19,failed:0,cancelled:false}));
+  expect(await screen.findByText("Saved after edit")).toBeTruthy();expect(screen.queryByText(/19/)).toBeNull();
+});
+
+it.each(["account","credential","role","workspace","owner"] as const)("fences the old job and Stop after the %s scope changes",async(boundary)=>{
+  const finishes:((value:unknown)=>void)[]=[];
+  vi.mocked(api).mockImplementation((path)=>path.endsWith("/run")?new Promise(resolve=>{finishes.push(resolve);}):Promise.resolve(path.endsWith("/run/cancel")?{cancelled:true}:workspace));
+  const {rerender}=render(view("editor"));fireEvent.click(await screen.findByRole("button",{name:"运行集合"}));await waitFor(()=>expect(finishes).toHaveLength(1));
+  if(boundary==="account")rerender(view("editor","new-account"));
+  if(boundary==="credential"){vi.mocked(token).mockReturnValue("new-token");rerender(view("editor"));}
+  if(boundary==="role")rerender(view("viewer"));
+  if(boundary==="workspace"||boundary==="owner")rerender(<QueryClientProvider client={client}><Theme><SharedWorkspaceView accountId="member" selected={{...summary("editor"),...(boundary==="workspace"?{workspace_id:"other"}:{owner_id:"other-owner"})}} dark={false} onClose={vi.fn()} onDirtyChange={vi.fn()}/></Theme></QueryClientProvider>);
+  await waitFor(()=>expect(screen.queryByRole("button",{name:"停止集合运行"})).toBeNull());
+  if(boundary!=="role"){
+    fireEvent.click(await screen.findByRole("button",{name:"运行集合"}));await waitFor(()=>expect(finishes).toHaveLength(2));
+    await act(async()=>finishes[0]({passed:19,failed:0,cancelled:false}));
+    expect(screen.getByRole("button",{name:"停止集合运行"})).toBeTruthy();expect(screen.queryByText(/19/)).toBeNull();
+    const calls=vi.mocked(api).mock.calls.filter(([path])=>path.endsWith("/run"));const body=calls[1][2] as {job_id:string};
+    fireEvent.click(screen.getByRole("button",{name:"停止集合运行"}));await waitFor(()=>expect(api).toHaveBeenCalledWith(calls[1][0]+"/cancel","POST",{job_id:body.job_id}));
+    await act(async()=>finishes[1]({passed:0,failed:0,cancelled:true}));
+  }else{await act(async()=>finishes[0]({passed:19,failed:0,cancelled:false}));expect(screen.queryByText(/19/)).toBeNull();}
+});
+
+it("does not let a late Stop acknowledgment change a newer job's busy state",async()=>{
+  const finishes:((value:unknown)=>void)[]=[];const stops:((value:unknown)=>void)[]=[];
+  vi.mocked(api).mockImplementation((path)=>path===`${base}/run`?new Promise(resolve=>{finishes.push(resolve);}):path===`${base}/run/cancel`?new Promise(resolve=>{stops.push(resolve);}):Promise.resolve(workspace));
+  render(view("editor"));fireEvent.click(await screen.findByRole("button",{name:"运行集合"}));await waitFor(()=>expect(finishes).toHaveLength(1));
+  fireEvent.click(screen.getByRole("button",{name:"停止集合运行"}));await waitFor(()=>expect(stops).toHaveLength(1));
+  await act(async()=>finishes[0]({passed:0,failed:0,cancelled:true}));fireEvent.click(screen.getByRole("button",{name:"运行集合"}));await waitFor(()=>expect(finishes).toHaveLength(2));
+  fireEvent.click(screen.getByRole("button",{name:"停止集合运行"}));await waitFor(()=>expect(stops).toHaveLength(2));
+  await act(async()=>stops[0]({cancelled:true}));expect(screen.getByRole("button",{name:"停止集合运行"})).toHaveProperty("disabled",true);
+  await act(async()=>stops[1]({cancelled:true}));expect(screen.getByRole("button",{name:"停止集合运行"})).toHaveProperty("disabled",false);
+  await act(async()=>finishes[1]({passed:0,failed:0,cancelled:true}));expect(screen.queryByRole("button",{name:"停止集合运行"})).toBeNull();
+});

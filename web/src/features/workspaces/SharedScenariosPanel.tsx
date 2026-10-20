@@ -8,9 +8,9 @@ import { collectionDescendants } from "../collections/tree";
 import ScenarioEditor, { scenarioDraftValid } from "../testing/ScenarioEditor";
 
 type RunResult = { passed: number; failed: number; cancelled: boolean };
-export default function SharedScenariosPanel({ data, collectionId, dirty, saving, canSave, running, stopping, result, onSelectCollection, onChange, onSave, onRun, onStop }: {
-  data: WorkspaceData; collectionId: string; dirty: boolean; saving: boolean; canSave: boolean; running: boolean; stopping: boolean; result: RunResult | null;
-  onSelectCollection: (id: string) => void; onChange: (scenarios: Scenario[]) => void; onSave: () => void; onRun: (id: string) => void; onStop: () => void;
+export default function SharedScenariosPanel({ data, collectionId, dirty, saving, canSave, running, result, onSelectCollection, onChange, onSave, onRun }: {
+  data: WorkspaceData; collectionId: string; dirty: boolean; saving: boolean; canSave: boolean; running: boolean; result: RunResult | null;
+  onSelectCollection: (id: string) => void; onChange: (scenarios: Scenario[]) => void; onSave: () => void; onRun: (id: string) => void;
 }) {
   useLanguage();
   const [edit, setEdit] = useState<{ value: Scenario; original: string | null } | null>(null);
@@ -37,7 +37,6 @@ export default function SharedScenariosPanel({ data, collectionId, dirty, saving
     {edit && <Card><Flex direction="column" gap="3"><ScenarioEditor key={edit.value.id || "new"} scenario={edit.value} requests={requests} disabled={busy} onChange={(value) => setEdit((current) => current ? { ...current, value } : null)} /><Text size="1" color="gray">{t("应用场景修改后，再保存共享工作区。")}</Text><Flex gap="2" wrap="wrap"><Button variant="outline" disabled={busy} onClick={() => { setEdit(null); setError(false); }}>{t("取消")}</Button><Button disabled={busy || !scenarioDraftValid(edit.value)} onClick={apply}>{t("应用场景修改")}</Button></Flex></Flex></Card>}
     {error && <Callout.Root color="red" role="alert"><Callout.Text>{t("场景保存失败，请检查名称、请求引用、步骤数量或工作区版本冲突。未保存的编辑已保留。")}</Callout.Text></Callout.Root>}
     {(dirty || !!edit) && <Text size="1" color="gray">{t("先应用场景修改并保存工作区，再运行场景。")}</Text>}
-    {running && <Button variant="outline" loading={stopping} disabled={stopping} onClick={onStop}>{t("停止集合运行")}</Button>}
     {result && <Text role="status" size="2">{t("通过")}: {result.passed} · {t("失败")}: {result.failed}{result.cancelled && <> · {t("已取消")}</>}</Text>}
     <Button loading={saving} disabled={!dirty || !canSave || !!edit} onClick={onSave}>{t("保存共享工作区")}</Button>
   </Flex><AlertDialog.Root open={!!deleting && deleting.data === data && !busy} onOpenChange={(open) => { if (!open) setDeleting(null); }}><AlertDialog.Content maxWidth="min(560px, calc(100vw - 24px))"><AlertDialog.Title>{t("删除场景")}</AlertDialog.Title><AlertDialog.Description>{t("删除「{{value0}}」，保存后生效。", { value0: deleting?.name ?? "" })}</AlertDialog.Description><Flex justify="end" gap="3" mt="4"><AlertDialog.Cancel><Button variant="soft" color="gray">{t("取消")}</Button></AlertDialog.Cancel><Button color="red" onClick={() => { if (deleting && deleting.data === data && !busy) onChange((data.scenarios ?? []).filter((scenario) => scenario.id !== deleting.id)); setDeleting(null); }}>{t("确认删除")}</Button></Flex></AlertDialog.Content></AlertDialog.Root></section>;
