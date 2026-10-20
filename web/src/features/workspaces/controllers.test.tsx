@@ -553,3 +553,18 @@ it("keeps extracted local values in the environment used by the original request
     "production",
   );
 });
+
+it("restores the selected owned workspace after shared navigation clears the same owned ID", async () => {
+  const original = makeWorkspace();
+  const { result } = renderHook(() => useWorkspace(true), { wrapper: harness(original) });
+  await waitFor(() => expect(result.current.draft?.id).toBe(original.id));
+  const selectedId = result.current.selectedId;
+  act(() => {
+    result.current.setDraft(null);
+    result.current.setSaved(null);
+    result.current.setSelectedId(selectedId);
+  });
+  await waitFor(() => expect(result.current.draft).toEqual(original));
+  expect(result.current.saved).toEqual(original);
+  expect(result.current.dirty).toBe(false);
+});

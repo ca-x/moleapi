@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Theme } from "@radix-ui/themes";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -1881,4 +1881,47 @@ it.each(["request", "cache", "credential"] as const)("discards shared certificat
   if (boundary === "request") fireEvent.change(screen.getByLabelText("请求"), { target: { value: first.data.collections[0].requests[0].id } });
   await waitFor(() => expect((screen.getByRole("button", { name: "保存共享工作区" }) as HTMLButtonElement).disabled).toBe(true));
   expect(vi.mocked(api).mock.calls.some(([, method]) => method === "PUT")).toBe(false);
+});
+
+it("creates a shared TCP request with full saved source and session-local messages", async () => {
+  let canonical = structuredClone(workspace);
+  const session = { id: "tcp-a", protocol: "tcp", state: "open", url: "tcp://fixture.test:9000", client_half_closed: false, received_bytes: 0, sent_bytes: 0, handshake: null };
+  vi.mocked(api).mockImplementation((path, method, body) => {
+    if (path === base && method === "PUT") { canonical = { ...canonical, revision: 4, data: (body as Workspace).data }; return Promise.resolve(canonical); }
+    if (path === `${base}/sessions` || path === `${base}/sessions/tcp-a`) return Promise.resolve(session);
+    if (path.startsWith(`${base}/sessions/tcp-a/events`)) return Promise.resolve({ events: [], next_cursor: 0, earliest_cursor: 0, dropped_count: 0 });
+    if (path.endsWith("/send")) return Promise.resolve({ ok: true });
+    return Promise.resolve(canonical);
+  });
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "新增 TCP 请求" }));
+  fireEvent.change(screen.getByLabelText("请求地址"), { target: { value: "tcp://fixture.test:9000" } });
+  expect(screen.queryByLabelText("方法")).toBeNull();
+  expect(screen.queryByRole("tab", { name: /鉴权/ })).toBeNull();
+  expect(screen.queryByRole("tab", { name: /请求头/ })).toBeNull();
+  expect((screen.getByRole("button", { name: "连接" }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.change(screen.getByLabelText("TCP 分帧方式"), { target: { value: "length_be" } });
+  fireEvent.change(screen.getByLabelText("单帧上限（字节）"), { target: { value: "4096" } });
+  fireEvent.change(screen.getByLabelText("空闲超时（ms，0 为关闭）"), { target: { value: "5000" } });
+  fireEvent.click(screen.getByLabelText("禁用 Nagle（TCP_NODELAY）"));
+  fireEvent.mouseDown(screen.getByRole("tab", { name: /已保存报文/ }), { button: 0 });
+  fireEvent.change(screen.getByLabelText("已保存 TCP 报文模板"), { target: { value: "saved {{region}}" } });
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(canonical.revision).toBe(4));
+  expect(canonical.data.collections[0].requests.at(-1)).toMatchObject({ method: "GET", body_kind: "none", protocol: { kind: "tcp", framing: "length_be", max_frame_bytes: 4096, idle_timeout_ms: 5000, no_delay: false, message: { encoding: "text", payload_source: "saved {{region}}", secret: false } } });
+  fireEvent.click(await screen.findByRole("button", { name: "连接" }));
+  await screen.findByLabelText("TCP 临时报文");
+  expect(vi.mocked(api).mock.calls.some(([path]) => path.endsWith("/send"))).toBe(false);
+  const live = within(screen.getByRole("region", { name: "共享实时会话" }));
+  fireEvent.change(live.getByLabelText("TCP 临时报文"), { target: { value: "aGVsbG8=" } });
+  fireEvent.change(live.getByLabelText("TCP 报文编码"), { target: { value: "base64" } });
+  fireEvent.click(live.getByLabelText("私密报文"));
+  fireEvent.click(live.getByRole("button", { name: "发送报文" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/sessions/tcp-a/send`, "POST", { kind: "tcp_send", message: { encoding: "base64", payload_source: "aGVsbG8=", secret: true } }));
+  expect((screen.getByRole("button", { name: "保存共享工作区" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(canonical.data.collections[0].requests.at(-1)?.protocol).toMatchObject({ message: { payload_source: "saved {{region}}", secret: false } });
+  expect(live.queryByRole("tab", { name: /握手/ })).toBeNull();
+  fireEvent.click(live.getByRole("button", { name: "半关闭" }));
+  fireEvent.click(await screen.findByRole("button", { name: "确认半关闭" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/sessions/tcp-a/send`, "POST", { kind: "tcp_half_close" }));
 });

@@ -1,4 +1,12 @@
 {
+  "新增 TCP 请求": "Add TCP request",
+  "共享 TCP 请求设置": "Shared TCP request settings",
+  "已保存报文": "Saved message",
+  "已保存 TCP 报文模板": "Saved TCP message template",
+  "共享 TCP 会话报文": "Shared TCP session message",
+  "此处报文仅用于当前连接，不会自动保存到共享请求。": "This message is only for the current connection and is not automatically saved to the shared request.",
+  "TCP 临时报文": "Temporary TCP message",
+  "确认半关闭": "Confirm half-close",
   "新增 SSE 请求": "Add SSE request",
   "新增 WebSocket 请求": "Add WebSocket request",
   "请求版本": "Request history",

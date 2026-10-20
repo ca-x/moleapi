@@ -706,9 +706,10 @@ pub async fn shared_session_create(
             | moleapi_core::Protocol::Websocket
             | moleapi_core::Protocol::Data { .. }
             | moleapi_core::Protocol::Graphql { .. }
+            | moleapi_core::Protocol::Tcp { .. }
     ) {
         return Err(ApiError::bad(
-            "Shared live sessions support saved SSE, WebSocket, Data and GraphQL subscriptions",
+            "Shared live sessions support saved SSE, WebSocket, Data, TCP and GraphQL subscriptions",
         ));
     }
     if request.protocol.is_graphql()
@@ -876,6 +877,10 @@ pub async fn shared_session_send(
             message,
             SendMessage::Text { .. } | SendMessage::Binary { .. } | SendMessage::Ping { .. }
         ),
+        "tcp" => matches!(
+            message,
+            SendMessage::TcpSend { .. } | SendMessage::TcpHalfClose
+        ),
         "data" => matches!(
             message,
             SendMessage::DataQuery { .. }
@@ -889,10 +894,12 @@ pub async fn shared_session_send(
             "Message is unavailable for this shared session protocol",
         ));
     }
-    if summary.protocol == "data" {
+    if summary.protocol == "data" || summary.protocol == "tcp" {
         let action = match &message {
             SendMessage::DataQuery { .. } => "protocol.data.query",
             SendMessage::DataCancel { .. } => "protocol.data.cancel",
+            SendMessage::TcpSend { .. } => "protocol.tcp.send",
+            SendMessage::TcpHalfClose => "protocol.tcp.half_close",
             _ => "protocol.data.schema",
         };
         let audit = state.db.begin().await?;

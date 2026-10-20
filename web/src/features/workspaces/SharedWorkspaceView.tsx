@@ -31,6 +31,8 @@ import SharedCollectionSettingsDialog from "./SharedCollectionSettingsDialog";
 import SharedResourceActions from "./SharedResourceActions";
 import SharedScenariosPanel from "./SharedScenariosPanel";
 import SharedGraphQLWorkbench from "./SharedGraphQLWorkbench";
+import SharedTcpRequestEditor from "./SharedTcpRequestEditor";
+import { tcpConfig } from "../tcp/model";
 import SharedSpecificationsPanel from "./SharedSpecificationsPanel";
 import SharedRequestSpecification from "./SharedRequestSpecification";
 import SharedDatasetsPanel from "./SharedDatasetsPanel";
@@ -134,8 +136,9 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
   const httpRequest = !!request && (!request.protocol?.kind || request.protocol.kind === "http");
   const matchRoutePath = request ? mockRouteInfo(request).path : "";
   const httpLiveRequest = request?.protocol?.kind === "sse" || request?.protocol?.kind === "websocket";
+  const tcpRequest = request?.protocol?.kind === "tcp";
   const websocketRequest = request?.protocol?.kind === "websocket";
-  const liveRequest = request?.protocol?.kind === "sse" || request?.protocol?.kind === "websocket" || request?.protocol?.kind === "data";
+  const liveRequest = request?.protocol?.kind === "sse" || request?.protocol?.kind === "websocket" || request?.protocol?.kind === "data" || tcpRequest;
   const example = request?.examples.find((item) => item.id === exampleId) ?? request?.examples[0];
   useEffect(() => { linkedSchemaGeneration.current += 1; setLinkingSchema(false); }, [scope, collection?.id, request?.id, example?.id, tab]);
   const statusPending = !!example && exampleStatusInput !== String(example.status);
@@ -177,9 +180,10 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
     setDraft((currentDraft) => currentDraft ? { ...currentDraft, data } : null);
     setCollectionId(selectedId); setRequestId("");
   }
-  function addHttpRequest(kind: "http" | "data" | "graphql" | "sse" | "websocket" = "http") {
+  function addHttpRequest(kind: "http" | "data" | "graphql" | "sse" | "websocket" | "tcp" = "http") {
     if (!canEdit || !collection) return;
     const next = newRequest();
+    if (kind === "tcp") { next.protocol = tcpConfig(); next.name = "TCP"; next.url = ""; }
     if (kind === "data") { next.protocol = dataConfig(); next.name = t("数据查询"); next.url = ""; }
     if (kind === "graphql") { next.protocol = { kind: "graphql", document: "query Query { __typename }", variables: {}, variables_source: "{}", operation_name: null, connection_params: {}, subscription_url: null }; next.method = "POST"; next.name = "GraphQL"; next.url = ""; }
     if (kind === "sse" || kind === "websocket") { next.protocol = { kind }; next.method = "GET"; next.name = kind === "sse" ? "SSE" : "WebSocket"; next.url = ""; }
@@ -403,7 +407,7 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
         {canEdit && <Button variant="outline" onClick={() => setCollectionSettings({ kind: "create", parent_id: null })}>{t("新建集合")}</Button>}
         {draft.data.collections.length === 0 ? <Text size="2" color="gray">{t("此工作区还没有集合")}</Text> : <>
           <Choice label={t("集合")} value={collection?.id ?? ""} onChange={(value) => { setCollectionId(value); setRequestId(""); }} options={draft.data.collections.map((item) => ({ value: item.id, label: item.name }))} />
-          {collection && <Flex align="center" justify="between" gap="2" wrap="wrap"><Heading size="3">{collection.name}</Heading>{canEdit && <Flex gap="2" wrap="wrap"><Button variant="outline" onClick={() => setCollectionSettings({ kind: "edit", id: collection.id })}>{t("集合与目录设置")}</Button><Button variant="outline" onClick={() => setCollectionSettings({ kind: "create", parent_id: collection.id })}>{t("新建目录")}</Button><Button variant="outline" onClick={() => addHttpRequest()}>{t("新增 HTTP 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("data")}>{t("新增 Data 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("graphql")}>{t("新增 GraphQL 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("sse")}>{t("新增 SSE 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("websocket")}>{t("新增 WebSocket 请求")}</Button><Button loading={running} disabled={running || dirty || !runOptionsValid || collection.requests.length === 0} onClick={() => void runCollection()}>{t("运行集合")}</Button></Flex>}</Flex>}
+          {collection && <Flex align="center" justify="between" gap="2" wrap="wrap"><Heading size="3">{collection.name}</Heading>{canEdit && <Flex gap="2" wrap="wrap"><Button variant="outline" onClick={() => setCollectionSettings({ kind: "edit", id: collection.id })}>{t("集合与目录设置")}</Button><Button variant="outline" onClick={() => setCollectionSettings({ kind: "create", parent_id: collection.id })}>{t("新建目录")}</Button><Button variant="outline" onClick={() => addHttpRequest()}>{t("新增 HTTP 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("data")}>{t("新增 Data 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("graphql")}>{t("新增 GraphQL 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("sse")}>{t("新增 SSE 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("websocket")}>{t("新增 WebSocket 请求")}</Button><Button variant="outline" onClick={() => addHttpRequest("tcp")}>{t("新增 TCP 请求")}</Button><Button loading={running} disabled={running || dirty || !runOptionsValid || collection.requests.length === 0} onClick={() => void runCollection()}>{t("运行集合")}</Button></Flex>}</Flex>}
           {canEdit && collection && <SharedResourceActions key={`${scope}/${saved?.revision}/${conflict?.revision ?? ""}`} data={draft.data} workspaceName={draft.name} collectionId={collection.id} requestId={request?.id} onChange={applyResourceChange} />}
           {canEdit && dirty && <Text size="1" color="gray">{t("先保存修改，再运行集合。")}</Text>}
           {runResult && <Text role="status" size="2">{t("通过")}: {runResult.passed} · {t("失败")}: {runResult.failed}{runResult.cancelled && <> · {t("已取消")}</>}</Text>}
@@ -412,12 +416,13 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
             {request && (canEdit ? <Flex direction="column" gap="3">
               <Field label={t("请求名称")}><TextField.Root value={request.name} onChange={(event) => updateSelectedRequest({ name: event.target.value })} /></Field>
               {request.protocol?.kind !== "data" && <Flex className="shared-request-line" gap="2" wrap="wrap">
-                {!graphqlRequest && !httpLiveRequest && <Choice label={t("方法")} value={request.method} onChange={(method) => updateSelectedRequest({ method })} options={["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].map((value) => ({ value, label: value }))} />}
+                {!graphqlRequest && !httpLiveRequest && !tcpRequest && <Choice label={t("方法")} value={request.method} onChange={(method) => updateSelectedRequest({ method })} options={["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].map((value) => ({ value, label: value }))} />}
                 <Field label={t("请求地址")}><TextField.Root value={request.url} onChange={(event) => updateSelectedRequest({ url: event.target.value })} /></Field>
               </Flex>}
               <Field label={t("描述")}><TextArea value={request.description} onChange={(event) => updateSelectedRequest({ description: event.target.value })} /></Field>
               {httpRequest && <SharedRequestSpecification key={`${scope}/${collection.id}/${request.id}/${saved?.revision}`} request={request} specifications={draft.data.specifications ?? []} onChange={updateSelectedRequest} />}
               {request.protocol?.kind === "data" && <SharedDataRequestEditor key={`${scope}/${collection.id}/${request.id}/${saved?.revision}/${conflict?.revision ?? ""}`} request={request} dark={dark} isCurrent={() => datasetContextCurrent() && !conflict} onChange={updateSelectedRequest} />}
+              {tcpRequest && <SharedTcpRequestEditor key={`${scope}/${request.id}/${saved?.revision}/${conflict?.revision ?? ""}`} request={request} scope={`${scope}/${request.id}/${saved?.revision}/${conflict?.revision ?? ""}`} dark={dark} disabled={saving || !!conflict} isCurrent={() => datasetContextCurrent() && selectedRequestRef.current === request.id && !conflict} onChange={updateSelectedRequest} />}
               {(httpRequest || graphqlRequest || httpLiveRequest) && <Tabs.Root key={`${collection.id}/${request.id}/${saved?.revision}`} value={((graphqlRequest || httpLiveRequest) && requestEditorTab === "body") || (httpLiveRequest && requestEditorTab === "assertions") ? "headers" : requestEditorTab} onValueChange={setRequestEditorTab}>
                 <Tabs.List className="shared-request-tabs">
                   {[

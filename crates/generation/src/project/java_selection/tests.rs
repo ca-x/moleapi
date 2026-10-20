@@ -121,14 +121,11 @@ async fn invalid_bounded_and_timed_out_probes_do_not_create_a_preference() {
             .is_err()
     );
     let slow = executable(directory.path(), "slow", "exec /bin/sleep 20");
-    assert!(
-        runtime
-            .select_native_java(slow, &preference)
-            .await
-            .unwrap_err()
-            .to_string()
-            .contains("timed out")
-    );
+    let failure = runtime
+        .select_native_java(slow, &preference)
+        .await
+        .expect_err("A hanging Java probe must be rejected");
+    assert!(failure.to_string().contains("timed out"), "{failure:#}");
     assert!(
         runtime
             .select_native_java(PathBuf::from("relative-java"), &preference)

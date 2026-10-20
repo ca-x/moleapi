@@ -1386,6 +1386,8 @@ kbd {
 .tcp-tabs {min-height:320px;flex:1;display:flex;flex-direction:column;}
 .tcp-tabs > .rt-TabsContent[data-state="active"] {display:flex;flex-direction:column;gap:16px;padding:16px 20px;flex:1;min-height:0;overflow:auto;}
 .tcp-tabs > .rt-TabsContent > .code-editor {flex:1;min-height:180px;}
+.tcp-tabs > .rt-TabsContent > .tcp-message-editor {flex:1;min-height:0;}
+.tcp-tabs .tcp-message-editor > .code-editor {flex:1;min-height:180px;}
 @media(max-width:700px){.tcp-toolbar{padding:12px;}.tcp-tabs{flex-shrink:0;}.tcp-tabs > .rt-TabsContent[data-state="active"]{padding:12px;}}
 
 .webhook-page { display: flex; flex-direction: column; gap: 20px; }
