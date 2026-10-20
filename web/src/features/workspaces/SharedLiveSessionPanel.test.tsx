@@ -65,3 +65,20 @@ it("keeps a saved session polling while a workspace Save is pending", async () =
   expect(screen.getByRole("button", { name: "断开" })).toBeTruthy();
   expect(fetch).not.toHaveBeenCalled();
 });
+
+it("does not reopen a closed session when an older in-flight poll finishes later", async () => {
+  let finishSummary!: (value: unknown) => void;
+  vi.mocked(api).mockImplementation((path) => {
+    if (path === `${base}/sessions`) return Promise.resolve(session);
+    if (path === `${base}/sessions/a`) return new Promise((resolve) => { finishSummary = resolve; });
+    if (path.endsWith("/close")) return Promise.resolve({ ...session, state: "closed" });
+    return Promise.resolve({ events: [], next_cursor: 0, earliest_cursor: 0, dropped_count: 0 });
+  });
+  render(view()); fireEvent.click(screen.getByRole("button", { name: "连接" }));
+  await waitFor(() => expect(finishSummary).toBeTypeOf("function"));
+  fireEvent.click(screen.getByRole("button", { name: "断开" }));
+  await screen.findByRole("button", { name: "重新连接" });
+  await act(async () => finishSummary(session));
+  expect(screen.queryByRole("button", { name: "断开" })).toBeNull();
+  expect(screen.getByRole("button", { name: "重新连接" })).toBeTruthy();
+});

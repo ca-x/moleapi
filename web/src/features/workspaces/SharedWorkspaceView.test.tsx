@@ -1925,3 +1925,48 @@ it("creates a shared TCP request with full saved source and session-local messag
   fireEvent.click(await screen.findByRole("button", { name: "确认半关闭" }));
   await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/sessions/tcp-a/send`, "POST", { kind: "tcp_half_close" }));
 });
+
+it("authors shared Socket.IO configuration and keeps emitted messages and listener changes session-local", async () => {
+  let canonical = structuredClone(workspace);
+  const session = { id: "sio-a", protocol: "socketio", state: "open", url: "ws://fixture.test", received_bytes: 0, sent_bytes: 0, handshake: null };
+  vi.mocked(api).mockImplementation((path, method, body) => {
+    if (path === base && method === "PUT") { canonical = { ...canonical, revision: 4, data: (body as Workspace).data }; return Promise.resolve(canonical); }
+    if (path === `${base}/sessions` || path === `${base}/sessions/sio-a`) return Promise.resolve(session);
+    if (path.startsWith(`${base}/sessions/sio-a/events`)) return Promise.resolve({ events: [], next_cursor: 0, earliest_cursor: 0, dropped_count: 0 });
+    if (path.endsWith("/send")) return Promise.resolve({ ok: true });
+    return Promise.resolve(canonical);
+  });
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "新增 Socket.IO 请求" }));
+  fireEvent.change(screen.getByLabelText("请求地址"), { target: { value: "ws://fixture.test" } });
+  const source = within(screen.getByRole("region", { name: "共享 Socket.IO 请求设置" }));
+  fireEvent.change(source.getByLabelText("Namespace"), { target: { value: "/fixture" } });
+  fireEvent.change(source.getByLabelText("Engine.IO 路径"), { target: { value: "/custom/socket.io/" } });
+  fireEvent.change(source.getByLabelText("发送事件名称"), { target: { value: "echo" } });
+  fireEvent.change(source.getByLabelText("Socket.IO 事件参数"), { target: { value: '["saved"]' } });
+  expect(source.queryByRole("button", { name: "发送事件" })).toBeNull();
+  fireEvent.mouseDown(source.getByRole("tab", { name: /连接 Auth/ }), { button: 0 });
+  fireEvent.change(source.getByLabelText("Socket.IO Auth JSON"), { target: { value: '{"token":"{{team_token}}"}' } });
+  expect((screen.getByRole("button", { name: "连接" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.queryByRole("tab", { name: /请求体/ })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(canonical.revision).toBe(4));
+  const request = canonical.data.collections[0].requests.at(-1)!;
+  expect(request.protocol).toMatchObject({ kind: "socketio", namespace: "/fixture", path: "/custom/socket.io/", auth_source: '{"token":"{{team_token}}"}', event: "echo", arguments_source: '["saved"]' });
+  fireEvent.click(screen.getByRole("button", { name: "连接" }));
+  const live = within(await screen.findByRole("region", { name: "共享 Socket.IO 实时消息" }));
+  expect(vi.mocked(api).mock.calls.some(([path]) => path.endsWith("/send"))).toBe(false);
+  expect(live.queryByLabelText("Namespace")).toBeNull();
+  expect(live.queryByRole("tab", { name: /连接 Auth/ })).toBeNull();
+  fireEvent.change(live.getByLabelText("Socket.IO 事件参数"), { target: { value: '["temporary",{"_placeholder":true,"num":0}]' } });
+  fireEvent.change(live.getByLabelText("二进制附件（每行一个 Base64）"), { target: { value: "AP8H" } });
+  fireEvent.click(live.getByLabelText("请求 ACK"));
+  fireEvent.click(live.getByRole("button", { name: "发送事件" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/sessions/sio-a/send`, "POST", expect.objectContaining({ kind: "socketio_emit", event: "echo", arguments_source: '["temporary",{"_placeholder":true,"num":0}]', attachments_base64: ["AP8H"], ack_id: expect.any(String) })));
+  fireEvent.mouseDown(live.getByRole("tab", { name: /监听事件/ }), { button: 0 });
+  fireEvent.change(live.getByLabelText("监听事件名称"), { target: { value: "question" } });
+  fireEvent.click(live.getByRole("button", { name: "添加监听" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/sessions/sio-a/send`, "POST", { kind: "socketio_listen", event: "question", enabled: true }));
+  expect(canonical.data.collections[0].requests.at(-1)?.protocol).toMatchObject({ arguments_source: '["saved"]', attachments_base64: [], request_ack: false });
+  expect((screen.getByRole("button", { name: "保存共享工作区" }) as HTMLButtonElement).disabled).toBe(true);
+});

@@ -1426,3 +1426,9 @@ kbd {
 .project-regeneration-dialog,.openapi-source-bundle-dialog { width:min(1000px,calc(100vw - 32px)); min-width:0; }
 .project-regeneration-dialog .code-editor,.openapi-source-bundle-dialog .code-editor { min-width:0; max-width:100%; }
 .project-regeneration-dialog .cm-gutterElement,.openapi-source-bundle-dialog .cm-gutterElement,.generation-dialog .cm-gutterElement { color:var(--gray-11); }
+
+.shared-socketio { min-width:0; max-width:100%; }
+.shared-socketio .socketio-workbench { height:auto; }
+.shared-socketio .grpc-tabs { flex:none; min-height:0; }
+.shared-socketio .grpc-tabs > .rt-TabsContent[data-state="active"] { flex:none; overflow:visible; }
+.shared-socketio .grpc-tabs > .rt-TabsContent > .code-editor { flex:none; min-height:0; }

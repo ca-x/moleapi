@@ -707,9 +707,10 @@ pub async fn shared_session_create(
             | moleapi_core::Protocol::Data { .. }
             | moleapi_core::Protocol::Graphql { .. }
             | moleapi_core::Protocol::Tcp { .. }
+            | moleapi_core::Protocol::Socketio { .. }
     ) {
         return Err(ApiError::bad(
-            "Shared live sessions support saved SSE, WebSocket, Data, TCP and GraphQL subscriptions",
+            "Shared live sessions support saved SSE, WebSocket, Data, TCP, Socket.IO and GraphQL subscriptions",
         ));
     }
     if request.protocol.is_graphql()
@@ -877,6 +878,12 @@ pub async fn shared_session_send(
             message,
             SendMessage::Text { .. } | SendMessage::Binary { .. } | SendMessage::Ping { .. }
         ),
+        "socketio" => matches!(
+            message,
+            SendMessage::SocketioEmit { .. }
+                | SendMessage::SocketioListen { .. }
+                | SendMessage::SocketioAck { .. }
+        ),
         "tcp" => matches!(
             message,
             SendMessage::TcpSend { .. } | SendMessage::TcpHalfClose
@@ -894,12 +901,15 @@ pub async fn shared_session_send(
             "Message is unavailable for this shared session protocol",
         ));
     }
-    if summary.protocol == "data" || summary.protocol == "tcp" {
+    if matches!(summary.protocol.as_str(), "data" | "tcp" | "socketio") {
         let action = match &message {
             SendMessage::DataQuery { .. } => "protocol.data.query",
             SendMessage::DataCancel { .. } => "protocol.data.cancel",
             SendMessage::TcpSend { .. } => "protocol.tcp.send",
             SendMessage::TcpHalfClose => "protocol.tcp.half_close",
+            SendMessage::SocketioEmit { .. } => "protocol.socketio.emit",
+            SendMessage::SocketioListen { .. } => "protocol.socketio.listen",
+            SendMessage::SocketioAck { .. } => "protocol.socketio.ack",
             _ => "protocol.data.schema",
         };
         let audit = state.db.begin().await?;

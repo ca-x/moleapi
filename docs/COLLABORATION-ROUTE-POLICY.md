@@ -44,10 +44,10 @@ This inventory covers every `.route` registered in `crates/server/src/lib.rs` at
 | `/owners/{owner}/workspaces/{workspace}/run/cancel` | POST editor, creator only | instance-local cancellation keyed by actor and membership epoch; early cancellation and actor audit |
 | `/owners/{owner}/workspaces/{workspace}/requests/{request}/execute` | POST editor | canonical saved request execution and private response |
 | `/owners/{owner}/workspaces/{workspace}/execute-draft` | POST editor | HTTP or GraphQL query/mutation draft execution under canonical collection and expected revision |
-| `/owners/{owner}/workspaces/{workspace}/sessions` | POST editor | canonical saved SSE/WebSocket/Data/TCP/GraphQL subscription connection under expected revision |
+| `/owners/{owner}/workspaces/{workspace}/sessions` | POST editor | canonical saved SSE/WebSocket/Data/TCP/Socket.IO/GraphQL subscription connection under expected revision |
 | `/owners/{owner}/workspaces/{workspace}/sessions/{id}` | GET/DELETE editor, creator only | bound live session summary and removal |
 | `/owners/{owner}/workspaces/{workspace}/sessions/{id}/events` | GET editor, creator only | bounded private live events |
-| `/owners/{owner}/workspaces/{workspace}/sessions/{id}/send` | POST editor, creator only | WebSocket text/binary/Ping, Data query/schema/cancel or TCP send/half-close; Data/TCP commands record actor-only audit, canonical session scripts/snapshots and creator fences retained |
+| `/owners/{owner}/workspaces/{workspace}/sessions/{id}/send` | POST editor, creator only | WebSocket text/binary/Ping, Data query/schema/cancel, TCP send/half-close or Socket.IO emit/listen/ACK; Data/TCP/Socket.IO commands record actor-only audit, canonical session scripts/snapshots and creator fences retained |
 | `/owners/{owner}/workspaces/{workspace}/sessions/{id}/close` | POST editor, creator only | close bound live connection |
 | `/owners/{owner}/workspaces/{workspace}/mock/{request}/{example}` | GET editor | saved Mock example preview and call record |
 | `/owners/{owner}/workspaces/{workspace}/graphql/introspect` | POST editor | saved canonical GraphQL request under expected revision; actor audit and member/revision/credential final fence; returns candidate only |

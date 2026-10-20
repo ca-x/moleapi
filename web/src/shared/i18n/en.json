@@ -1,4 +1,8 @@
 {
+  "新增 Socket.IO 请求": "Add Socket.IO request",
+  "共享 Socket.IO 请求设置": "Shared Socket.IO request settings",
+  "共享 Socket.IO 实时消息": "Shared Socket.IO live messages",
+  "事件参数与监听器修改仅用于当前连接，不会自动保存到共享请求。": "Event arguments and listener changes apply only to the current connection and are not automatically saved to the shared request.",
   "新增 TCP 请求": "Add TCP request",
   "共享 TCP 请求设置": "Shared TCP request settings",
   "已保存报文": "Saved message",
