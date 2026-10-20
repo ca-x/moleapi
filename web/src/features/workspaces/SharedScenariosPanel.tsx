@@ -8,8 +8,8 @@ import { collectionDescendants } from "../collections/tree";
 import ScenarioEditor, { scenarioDraftValid } from "../testing/ScenarioEditor";
 
 type RunResult = { passed: number; failed: number; cancelled: boolean };
-export default function SharedScenariosPanel({ data, collectionId, dirty, saving, canSave, running, result, onSelectCollection, onChange, onSave, onRun }: {
-  data: WorkspaceData; collectionId: string; dirty: boolean; saving: boolean; canSave: boolean; running: boolean; result: RunResult | null;
+export default function SharedScenariosPanel({ data, collectionId, dirty, saving, canSave, running, runOptionsValid = true, result, onSelectCollection, onChange, onSave, onRun }: {
+  data: WorkspaceData; collectionId: string; dirty: boolean; saving: boolean; canSave: boolean; running: boolean; runOptionsValid?: boolean; result: RunResult | null;
   onSelectCollection: (id: string) => void; onChange: (scenarios: Scenario[]) => void; onSave: () => void; onRun: (id: string) => void;
 }) {
   useLanguage();
@@ -32,7 +32,7 @@ export default function SharedScenariosPanel({ data, collectionId, dirty, saving
     <Heading size="3">{t("工作区测试场景")}</Heading>
     {data.collections.length > 0 && <Choice label={t("集合")} value={collectionId} disabled={busy} options={data.collections.map((collection) => ({ value: collection.id, label: collection.name }))} onChange={onSelectCollection} />}
     <Text size="1" color="gray">{t("场景保存请求引用、顺序和分组，随工作区同步。步骤使用原接口定义及当前环境，允许重复执行同一请求。")}</Text>
-    {scenarios.map((scenario) => <Card key={scenario.id}><Flex gap="2" wrap="wrap" align="center"><Text weight="medium">{scenario.name}</Text><Button variant="outline" disabled={busy} onClick={() => { setEdit({ value: structuredClone(scenario), original: JSON.stringify(scenario) }); setError(false); }}>{t("编辑场景")}</Button><Button variant="outline" color="red" disabled={busy || !!edit} onClick={() => setDeleting({ id: scenario.id, name: scenario.name, data })}>{t("删除场景")}</Button><Button disabled={busy || dirty || !!edit} onClick={() => onRun(scenario.id)}>{t("运行已保存场景")}</Button></Flex></Card>)}
+    {scenarios.map((scenario) => <Card key={scenario.id}><Flex gap="2" wrap="wrap" align="center"><Text weight="medium">{scenario.name}</Text><Button variant="outline" disabled={busy} onClick={() => { setEdit({ value: structuredClone(scenario), original: JSON.stringify(scenario) }); setError(false); }}>{t("编辑场景")}</Button><Button variant="outline" color="red" disabled={busy || !!edit} onClick={() => setDeleting({ id: scenario.id, name: scenario.name, data })}>{t("删除场景")}</Button><Button disabled={busy || dirty || !!edit || !runOptionsValid} onClick={() => onRun(scenario.id)}>{t("运行已保存场景")}</Button></Flex></Card>)}
     <Button variant="outline" disabled={busy || !collectionId} onClick={() => { setEdit({ value: { id: "", name: "", description: "", collection_id: collectionId, steps: [] }, original: null }); setError(false); }}>{t("新建场景")}</Button>
     {edit && <Card><Flex direction="column" gap="3"><ScenarioEditor key={edit.value.id || "new"} scenario={edit.value} requests={requests} disabled={busy} onChange={(value) => setEdit((current) => current ? { ...current, value } : null)} /><Text size="1" color="gray">{t("应用场景修改后，再保存共享工作区。")}</Text><Flex gap="2" wrap="wrap"><Button variant="outline" disabled={busy} onClick={() => { setEdit(null); setError(false); }}>{t("取消")}</Button><Button disabled={busy || !scenarioDraftValid(edit.value)} onClick={apply}>{t("应用场景修改")}</Button></Flex></Flex></Card>}
     {error && <Callout.Root color="red" role="alert"><Callout.Text>{t("场景保存失败，请检查名称、请求引用、步骤数量或工作区版本冲突。未保存的编辑已保留。")}</Callout.Text></Callout.Root>}

@@ -16,7 +16,7 @@ vi.mock("../../shared/api", () => ({ api: vi.fn(), previewSharedMock: vi.fn(), t
 vi.mock("../generation/saveProjectFile", () => ({ saveProjectFile: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("../../shared/ui", () => ({
   Field: ({ label, children }: { label: string; children: React.ReactNode }) => <label>{label}{children}</label>,
-  Choice: ({ label, value, options, onChange }: { label: string; value: string; options: { value: string; label: string }[]; onChange: (value: string) => void }) => <label>{label}<select value={value} onChange={(event) => onChange(event.target.value)}>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>,
+  Choice: ({ label, value, options, onChange, disabled }: { disabled?: boolean; label: string; value: string; options: { value: string; label: string }[]; onChange: (value: string) => void }) => <label>{label}<select disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)}>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>,
   Editor: ({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) => <label>{label}<textarea value={value} onChange={(event) => onChange(event.target.value)} /></label>,
   PairEditor: ({ rows, onChange, keyLabel, valueLabel }: { rows: { id: string; key: string; value: string; enabled: boolean }[]; onChange: (rows: { id: string; key: string; value: string; enabled: boolean }[]) => void; keyLabel: string; valueLabel: string }) => <div>{rows.map((row) => <div key={row.id}><label>{keyLabel}<input value={row.key} onChange={(event) => onChange(rows.map((item) => item.id === row.id ? { ...item, key: event.target.value } : item))} /></label><label>{valueLabel}<input value={row.value} onChange={(event) => onChange(rows.map((item) => item.id === row.id ? { ...item, value: event.target.value } : item))} /></label></div>)}<button onClick={() => onChange([...rows, { id: "header-a", key: "X-Test", value: "yes", enabled: true }])}>添加一行</button></div>,
   ToolButton: ({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) => <button aria-label={label} onClick={onClick}>{children}</button>,
@@ -1421,4 +1421,101 @@ it.each(["edit","account","credential","role","revision","conflict"] as const)("
 
 it("hides shared dataset data and mutation controls from viewers",async()=>{
   render(view("viewer"));await screen.findByLabelText("请求");expect(screen.queryByRole("button",{name:"工作区数据集"})).toBeNull();expect(screen.queryByRole("button",{name:"新建数据集"})).toBeNull();
+});
+
+it("shares saved dataset IDs and iterations between collection and scenario runs", async () => {
+  const shared = structuredClone(workspace), collection = shared.data.collections[0];
+  shared.data.datasets = [{ id: "private", name: "Private rows", description: "", secret: true, source: { format: "json", source: '[{"value":"private-source"}]' } }];
+  shared.data.scenarios = [{ id: "scenario-data", name: "Data scenario", description: "", collection_id: collection.id, steps: [{ id: "step", request_id: collection.requests[0].id, name: "", group: "", enabled: true, repeat: 1 }] }];
+  vi.mocked(api).mockImplementation((path) => Promise.resolve(path.endsWith("/run") ? { passed: 1, failed: 0, cancelled: false } : shared));
+  render(view("editor"));
+  fireEvent.change(await screen.findByLabelText("运行数据集"), { target: { value: "dataset:private" } });
+  fireEvent.change(screen.getByLabelText("迭代次数"), { target: { value: "2" } });
+  fireEvent.click(screen.getByRole("button", { name: "运行集合" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/run`, "POST", expect.objectContaining({ dataset_id: "private", iterations: 2 })));
+  await waitFor(() => expect(screen.getByRole("button", { name: "运行集合" })).toHaveProperty("disabled", false));
+  fireEvent.click(screen.getByRole("button", { name: "工作区测试场景" }));
+  fireEvent.click(await screen.findByRole("button", { name: "运行已保存场景" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/run`, "POST", expect.objectContaining({ scenario_id: "scenario-data", dataset_id: "private", iterations: 2 })));
+  const runs = vi.mocked(api).mock.calls.filter(([path]) => path === `${base}/run`);
+  expect(runs).toHaveLength(2);
+  for (const [, , body] of runs) { expect(body).not.toHaveProperty("dataset"); expect(JSON.stringify(body)).not.toContain("private-source"); }
+  expect(vi.mocked(api).mock.calls.some(([, method]) => method === "PUT")).toBe(false);
+});
+
+it("previews temporary run data through the member route without saving and runs inline CSV", async () => {
+  vi.mocked(api).mockImplementation((path) => Promise.resolve(path.endsWith("/dataset/preview") ? { columns: ["value"], rows: [{ value: "alpha" }] } : path.endsWith("/run") ? { passed: 1, failed: 0, cancelled: false } : workspace));
+  render(view("editor"));
+  fireEvent.change(await screen.findByLabelText("运行数据集"), { target: { value: "temporary" } });
+  expect(screen.getByRole("button", { name: "运行集合" })).toHaveProperty("disabled", true);
+  fireEvent.change(screen.getByLabelText("数据格式"), { target: { value: "csv" } });
+  fireEvent.change(screen.getByLabelText("测试数据源"), { target: { value: "value\nalpha" } });
+  fireEvent.click(screen.getByRole("button", { name: "预览数据行" }));
+  await screen.findByText("alpha");
+  expect(api).toHaveBeenCalledWith(`${base}/dataset/preview`, "POST", { expected_revision: 3, dataset: { format: "csv", source: "value\nalpha" } });
+  fireEvent.click(screen.getByRole("button", { name: "运行集合" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/run`, "POST", expect.objectContaining({ dataset: { format: "csv", source: "value\nalpha" } })));
+  expect(vi.mocked(api).mock.calls.some(([path, method]) => path.startsWith("/api/testing/") || method === "PUT")).toBe(false);
+});
+
+it("accepts query run data and blocks a selected dataset deleted by another member", async () => {
+  const shared = structuredClone(workspace);
+  shared.data.datasets = [{ id: "query", name: "Fresh query", description: "", secret: true, query: { request_id: "query-request" } }];
+  vi.mocked(api).mockImplementation((path) => Promise.resolve(path.endsWith("/run") ? { passed: 1, failed: 0, cancelled: false } : shared));
+  render(view("editor"));
+  fireEvent.change(await screen.findByLabelText("运行数据集"), { target: { value: "dataset:query" } });
+  fireEvent.click(screen.getByRole("button", { name: "运行集合" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/run`, "POST", expect.objectContaining({ dataset_id: "query" })));
+  act(() => client.setQueryData(["shared-workspace", "member", "owner-id", "w", "editor", 0], { ...shared, revision: 4, data: { ...shared.data, datasets: [] } }));
+  await screen.findByText("所选数据集已删除或缺少数据源，请重新选择。");
+  expect(screen.getByLabelText("运行数据集")).toHaveProperty("value", "dataset:query");
+  expect(screen.getByRole("button", { name: "运行集合" })).toHaveProperty("disabled", true);
+});
+
+it("retains temporary input across tabs and resets it across account scope", async () => {
+  const mounted = render(view("editor"));
+  fireEvent.change(await screen.findByLabelText("运行数据集"), { target: { value: "temporary" } });
+  fireEvent.change(screen.getByLabelText("测试数据源"), { target: { value: '[{"private":"temporary-secret"}]' } });
+  fireEvent.click(screen.getByRole("button", { name: "文档" }));
+  fireEvent.click(screen.getByRole("button", { name: "资源" }));
+  expect((screen.getByLabelText("测试数据源") as HTMLTextAreaElement).value).toContain("temporary-secret");
+  mounted.rerender(view("editor", "different-member"));
+  await screen.findByLabelText("运行数据集");
+  expect(screen.getByLabelText("运行数据集")).toHaveProperty("value", "none");
+  expect(screen.queryByLabelText("测试数据源")).toBeNull();
+});
+
+it("locks run settings while preserving the original dataset job and global Stop across tabs", async () => {
+  let finish!: (value: unknown) => void;
+  const shared = structuredClone(workspace);
+  shared.data.datasets = [{ id: "d", name: "Rows", description: "", secret: true, source: { format: "csv", source: "value\nalpha" } }];
+  vi.mocked(api).mockImplementation((path) => path === `${base}/run` ? new Promise((resolve) => { finish = resolve; }) : Promise.resolve(shared));
+  render(view("editor"));
+  fireEvent.change(await screen.findByLabelText("运行数据集"), { target: { value: "dataset:d" } });
+  fireEvent.click(screen.getByRole("button", { name: "运行集合" }));
+  await waitFor(() => expect(finish).toBeTypeOf("function"));
+  expect(screen.getByLabelText("运行数据集")).toHaveProperty("disabled", true);
+  expect(screen.getByLabelText("迭代次数")).toHaveProperty("disabled", true);
+  fireEvent.click(screen.getByRole("button", { name: "文档" }));
+  fireEvent.click(screen.getByRole("button", { name: "停止集合运行" }));
+  const body = vi.mocked(api).mock.calls.find(([path]) => path === `${base}/run`)?.[2] as { job_id: string };
+  await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/run/cancel`, "POST", { job_id: body.job_id }));
+  act(() => finish({ passed: 1, failed: 0, cancelled: true }));
+  await waitFor(() => expect(screen.queryByRole("button", { name: "停止集合运行" })).toBeNull());
+  fireEvent.click(screen.getByRole("button", { name: "资源" }));
+  expect(screen.getByLabelText("运行数据集")).toHaveProperty("value", "dataset:d");
+  expect(screen.getByLabelText("运行数据集")).toHaveProperty("disabled", false);
+});
+
+it("does not dispatch run against a newly cached revision before React updates saved data", async () => {
+  const shared = structuredClone(workspace);
+  shared.data.datasets = [{ id: "d", name: "Rows", description: "", secret: true, source: { format: "csv", source: "value\nalpha" } }];
+  vi.mocked(api).mockResolvedValue(shared);
+  render(view("editor"));
+  fireEvent.change(await screen.findByLabelText("运行数据集"), { target: { value: "dataset:d" } });
+  act(() => {
+    client.setQueryData(["shared-workspace", "member", "owner-id", "w", "editor", 0], { ...shared, revision: 4, data: { ...shared.data, datasets: [] } });
+    fireEvent.click(screen.getByRole("button", { name: "运行集合" }));
+  });
+  expect(vi.mocked(api).mock.calls.some(([path]) => path === `${base}/run`)).toBe(false);
 });

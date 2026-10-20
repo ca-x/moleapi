@@ -31,6 +31,9 @@ import SharedCollectionSettingsDialog from "./SharedCollectionSettingsDialog";
 import SharedResourceActions from "./SharedResourceActions";
 import SharedScenariosPanel from "./SharedScenariosPanel";
 import SharedDatasetsPanel from "./SharedDatasetsPanel";
+import SharedRunOptions from "./SharedRunOptions";
+import { defaultSharedRunConfig, resolveSharedRunOptions, type SharedRunConfig } from "./sharedRunOptions";
+import type { DatasetPreview } from "../testing/RunnerDataset";
 import type { CollectionSettingsTarget } from "../collections/CollectionSettingsFields";
 
 type Tab = "resources" | "history" | "reports" | "mock" | "documents" | "variables" | "scenarios" | "datasets";
@@ -78,6 +81,12 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
   const [exportingReport, setExportingReport] = useState<string | null>(null);
   const mounted = useRef(true);
   const scope = `${accountId}:${owner}:${workspaceId}:${selected.role}:${epoch}`;
+  const [runConfigState, setRunConfigState] = useState<{ scope: string; value: SharedRunConfig } | null>(null);
+  const [runDataBusy, setRunDataBusy] = useState<{ scope: string; busy: boolean } | null>(null);
+  const runConfig = runConfigState?.scope === scope ? runConfigState.value : defaultSharedRunConfig();
+  const dataBusy = runDataBusy?.scope === scope && runDataBusy.busy;
+  const runOptionsValid = !dataBusy && resolveSharedRunOptions(runConfig, saved?.data.datasets ?? []).options !== null;
+  useEffect(() => { setRunConfigState(null); setRunDataBusy(null); }, [scope]);
   const latest = useRef(scope);
   latest.current = scope;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -227,8 +236,16 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
       if (current(origin)) { setError(liveError(cause)); try { const remote = await api<Workspace>(base); if (current(origin) && remote.revision !== saved.revision) setConflict(remote); } catch { /* Access revocation is shown by the next workspace refresh. */ } }
     } finally { if (current(origin)) setSaving(false); }
   }
+  async function previewRunData(source: { format: "csv" | "json"; source: string }) {
+    if (!saved || !datasetContextCurrent()) throw new Error("stale dataset context");
+    const result = await api<DatasetPreview>(`${base}/dataset/preview`, "POST", { expected_revision: saved.revision, dataset: source });
+    if (!datasetContextCurrent()) throw new Error("stale dataset context");
+    return result;
+  }
   async function runCollection(scenarioId?: string) {
-    if (!canEdit || !collection || running || activeRun.current?.scope === scope || dirty || !current(scope)) return;
+    if (!canEdit || !collection || running || activeRun.current?.scope === scope || dirty || dataBusy || !datasetContextCurrent()) return;
+    const options = resolveSharedRunOptions(runConfig, saved?.data.datasets ?? []).options;
+    if (!options) return;
     const scenario = scenarioId ? saved?.data.scenarios?.find((scenario) => scenario.id === scenarioId && scenario.collection_id === collection.id) : undefined;
     if (scenarioId && !scenario) return;
     const origin = scope;
@@ -238,7 +255,7 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
     activeRun.current = job;
     setRunning(true); setError(""); setRunResult(null);
     try {
-      const result = await api<RunResult>(`${base}/run`, "POST", { collection_id: collection.id, ...(scenarioId ? { scenario_id: scenarioId } : {}), job_id: jobId });
+      const result = await api<RunResult>(`${base}/run`, "POST", { ...options, collection_id: collection.id, ...(scenarioId ? { scenario_id: scenarioId } : {}), job_id: jobId });
       if (current(origin)) { if (runGeneration.current === generation) setRunResult(result); void client.invalidateQueries({ queryKey: ["shared-history", accountId, owner, workspaceId] }); void client.invalidateQueries({ queryKey: ["shared-reports", accountId, owner, workspaceId] }); }
     } catch (cause) { if (current(origin) && runGeneration.current === generation) setError(liveError(cause)); }
     finally { if (current(origin) && activeRun.current === job) { activeRun.current = null; setRunning(false); setStoppingRun(false); } }
@@ -322,12 +339,13 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
       {canEdit && running && activeRun.current?.scope === scope && <Flex role="region" aria-label={t("当前运行任务")} gap="2" justify="between" align="center" wrap="wrap"><Text size="2" style={{ overflowWrap: "anywhere", minWidth: 0 }}>{t("正在运行：{{name}}", { name: activeRun.current.label })}</Text><Button variant="outline" color="gray" loading={stoppingRun} disabled={stoppingRun} onClick={() => void stopCollection()}>{t("停止集合运行")}</Button></Flex>}
       <Flex gap="2" wrap="wrap"><Button variant={tab === "resources" ? "solid" : "outline"} onClick={() => setTab("resources")}>{t("资源")}</Button><Button variant={tab === "documents" ? "solid" : "outline"} onClick={() => setTab("documents")}>{t("文档")}</Button><Button variant={tab === "variables" ? "solid" : "outline"} onClick={() => setTab("variables")}>{t("环境变量")}</Button>{canEdit && <><Button variant={tab === "datasets" ? "solid" : "outline"} onClick={() => setTab("datasets")}>{t("工作区数据集")}</Button><Button variant={tab === "scenarios" ? "solid" : "outline"} onClick={() => setTab("scenarios")}>{t("工作区测试场景")}</Button><Button variant={tab === "history" ? "solid" : "outline"} onClick={() => setTab("history")}>{t("执行历史")}</Button><Button variant={tab === "reports" ? "solid" : "outline"} onClick={() => setTab("reports")}>{t("测试报告")}</Button><Button variant={tab === "mock" ? "solid" : "outline"} onClick={() => setTab("mock")}>{t("Mock 预览")}</Button></>}</Flex>
       {conflict && <Callout.Root color="amber" role="alert"><Callout.Text>{t("共享工作区已被其他成员更新。选择要保留的版本。")}</Callout.Text><Flex gap="2" wrap="wrap" mt="2"><Button variant="soft" onClick={() => { setDraft(conflict); setSaved(conflict); setConflict(null); setError(""); }}>{t("使用服务器版本")}</Button><Button variant="soft" onClick={() => { setSaved(conflict); setDraft((currentDraft) => currentDraft ? { ...currentDraft, revision: conflict.revision } : null); setConflict(null); setError(""); }}>{t("保留我的修改")}</Button></Flex></Callout.Root>}
+      {canEdit && saved && (tab === "resources" || tab === "scenarios") && <SharedRunOptions key={scope} value={runConfig} datasets={saved.data.datasets ?? []} scope={`${scope}/${saved.revision}`} workspaceId={workspaceId} disabled={running || !!dataBusy} dark={dark} onChange={(value) => { if (!running && !dataBusy && current(scope)) { invalidateDraftResults(); setRunConfigState({ scope, value }); } }} onBusyChange={(busy) => { if (current(scope)) setRunDataBusy({ scope, busy }); }} previewSource={previewRunData} />}
       {tab === "resources" && <>
         {canEdit ? <Field label={t("工作区名称")}><TextField.Root value={draft.name} onChange={(event) => { invalidateDraftResults(); setDraft((currentDraft) => currentDraft ? { ...currentDraft, name: event.target.value } : null); }} /></Field> : <Text size="2">{draft.name}</Text>}
         {canEdit && <Button variant="outline" onClick={() => setCollectionSettings({ kind: "create", parent_id: null })}>{t("新建集合")}</Button>}
         {draft.data.collections.length === 0 ? <Text size="2" color="gray">{t("此工作区还没有集合")}</Text> : <>
           <Choice label={t("集合")} value={collection?.id ?? ""} onChange={(value) => { setCollectionId(value); setRequestId(""); }} options={draft.data.collections.map((item) => ({ value: item.id, label: item.name }))} />
-          {collection && <Flex align="center" justify="between" gap="2" wrap="wrap"><Heading size="3">{collection.name}</Heading>{canEdit && <Flex gap="2" wrap="wrap"><Button variant="outline" onClick={() => setCollectionSettings({ kind: "edit", id: collection.id })}>{t("集合与目录设置")}</Button><Button variant="outline" onClick={() => setCollectionSettings({ kind: "create", parent_id: collection.id })}>{t("新建目录")}</Button><Button variant="outline" onClick={addHttpRequest}>{t("新增 HTTP 请求")}</Button><Button loading={running} disabled={running || dirty || collection.requests.length === 0} onClick={() => void runCollection()}>{t("运行集合")}</Button></Flex>}</Flex>}
+          {collection && <Flex align="center" justify="between" gap="2" wrap="wrap"><Heading size="3">{collection.name}</Heading>{canEdit && <Flex gap="2" wrap="wrap"><Button variant="outline" onClick={() => setCollectionSettings({ kind: "edit", id: collection.id })}>{t("集合与目录设置")}</Button><Button variant="outline" onClick={() => setCollectionSettings({ kind: "create", parent_id: collection.id })}>{t("新建目录")}</Button><Button variant="outline" onClick={addHttpRequest}>{t("新增 HTTP 请求")}</Button><Button loading={running} disabled={running || dirty || !runOptionsValid || collection.requests.length === 0} onClick={() => void runCollection()}>{t("运行集合")}</Button></Flex>}</Flex>}
           {canEdit && collection && <SharedResourceActions key={`${scope}/${saved?.revision}/${conflict?.revision ?? ""}`} data={draft.data} workspaceName={draft.name} collectionId={collection.id} requestId={request?.id} onChange={applyResourceChange} />}
           {canEdit && dirty && <Text size="1" color="gray">{t("先保存修改，再运行集合。")}</Text>}
           {runResult && <Text role="status" size="2">{t("通过")}: {runResult.passed} · {t("失败")}: {runResult.failed}{runResult.cancelled && <> · {t("已取消")}</>}</Text>}
@@ -373,7 +391,7 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
         {canEdit && <Button loading={saving} disabled={!dirty || saving || !!conflict || invalidDocuments} onClick={() => void save()}>{t("保存共享工作区")}</Button>}
       </>}
       {tab === "datasets" && canEdit && saved && <SharedDatasetsPanel key={`${scope}/${saved.revision}/${conflict?.revision ?? ""}`} scope={`${scope}/${saved.revision}/${conflict?.revision ?? ""}`} data={draft.data} base={base} revision={saved.revision} dark={dark} dirty={dirty} saving={saving} canSave={!saving && !conflict && !invalidDocuments} isCurrent={datasetContextCurrent} onChange={updateDatasets} onSave={() => void save()} />}
-      {tab === "scenarios" && canEdit && <SharedScenariosPanel key={`${scope}/${collection?.id ?? ""}/${saved?.revision}/${conflict?.revision ?? ""}`} data={draft.data} collectionId={collection?.id ?? ""} dirty={dirty} saving={saving} canSave={!saving && !conflict && !invalidDocuments} running={running} result={runResult} onSelectCollection={(value) => { setCollectionId(value); setRequestId(""); }} onChange={updateScenarios} onSave={() => void save()} onRun={(id) => void runCollection(id)} />}
+      {tab === "scenarios" && canEdit && <SharedScenariosPanel key={`${scope}/${collection?.id ?? ""}/${saved?.revision}/${conflict?.revision ?? ""}`} data={draft.data} collectionId={collection?.id ?? ""} dirty={dirty} saving={saving} canSave={!saving && !conflict && !invalidDocuments} running={running} runOptionsValid={runOptionsValid} result={runResult} onSelectCollection={(value) => { setCollectionId(value); setRequestId(""); }} onChange={updateScenarios} onSave={() => void save()} onRun={(id) => void runCollection(id)} />}
       {tab === "documents" && <SharedDocumentsPanel key={`${scope}/${saved?.revision}`} data={draft.data} canEdit={canEdit} dark={dark} dirty={dirty} saving={saving} canSave={!saving && !conflict && !invalidDocuments} conflictRevision={conflict?.revision ?? null} onChange={updateDocuments} onSave={() => void save()} onOpenRequest={openSharedRequest} />}
       {tab === "variables" && <SharedVariablesPanel key={`${scope}/${saved?.revision}`} data={draft.data} canEdit={canEdit} dirty={dirty} saving={saving} canSave={!saving && !conflict && !invalidDocuments} conflictRevision={conflict?.revision ?? null} onChange={updateVariables} onSave={() => void save()} />}
       {tab === "history" && canEdit && <Flex direction="column" gap="2">{history.isPending && <Text role="status">{t("正在加载执行历史…")}</Text>}{history.error && <Callout.Root color="red" role="alert"><Callout.Text>{liveError(history.error)}</Callout.Text></Callout.Root>}{!history.error && history.data?.length === 0 && <Text size="2" color="gray">{t("暂无执行历史")}</Text>}{!history.error && history.data?.map((item) => <Flex key={item.id} justify="between" gap="2" wrap="wrap"><Text size="2">{item.method} {item.request_name}</Text><Text size="2">{item.status} · {item.created_at}</Text></Flex>)}</Flex>}
