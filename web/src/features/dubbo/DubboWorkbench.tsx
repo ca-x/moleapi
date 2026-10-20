@@ -3,10 +3,13 @@ import {t, useLanguage} from "../../shared/i18n";
 import {id} from "../../shared/model";
 import type {DubboConfig, RequestSpec, Workspace, WorkspaceData} from "../../shared/types";
 import {Choice, Field, PairEditor} from "../../shared/ui";
-import MetadataPreviewPane from "./MetadataPreviewPane";
+import MetadataPreviewPane,{type MetadataOperations} from "./MetadataPreviewPane";
+import {useEffect,useRef} from "react";
 
-export default function DubboWorkbench({request, update, disabled, workspaceId, workspaceData, workspaceRevision, onImported, dirty}:{request:RequestSpec;update:(patch:Partial<RequestSpec>)=>void;disabled:boolean;workspaceId?:string;workspaceData?:WorkspaceData;workspaceRevision?:number;onImported?:(workspace:Workspace)=>void;dirty?:boolean}) {
-  useLanguage();
+export default function DubboWorkbench({request, update:updateSource, disabled, workspaceId, workspaceData, workspaceRevision, onImported, dirty, scope, isCurrent, metadataOperations}:{request:RequestSpec;update:(patch:Partial<RequestSpec>)=>void;disabled:boolean;workspaceId?:string;workspaceData?:WorkspaceData;workspaceRevision?:number;onImported?:(workspace:Workspace)=>void;dirty?:boolean;scope?:string;isCurrent?:()=>boolean;metadataOperations?:MetadataOperations}) {
+  useLanguage();const identity=JSON.stringify([scope,request]),current=useRef(identity);current.current=identity;const latest=useRef({disabled,updateSource,isCurrent});latest.current={disabled,updateSource,isCurrent};const mounted=useRef(true);useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
+  const admitted=()=>mounted.current&&current.current===identity&&!latest.current.disabled&&(latest.current.isCurrent?.()??true);
+  const update=(patch:Partial<RequestSpec>)=>{if(admitted())latest.current.updateSource(patch);};
   if (request.protocol?.kind !== "dubbo") return null;
   const config = request.protocol;
   const change = (patch:Partial<DubboConfig>) => update({protocol:{...config,...patch}});
@@ -69,6 +72,6 @@ export default function DubboWorkbench({request, update, disabled, workspaceId, 
     <Text weight="medium">{t("Dubbo 附件")}</Text>
     <PairEditor rows={config.attachments} onChange={attachments=>change({attachments})} disabled={disabled} secrets keyLabel={t("附件名")} valueLabel={t("附件值")}/>
     <Separator size="4"/>
-    <MetadataPreviewPane request={request} update={update} workspaceId={workspaceId} workspaceData={workspaceData} workspaceRevision={workspaceRevision} onImported={onImported} dirty={dirty} disabled={disabled}/>
+    <MetadataPreviewPane scope={scope} isCurrent={admitted} operations={metadataOperations} request={request} update={update} workspaceId={workspaceId} workspaceData={workspaceData} workspaceRevision={workspaceRevision} onImported={onImported} dirty={dirty} disabled={disabled}/>
   </div>;
 }

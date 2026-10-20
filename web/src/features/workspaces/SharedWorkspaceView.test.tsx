@@ -2161,3 +2161,20 @@ it('stages shared A2A Agent Cards until explicit Save and keeps runtime paramete
  fireEvent.click(live.getByRole('button',{name:/停止请求/}));await waitFor(()=>expect(api).toHaveBeenCalledWith(`${base}/sessions/a2a-session/send`,'POST',expect.objectContaining({kind:'a2a_stop'})));
  expect(canonical.data).toEqual(saved.data);expect(canonical.revision).toBe(saved.revision);expect(vi.mocked(api).mock.calls.every(([path])=>path.startsWith(base))).toBe(true);
 });
+
+it('stages shared Dubbo metadata, explicitly saves methods and invokes cancellable canonical member calls',async()=>{
+ let canonical=structuredClone(workspace);const definition={service:'fixture.Service',version:'1',group:'qa',application:'provider',metadata_path:'path',document_sha256:'a'.repeat(64),raw_document:'{"unknown":true}',methods:[{name:'echo',parameter_types:['java.lang.String'],return_type:'java.lang.String'}],types:[]};let finishCall!:(value:unknown)=>void;
+ vi.mocked(api).mockImplementation((path,method,body)=>{
+  if(path==='/api/dubbo/capability')return Promise.resolve({available:true,engine:'Apache Dubbo'});
+  if(path===base&&method==='PUT'){canonical={...canonical,revision:canonical.revision+1,data:(body as Workspace).data};return Promise.resolve(canonical);}
+  if(path===`${base}/dubbo/metadata/preview`)return Promise.resolve(definition);
+  if(path===`${base}/dubbo/metadata/import`){const candidate=structuredClone(canonical),request=candidate.data.collections[0].requests.at(-1)!;candidate.data.collections[0].requests.push({...request,id:'method-draft',name:'echo(java.lang.String)'});return Promise.resolve(candidate);}
+  if(path.endsWith('/requests/method-draft/execute'))return new Promise(resolve=>{finishCall=resolve;});
+  if(path===`${base}/dubbo/cancel`)return Promise.resolve({cancelled:true});return Promise.resolve(canonical);
+ });
+ render(view('editor'));fireEvent.click(await screen.findByRole('button',{name:'新增 Dubbo 请求'}));fireEvent.change(screen.getByLabelText('Dubbo 服务'),{target:{value:'fixture.Service'}});fireEvent.change(screen.getByLabelText('Dubbo 方法'),{target:{value:'echo'}});fireEvent.change(screen.getByLabelText('元数据中心地址'),{target:{value:'nacos://fixture.test'}});fireEvent.change(screen.getByLabelText('提供方 application'),{target:{value:'provider'}});fireEvent.click(screen.getByRole('button',{name:'保存共享工作区'}));await waitFor(()=>expect((screen.getByRole('button',{name:'保存共享工作区'}) as HTMLButtonElement).disabled).toBe(true));
+ fireEvent.click(screen.getByRole('button',{name:'预览元数据'}));await screen.findByText('echo(java.lang.String) → java.lang.String');fireEvent.click(screen.getByRole('button',{name:'导入所选方法'}));await waitFor(()=>expect((screen.getByRole('button',{name:'保存共享工作区'}) as HTMLButtonElement).disabled).toBe(false));expect(canonical.data.collections[0].requests).toHaveLength(workspace.data.collections[0].requests.length+1);
+ fireEvent.click(screen.getByRole('button',{name:'保存共享工作区'}));await waitFor(()=>expect(canonical.data.collections[0].requests).toHaveLength(workspace.data.collections[0].requests.length+2));const saved=structuredClone(canonical);
+ fireEvent.change(screen.getByLabelText('请求'),{target:{value:'method-draft'}});await waitFor(()=>expect((screen.getByRole('button',{name:'发送已保存请求'}) as HTMLButtonElement).disabled).toBe(false));fireEvent.click(screen.getByRole('button',{name:'发送已保存请求'}));await waitFor(()=>expect(finishCall).toBeTypeOf('function'));fireEvent.click(screen.getByRole('button',{name:'停止调用'}));await waitFor(()=>expect(api).toHaveBeenCalledWith(`${base}/dubbo/cancel`,'POST',expect.objectContaining({request_id:'method-draft',expected_revision:canonical.revision,job_id:expect.any(String)})));
+ await act(async()=>finishCall({status:200,status_text:'Dubbo OK',headers:[],body:'"value"',elapsed_ms:1,size_bytes:7,url:'dubbo://fixture',tests:[],logs:[],variable_updates:[],request_updates:[],skipped:false,truncated:false}));expect(canonical.data).toEqual(saved.data);expect(canonical.revision).toBe(saved.revision);expect(vi.mocked(api).mock.calls.every(([path])=>path.startsWith(base)||path==='/api/dubbo/capability')).toBe(true);
+});

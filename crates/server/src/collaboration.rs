@@ -24,6 +24,8 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::future::Future;
 
+mod dubbo;
+pub use dubbo::{shared_dubbo_cancel, shared_dubbo_metadata_import, shared_dubbo_metadata_preview};
 mod a2a;
 pub use a2a::{shared_a2a_cancel, shared_a2a_discover, shared_a2a_import, shared_a2a_read};
 mod mcp;
@@ -585,9 +587,14 @@ pub async fn shared_execute(
         .find(|request| request.id == request_id)
         .cloned()
         .ok_or_else(ApiError::not_found)?;
-    let soap = request.protocol.is_soap();
-    if soap && input.has_scope_overrides() {
-        return Err(ApiError::bad("Shared SOAP uses canonical workspace scopes"));
+    let protected = request.protocol.is_soap() || request.protocol.is_dubbo();
+    let dubbo = request.protocol.is_dubbo();
+    if protected && input.has_scope_overrides() || dubbo && input.has_environment_override() {
+        return Err(ApiError::bad(if dubbo {
+            "Shared Dubbo uses canonical workspace scopes"
+        } else {
+            "Shared SOAP uses canonical workspace scopes"
+        }));
     }
     record_event_result(
         &tx,
@@ -600,13 +607,26 @@ pub async fn shared_execute(
     )
     .await?;
     tx.commit().await?;
+    let lease = if dubbo {
+        dubbo::execution_lease(
+            &state,
+            &actor.0,
+            &owner,
+            &workspace,
+            &request_id,
+            admission,
+            input.job_id(),
+        )?
+    } else {
+        None
+    };
     let run = crate::execution::execute(
         State(state.clone()),
         Extension(Identity(owner.clone())),
         Json(input.into_execute(workspace.clone(), request, canonical.revision)),
     );
     let watch = async {
-        if soap {
+        if protected {
             return watch_authenticated_revision(
                 &state,
                 &actor.0,
@@ -622,7 +642,7 @@ pub async fn shared_execute(
         ApiError::not_found()
     };
     let final_check = async {
-        if soap {
+        if protected {
             return finish_specification_preview(
                 &state.db,
                 &actor.0,
@@ -639,7 +659,19 @@ pub async fn shared_execute(
         }
         Ok(())
     };
-    with_access_watch(run, watch, final_check).await
+    dubbo::cancelable(
+        lease,
+        with_access_watch(run, watch, final_check),
+        finish_specification_preview(
+            &state.db,
+            &actor.0,
+            &owner,
+            &workspace,
+            (admission, canonical.revision),
+            crate::auth::still_authenticated(&state, &actor.0, &headers),
+        ),
+    )
+    .await
 }
 
 pub async fn shared_execute_draft(
@@ -664,13 +696,21 @@ pub async fn shared_execute_draft(
     if input.request.protocol != moleapi_core::Protocol::Http
         && !input.request.protocol.is_graphql()
         && !input.request.protocol.is_soap()
+        && !input.request.protocol.is_dubbo()
     {
         return Err(ApiError::bad(
-            "Draft execution supports HTTP, GraphQL and SOAP requests only",
+            "Draft execution supports HTTP, GraphQL, SOAP and Dubbo requests only",
         ));
     }
-    if input.request.protocol.is_soap() && input.has_scope_overrides() {
-        return Err(ApiError::bad("Shared SOAP uses canonical workspace scopes"));
+    let dubbo = input.request.protocol.is_dubbo();
+    if (input.request.protocol.is_soap() || dubbo) && input.has_scope_overrides()
+        || dubbo && input.has_environment_override()
+    {
+        return Err(ApiError::bad(if dubbo {
+            "Shared Dubbo uses canonical workspace scopes"
+        } else {
+            "Shared SOAP uses canonical workspace scopes"
+        }));
     }
     if input.request.protocol.is_graphql()
         && moleapi_core::graphql_is_subscription(&input.request)
@@ -698,6 +738,16 @@ pub async fn shared_execute_draft(
     {
         return Err(ApiError::not_found());
     }
+    if dubbo
+        && !canonical.data.collections.iter().any(|c| {
+            c.id == input.collection_id
+                && c.requests
+                    .iter()
+                    .any(|r| r.id == input.request.id && r.protocol.is_dubbo())
+        })
+    {
+        return Err(ApiError::not_found());
+    }
     moleapi_core::validate_request(&input.request, true)
         .map_err(|error| ApiError::bad(error.to_string()))?;
     record_event_result(
@@ -711,6 +761,19 @@ pub async fn shared_execute_draft(
     )
     .await?;
     tx.commit().await?;
+    let lease = if dubbo {
+        dubbo::execution_lease(
+            &state,
+            &actor.0,
+            &owner,
+            &workspace,
+            &input.request.id,
+            admission,
+            input.job_id(),
+        )?
+    } else {
+        None
+    };
     let run = crate::execution::execute(
         State(state.clone()),
         Extension(Identity(owner.clone())),
@@ -733,7 +796,19 @@ pub async fn shared_execute_draft(
         (admission, canonical.revision),
         crate::auth::still_authenticated(&state, &actor.0, &headers),
     );
-    with_access_watch(run, watch, final_check).await
+    dubbo::cancelable(
+        lease,
+        with_access_watch(run, watch, final_check),
+        finish_specification_preview(
+            &state.db,
+            &actor.0,
+            &owner,
+            &workspace,
+            (admission, canonical.revision),
+            crate::auth::still_authenticated(&state, &actor.0, &headers),
+        ),
+    )
+    .await
 }
 
 pub async fn shared_session_create(

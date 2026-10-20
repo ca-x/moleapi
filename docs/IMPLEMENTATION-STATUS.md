@@ -493,3 +493,8 @@ Shared editors/admins now configure/save/import/export MCP HTTP/allowed STDIO an
 ## Shared A2A client checkpoint
 
 Shared editors/admins configure versioned A2A0.3 JSONRPC/1.0 JSONRPC or HTTP+JSON, stage original Card import/discovery/restore candidates and explicitly Save adopted interfaces/templates. Creator-bound sessions use canonical owner preparation for message/task/stream/push operations with runtime-local edits, explicit remote cancellation/local Stop and source/credential/member/revision fences. A reviewed final-authorization cancellation race is fixed and regression-tested in shared/owned discovery. Current detailed evidence and remaining distribution/native/platform boundaries are in COLLABORATION-COVERAGE.md; full395-capability completion is not claimed.
+
+
+## Shared classic Dubbo client checkpoint
+
+Shared editors/admins configure classic Dubbo direct/ZooKeeper/Nacos, explicitly save metadata method/DTO candidates and perform canonical saved or temporary finite calls with actor-bound Stop. Owner variables/scripts/assertions, source privacy including transient metadata login tokens, credential/member/revision fences and worker reap have real Apache/Curator and authenticated Nacos2.5.1 evidence. Owned immediate import remains compatible. Full frontend762, affected server81 plus explicit shared10 real/policy cases, protocol16, types/production/strict Clippy/fmt and actual bilingual narrow browser gates pass. Detailed scopes and expected private-value collisions are in COLLABORATION-COVERAGE.md. EDAS sandbox, native hosted sync/full member resource parity, distributed routing and platform/database/release integration remain open; full395-capability completion is not claimed.

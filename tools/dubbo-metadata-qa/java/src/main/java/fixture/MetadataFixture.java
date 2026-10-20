@@ -25,7 +25,15 @@ public class MetadataFixture {
       app.setQosEnable(false); app.setEnableFileCache(false);
       ServiceConfig<RegistryService> service=new ServiceConfig<>();
       service.setInterface(RegistryService.class); service.setRef(new RegistryService() {
-        public String echo(String value) {calls.incrementAndGet(); return "metadata:"+value;}
+        public String echo(String value) {
+          calls.incrementAndGet();
+          if ("return-null".equals(value)) return null;
+          if ("throw".equals(value)) throw new IllegalArgumentException("fixture remote failure");
+          if ("wait".equals(value)) {
+            try {Thread.sleep(30_000);} catch (InterruptedException error) {Thread.currentThread().interrupt();}
+          }
+          return "metadata:"+value;
+        }
         public Profile exchange(Profile value) {calls.incrementAndGet(); return value;}
       });
       service.setVersion("1.0.0"); service.setGroup("qa");

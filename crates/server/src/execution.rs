@@ -33,6 +33,8 @@ pub struct ExecuteSaved {
     data: Vec<Pair>,
     #[serde(default)]
     locals: Vec<VariableUpdate>,
+    #[serde(default)]
+    job_id: Option<String>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -47,8 +49,16 @@ pub struct ExecuteDraft {
     data: Vec<Pair>,
     #[serde(default)]
     locals: Vec<VariableUpdate>,
+    #[serde(default)]
+    job_id: Option<String>,
 }
 impl ExecuteDraft {
+    pub(crate) fn job_id(&self) -> Option<&str> {
+        self.job_id.as_deref()
+    }
+    pub(crate) fn has_environment_override(&self) -> bool {
+        self.environment_id.is_some()
+    }
     pub(crate) fn has_scope_overrides(&self) -> bool {
         !self.variables.is_empty() || !self.data.is_empty() || !self.locals.is_empty()
     }
@@ -66,6 +76,12 @@ impl ExecuteDraft {
     }
 }
 impl ExecuteSaved {
+    pub(crate) fn job_id(&self) -> Option<&str> {
+        self.job_id.as_deref()
+    }
+    pub(crate) fn has_environment_override(&self) -> bool {
+        self.environment_id.is_some()
+    }
     pub(crate) fn has_scope_overrides(&self) -> bool {
         !self.variables.is_empty() || !self.data.is_empty() || !self.locals.is_empty()
     }

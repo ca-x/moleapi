@@ -34,7 +34,7 @@ Files: features/a2a/A2aClient.tsx, A2aCardEditor.tsx, existing owned wrappers/ho
 
 - [x] Full frontend/typecheck/production and affected backend; strict server Clippy/package fmt/diff, actual embedded build.
 - [x] Independent review; actual embedded bilingual390/1280 card/source/interface/template/message/task/stream/history/artifact/Stop/cancel/owned compatibility and light/dark a11y, screenshots and canonical preservation.
-- [ ] Coverage/map/status/ledger; commit/push, preserved PR update and exact-head CI/Docker observation. Whole28-module395-capability/native distribution/full platform matrix remains open.
+- [x] Coverage/map/status/ledger; commit/push, preserved PR update and exact-head CI/Docker observation. Whole28-module395-capability/native distribution/full platform matrix remains open.
 
 ## Review focus
 
@@ -63,3 +63,5 @@ Files: features/a2a/A2aClient.tsx, A2aCardEditor.tsx, existing owned wrappers/ho
 - Delivery pending commit/push/PR and exact-head CI/Docker. Prior MCP1dc84d0 Docker39502988936 completed success on native amd64/arm64 + container smoke, manifest skipped because PR; app39502988938 check remains live, database/source passed. Whole28-module395-capability goal remains active.
 
 - Final affected suite after the cancellation fix:72 passed,2 configured fixture ignores; cargo fmt and git diff --check exit0. All named QA browser/app/fixture processes stopped; screenshots inspected. Existing locale maps exactly preserved with5 new keys each. Source is ready for the already-authorized commit/push and PR checkpoint.
+
+- Delivery: committed/pushed69193d9; PR41 preserved and checkpoint appended. Exact-head Application39507519049 and Docker39507518860 both success; native amd64/arm64 smoke passed, PR manifest skipped/no registry image publish. QA processes were stopped. Full goal remains active.

@@ -42,8 +42,8 @@ This inventory covers every `.route` registered in `crates/server/src/lib.rs` at
 | `/owners/{owner}/workspaces/{workspace}` | GET viewer; PUT editor | workspace; viewer projection |
 | `/owners/{owner}/workspaces/{workspace}/run` | POST editor | outbound requests, private results and saved report |
 | `/owners/{owner}/workspaces/{workspace}/run/cancel` | POST editor, creator only | instance-local cancellation keyed by actor and membership epoch; early cancellation and actor audit |
-| `/owners/{owner}/workspaces/{workspace}/requests/{request}/execute` | POST editor | canonical saved request execution and private response; SOAP additionally fences credentials/revision and rejects scope overrides |
-| `/owners/{owner}/workspaces/{workspace}/execute-draft` | POST editor | HTTP, GraphQL query/mutation or SOAP draft execution under canonical collection, credential/member/revision fences; SOAP rejects scope overrides |
+| `/owners/{owner}/workspaces/{workspace}/requests/{request}/execute` | POST editor | canonical saved request execution and private response; SOAP/Dubbo additionally fence credentials/revision and reject scope overrides; Dubbo rejects environment overrides and supports actor/request/epoch-bound job cancellation |
+| `/owners/{owner}/workspaces/{workspace}/execute-draft` | POST editor | HTTP, GraphQL query/mutation, SOAP or saved-identity Dubbo draft execution under canonical collection, credential/member/revision fences; SOAP/Dubbo reject scope overrides; Dubbo also rejects environment overrides |
 | `/owners/{owner}/workspaces/{workspace}/sessions` | POST editor | canonical saved SSE/WebSocket/Data/TCP/Socket.IO/gRPC/MQTT/MCP/A2A/GraphQL subscription connection under expected revision |
 | `/owners/{owner}/workspaces/{workspace}/sessions/{id}` | GET/DELETE editor, creator only | bound live session summary and removal |
 | `/owners/{owner}/workspaces/{workspace}/sessions/{id}/events` | GET editor, creator only | bounded private live events |
@@ -51,6 +51,9 @@ This inventory covers every `.route` registered in `crates/server/src/lib.rs` at
 | `/owners/{owner}/workspaces/{workspace}/sessions/{id}/close` | POST editor, creator only | close bound live connection |
 | `/owners/{owner}/workspaces/{workspace}/mock/{request}/{example}` | GET editor | saved Mock example preview and call record |
 | `/workspaces/{workspace}/mcp/config/export` | No shared access | current owner/local saved MCP request export; shared native privacy pipeline screens custom Host names before encoding |
+| `/owners/{owner}/workspaces/{workspace}/dubbo/metadata/preview` | POST editor | saved canonical Dubbo request/revision/owner scopes, bounded checked metadata read, inherited private screening, actor audit and credential/member/revision watcher/final fence |
+| `/owners/{owner}/workspaces/{workspace}/dubbo/metadata/import` | POST editor | refetch exact SHA, canonical collection and explicit method decisions; screened original-source/DTO workspace candidate only, same fences; explicit shared Save persists |
+| `/owners/{owner}/workspaces/{workspace}/dubbo/cancel` | POST editor | saved request/revision, actor/request/member-epoch bound job cancellation, bounded early Stop; credential/member final admission and action-only actor audit |
 | `/owners/{owner}/workspaces/{workspace}/a2a/cards/import` | POST editor | canonical saved A2A request/dialect/revision-bound original Card candidate, inherited owner privacy, actor audit and credential/member/revision watcher/final fence; no persistence |
 | `/owners/{owner}/workspaces/{workspace}/a2a/cards/read` | POST editor | canonical request-linked Card specification/dialect only, same privacy/audit/fences |
 | `/owners/{owner}/workspaces/{workspace}/a2a/cards/discover` | POST editor | explicit URL, canonical owner auth/variables/scripts/TLS/timeout/checked network, bounded no-redirect Card fetch and candidate; same fences and actor cancellation |

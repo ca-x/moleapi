@@ -499,6 +499,18 @@ async fn build(
             get(collaboration::shared_mock),
         )
         .route(
+            "/owners/{owner}/workspaces/{workspace}/dubbo/cancel",
+            post(collaboration::shared_dubbo_cancel),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/dubbo/metadata/preview",
+            post(collaboration::shared_dubbo_metadata_preview),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/dubbo/metadata/import",
+            post(collaboration::shared_dubbo_metadata_import),
+        )
+        .route(
             "/owners/{owner}/workspaces/{workspace}/a2a/cards/import",
             post(collaboration::shared_a2a_import),
         )

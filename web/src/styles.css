@@ -1475,3 +1475,9 @@ kbd {
 .shared-a2a .protocol-events { height:360px; flex:none; min-height:0; }
 .shared-a2a .protocol-event-list { min-width:0; }
 .shared-a2a .protocol-event-list .rt-ScrollAreaViewport > div { width:100%; min-width:0!important; }
+
+.shared-dubbo { min-width:0; max-width:100%; }
+.shared-dubbo .form-panel { min-width:0; max-width:100%; }
+.shared-dubbo .response-pane { margin-top:16px; min-width:0; }
+.shared-dubbo .rt-Button.rt-variant-soft:not([data-accent-color="gray"]):not([disabled]) { color:var(--accent-12); }
+.shared-dubbo .code-editor .cm-gutters { color:var(--gray-11); }
