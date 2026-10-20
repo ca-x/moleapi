@@ -2285,5 +2285,9 @@
   "不使用数据集": "No dataset",
   "临时 CSV/JSON": "Temporary CSV/JSON",
   "临时数据仅用于本次运行，不保存到工作区。": "Temporary data is used only for this run and is not saved to the workspace.",
-  "所选数据集已删除或缺少数据源，请重新选择。": "The selected dataset was deleted or has no source. Select another dataset."
+  "所选数据集已删除或缺少数据源，请重新选择。": "The selected dataset was deleted or has no source. Select another dataset.",
+  "新增 Data 请求": "Add Data request",
+  "Data 请求设置": "Data request settings",
+  "数据源地址": "Data source URL",
+  "共享数据查询": "Shared data query"
 }

@@ -72,3 +72,21 @@ it("infers XLSB from a selected file and exposes worksheet and cached-value cont
   await act(async()=>{fireEvent.click(screen.getByRole("button",{name:"选择数据文件"}));});
   expect(change).toHaveBeenCalledWith(expect.objectContaining({file_name:"transactions.xlsb",file_format:"xlsb",sheet_name:""}));
 });
+it("discards a deferred file when shared canonical admission becomes stale",async()=>{
+  let finish!:(value:{name:string;base64:string})=>void;
+  vi.mocked(pickDataFile).mockReturnValue(new Promise(done=>{finish=done;}));
+  let current=true;const change=vi.fn();
+  render(<DataSourceFields config={{...dataConfig(),source:"local_file"}} change={change} connected={false} isCurrent={()=>current}/>);
+  fireEvent.click(screen.getByRole("button",{name:"选择数据文件"}));current=false;
+  await act(async()=>{finish({name:"stale.csv",base64:"MQ=="});});
+  expect(change).not.toHaveBeenCalled();
+});
+it("does not overwrite changed file source settings with a delayed file",async()=>{
+  let finish!:(value:{name:string;base64:string})=>void;
+  vi.mocked(pickDataFile).mockReturnValue(new Promise(done=>{finish=done;}));
+  const config={...dataConfig(),source:"local_file" as const};const change=vi.fn();
+  const view=render(<DataSourceFields config={config} change={change} connected={false}/>);
+  fireEvent.click(screen.getByRole("button",{name:"选择数据文件"}));
+  view.rerender(<DataSourceFields config={{...config,table_name:"changed"}} change={change} connected={false}/>);
+  await act(async()=>{finish({name:"stale.csv",base64:"MQ=="});});expect(change).not.toHaveBeenCalled();
+});

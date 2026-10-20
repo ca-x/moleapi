@@ -98,6 +98,27 @@ pub(crate) struct MemberLive {
     revision: i64,
 }
 impl MemberLive {
+    pub(crate) async fn insert_history(
+        &self,
+        state: &AppState,
+        entry: &moleapi_core::HistoryEntry,
+    ) -> Result<(), ApiError> {
+        let tx = state.db.begin().await?;
+        // Role changes and shared workspace writes take this same canonical row lock.
+        let canonical = lock_workspace(&tx, &self.owner, &self.workspace).await?;
+        let (_, current) = access(&tx, &self.actor, &self.owner, &self.workspace).await?;
+        if current != self.admission
+            || current.role == Role::Viewer
+            || canonical.revision != self.revision
+            || entry.workspace_id != self.workspace
+        {
+            return Err(ApiError::not_found());
+        }
+        crate::history::insert_in(&tx, &self.owner, entry).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
     pub(crate) async fn check(&self, state: &AppState, actor: &str) -> Result<(), ApiError> {
         if actor != self.actor {
             return Err(ApiError::not_found());
@@ -654,10 +675,12 @@ pub async fn shared_session_create(
         .ok_or_else(ApiError::not_found)?;
     if !matches!(
         request.protocol,
-        moleapi_core::Protocol::Sse | moleapi_core::Protocol::Websocket
+        moleapi_core::Protocol::Sse
+            | moleapi_core::Protocol::Websocket
+            | moleapi_core::Protocol::Data { .. }
     ) {
         return Err(ApiError::bad(
-            "Shared live sessions support saved SSE and WebSocket requests",
+            "Shared live sessions support saved SSE, WebSocket and Data requests",
         ));
     }
     tx.commit().await?;
@@ -812,20 +835,51 @@ pub async fn shared_session_send(
         .protocol_sessions
         .summary(&owner, &id)
         .map_err(crate::protocols::error)?;
-    if summary.protocol != "websocket"
-        || !matches!(
+    let supported = match summary.protocol.as_str() {
+        "websocket" => matches!(
             message,
             SendMessage::Text { .. } | SendMessage::Binary { .. } | SendMessage::Ping { .. }
-        )
-    {
+        ),
+        "data" => matches!(
+            message,
+            SendMessage::DataQuery { .. }
+                | SendMessage::DataCancel { .. }
+                | SendMessage::DataSchemaRefresh
+        ),
+        _ => false,
+    };
+    if !supported {
         return Err(ApiError::bad(
-            "Shared session send supports WebSocket text, binary and Ping",
+            "Message is unavailable for this shared session protocol",
         ));
     }
-    state
-        .protocol_sessions
-        .send(&owner, &id, message)
-        .map_err(crate::protocols::error)?;
+    if summary.protocol == "data" {
+        let action = match &message {
+            SendMessage::DataQuery { .. } => "protocol.data.query",
+            SendMessage::DataCancel { .. } => "protocol.data.cancel",
+            _ => "protocol.data.schema",
+        };
+        let audit = state.db.begin().await?;
+        record_event_result(
+            &audit,
+            &owner,
+            &workspace,
+            &actor.0,
+            action,
+            Some(&id),
+            "started",
+        )
+        .await?;
+        audit.commit().await?;
+        member.check(&state, &actor.0).await?;
+    }
+    let _ = crate::protocols::send(
+        State(state.clone()),
+        Extension(Identity(owner.clone())),
+        Path(id.clone()),
+        Json(message),
+    )
+    .await?;
     member.check(&state, &actor.0).await?;
     Ok(Json(json!({"ok":true})))
 }

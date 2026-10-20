@@ -13,6 +13,7 @@ import type { SharedWorkspaceSummary, Workspace } from "../../shared/types";
 import SharedWorkspaceView from "./SharedWorkspaceView";
 
 vi.mock("../../shared/api", () => ({ api: vi.fn(), previewSharedMock: vi.fn(), token: vi.fn() }));
+vi.mock("../data/DataSqlEditor", () => ({ DataSqlEditor: ({ value, change }: { value: string; change: (sql: string) => void }) => <label>SQL 查询编辑器<textarea value={value} onChange={(event) => change(event.target.value)} /></label> }));
 vi.mock("../generation/saveProjectFile", () => ({ saveProjectFile: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("../../shared/ui", () => ({
   Field: ({ label, children }: { label: string; children: React.ReactNode }) => <label>{label}{children}</label>,
@@ -1518,4 +1519,51 @@ it("does not dispatch run against a newly cached revision before React updates s
     fireEvent.click(screen.getByRole("button", { name: "运行集合" }));
   });
   expect(vi.mocked(api).mock.calls.some(([path]) => path === `${base}/run`)).toBe(false);
+});
+
+it("creates and saves a shared Data request with SQL source/auth/scripts without owner calls", async () => {
+  vi.mocked(api).mockImplementation((_path,method,body) => Promise.resolve(method === "PUT" ? { ...workspace, revision: 4, data: (body as { data: Workspace["data"] }).data } : workspace));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "新增 Data 请求" }));
+  await screen.findByLabelText("数据源类型");
+  fireEvent.change(screen.getByLabelText("请求名称"), { target: { value: "Member SQL" } });
+  fireEvent.change(screen.getByLabelText("SQL 查询编辑器"), { target: { value: "SELECT value FROM records" } });
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.anything()));
+  const body = vi.mocked(api).mock.calls.find(([path,method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
+  expect(body.data.collections[0].requests.at(-1)).toMatchObject({ name: "Member SQL", protocol: { kind: "data", source: "postgresql", sql: "SELECT value FROM records", read_only: true } });
+  expect(vi.mocked(api).mock.calls.some(([path]) => path.startsWith("/api/sessions") || path.startsWith("/api/workspaces"))).toBe(false);
+});
+
+it("queries a saved shared Data session through member routes and shows typed rows", async () => {
+  const shared=structuredClone(workspace), request=shared.data.collections[0].requests[0];
+  request.protocol={...dataConfig(),source:"local_file",sql:"SELECT name FROM data",file_name:"rows.csv",file_base64:"aWQsbmFtZQoxLGFscGhhCg=="};request.url="";
+  const session={id:"data-live",workspace_id:"w",request_id:request.id,protocol:"data",url:"http://data.invalid/",state:"open",reason:null,created_at:"now",updated_at:"now",received_bytes:0,sent_bytes:0,event_count:0,handshake:null};
+  let queryId="";
+  vi.mocked(api).mockImplementation((path,method,body)=>{
+    if(path===`${base}/sessions`&&method==="POST")return Promise.resolve(session);
+    if(path===`${base}/sessions/data-live`)return Promise.resolve(session);
+    if(path.endsWith("/send")){if((body as {kind:string}).kind==="data_query")queryId=(body as {query_id:string}).query_id;return Promise.resolve({ok:true});}
+    if(path.includes("/events?"))return Promise.resolve({events:queryId?[
+      {cursor:1,received_at:"now",direction:"incoming",message:{kind:"data_started",query_id:queryId}},
+      {cursor:2,received_at:"now",direction:"incoming",message:{kind:"data_columns",query_id:queryId,columns:[{name:"name",data_type:"TEXT",nullable:false}]}},
+      {cursor:3,received_at:"now",direction:"incoming",message:{kind:"data_rows",query_id:queryId,rows:[[{kind:"text",value:"member-alpha"}]]}},
+      {cursor:4,received_at:"now",direction:"incoming",message:{kind:"data_finished",query_id:queryId,rows_affected:0,elapsed_ms:1,truncated:false,limit_reason:null}},
+    ]:[],next_cursor:queryId?4:0,earliest_cursor:1,dropped_count:0});
+    return Promise.resolve(shared);
+  });
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button",{name:"连接"}));
+  fireEvent.click(await screen.findByRole("button",{name:"运行当前查询"}));
+  await waitFor(()=>expect(api).toHaveBeenCalledWith(`${base}/sessions/data-live/send`,"POST",expect.objectContaining({kind:"data_query",sql:"SELECT name FROM data",read_only:true})));
+  await screen.findByText("member-alpha",{},{timeout:3000});
+  expect(screen.getByRole("button",{name:"导出 CSV"})).toHaveProperty("disabled",false);
+  expect(screen.queryByRole("button",{name:"发送已保存请求"})).toBeNull();
+  expect(vi.mocked(api).mock.calls.some(([path])=>path.startsWith("/api/sessions"))).toBe(false);
+});
+
+it("keeps Data source SQL private for a viewer and has no Data mutation controls",async()=>{
+  const shared=structuredClone(workspace);shared.data.collections[0].requests[0].protocol={...dataConfig(),sql:""};
+  vi.mocked(api).mockResolvedValue(shared);render(view("viewer"));await screen.findByText("此工作区为只读。不能保存、运行请求或查看私有执行记录。");
+  expect(screen.queryByLabelText("Data 请求设置")).toBeNull();expect(screen.queryByRole("button",{name:"新增 Data 请求"})).toBeNull();expect(screen.queryByRole("button",{name:"连接"})).toBeNull();
 });

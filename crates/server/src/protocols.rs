@@ -83,8 +83,19 @@ pub(crate) struct DataCompletionContext {
     scopes: tokio::sync::Mutex<moleapi_core::VariableScopes>,
     processing: tokio::sync::watch::Sender<Option<String>>,
     mask_state: SharedMask,
+    member: Option<crate::collaboration::MemberLive>,
+    actor: String,
+    headers: axum::http::HeaderMap,
 }
 impl DataCompletionContext {
+    async fn check_member(&self) -> Result<(), ApiError> {
+        if let Some(member) = &self.member {
+            member.check(&self.state, &self.actor).await?;
+            crate::auth::still_authenticated(&self.state, &self.actor, &self.headers).await?;
+        }
+        Ok(())
+    }
+
     fn refresh_mask(&self, values: &std::collections::BTreeSet<String>) -> Result<(), ApiError> {
         let redactor = Arc::new(Redactor::new(values)?);
         *self.mask_state.write().unwrap() = redactor;
@@ -450,6 +461,9 @@ pub(crate) async fn create_as(
             scopes: tokio::sync::Mutex::new(scopes),
             processing: tokio::sync::watch::channel(None).0,
             mask_state: mask_state.clone(),
+            member: member.cloned(),
+            actor: actor.to_owned(),
+            headers: headers.clone(),
         });
         {
             let mut sessions = s.data_sessions.lock().unwrap();
@@ -532,6 +546,7 @@ async fn save_data_completion(
     {
         return Ok(None);
     }
+    context.check_member().await?;
     let w = owned(&context.state, &context.owner, &context.workspace_id).await?;
     let mut scopes = context.scopes.lock().await;
     let history_cleared = crate::history::cleared_since(
@@ -646,23 +661,32 @@ async fn save_data_completion(
         stored.size_bytes = stored.body.len();
         stored.tests.clear();
     }
+    context.check_member().await?;
+    let environment = scopes.effective();
+    let privacy = crate::privacy::HistoryPrivacy {
+        values: &scopes.private_values,
+        redact_failed_response,
+    };
     let history_id = if history_cleared {
         None
+    } else if let Some(member) = &context.member {
+        let entry =
+            crate::history::project(&w, &context.request, Some(&environment), &stored, privacy)?;
+        member.insert_history(&context.state, &entry).await?;
+        Some(entry.id)
     } else {
         crate::history::record(
             &context.state,
             &context.owner,
             &w,
             &context.request,
-            Some(&scopes.effective()),
+            Some(&environment),
             &stored,
-            crate::privacy::HistoryPrivacy {
-                values: &scopes.private_values,
-                redact_failed_response,
-            },
+            privacy,
         )
         .await?
     };
+    context.check_member().await?;
     context.refresh_mask(&scopes.private_values)?;
     drop(guard);
     if history_id.is_none() && !history_cleared {
@@ -777,6 +801,7 @@ async fn send_scripted_data_query(
     if *admitted != context.generation || check(s, owner, id).await.is_err() {
         return Err(ApiError::unauthorized());
     }
+    context.check_member().await?;
     let mut scopes = context.scopes.lock().await;
     let before = scopes.clone();
     let prepared = tokio::select! {
@@ -856,6 +881,7 @@ async fn send_scripted_data_query(
             .data_event(owner, id, EventMessage::DataSkipped { query_id });
         return Ok(());
     };
+    context.check_member().await?;
     context.processing.send_replace(Some(query_id.clone()));
     let source = match &context.prepared_request.protocol {
         Protocol::Data { config } => config,
