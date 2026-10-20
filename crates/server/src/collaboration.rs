@@ -269,6 +269,24 @@ async fn access<C: ConnectionTrait>(
     ))
 }
 
+async fn with_access_watch<T>(
+    operation: impl Future<Output = Result<T, ApiError>>,
+    watch: impl Future<Output = ApiError>,
+    final_check: impl Future<Output = Result<(), ApiError>>,
+) -> Result<T, ApiError> {
+    let result = {
+        // Both futures must drop before final_check can acquire a pooled connection.
+        tokio::pin!(operation);
+        tokio::pin!(watch);
+        tokio::select! { biased;
+            error = &mut watch => return Err(error),
+            result = &mut operation => result,
+        }
+    };
+    final_check.await?;
+    result
+}
+
 async fn watch_access(
     state: &AppState,
     actor: &str,
@@ -485,22 +503,21 @@ pub async fn shared_run(
         Path(workspace.clone()),
         Json(input),
     );
-    let watch = watch_access(&state, &actor.0, &owner, &workspace, admission);
-    tokio::pin!(run);
-    tokio::pin!(watch);
-    let result = tokio::select! {
-        biased;
-        _ = &mut watch => {
-            let _ = state.project_jobs.cancel_job(&owner, Some(&workspace), &internal_id);
+    let watch = async {
+        watch_access(&state, &actor.0, &owner, &workspace, admission).await;
+        let _ = state
+            .project_jobs
+            .cancel_job(&owner, Some(&workspace), &internal_id);
+        ApiError::not_found()
+    };
+    let final_check = async {
+        let (_, current) = access(&state.db, &actor.0, &owner, &workspace).await?;
+        if current != admission {
             return Err(ApiError::not_found());
         }
-        result = &mut run => result,
+        Ok(())
     };
-    let (_, current) = access(&state.db, &actor.0, &owner, &workspace).await?;
-    if current != admission {
-        return Err(ApiError::not_found());
-    }
-    let mut result = result?;
+    let mut result = with_access_watch(run, watch, final_check).await?;
     result.0["job_id"] = json!(job_id);
     Ok(result)
 }
@@ -544,19 +561,18 @@ pub async fn shared_execute(
         Extension(Identity(owner.clone())),
         Json(input.into_execute(workspace.clone(), request, canonical.revision)),
     );
-    let watch = watch_access(&state, &actor.0, &owner, &workspace, admission);
-    tokio::pin!(run);
-    tokio::pin!(watch);
-    let result = tokio::select! {
-        biased;
-        _ = &mut watch => return Err(ApiError::not_found()),
-        result = &mut run => result,
+    let watch = async {
+        watch_access(&state, &actor.0, &owner, &workspace, admission).await;
+        ApiError::not_found()
     };
-    let (_, current) = access(&state.db, &actor.0, &owner, &workspace).await?;
-    if current != admission {
-        return Err(ApiError::not_found());
-    }
-    result
+    let final_check = async {
+        let (_, current) = access(&state.db, &actor.0, &owner, &workspace).await?;
+        if current != admission {
+            return Err(ApiError::not_found());
+        }
+        Ok(())
+    };
+    with_access_watch(run, watch, final_check).await
 }
 
 pub async fn shared_execute_draft(
@@ -625,23 +641,19 @@ pub async fn shared_execute_draft(
         canonical.revision,
         "Workspace changed during draft execution",
     );
-    tokio::pin!(run);
-    tokio::pin!(watch);
-    let result = tokio::select! {
-        biased;
-        error = &mut watch => return Err(error),
-        result = &mut run => result,
+    let final_check = async {
+        let (current_workspace, current) = access(&state.db, &actor.0, &owner, &workspace).await?;
+        if current != admission {
+            return Err(ApiError::not_found());
+        }
+        if current_workspace.revision != canonical.revision {
+            return Err(ApiError::conflict(
+                "Workspace changed during draft execution",
+            ));
+        }
+        Ok(())
     };
-    let (current_workspace, current) = access(&state.db, &actor.0, &owner, &workspace).await?;
-    if current != admission {
-        return Err(ApiError::not_found());
-    }
-    if current_workspace.revision != canonical.revision {
-        return Err(ApiError::conflict(
-            "Workspace changed during draft execution",
-        ));
-    }
-    result
+    with_access_watch(run, watch, final_check).await
 }
 
 pub async fn shared_session_create(
@@ -963,19 +975,18 @@ pub async fn shared_mock(
         OriginalUri(uri),
         headers,
     );
-    let watch = watch_access(&state, &actor.0, &owner, &workspace, admission);
-    tokio::pin!(preview);
-    tokio::pin!(watch);
-    let result = tokio::select! {
-        biased;
-        _ = &mut watch => return Err(ApiError::not_found()),
-        result = &mut preview => result,
+    let watch = async {
+        watch_access(&state, &actor.0, &owner, &workspace, admission).await;
+        ApiError::not_found()
     };
-    let (_, current) = access(&state.db, &actor.0, &owner, &workspace).await?;
-    if current != admission {
-        return Err(ApiError::not_found());
-    }
-    let mut response = result?;
+    let final_check = async {
+        let (_, current) = access(&state.db, &actor.0, &owner, &workspace).await?;
+        if current != admission {
+            return Err(ApiError::not_found());
+        }
+        Ok(())
+    };
+    let mut response = with_access_watch(preview, watch, final_check).await?;
     response.headers_mut().insert(
         "x-moleapi-mock-preview",
         axum::http::HeaderValue::from_static("saved-example"),
@@ -1112,19 +1123,15 @@ pub async fn shared_specification_preview(
         revision,
         "Workspace changed during specification preview",
     );
-    tokio::pin!(preview);
-    tokio::pin!(watch);
-    let result = tokio::select! { biased; error = &mut watch => return Err(error), result = &mut preview => result };
-    finish_specification_preview(
+    let final_check = finish_specification_preview(
         &state.db,
         &actor.0,
         &owner,
         &workspace,
         (admission, revision),
         crate::auth::still_authenticated(&state, &actor.0, &headers),
-    )
-    .await?;
-    result
+    );
+    with_access_watch(preview, watch, final_check).await
 }
 
 #[derive(Deserialize)]
@@ -1234,22 +1241,19 @@ pub async fn shared_validate_mock_schema(
         canonical.revision,
         "Workspace changed during linked Mock validation",
     );
-    tokio::pin!(validate);
-    tokio::pin!(watch);
-    let result = tokio::select! {biased;
-        error = &mut watch => return Err(error),
-        result = &mut validate => result,
+    let final_check = async {
+        let (current_workspace, current) = access(&state.db, &actor.0, &owner, &workspace).await?;
+        if current != admission {
+            return Err(ApiError::not_found());
+        }
+        if current_workspace.revision != canonical.revision {
+            return Err(ApiError::conflict(
+                "Workspace changed during linked Mock validation",
+            ));
+        }
+        Ok(())
     };
-    let (current_workspace, current) = access(&state.db, &actor.0, &owner, &workspace).await?;
-    if current != admission {
-        return Err(ApiError::not_found());
-    }
-    if current_workspace.revision != canonical.revision {
-        return Err(ApiError::conflict(
-            "Workspace changed during linked Mock validation",
-        ));
-    }
-    result
+    with_access_watch(validate, watch, final_check).await
 }
 
 pub async fn shared_mock_dispatch(
@@ -1295,20 +1299,17 @@ pub async fn shared_mock_dispatch(
         canonical.revision,
         "Workspace changed during Mock routing",
     );
-    tokio::pin!(dispatch);
-    tokio::pin!(watch);
-    let result = tokio::select! {biased;
-        error = &mut watch => return Err(error),
-        result = &mut dispatch => result,
+    let final_check = async {
+        let (current_workspace, current) = access(&state.db, &actor.0, &owner, &workspace).await?;
+        if current != admission {
+            return Err(ApiError::not_found());
+        }
+        if current_workspace.revision != canonical.revision {
+            return Err(ApiError::conflict("Workspace changed during Mock routing"));
+        }
+        Ok(())
     };
-    let (current_workspace, current) = access(&state.db, &actor.0, &owner, &workspace).await?;
-    if current != admission {
-        return Err(ApiError::not_found());
-    }
-    if current_workspace.revision != canonical.revision {
-        return Err(ApiError::conflict("Workspace changed during Mock routing"));
-    }
-    result
+    with_access_watch(dispatch, watch, final_check).await
 }
 
 pub async fn shared_mock_calls(
@@ -2003,6 +2004,128 @@ pub(crate) async fn cascade<C: ConnectionTrait>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn completed_operation_releases_pending_watcher_before_final_database_read() {
+        use sea_orm::{ConnectOptions, Database, DbBackend, Statement};
+        use std::time::Duration;
+        for operation_succeeds in [true, false] {
+            let mut options = ConnectOptions::new("sqlite::memory:");
+            options
+                .min_connections(1)
+                .max_connections(1)
+                .acquire_timeout(Duration::from_millis(200));
+            let db = Database::connect(options).await.unwrap();
+            let held = tokio::sync::Notify::new();
+            let watch = async {
+                let transaction = db.begin().await.unwrap();
+                held.notify_one();
+                std::future::pending::<()>().await;
+                drop(transaction);
+                ApiError::not_found()
+            };
+            let operation = async {
+                held.notified().await;
+                if operation_succeeds {
+                    Ok(())
+                } else {
+                    Err(ApiError::bad("operation failed"))
+                }
+            };
+            let checked = std::sync::atomic::AtomicBool::new(false);
+            let final_check = async {
+                db.execute(Statement::from_string(
+                    DbBackend::Sqlite,
+                    "SELECT 1".to_owned(),
+                ))
+                .await
+                .map_err(|error| {
+                    eprintln!("watcher lifetime regression: {error:?}");
+                    ApiError::from(error)
+                })?;
+                checked.store(true, std::sync::atomic::Ordering::SeqCst);
+                Ok(())
+            };
+            let result = with_access_watch(operation, watch, final_check).await;
+            assert!(
+                checked.load(std::sync::atomic::Ordering::SeqCst),
+                "final permission DB read must run after releasing the watcher connection"
+            );
+            if operation_succeeds {
+                assert!(result.is_ok());
+            } else {
+                assert_eq!(
+                    result.unwrap_err().status,
+                    axum::http::StatusCode::BAD_REQUEST
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn denied_watcher_releases_running_operation_and_skips_final_check() {
+        use sea_orm::{ConnectOptions, Database, DbBackend, Statement};
+        use std::time::Duration;
+        let mut options = ConnectOptions::new("sqlite::memory:");
+        options
+            .min_connections(1)
+            .max_connections(1)
+            .acquire_timeout(Duration::from_millis(200));
+        let db = Database::connect(options).await.unwrap();
+        let held = tokio::sync::Notify::new();
+        let operation = async {
+            let transaction = db.begin().await.unwrap();
+            held.notify_one();
+            std::future::pending::<()>().await;
+            drop(transaction);
+            Ok(())
+        };
+        let watch = async {
+            held.notified().await;
+            ApiError::forbidden("access revoked")
+        };
+        let checked = std::sync::atomic::AtomicBool::new(false);
+        let final_check = async {
+            checked.store(true, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        };
+        let error = with_access_watch(operation, watch, final_check)
+            .await
+            .unwrap_err();
+        assert_eq!(error.status, axum::http::StatusCode::FORBIDDEN);
+        assert!(!checked.load(std::sync::atomic::Ordering::SeqCst));
+        db.execute(Statement::from_string(
+            DbBackend::Sqlite,
+            "SELECT 1".to_owned(),
+        ))
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn ready_watcher_has_priority_and_final_denial_withholds_private_output() {
+        let checked = std::sync::atomic::AtomicBool::new(false);
+        let error = with_access_watch(
+            async { Ok("private output") },
+            async { ApiError::not_found() },
+            async {
+                checked.store(true, std::sync::atomic::Ordering::SeqCst);
+                Ok(())
+            },
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.status, axum::http::StatusCode::NOT_FOUND);
+        assert!(!checked.load(std::sync::atomic::Ordering::SeqCst));
+        let error = with_access_watch(
+            async { Ok("private output") },
+            std::future::pending::<ApiError>(),
+            async { Err(ApiError::conflict("revision changed")) },
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.status, axum::http::StatusCode::CONFLICT);
+    }
 
     #[tokio::test]
     async fn specification_preview_rechecks_after_a_pending_credential_check() {
