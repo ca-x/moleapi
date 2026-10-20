@@ -25,6 +25,7 @@ export function useAuth() {
         client.removeQueries({ queryKey: ["shared-workspace"] });
         client.removeQueries({ queryKey: ["shared-history"] });
         client.removeQueries({ queryKey: ["shared-reports"] });
+        client.removeQueries({ queryKey: ["shared-mock-calls"] });
         client.removeQueries({ queryKey: ["workspace-versions"] });
       }
     };
@@ -53,6 +54,7 @@ export function useAuth() {
     client.removeQueries({ queryKey: ["shared-workspace"] });
     client.removeQueries({ queryKey: ["shared-history"] });
     client.removeQueries({ queryKey: ["shared-reports"] });
+    client.removeQueries({ queryKey: ["shared-mock-calls"] });
     client.removeQueries({ queryKey: ["workspace-versions"] });
   };
   return {

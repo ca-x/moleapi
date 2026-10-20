@@ -145,7 +145,7 @@ export function useWorkbenchController() {
   function switchWorkspace(value: string) {
     const clearSharedCache = () => {
       if (!selectedShared) return;
-      for (const kind of ["shared-workspace", "shared-history", "shared-reports"]) {
+      for (const kind of ["shared-workspace", "shared-history", "shared-reports", "shared-mock-calls"]) {
         queryClient.removeQueries({ queryKey: [kind, auth.accountId, selectedShared.owner_id, selectedShared.workspace_id] });
       }
     };
@@ -185,7 +185,7 @@ export function useWorkbenchController() {
   }
   function leaveShared() {
     if (selectedShared) {
-      for (const kind of ["shared-workspace", "shared-history", "shared-reports"]) {
+      for (const kind of ["shared-workspace", "shared-history", "shared-reports", "shared-mock-calls"]) {
         queryClient.removeQueries({ queryKey: [kind, auth.accountId, selectedShared.owner_id, selectedShared.workspace_id] });
       }
     }
