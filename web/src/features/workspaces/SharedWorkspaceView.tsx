@@ -23,6 +23,7 @@ import SharedVariablesPanel from "./SharedVariablesPanel";
 import SharedLiveSessionPanel from "./SharedLiveSessionPanel";
 import MockTrafficControls from "../requests/MockTrafficControls";
 import SharedMockSchemaControls from "./SharedMockSchemaControls";
+import MockDataEditor from "../requests/MockDataEditor";
 import MockMatchingEditor from "../requests/MockMatchingEditor";
 import MockScriptEditor from "../requests/MockScriptEditor";
 import { mockRouteInfo } from "../requests/mockRouteInfo";
@@ -247,7 +248,7 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
     finally { if (current(origin) && sendGeneration.current === generation) setSending(false); }
   }
   async function previewExample() {
-    if (!canEdit || !request || !example || mocking || dirty || statusPending || conflict || !current(scope)) return;
+    if (!canEdit || !request || !example || !!example.mock_data?.parameters?.length || mocking || dirty || statusPending || conflict || !current(scope)) return;
     const origin = scope;
     const generation = ++mockGeneration.current;
     setMocking(true); setError(""); setMockPreview(null);
@@ -338,16 +339,18 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
             <Field label={t("状态码")}><TextField.Root inputMode="numeric" maxLength={3} value={exampleStatusInput} onChange={(event) => { const value = event.target.value; setExampleStatusInput(value); const status = Number(value); if (/^[2-5]\d\d$/.test(value) && status <= 599) updateExample((item) => ({ ...item, status })); }} onBlur={() => { if (statusPending) setExampleStatusInput(String(example.status)); }} /></Field>
           </Flex>
           <MockTrafficControls example={example} onChange={(patch) => updateExample((item) => ({ ...item, ...patch }))} />
-          <SharedMockSchemaControls key={`${scope}/${request?.id}/${example.id}/${saved?.revision}/${conflict?.revision ?? ""}`} example={example} dark={dark} onChange={(patch) => updateExample((item) => ({ ...item, ...patch }))} />
+          <SharedMockSchemaControls key={`${scope}/${request?.id}/${example.id}/${saved?.revision}/${conflict?.revision ?? ""}`} example={example} dark={dark} datasets={draft.data.datasets ?? []} dataEnabled={httpRequest && draft.data.script_mode === "v2"} onChange={(patch) => updateExample((item) => ({ ...item, ...patch }))} />
           {statusPending && <Text role="alert" size="1" color="red">{t("状态码必须为 200 到 599。")}</Text>}
           <Field label={t("响应正文")}><TextArea value={example.body} onChange={(event) => updateExample((item) => ({ ...item, body: event.target.value }))} /></Field>
           <div><Text as="p" size="2" weight="medium">{t("响应头")}</Text><PairEditor rows={example.headers} onChange={(headers) => updateExample((item) => ({ ...item, headers }))} keyLabel="Header" valueLabel={t("值")} secrets /></div>
           {request && matchRoutePath ? <Text as="p" size="1" color="gray" style={{ overflowWrap: "anywhere" }}>{t("匹配路由")}: <code>{`${request.method} ${base}/mocks${matchRoutePath}`}</code></Text> : <Text size="1" color="gray">{t("Mock 匹配路由需要字面量 HTTP URL；路径变量使用单层 {name}。")}</Text>}
+          {example.mock_data && <><MockDataEditor binding={example.mock_data} datasets={draft.data.datasets ?? []} onChange={(mock_data) => updateExample((item) => ({ ...item, mock_data }))} /><Text size="1" color="gray">{t("数据绑定启用时，保存的静态正文不会作为失败回退。")}</Text></>}
           <MockMatchingEditor rule={example.mock_match} onChange={(mock_match) => updateExample((item) => ({ ...item, mock_match }))} />
           <MockScriptEditor script={example.mock_script ?? ""} enabled={draft.data.script_mode === "v2"} dark={dark} onChange={(mock_script) => updateExample((item) => ({ ...item, mock_script }))} />
           <Button variant="outline" color="red" onClick={() => { updateRequest((item) => ({ ...item, examples: item.examples.filter((entry) => entry.id !== example.id) })); setExampleId(""); }}>{t("删除示例")}</Button>
         </Flex>}
-        {example && <Button loading={mocking} disabled={mocking || dirty || statusPending || !!conflict} onClick={() => void previewExample()}>{t("预览已保存 Mock 示例")}</Button>}
+        {example && <Button loading={mocking} disabled={mocking || dirty || statusPending || !!conflict || !!example.mock_data?.parameters?.length} onClick={() => void previewExample()}>{t("预览已保存 Mock 示例")}</Button>}
+        {!!example?.mock_data?.parameters?.length && <Text size="1" color="gray">{t("带请求参数的数据绑定请通过匹配路由调用。")}</Text>}
         {dirty && <Text size="1" color="gray">{t("先保存修改，再预览 Mock 示例。")}</Text>}
         {mockPreview && <><Text role="status" size="2">{t("Mock 响应状态")}: {mockPreview.status}</Text><TextArea aria-label={t("Mock 响应正文")} readOnly value={mockPreview.body.slice(0, 16 * 1024)} />{mockPreview.body.length > 16 * 1024 && <Text size="1" color="gray">{t("仅显示响应正文前 16 KiB。")}</Text>}</>}
         <Button loading={saving} disabled={!dirty || saving || statusPending || !!conflict || invalidDocuments} onClick={() => void save()}>{t("保存共享工作区")}</Button>

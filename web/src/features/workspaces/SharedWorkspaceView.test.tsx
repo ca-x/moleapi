@@ -842,3 +842,74 @@ it("withholds an old response when another editor replaces the saved request at 
   await act(async () => finish({ status: 200, status_text: "OK", elapsed_ms: 5, body: "old-private-response" }));
   expect(screen.queryByLabelText("响应正文预览")).toBeNull();
 });
+
+it("selects a shared dataset view without replacing body, script or traffic settings", async () => {
+  const first = workspace.data.collections[0].requests[0];
+  const shared: Workspace = { ...workspace, data: { ...workspace.data, script_mode: "v2", datasets: [{ id: "data-a", name: "Rows", description: "", secret: true, source: { format: "json", source: '[{"id":"a"}]' }, views: [{ id: "all", name: "All", sql: "SELECT id FROM data" }] }], collections: [{ ...workspace.data.collections[0], requests: [{ ...first, examples: [{ id: "data-example", name: "Data", status: 201, headers: [{ id: "ct", key: "Content-Type", value: "text/plain", enabled: true }], body: "keep static", mock_script: "console.log('keep')", delay_ms: 12, mock_schema: '{"type":"object"}', mock_name_inference: true }] }] }] } };
+  vi.mocked(api).mockImplementation((path, method, body) => {
+    if (path.endsWith("/mock-calls")) return Promise.resolve([]);
+    if (method !== "PUT") return Promise.resolve(shared);
+    const data = structuredClone((body as { data: Workspace["data"] }).data);
+    Reflect.deleteProperty(data.collections[0].requests[0].examples[0].mock_data!, "parameters");
+    return Promise.resolve({ ...shared, revision: 4, data });
+  });
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "Mock 预览" }));
+  fireEvent.change(screen.getByLabelText("Mock 正文来源"), { target: { value: "data" } });
+  expect(await screen.findByRole("combobox", { name: "只读数据视图" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.anything()));
+  const sent = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
+  expect(sent.data.collections[0].requests[0].examples[0]).toMatchObject({ body: "keep static", mock_script: "console.log('keep')", delay_ms: 12, mock_data: { dataset_id: "data-a", view_id: "all", shape: "rows", parameters: [] }, headers: [{ value: "application/json" }] });
+  expect(sent.data.collections[0].requests[0].examples[0].mock_schema).toBeUndefined();
+  expect(sent.data.collections[0].requests[0].examples[0].mock_name_inference).toBeUndefined();
+  await waitFor(() => expect(screen.getByRole("button", { name: "预览已保存 Mock 示例" })).toHaveProperty("disabled", false));
+  expect(vi.mocked(api).mock.calls.every(([path]) => path === base || path.startsWith(`${base}/`))).toBe(true);
+});
+
+it("edits shared data parameters through CAS and directs parameterized previews to the member route", async () => {
+  const first = workspace.data.collections[0].requests[0];
+  const shared: Workspace = { ...workspace, data: { ...workspace.data, script_mode: "v2", datasets: [{ id: "data-a", name: "Rows", description: "", secret: false, views: [{ id: "by-id", name: "By ID", sql: "SELECT id FROM data WHERE id = ?" }] }], collections: [{ ...workspace.data.collections[0], requests: [{ ...first, url: "https://example.test/items/{id}", examples: [{ id: "data-example", name: "Data", status: 200, headers: [], body: "retained", mock_data: { dataset_id: "data-a", view_id: "by-id", shape: "first", parameters: [] } }] }] }] } };
+  vi.mocked(api).mockImplementation((path, method, body) => Promise.resolve(path.endsWith("/mock-calls") ? [] : method === "PUT" ? { ...shared, revision: 4, data: (body as { data: Workspace["data"] }).data } : shared));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "Mock 预览" }));
+  fireEvent.click(screen.getByRole("button", { name: "添加视图参数" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "参数名 1" }), { target: { value: "id" } });
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "保存共享工作区" })).toHaveProperty("disabled", true));
+  expect(screen.getByRole("button", { name: "预览已保存 Mock 示例" })).toHaveProperty("disabled", true);
+  expect(screen.getByText("带请求参数的数据绑定请通过匹配路由调用。")).toBeTruthy();
+  const sent = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
+  expect(sent.data.collections[0].requests[0].examples[0].mock_data).toMatchObject({ shape: "first", parameters: [{ source: "query", name: "id" }] });
+  expect(previewSharedMock).not.toHaveBeenCalled();
+});
+
+it.each([false, true])("preserves a shared binding and warns when its %s dataset/view is missing", async (missingView) => {
+  const first = workspace.data.collections[0].requests[0];
+  const shared: Workspace = { ...workspace, data: { ...workspace.data, datasets: missingView ? [{ id: "missing", name: "Rows", description: "", secret: false, views: [] }] : [], collections: [{ ...workspace.data.collections[0], requests: [{ ...first, examples: [{ id: "e", name: "Data", status: 200, headers: [], body: "retained", mock_data: { dataset_id: "missing", view_id: "gone", shape: "rows", parameters: [] } }] }] }] } };
+  vi.mocked(api).mockImplementation((path) => Promise.resolve(path.endsWith("/mock-calls") ? [] : shared));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "Mock 预览" }));
+  expect(screen.getByRole("alert").textContent).toContain("所选数据集或只读视图已不可用。");
+  expect(screen.getByLabelText("Mock 正文来源")).toHaveProperty("value", "data");
+  expect(screen.getByRole("button", { name: "保存共享工作区" })).toHaveProperty("disabled", true);
+});
+
+it("does not offer a new shared data binding in v1 mode", async () => {
+  const first = workspace.data.collections[0].requests[0];
+  const shared: Workspace = { ...workspace, data: { ...workspace.data, script_mode: "v1", datasets: [{ id: "d", name: "Rows", description: "", secret: false, views: [{ id: "all", name: "All", sql: "SELECT 1" }] }], collections: [{ ...workspace.data.collections[0], requests: [{ ...first, examples: [{ id: "e", name: "Static", status: 200, headers: [], body: "retained" }] }] }] } };
+  vi.mocked(api).mockImplementation((path) => Promise.resolve(path.endsWith("/mock-calls") ? [] : shared));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "Mock 预览" }));
+  expect(screen.queryByRole("option", { name: "已保存的数据绑定" })).toBeNull();
+  expect(screen.queryByRole("combobox", { name: "只读数据视图" })).toBeNull();
+});
+
+it("does not offer an HTTP-only data binding for a shared WebSocket request", async () => {
+  const first = workspace.data.collections[0].requests[0];
+  const shared: Workspace = { ...workspace, data: { ...workspace.data, script_mode: "v2", datasets: [{ id: "d", name: "Rows", description: "", secret: false, views: [{ id: "all", name: "All", sql: "SELECT 1" }] }], collections: [{ ...workspace.data.collections[0], requests: [{ ...first, protocol: { kind: "websocket" }, url: "ws://example.test/items", examples: [{ id: "e", name: "Static", status: 200, headers: [], body: "retained" }] }] }] } };
+  vi.mocked(api).mockImplementation((path) => Promise.resolve(path.endsWith("/mock-calls") ? [] : shared));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "Mock 预览" }));
+  expect(screen.queryByRole("option", { name: "已保存的数据绑定" })).toBeNull();
+});

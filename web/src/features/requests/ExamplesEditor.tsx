@@ -14,30 +14,8 @@ import SchemaEditorDialog from "./MockSchemaDialog";
 import MockMatchingEditor from "./MockMatchingEditor";
 import MockScriptEditor from "./MockScriptEditor";
 import { mockRouteInfo } from "./mockRouteInfo";
+import MockDataEditor from "./MockDataEditor";
 
-type DataBinding=NonNullable<RequestSpec["examples"][number]["mock_data"]>;
-
-function MockDataEditor({binding,datasets,onChange}:{binding:DataBinding;datasets:SavedDataset[];onChange:(binding:DataBinding)=>void}) {
-  const dataset=datasets.find(item=>item.id===binding.dataset_id);
-  const views=dataset?.views?.filter(view=>!!view.sql)??[];
-  return <fieldset className="mock-data-editor"><legend>{t("数据驱动 Mock")}</legend>
-    <Field label={t("保存的数据集")}><Select.Root value={dataset?.id??""} onValueChange={dataset_id=>{
-      const next=datasets.find(item=>item.id===dataset_id);
-      const view_id=next?.views?.find(view=>!!view.sql)?.id??"";
-      onChange({...binding,dataset_id,view_id});
-    }}><Select.Trigger aria-label={t("保存的数据集")} placeholder={t("数据集不可用")}/><Select.Content>{datasets.filter(item=>item.views?.some(view=>!!view.sql)).map(item=><Select.Item key={item.id} value={item.id}>{item.name}</Select.Item>)}</Select.Content></Select.Root></Field>
-    <Field label={t("只读数据视图")}><Select.Root value={views.some(view=>view.id===binding.view_id)?binding.view_id:""} onValueChange={view_id=>onChange({...binding,view_id})}><Select.Trigger aria-label={t("只读数据视图")} placeholder={t("视图不可用")}/><Select.Content>{views.map(view=><Select.Item key={view.id} value={view.id}>{view.name}</Select.Item>)}</Select.Content></Select.Root></Field>
-    {(!dataset||!views.some(view=>view.id===binding.view_id))&&<Text role="alert" size="1" color="red">{t("所选数据集或只读视图已不可用。")}</Text>}
-    <Field label={t("数据响应形状")}><Select.Root value={binding.shape} onValueChange={shape=>onChange({...binding,shape:shape as DataBinding["shape"]})}><Select.Trigger aria-label={t("数据响应形状")}/><Select.Content><Select.Item value="rows">{t("所有匹配行")}</Select.Item><Select.Item value="first">{t("第一行")}</Select.Item></Select.Content></Select.Root></Field>
-    <Text size="1" color="gray">{t("参数按顺序传入视图 SQL 的 ? 占位符；重复或敏感值会被拒绝。")}</Text>
-    {binding.parameters.map((parameter,index)=><div className="mock-data-parameter" key={index}>
-      <Select.Root value={parameter.source} onValueChange={source=>onChange({...binding,parameters:binding.parameters.map((item,position)=>position===index?{...item,source:source as DataBinding["parameters"][number]["source"]}:item)})}><Select.Trigger aria-label={`${t("参数来源")} ${index+1}`}/><Select.Content><Select.Item value="path">{t("路径变量")}</Select.Item><Select.Item value="query">{t("查询参数")}</Select.Item><Select.Item value="header">{t("请求头")}</Select.Item></Select.Content></Select.Root>
-      <TextField.Root aria-label={`${t("参数名")} ${index+1}`} value={parameter.name} maxLength={128} onChange={event=>onChange({...binding,parameters:binding.parameters.map((item,position)=>position===index?{...item,name:event.target.value}:item)})}/>
-      <Button variant="soft" color="red" onClick={()=>onChange({...binding,parameters:binding.parameters.filter((_,position)=>position!==index)})}>{t("移除参数")}</Button>
-    </div>)}
-    <Button variant="soft" disabled={binding.parameters.length>=16} onClick={()=>onChange({...binding,parameters:[...binding.parameters,{source:"query",name:""}]})}>{t("添加视图参数")}</Button>
-  </fieldset>;
-}
 export default function ExamplesEditor({
   request,
   update,
@@ -188,8 +166,8 @@ export default function ExamplesEditor({
           {workspaceId && <Text as="p" size="1" color="gray" style={{overflowWrap:"anywhere"}}>{t("Mock 地址")}: <code>{`/api/mock/${encodeURIComponent(workspaceId)}/${encodeURIComponent(request.id)}/${encodeURIComponent(example.id)}`}</code></Text>}
           {workspaceId && routePath && <Text as="p" size="1" color="gray" style={{overflowWrap:"anywhere"}}>{t("匹配路由")}: <code>{`${request.method} /api/mocks/${encodeURIComponent(workspaceId)}${routePath}`}</code></Text>}
           {workspaceId && !routePath && <Text size="1" color="gray">{t("Mock 匹配路由需要字面量 HTTP URL；路径变量使用单层 {name}。")}</Text>}
-          {workspaceId && <Button variant="soft" color="gray" disabled={dirty||busy!==""||!!example.mock_data?.parameters.length} loading={busy===`${workspaceId}/${request.id}/${example.id}`} onClick={()=>previewExample(example.id)}>{t("预览 Mock")}</Button>}
-          {!!example.mock_data?.parameters.length&&<Text size="1" color="gray">{t("带请求参数的数据绑定请通过匹配路由调用。")}</Text>}
+          {workspaceId && <Button variant="soft" color="gray" disabled={dirty||busy!==""||!!example.mock_data?.parameters?.length} loading={busy===`${workspaceId}/${request.id}/${example.id}`} onClick={()=>previewExample(example.id)}>{t("预览 Mock")}</Button>}
+          {!!example.mock_data?.parameters?.length&&<Text size="1" color="gray">{t("带请求参数的数据绑定请通过匹配路由调用。")}</Text>}
           {dirty && <Text size="1" color="gray">{t("先保存工作区，再预览 Mock。")}</Text>}
           {error===`${workspaceId}/${request.id}/${example.id}` && <Text role="alert" size="1" color="red">{t("Mock 预览失败，请检查脚本与数据源。")}</Text>}
           {!dirty && preview?.scope===`${workspaceId}/${request.id}/${example.id}` && preview.fingerprint===JSON.stringify(example) && <Field label={t("Mock 预览结果")} hint={`${t("状态码")}: ${preview.status}`}><TextArea readOnly rows={5} value={preview.body.slice(0,64*1024)} /></Field>}

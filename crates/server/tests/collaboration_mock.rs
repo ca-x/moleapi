@@ -298,3 +298,49 @@ async fn shared_routed_mock_withholds_a_delayed_result_after_role_or_workspace_c
         assert!(!result.to_string().contains("hello"));
     }
 }
+
+#[tokio::test]
+async fn shared_routed_mock_reads_the_canonical_owner_dataset_with_incoming_parameters() {
+    let fixture = fixture().await;
+    let (_, mut saved) = call(
+        &fixture.router,
+        "GET",
+        &fixture.base,
+        Some(&fixture.editor),
+        None,
+    )
+    .await;
+    saved["data"]["datasets"] = json!([{"id":"rows","name":"Rows","secret":true,"source":{"format":"json","source":"[{\"id\":\"123\",\"value\":\"owner-row\"},{\"id\":\"456\",\"value\":\"other-row\"}]"},"views":[{"id":"by-id","name":"By ID","sql":"SELECT value FROM data WHERE id = ?"}]}]);
+    let example = &mut saved["data"]["collections"][0]["requests"][0]["examples"][1];
+    example["mock_script"] = json!("");
+    example["mock_data"] = json!({"dataset_id":"rows","view_id":"by-id","shape":"first","parameters":[{"source":"path","name":"id"}]});
+    let (status, _) = call(&fixture.router, "PUT", &fixture.base, Some(&fixture.editor), Some(json!({"name":saved["name"],"data":saved["data"],"expected_revision":saved["revision"]}))).await;
+    assert_eq!(status, StatusCode::OK);
+    let path = format!("{}/mocks/items/123?mode=fast&mode=fast", fixture.base);
+    let (status, response) = invoke(&fixture.router, &path, &fixture.editor, "POST", "hello").await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{response}");
+    assert_eq!(response, json!({"value":"owner-row"}));
+    let (status, response) = invoke(
+        &fixture.router,
+        &format!("{}/mocks/items/456?mode=fast&mode=fast", fixture.base),
+        &fixture.editor,
+        "POST",
+        "hello",
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{response}");
+    assert_eq!(response, json!({"value":"other-row"}));
+    let (status, response) = invoke(&fixture.router, &path, &fixture.viewer, "POST", "hello").await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert!(!response.to_string().contains("owner-row"));
+    let (status, response) = invoke(
+        &fixture.router,
+        "/api/mocks/w/items/123?mode=fast&mode=fast",
+        &fixture.editor,
+        "POST",
+        "hello",
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert!(!response.to_string().contains("owner-row"));
+}

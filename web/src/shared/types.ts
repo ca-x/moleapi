@@ -117,7 +117,7 @@ export interface Example {
     dataset_id:string;
     view_id:string;
     shape:"rows"|"first";
-    parameters:{source:"path"|"query"|"header";name:string}[];
+    parameters?:{source:"path"|"query"|"header";name:string}[];
   };
   mock_match?: {
     priority: number;

@@ -307,3 +307,17 @@ it("edits and reloads the per-minute Mock limit in both languages",async()=>{
   await setLanguage("zh-CN");
   expect(screen.getByRole("spinbutton",{name:"每分钟请求上限"})).toBeTruthy();
 });
+
+it("opens a canonical saved dataset binding when the server omits empty parameters", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  await setLanguage("en");
+  const request = newRequest("Data", "https://example.test/items");
+  request.examples = [{ id: "e", name: "Data", status: 200, headers: [], body: "retained", mock_data: { dataset_id: "d", view_id: "all", shape: "rows", parameters: [] } }];
+  Reflect.deleteProperty(request.examples[0].mock_data!, "parameters");
+  const datasets = [{ id: "d", name: "Rows", description: "", secret: false, views: [{ id: "all", name: "All", sql: "SELECT 1" }] }];
+  const update = vi.fn();
+  render(<Theme><ExamplesEditor request={request} update={update} dark={false} asyncMock workspaceId="w" datasets={datasets} /></Theme>);
+  expect(screen.getByRole("button", { name: "Preview Mock" })).toHaveProperty("disabled", false);
+  fireEvent.click(screen.getByRole("button", { name: "Add view parameter" }));
+  expect(update.mock.lastCall?.[0].examples[0].mock_data.parameters).toEqual([{ source: "query", name: "" }]);
+});
