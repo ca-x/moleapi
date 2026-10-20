@@ -5,7 +5,7 @@ import { api, previewSharedMock, token } from "../../shared/api";
 import { t, useLanguage } from "../../shared/i18n";
 import { liveError } from "../../shared/i18n/errors";
 import { id, newRequest } from "../../shared/model";
-import type { ApiResponse, Example, HistoryEntry, MarkdownDocument, Pair, RequestSpec, RunReportPage, SharedWorkspaceSummary, Workspace, WorkspaceData } from "../../shared/types";
+import type { ApiResponse, Example, ExportResult, HistoryEntry, MarkdownDocument, Pair, RequestSpec, RunReportPage, SharedWorkspaceSummary, Workspace, WorkspaceData } from "../../shared/types";
 import { Choice, Editor, Field, PairEditor } from "../../shared/ui";
 import RequestAuthEditor from "../authentication/RequestAuthEditor";
 import { authenticationEligibility } from "../authentication/eligibility";
@@ -16,6 +16,7 @@ import AssertionsEditor from "../testing/AssertionsEditor";
 import ExtractionsEditor from "../testing/ExtractionsEditor";
 import NetworkSettings from "../network/NetworkSettings";
 import { validateMarkdownDocuments } from "../documents/validation";
+import { saveProjectFile } from "../generation/saveProjectFile";
 import { hasChanges } from "./draft";
 import SharedDocumentsPanel from "./SharedDocumentsPanel";
 import SharedVariablesPanel from "./SharedVariablesPanel";
@@ -57,12 +58,14 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
   const mockGeneration = useRef(0);
   const [error, setError] = useState<ReturnType<typeof liveError>>("");
   const [runResult, setRunResult] = useState<RunResult | null>(null);
+  const [reportFormat, setReportFormat] = useState("html");
+  const [exportingReport, setExportingReport] = useState<string | null>(null);
   const mounted = useRef(true);
   const scope = `${accountId}:${owner}:${workspaceId}:${selected.role}:${epoch}`;
   const latest = useRef(scope);
   latest.current = scope;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  useEffect(() => { setDraft(null); setSaved(null); setLoadedScope(""); setConflict(null); setCollectionId(""); setRequestId(""); setExampleId(""); setTab("resources"); setRequestEditorTab("query"); setError(""); setRunResult(null); setRequestResponse(null); setResponseSource(null); setMockPreview(null); setSaving(false); setRunning(false); setSending(false); setMocking(false); }, [scope]);
+  useEffect(() => { setDraft(null); setSaved(null); setLoadedScope(""); setConflict(null); setCollectionId(""); setRequestId(""); setExampleId(""); setTab("resources"); setRequestEditorTab("query"); setError(""); setRunResult(null); setReportFormat("html"); setExportingReport(null); setRequestResponse(null); setResponseSource(null); setMockPreview(null); setSaving(false); setRunning(false); setSending(false); setMocking(false); }, [scope]);
   const current = (origin: string) => mounted.current && latest.current === origin && token() === credential;
   const workspace = useQuery({
     queryKey: ["shared-workspace", accountId, owner, workspaceId, selected.role, epoch],
@@ -183,6 +186,17 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
     } catch (cause) { if (current(origin) && runGeneration.current === generation) setError(liveError(cause)); }
     finally { if (current(origin) && runGeneration.current === generation) setRunning(false); }
   }
+  async function downloadReport(reportId: string) {
+    if (!canEdit || exportingReport || !current(scope)) return;
+    const origin = scope;
+    setExportingReport(reportId);
+    setError("");
+    try {
+      const file = await api<ExportResult>(`${base}/reports/${encodeURIComponent(reportId)}/export?format=${encodeURIComponent(reportFormat)}&language=${encodeURIComponent(language)}`);
+      if (current(origin)) await saveProjectFile(file.filename, new TextEncoder().encode(file.content), () => current(origin));
+    } catch (cause) { if (current(origin)) setError(liveError(cause)); }
+    finally { if (current(origin)) setExportingReport(null); }
+  }
   async function sendSavedRequest() {
     if (!canEdit || !request || sending || dirty || !current(scope)) return;
     const origin = scope;
@@ -279,7 +293,13 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
       {tab === "documents" && <SharedDocumentsPanel key={`${scope}/${saved?.revision}`} data={draft.data} canEdit={canEdit} dark={dark} dirty={dirty} saving={saving} canSave={!saving && !conflict && !invalidDocuments} conflictRevision={conflict?.revision ?? null} onChange={updateDocuments} onSave={() => void save()} onOpenRequest={openSharedRequest} />}
       {tab === "variables" && <SharedVariablesPanel key={`${scope}/${saved?.revision}`} data={draft.data} canEdit={canEdit} dirty={dirty} saving={saving} canSave={!saving && !conflict && !invalidDocuments} conflictRevision={conflict?.revision ?? null} onChange={updateVariables} onSave={() => void save()} />}
       {tab === "history" && canEdit && <Flex direction="column" gap="2">{history.isPending && <Text role="status">{t("正在加载执行历史…")}</Text>}{history.error && <Callout.Root color="red" role="alert"><Callout.Text>{liveError(history.error)}</Callout.Text></Callout.Root>}{!history.error && history.data?.length === 0 && <Text size="2" color="gray">{t("暂无执行历史")}</Text>}{!history.error && history.data?.map((item) => <Flex key={item.id} justify="between" gap="2" wrap="wrap"><Text size="2">{item.method} {item.request_name}</Text><Text size="2">{item.status} · {item.created_at}</Text></Flex>)}</Flex>}
-      {tab === "reports" && canEdit && <Flex direction="column" gap="2">{reports.isPending && <Text role="status">{t("正在加载测试报告…")}</Text>}{reports.error && <Callout.Root color="red" role="alert"><Callout.Text>{liveError(reports.error)}</Callout.Text></Callout.Root>}{!reports.error && reports.data?.items.length === 0 && <Text size="2" color="gray">{t("暂无测试报告")}</Text>}{!reports.error && reports.data?.items.map((item) => <Flex key={item.id} justify="between" gap="2" wrap="wrap"><Text size="2">{item.collection_name}</Text><Text size="2">{t("通过")}: {item.summary.passed} · {t("失败")}: {item.summary.failed}</Text></Flex>)}</Flex>}
+      {tab === "reports" && canEdit && <Flex direction="column" gap="2">
+        {reports.isPending && <Text role="status">{t("正在加载测试报告…")}</Text>}
+        {reports.error && <Callout.Root color="red" role="alert"><Callout.Text>{liveError(reports.error)}</Callout.Text></Callout.Root>}
+        {!reports.error && reports.data?.items.length === 0 && <Text size="2" color="gray">{t("暂无测试报告")}</Text>}
+        {!reports.error && !!reports.data?.items.length && <Choice label={t("报告导出格式")} value={reportFormat} disabled={!!exportingReport} onChange={setReportFormat} options={[{ value: "html", label: "HTML" }, { value: "json", label: "JSON" }, { value: "csv", label: "CSV" }, { value: "junit", label: "JUnit XML" }]} />}
+        {!reports.error && reports.data?.items.map((item) => <Flex key={item.id} justify="between" align="center" gap="2" wrap="wrap"><Text size="2">{item.collection_name}</Text><Text size="2">{t("通过")}: {item.summary.passed} · {t("失败")}: {item.summary.failed}</Text><Button variant="soft" disabled={!!exportingReport} loading={exportingReport === item.id} onClick={() => void downloadReport(item.id)}>{t("下载脱敏报告")}</Button></Flex>)}
+      </Flex>}
       {tab === "mock" && canEdit && <Flex direction="column" gap="3">
         <Heading size="3">{t("Mock 示例预览")}</Heading>
         {draft.data.collections.length > 0 && <Choice label={t("集合")} value={collection?.id ?? ""} onChange={(value) => { setCollectionId(value); setRequestId(""); setExampleId(""); }} options={draft.data.collections.map((item) => ({ value: item.id, label: item.name }))} />}

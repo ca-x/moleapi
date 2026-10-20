@@ -510,6 +510,10 @@ async fn build(
             get(collaboration::shared_report),
         )
         .route(
+            "/owners/{owner}/workspaces/{workspace}/reports/{report}/export",
+            get(collaboration::shared_report_export),
+        )
+        .route(
             "/owners/{owner}/workspaces/{workspace}/reports/{report}/steps/{position}/response",
             get(collaboration::shared_report_response),
         )

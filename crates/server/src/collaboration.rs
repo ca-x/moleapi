@@ -934,6 +934,38 @@ pub async fn shared_report(
     editor_read(&state, &actor.0, &owner, &workspace, read).await
 }
 
+pub async fn shared_report_export(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Identity>,
+    Path((owner, workspace, report)): Path<(String, String, String)>,
+    axum::extract::Query(options): axum::extract::Query<crate::run_reports::Export>,
+) -> Result<Json<moleapi_formats::ExportResult>, ApiError> {
+    if state.local {
+        return Err(ApiError::not_found());
+    }
+    let (_, admission) = access(&state.db, &actor.0, &owner, &workspace).await?;
+    if admission.role == Role::Viewer {
+        return Err(ApiError::not_found());
+    }
+    record_event_result(
+        &state.db,
+        &owner,
+        &workspace,
+        &actor.0,
+        "report.export",
+        Some(&report),
+        "started",
+    )
+    .await?;
+    let read = crate::run_reports::export(
+        State(state.clone()),
+        Extension(Identity(owner.clone())),
+        Path((workspace.clone(), report)),
+        axum::extract::Query(options),
+    );
+    editor_read(&state, &actor.0, &owner, &workspace, read).await
+}
+
 pub async fn shared_report_response(
     State(state): State<AppState>,
     Extension(actor): Extension<Identity>,

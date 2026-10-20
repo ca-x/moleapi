@@ -7,10 +7,12 @@ import { api, previewSharedMock, token } from "../../shared/api";
 import { setLanguage } from "../../shared/i18n";
 import { initialData } from "../../shared/model";
 import { formatRequestLink } from "../documents/internalLinks";
+import { saveProjectFile } from "../generation/saveProjectFile";
 import type { SharedWorkspaceSummary, Workspace } from "../../shared/types";
 import SharedWorkspaceView from "./SharedWorkspaceView";
 
 vi.mock("../../shared/api", () => ({ api: vi.fn(), previewSharedMock: vi.fn(), token: vi.fn() }));
+vi.mock("../generation/saveProjectFile", () => ({ saveProjectFile: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("../../shared/ui", () => ({
   Field: ({ label, children }: { label: string; children: React.ReactNode }) => <label>{label}{children}</label>,
   Choice: ({ label, value, options, onChange }: { label: string; value: string; options: { value: string; label: string }[]; onChange: (value: string) => void }) => <label>{label}<select value={value} onChange={(event) => onChange(event.target.value)}>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>,
@@ -22,8 +24,8 @@ const base = "/api/owners/owner-id/workspaces/w";
 const workspace: Workspace = { id: "w", name: "Team", revision: 3, updated_at: "now", data: initialData() };
 const summary = (role: SharedWorkspaceSummary["role"]): SharedWorkspaceSummary => ({ owner_id: "owner-id", owner_username: "owner", workspace_id: "w", workspace_name: "Team", revision: 3, role });
 let client: QueryClient;
-function view(role: SharedWorkspaceSummary["role"]) { return <QueryClientProvider client={client}><Theme><SharedWorkspaceView accountId="member" selected={summary(role)} dark={false} onClose={vi.fn()} onDirtyChange={vi.fn()} /></Theme></QueryClientProvider>; }
-beforeEach(async () => { vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} }); await setLanguage("zh-CN"); client = new QueryClient({ defaultOptions: { queries: { retry: false } } }); vi.mocked(token).mockReturnValue("session-member"); vi.mocked(api).mockReset(); vi.mocked(api).mockResolvedValue(workspace); vi.mocked(previewSharedMock).mockReset(); });
+function view(role: SharedWorkspaceSummary["role"], accountId = "member") { return <QueryClientProvider client={client}><Theme><SharedWorkspaceView accountId={accountId} selected={summary(role)} dark={false} onClose={vi.fn()} onDirtyChange={vi.fn()} /></Theme></QueryClientProvider>; }
+beforeEach(async () => { vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} }); await setLanguage("zh-CN"); client = new QueryClient({ defaultOptions: { queries: { retry: false } } }); vi.mocked(token).mockReturnValue("session-member"); vi.mocked(api).mockReset(); vi.mocked(api).mockResolvedValue(workspace); vi.mocked(previewSharedMock).mockReset(); vi.mocked(saveProjectFile).mockReset(); vi.mocked(saveProjectFile).mockResolvedValue(undefined); });
 afterEach(() => { cleanup(); client.clear(); vi.unstubAllGlobals(); });
 
 it("keeps viewer resources read-only and hides private execution controls", async () => {
@@ -35,6 +37,39 @@ it("keeps viewer resources read-only and hides private execution controls", asyn
   expect(screen.queryByRole("button", { name: "Mock 预览" })).toBeNull();
   expect(screen.queryByRole("tab", { name: /参数/ })).toBeNull();
   expect(api).toHaveBeenCalledWith(base);
+});
+
+it("downloads a saved redacted report through the member route", async () => {
+  vi.mocked(api).mockImplementation((path) => {
+    if (path === `${base}/reports`) return Promise.resolve({ items: [{ id: "report-a", collection_name: "Team tests", summary: { passed: 1, failed: 0 } }], next_cursor: null });
+    if (path.includes("/export?")) return Promise.resolve({ filename: "report.json", content: '{"safe":true}', mime: "application/json" });
+    return Promise.resolve(workspace);
+  });
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "测试报告" }));
+  await screen.findByText("Team tests");
+  fireEvent.change(screen.getByLabelText("报告导出格式"), { target: { value: "json" } });
+  fireEvent.click(screen.getByRole("button", { name: "下载脱敏报告" }));
+  await waitFor(() => expect(saveProjectFile).toHaveBeenCalledTimes(1));
+  expect(api).toHaveBeenCalledWith(`${base}/reports/report-a/export?format=json&language=zh-CN`);
+  expect(vi.mocked(saveProjectFile).mock.calls[0][0]).toBe("report.json");
+});
+
+it.each(["role", "account"] as const)("discards a delayed shared report export after the %s changes", async (boundary) => {
+  let finish!: (value: unknown) => void;
+  vi.mocked(api).mockImplementation((path) => {
+    if (path === `${base}/reports`) return Promise.resolve({ items: [{ id: "report-a", collection_name: "Team tests", summary: { passed: 1, failed: 0 } }], next_cursor: null });
+    if (path.includes("/export?")) return new Promise((resolve) => { finish = resolve; });
+    return Promise.resolve(workspace);
+  });
+  const { rerender } = render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "测试报告" }));
+  fireEvent.click(await screen.findByRole("button", { name: "下载脱敏报告" }));
+  await waitFor(() => expect(finish).toBeTypeOf("function"));
+  rerender(boundary === "role" ? view("viewer") : view("editor", "other-member"));
+  await act(async () => finish({ filename: "private.json", content: "private", mime: "application/json" }));
+  expect(saveProjectFile).not.toHaveBeenCalled();
+  expect(screen.queryByRole("button", { name: "下载脱敏报告" })).toBeNull();
 });
 
 it("connects a saved shared WebSocket, sends a message and keeps viewer controls absent", async () => {

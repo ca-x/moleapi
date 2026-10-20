@@ -174,7 +174,7 @@ pub async fn clear(
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Export {
+pub(crate) struct Export {
     format: String,
     #[serde(default = "english")]
     language: String,

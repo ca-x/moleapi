@@ -892,6 +892,7 @@ async fn editor_run_is_audited_and_cross_instance_removal_withholds_its_result()
     let second = hosted(settings).await.unwrap();
     let owner = register(&first, "runowner").await;
     let member = register(&first, "runmember").await;
+    let foreign = register(&first, "runforeign").await;
     let started = Arc::new(tokio::sync::Notify::new());
     let release = Arc::new(tokio::sync::Notify::new());
     let (url, server) = serve(
@@ -1041,6 +1042,69 @@ async fn editor_run_is_audited_and_cross_instance_removal_withholds_its_result()
     let (status, detail) = call(&first, "GET", &detail_path, Some(&member), None).await;
     assert_eq!(status, StatusCode::OK, "{detail}");
     assert_eq!(detail["id"], report_id);
+    let export_path = format!("{detail_path}/export?format=json&language=en");
+    let (status, exported) = call(&first, "GET", &export_path, Some(&member), None).await;
+    assert_eq!(status, StatusCode::OK, "{exported}");
+    assert!(exported["filename"].as_str().unwrap().ends_with(".json"));
+    let exported_report: serde_json::Value =
+        serde_json::from_str(exported["content"].as_str().unwrap()).unwrap();
+    assert_eq!(exported_report["id"], report_id);
+    for wrong_scope in [
+        format!(
+            "/api/owners/{member_id}/workspaces/w/reports/{report_id}/export?format=json&language=en"
+        ),
+        format!(
+            "/api/owners/{owner_id}/workspaces/other/reports/{report_id}/export?format=json&language=en"
+        ),
+    ] {
+        assert_eq!(
+            call(&first, "GET", &wrong_scope, Some(&member), None)
+                .await
+                .0,
+            StatusCode::NOT_FOUND
+        );
+    }
+    let (_, export_audit) = call(
+        &second,
+        "GET",
+        &format!("{shared_path}/audit"),
+        Some(&owner),
+        None,
+    )
+    .await;
+    assert!(export_audit.as_array().unwrap().iter().any(|event| {
+        event["actor_id"] == member_id
+            && event["action"] == "report.export"
+            && event["subject_id"] == report_id
+            && event["result"] == "started"
+    }));
+    assert_eq!(
+        call(
+            &first,
+            "GET",
+            &format!("{reports_path}/missing/export?format=json&language=en"),
+            Some(&member),
+            None
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        call(&first, "GET", &export_path, Some(&foreign), None)
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+    for path in [
+        format!("{detail_path}/export?format=pdf&language=en"),
+        format!("{detail_path}/export?format=json&language=fr"),
+    ] {
+        assert_eq!(
+            call(&first, "GET", &path, Some(&member), None).await.0,
+            StatusCode::BAD_REQUEST
+        );
+    }
     let position = detail["results"][0]["position"].as_u64().unwrap();
     let response_path = format!("{detail_path}/steps/{position}/response");
     let (status, saved_response) = call(&first, "GET", &response_path, Some(&member), None).await;
@@ -1135,6 +1199,12 @@ async fn editor_run_is_audited_and_cross_instance_removal_withholds_its_result()
         .0,
         StatusCode::OK
     );
+    assert_eq!(
+        call(&first, "GET", &export_path, Some(&member), None)
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
     let (status, withheld_mock) =
         tokio::time::timeout(std::time::Duration::from_secs(3), delayed_mock)
             .await
@@ -1224,7 +1294,13 @@ async fn editor_run_is_audited_and_cross_instance_removal_withholds_its_result()
             StatusCode::NOT_FOUND
         );
     }
-    for path in [&history_path, &reports_path, &detail_path, &response_path] {
+    for path in [
+        &history_path,
+        &reports_path,
+        &detail_path,
+        &response_path,
+        &export_path,
+    ] {
         assert_eq!(
             call(&first, "GET", path, Some(&member), None).await.0,
             StatusCode::NOT_FOUND

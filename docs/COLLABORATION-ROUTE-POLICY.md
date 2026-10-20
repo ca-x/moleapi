@@ -53,6 +53,7 @@ This inventory covers every `.route` registered in `crates/server/src/lib.rs` at
 | `/owners/{owner}/workspaces/{workspace}/history` | GET editor | saved redacted response history |
 | `/owners/{owner}/workspaces/{workspace}/reports` | GET editor | saved report summaries |
 | `/owners/{owner}/workspaces/{workspace}/reports/{report}` | GET editor | saved report detail |
+| `/owners/{owner}/workspaces/{workspace}/reports/{report}/export` | GET editor | bounded export of the saved redacted report; admitted actor/report ID audited before read, membership rechecked before release |
 | `/owners/{owner}/workspaces/{workspace}/reports/{report}/steps/{position}/response` | GET editor | saved response detail |
 | `/owners/{owner}/workspaces/{workspace}/members/{member}` | PATCH/DELETE admin hosted session | member identity |
 | `/workspaces/{id}` | No shared access | Not assessed for member use |
