@@ -393,6 +393,72 @@ it("acknowledges canonical Mock defaults after disabling faults and limits", asy
   expect(screen.getByLabelText("故障比例（%）")).toHaveProperty("value", "0");
 });
 
+it("edits shared inline Mock Schema and inference through canonical CAS", async () => {
+  const first = workspace.data.collections[0].requests[0];
+  const withExample: Workspace = { ...workspace, data: { ...workspace.data, collections: [{ ...workspace.data.collections[0], requests: [{ ...first, examples: [{ id: "schema-example", name: "Schema", status: 200, headers: [], body: "static body", fault_rate_percent: 17 }] }] }] } };
+  vi.mocked(api).mockImplementation((path, method, body) => path.endsWith("/mock-calls") ? Promise.resolve([]) : Promise.resolve(method === "PUT" ? { ...withExample, revision: 4, data: (body as { data: Workspace["data"] }).data } : withExample));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "Mock 预览" }));
+  fireEvent.change(screen.getByLabelText("Mock 正文来源"), { target: { value: "inline" } });
+  fireEvent.click(screen.getByRole("button", { name: "编辑 Mock JSON Schema" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Mock JSON Schema" }), { target: { value: "invalid" } });
+  expect(screen.getByRole("button", { name: "完成" })).toHaveProperty("disabled", true);
+  const schema = '{"type":"object","properties":{"id":{"const":7}},"required":["id"]}';
+  fireEvent.change(screen.getByRole("textbox", { name: "Mock JSON Schema" }), { target: { value: schema } });
+  fireEvent.click(screen.getByRole("button", { name: "完成" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "根据字段名生成 Mock 值" }));
+  expect(screen.getByRole("button", { name: "预览已保存 Mock 示例" })).toHaveProperty("disabled", true);
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.objectContaining({ expected_revision: 3 })));
+  const sent = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
+  expect(sent.data.collections[0].requests[0].examples[0]).toMatchObject({ mock_schema: schema, mock_name_inference: true, body: "static body", fault_rate_percent: 17 });
+  expect(vi.mocked(api).mock.calls.some(([path]) => path.includes("/mock-schema/validate"))).toBe(false);
+});
+
+it.each([false, true])("closes an uncommitted shared Schema dialog on remote revision (dirty=%s)", async (dirty) => {
+  const first = workspace.data.collections[0].requests[0];
+  const withExample: Workspace = { ...workspace, data: { ...workspace.data, collections: [{ ...workspace.data.collections[0], requests: [{ ...first, examples: [{ id: "schema-example", name: "Schema", status: 200, headers: [], body: "static", mock_schema: '{"type":"string","const":"old"}' }] }] }] } };
+  vi.mocked(api).mockImplementation((path) => Promise.resolve(path.endsWith("/mock-calls") ? [] : withExample));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "Mock 预览" }));
+  if (dirty) fireEvent.change(screen.getByLabelText("示例名称"), { target: { value: "Unsaved title" } });
+  fireEvent.click(screen.getByRole("button", { name: "编辑 Mock JSON Schema" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Mock JSON Schema" }), { target: { value: '{"type":"string","const":"stale local edit"}' } });
+  const remote = structuredClone(withExample);
+  remote.revision = 4;
+  remote.data.collections[0].requests[0].examples[0].mock_schema = '{"type":"string","const":"remote"}';
+  await act(async () => client.setQueryData(["shared-workspace", "member", "owner-id", "w", "editor", 0], remote));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  if (dirty) fireEvent.click(screen.getByRole("button", { name: "使用服务器版本" }));
+  fireEvent.click(screen.getByRole("button", { name: "编辑 Mock JSON Schema" }));
+  expect(screen.getByRole("textbox", { name: "Mock JSON Schema" })).toHaveProperty("value", remote.data.collections[0].requests[0].examples[0].mock_schema);
+});
+
+it.each(["linked", "data"] as const)("preserves an existing %s source until explicit inline selection", async (source) => {
+  const first = workspace.data.collections[0].requests[0];
+  const reference = source === "linked" ? { mock_schema_link: { specification_id: "spec", pointer: "/schema" } } : { mock_data: { dataset_id: "dataset", view_id: "view", shape: "rows" as const, parameters: [] } };
+  const withExample: Workspace = { ...workspace, data: { ...workspace.data, collections: [{ ...workspace.data.collections[0], requests: [{ ...first, examples: [{ id: "source-example", name: "Saved source", status: 200, headers: [], body: "retained static", ...reference }] }] }] } };
+  vi.mocked(api).mockImplementation((path, method, body) => path.endsWith("/mock-calls") ? Promise.resolve([]) : Promise.resolve(method === "PUT" ? { ...withExample, revision: 4, data: (body as { data: Workspace["data"] }).data } : withExample));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "Mock 预览" }));
+  expect(screen.getByLabelText("Mock 正文来源")).toHaveProperty("value", source);
+  fireEvent.change(screen.getByLabelText("示例名称"), { target: { value: "Renamed" } });
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.anything()));
+  const saved = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
+  expect(saved.data.collections[0].requests[0].examples[0]).toMatchObject(reference);
+  await waitFor(() => expect(screen.getByRole("button", { name: "保存共享工作区" })).toHaveProperty("disabled", true));
+  fireEvent.change(screen.getByLabelText("Mock 正文来源"), { target: { value: "inline" } });
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(vi.mocked(api).mock.calls.filter(([, method]) => method === "PUT")).toHaveLength(2));
+  const sent = vi.mocked(api).mock.calls.filter(([, method]) => method === "PUT")[1][2] as { data: Workspace["data"] };
+  const example = sent.data.collections[0].requests[0].examples[0];
+  expect(example.mock_schema).toBeTruthy();
+  expect(example.mock_data).toBeUndefined();
+  expect(example.mock_schema_link).toBeUndefined();
+  expect(example.body).toBe("retained static");
+});
+
 it("adds and removes a shared response example within the unsaved draft", async () => {
   vi.mocked(api).mockImplementation((path) => Promise.resolve(path.endsWith("/mock-calls") ? [] : workspace));
   render(view("editor"));

@@ -22,6 +22,7 @@ import SharedDocumentsPanel from "./SharedDocumentsPanel";
 import SharedVariablesPanel from "./SharedVariablesPanel";
 import SharedLiveSessionPanel from "./SharedLiveSessionPanel";
 import MockTrafficControls from "../requests/MockTrafficControls";
+import SharedMockSchemaControls from "./SharedMockSchemaControls";
 
 type Tab = "resources" | "history" | "reports" | "mock" | "documents" | "variables";
 type RunResult = { passed: number; failed: number; cancelled: boolean; report_id?: string };
@@ -333,6 +334,7 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
             <Field label={t("状态码")}><TextField.Root inputMode="numeric" maxLength={3} value={exampleStatusInput} onChange={(event) => { const value = event.target.value; setExampleStatusInput(value); const status = Number(value); if (/^[2-5]\d\d$/.test(value) && status <= 599) updateExample((item) => ({ ...item, status })); }} onBlur={() => { if (statusPending) setExampleStatusInput(String(example.status)); }} /></Field>
           </Flex>
           <MockTrafficControls example={example} onChange={(patch) => updateExample((item) => ({ ...item, ...patch }))} />
+          <SharedMockSchemaControls key={`${scope}/${request?.id}/${example.id}/${saved?.revision}/${conflict?.revision ?? ""}`} example={example} dark={dark} onChange={(patch) => updateExample((item) => ({ ...item, ...patch }))} />
           {statusPending && <Text role="alert" size="1" color="red">{t("状态码必须为 200 到 599。")}</Text>}
           <Field label={t("响应正文")}><TextArea value={example.body} onChange={(event) => updateExample((item) => ({ ...item, body: event.target.value }))} /></Field>
           <div><Text as="p" size="2" weight="medium">{t("响应头")}</Text><PairEditor rows={example.headers} onChange={(headers) => updateExample((item) => ({ ...item, headers }))} keyLabel="Header" valueLabel={t("值")} secrets /></div>
