@@ -6,14 +6,18 @@ import { DataSqlEditor } from "../data/DataSqlEditor";
 import { DataResults } from "../data/DataResults";
 import { formatSql, selectedStatement } from "../data/model";
 import { useDataEvents } from "../data/useDataEvents";
+import SharedResultDatasetDialog, { type SaveSharedResultDataset } from "./SharedResultDatasetDialog";
+import type { Result } from "../data/types";
 import type { ProtocolEvent, SendMessage } from "../protocols/types";
-export default function SharedDataSessionControls({ sessionId, config, events, dropped, open, sending, dark, send }: {
+export default function SharedDataSessionControls({ sessionId, config, events, dropped, open, sending, dark, send, onSaveResultDataset }: {
   sessionId: string; config: DataConfig; events: ProtocolEvent[]; dropped: number; open: boolean; sending: boolean; dark: boolean;
+  onSaveResultDataset: SaveSharedResultDataset;
   send: (message: SendMessage) => Promise<boolean>;
 }) {
   useLanguage();
   const model = useDataEvents(sessionId, events, dropped);
   const [sql, setSql] = useState(config.sql), [search, setSearch] = useState(""), [formatError, setFormatError] = useState(false);
+  const [datasetResult, setDatasetResult] = useState<Result | null>(null);
   const selection = useRef({ from: 0, to: 0 });
   async function run() {
     if (!open || sending || model.active) return;
@@ -31,7 +35,8 @@ export default function SharedDataSessionControls({ sessionId, config, events, d
     {(model.error || model.processingError || formatError) && <Callout.Root color="red" role="alert"><Callout.Text>{model.error || model.processingError || t("SQL 语法结构有误，请检查括号或引号。")}</Callout.Text></Callout.Root>}
     {model.preparing && <Text role="status">{t("正在运行查询前脚本…")}</Text>}
     {model.preparation && <Flex direction="column" gap="1"><Text size="2">{t("查询前脚本已完成")}{model.preparation.sql_changed && <> · {t("本次 SQL 已由脚本修改")}</>}</Text>{model.preparation.tests.map((test) => <Text size="2" key={test.id}>{test.passed ? "✓" : "✕"} {test.name}: {test.actual}</Text>)}{model.preparation.logs.map((log, index) => <Text size="2" key={index}>{log.level}: {log.message}</Text>)}</Flex>}
-    <DataResults result={model.result} />
+    <DataResults result={model.result} onSaveDataset={() => setDatasetResult(model.result)} />
+    {datasetResult && datasetResult === model.result && <SharedResultDatasetDialog key={datasetResult.id} result={datasetResult} onClose={() => setDatasetResult(null)} onSave={onSaveResultDataset} />}
     {model.processing && <Flex direction="column" gap="1"><Text size="2">{t("查询后处理已完成")}</Text>{model.processing.tests.map((test) => <Text size="2" key={test.id}>{test.passed ? "✓" : "✕"} {test.name}: {test.actual}</Text>)}{model.processing.logs.map((log, index) => <Text size="2" key={index}>{log.level}: {log.message}</Text>)}</Flex>}
   </Flex></section>;
 }

@@ -34,6 +34,8 @@ import SharedDatasetsPanel from "./SharedDatasetsPanel";
 import SharedRunOptions from "./SharedRunOptions";
 import { defaultSharedRunConfig, resolveSharedRunOptions, type SharedRunConfig } from "./sharedRunOptions";
 import SharedDataRequestEditor from "./SharedDataRequestEditor";
+import { resultDatasetSnapshot } from "../data/dataset";
+import type { Result as DataResult } from "../data/types";
 import { dataConfig } from "../data/model";
 import type { DatasetPreview } from "../testing/RunnerDataset";
 import type { CollectionSettingsTarget } from "../collections/CollectionSettingsFields";
@@ -239,6 +241,34 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
       if (current(origin)) { setError(liveError(cause)); try { const remote = await api<Workspace>(base); if (current(origin) && remote.revision !== saved.revision) setConflict(remote); } catch { /* Access revocation is shown by the next workspace refresh. */ } }
     } finally { if (current(origin)) setSaving(false); }
   }
+  async function saveResultDataset(result: DataResult, name: string, identifier: string, resultCurrent: () => boolean) {
+    const admitted = () => canEdit && !!saved && !!draft && !dirty && !saving && !conflict && datasetContextCurrent() && resultCurrent();
+    if (!admitted() || !saved) throw new Error("stale result context");
+    const origin = scope, snapshot = structuredClone(saved);
+    if (snapshot.data.datasets?.some((item) => item.id === identifier)) throw new Error("dataset already exists");
+    const dataset = resultDatasetSnapshot(result, name, snapshot.data.datasets ?? [], identifier);
+    setSaving(true);
+    try {
+      await api(`${base}/dataset/preview`, "POST", { expected_revision: snapshot.revision, dataset: dataset.source });
+      if (!admitted()) throw new Error("stale result context");
+      const data = { ...snapshot.data, datasets: [...(snapshot.data.datasets ?? []), dataset] };
+      const updated = await api<Workspace>(base, "PUT", { name: snapshot.name, data, expected_revision: snapshot.revision });
+      const persisted = updated.data.datasets?.find((item) => item.id === identifier);
+      if (updated.id !== snapshot.id || updated.revision <= snapshot.revision || persisted?.name !== dataset.name || !persisted.secret || persisted.source?.format !== dataset.source?.format || persisted.source?.source !== dataset.source?.source) throw new Error("dataset was not persisted");
+      if (current(origin)) {
+        invalidateDraftResults();
+        setDraft((latestDraft) => {
+          if (!latestDraft || latestDraft.id !== updated.id) return latestDraft;
+          if (!hasChanges({ draft: latestDraft, saved: snapshot })) return updated;
+          const datasets = latestDraft.data.datasets ?? [];
+          return { ...updated, name: latestDraft.name, data: { ...latestDraft.data, datasets: datasets.some((item) => item.id === identifier) ? datasets : [...datasets, dataset] } };
+        });
+        setSaved(updated); setConflict(null);
+        client.setQueryData(["shared-workspace", accountId, owner, workspaceId, selected.role, epoch], updated);
+        void client.invalidateQueries({ queryKey: ["shared-workspaces", accountId] });
+      }
+    } finally { if (current(origin)) setSaving(false); }
+  }
   async function previewRunData(source: { format: "csv" | "json"; source: string }) {
     if (!saved || !datasetContextCurrent()) throw new Error("stale dataset context");
     const result = await api<DatasetPreview>(`${base}/dataset/preview`, "POST", { expected_revision: saved.revision, dataset: source });
@@ -386,7 +416,7 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
               </Tabs.Root>}
             </Flex> : <Flex direction="column" gap="1"><Text weight="medium">{request.method} {request.name}</Text><Text size="2" style={{ overflowWrap: "anywhere" }}>{request.url}</Text><Text size="2" color="gray">{request.description}</Text></Flex>)}
           </>}
-          {canEdit && request && liveRequest && saved && <SharedLiveSessionPanel key={`${scope}/${request.id}/${saved.revision}/${dirty}`} base={base} request={request} revision={saved.revision} environmentId={saved.data.active_environment_id} dirty={dirty} saving={saving} conflict={!!conflict} dark={dark} />}
+          {canEdit && request && liveRequest && saved && <SharedLiveSessionPanel key={`${scope}/${request.id}/${saved.revision}/${dirty}`} base={base} request={request} revision={saved.revision} environmentId={saved.data.active_environment_id} dirty={dirty} saving={saving} conflict={!!conflict} dark={dark} onSaveResultDataset={saveResultDataset} />}
           {canEdit && request && !liveRequest && <Flex direction="column" gap="2">
             {dirty && httpRequest ? <><Button loading={sending} disabled={sending || saving || !!conflict} onClick={() => void sendDraftRequest()}>{t("发送草稿请求")}</Button><Text size="1" color="gray">{t("草稿请求仅供本次执行，保存后才会更新工作区。")}</Text></> : <Button loading={sending} disabled={sending || dirty} onClick={() => void sendSavedRequest()}>{t("发送已保存请求")}</Button>}
             {requestResponse && <><Text role="status" size="2">{responseSource === "draft" ? t("草稿请求执行结果") : t("已保存请求执行结果")}: {requestResponse.status} {requestResponse.status_text} · {requestResponse.elapsed_ms} ms</Text><TextArea aria-label={t("响应正文预览")} readOnly value={requestResponse.body.slice(0, 16 * 1024)} />{requestResponse.body.length > 16 * 1024 && <Text size="1" color="gray">{t("仅显示响应正文前 16 KiB。")}</Text>}</>}

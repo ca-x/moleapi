@@ -1,7 +1,7 @@
 import type {SavedDataset} from "../../shared/types";
 import type {Cell,Result} from "./types";
 
-export type ResultDatasetErrorCode = "incomplete"|"failed"|"truncated"|"empty"|"rows"|"columns"|"duplicate_columns"|"unsupported_cell"|"source_size";
+export type ResultDatasetErrorCode = "incomplete"|"failed"|"truncated"|"empty"|"rows"|"columns"|"duplicate_columns"|"unsupported_cell"|"source_size"|"name"|"datasets"|"aggregate";
 export class ResultDatasetError extends Error {
   constructor(readonly code:ResultDatasetErrorCode){super(code);}
 }
@@ -33,4 +33,14 @@ export function resultDatasetSource(result:Result):NonNullable<SavedDataset["sou
   const source=JSON.stringify(rows);
   if(new TextEncoder().encode(source).length>1024*1024)throw new ResultDatasetError("source_size");
   return {format:"json",source};
+}
+
+export function resultDatasetSnapshot(result:Result,name:string,existing:SavedDataset[],identifier:string):SavedDataset {
+  const title=name.trim();
+  if(!title||new TextEncoder().encode(title).length>256)throw new ResultDatasetError("name");
+  if(existing.length>=20)throw new ResultDatasetError("datasets");
+  const source=resultDatasetSource(result);
+  const total=existing.reduce((size,dataset)=>size+(dataset.source?new TextEncoder().encode(dataset.source.source).length:0),new TextEncoder().encode(source.source).length);
+  if(total>4*1024*1024)throw new ResultDatasetError("aggregate");
+  return {id:identifier,name:title,description:"",secret:true,source};
 }

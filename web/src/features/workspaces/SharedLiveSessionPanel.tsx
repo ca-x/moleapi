@@ -6,11 +6,12 @@ import { liveError } from "../../shared/i18n/errors";
 import type { RequestSpec } from "../../shared/types";
 import { Choice, Field } from "../../shared/ui";
 import { appendEvents } from "../protocols/events";
+import type { SaveSharedResultDataset } from "./SharedResultDatasetDialog";
 import SharedDataSessionControls from "./SharedDataSessionControls";
 import SessionEventPane from "../protocols/SessionEventPane";
 import type { EventBatch, ProtocolEvent, ProtocolSession, SendMessage } from "../protocols/types";
 
-export default function SharedLiveSessionPanel({ base, request, revision, environmentId, dirty, saving, conflict, dark }: {
+export default function SharedLiveSessionPanel({ base, request, revision, environmentId, dirty, saving, conflict, dark, onSaveResultDataset }: {
   base: string;
   request: RequestSpec;
   revision: number;
@@ -19,6 +20,7 @@ export default function SharedLiveSessionPanel({ base, request, revision, enviro
   saving: boolean;
   conflict: boolean;
   dark: boolean;
+  onSaveResultDataset: SaveSharedResultDataset;
 }) {
   useLanguage();
   const [session, setSession] = useState<ProtocolSession | null>(null);
@@ -122,7 +124,7 @@ export default function SharedLiveSessionPanel({ base, request, revision, enviro
       {session && <><Flex gap="2" align="center" wrap="wrap"><Text role="status" size="2">{t("状态")}: {({ connecting: t("连接中"), open: t("已连接"), closed: t("已关闭"), error: t("连接失败") })[session.state]}</Text>{(session.state === "open" || session.state === "connecting") ? <Button variant="soft" color="gray" loading={busy} onClick={() => void close()}>{t("断开")}</Button> : <Button variant="soft" disabled={busy || dirty || saving || conflict} onClick={() => void reset()}>{t("重新连接")}</Button>}</Flex>
         {session.reason && <Text size="2" color="gray">{session.reason}</Text>}
         {session.protocol === "websocket" && session.state === "open" && <Flex direction="column" gap="2"><Choice label={t("消息类型")} value={mode} onChange={(value) => setMode(value as typeof mode)} options={[{ value: "text", label: t("文本") }, { value: "binary", label: "Base64" }, { value: "ping", label: "Ping Base64" }]} /><Field label={mode === "text" ? t("消息正文") : "Base64"}><TextArea value={payload} onChange={(event) => setPayload(event.target.value)} /></Field><Button loading={sending} disabled={sending} onClick={() => void send()}>{t("发送消息")}</Button></Flex>}
-        {session.protocol === "data" && request.protocol?.kind === "data" ? <SharedDataSessionControls key={sessionId} sessionId={sessionId!} config={request.protocol} events={events} dropped={dropped} open={session.state === "open"} sending={sending} dark={dark} send={sendData} /> : <SessionEventPane events={events} dropped={dropped} dark={dark} sessionId={sessionId} protocolLabel={session.protocol.toUpperCase()} />}
+        {session.protocol === "data" && request.protocol?.kind === "data" ? <SharedDataSessionControls key={sessionId} sessionId={sessionId!} config={request.protocol} events={events} dropped={dropped} open={session.state === "open"} sending={sending} dark={dark} send={sendData} onSaveResultDataset={onSaveResultDataset} /> : <SessionEventPane events={events} dropped={dropped} dark={dark} sessionId={sessionId} protocolLabel={session.protocol.toUpperCase()} />}
       </>}
     </Flex>
   </section>;

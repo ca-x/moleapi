@@ -1567,3 +1567,118 @@ it("keeps Data source SQL private for a viewer and has no Data mutation controls
   vi.mocked(api).mockResolvedValue(shared);render(view("viewer"));await screen.findByText("此工作区为只读。不能保存、运行请求或查看私有执行记录。");
   expect(screen.queryByLabelText("Data 请求设置")).toBeNull();expect(screen.queryByRole("button",{name:"新增 Data 请求"})).toBeNull();expect(screen.queryByRole("button",{name:"连接"})).toBeNull();
 });
+
+function sharedResultFlow(options: { preview?: () => Promise<unknown>; put?: (body: unknown) => Promise<unknown>; get?: () => Workspace } = {}) {
+  let shared=structuredClone(workspace), queryId="";
+  shared.data.collections[0].requests[0].protocol={...dataConfig(),source:"local_file",sql:"SELECT * FROM data",file_name:"rows.csv",file_base64:"aWQKMQo="};
+  shared.data.collections[0].requests[0].url="";
+  const session={id:"result-live",workspace_id:"w",request_id:shared.data.collections[0].requests[0].id,protocol:"data",url:"http://data.invalid/",state:"open",reason:null,created_at:"now",updated_at:"now",received_bytes:0,sent_bytes:0,event_count:0,handshake:null};
+  vi.mocked(api).mockImplementation((path,method,body)=>{
+    if(path===`${base}/dataset/preview`)return options.preview?.()??Promise.resolve({columns:["id","amount","active","name"],rows:[]});
+    if(path===base&&method==="PUT") {
+      if(options.put)return options.put(body) as ReturnType<typeof api>;
+      shared={...shared,revision:shared.revision+1,data:(body as {data:Workspace["data"]}).data};return Promise.resolve(shared);
+    }
+    if(path===`${base}/sessions`&&method==="POST")return Promise.resolve(session);
+    if(path===`${base}/sessions/result-live`)return Promise.resolve(session);
+    if(path.endsWith("/send")){queryId=(body as {query_id:string}).query_id;return Promise.resolve({ok:true});}
+    if(path.includes("/events?"))return Promise.resolve({events:queryId?[
+      {cursor:1,received_at:"now",direction:"incoming",message:{kind:"data_started",query_id:queryId}},
+      {cursor:2,received_at:"now",direction:"incoming",message:{kind:"data_columns",query_id:queryId,columns:["id","amount","active","name"].map(name=>({name,data_type:"TEXT",nullable:true}))}},
+      {cursor:3,received_at:"now",direction:"incoming",message:{kind:"data_rows",query_id:queryId,rows:[[{kind:"integer",value:"9007199254740993"},{kind:"decimal",value:"1.2300"},{kind:"bool",value:true},{kind:"text",value:"result-alpha"}],[{kind:"null"},{kind:"decimal",value:"2.50"},{kind:"bool",value:false},{kind:"text",value:"result-beta"}]]}},
+      {cursor:4,received_at:"now",direction:"incoming",message:{kind:"data_finished",query_id:queryId,rows_affected:0,elapsed_ms:1,truncated:false,limit_reason:null}},
+    ]:[],next_cursor:queryId?4:0,earliest_cursor:1,dropped_count:0});
+    return Promise.resolve(options.get?.() ?? shared);
+  });
+  return shared;
+}
+async function openSharedResultDialog(filter = "") {
+  fireEvent.click(await screen.findByRole("button",{name:"连接"}));
+  fireEvent.click(await screen.findByRole("button",{name:"运行当前查询"}));
+  await screen.findByText("result-alpha",{},{timeout:3000});
+  if (filter) fireEvent.change(screen.getByLabelText("搜索结果"),{target:{value:filter}});
+  fireEvent.click(screen.getByRole("button",{name:"保存为数据集"}));
+  await screen.findByRole("dialog",{name:"保存查询结果为数据集"});
+  fireEvent.change(screen.getByRole("textbox",{name:"数据集名称"}),{target:{value:"Exact member rows"}});
+}
+it("saves all returned shared rows through member preview and private canonical CAS",async()=>{
+  sharedResultFlow();render(view("editor"));await openSharedResultDialog("result-alpha");
+  fireEvent.click(screen.getByRole("button",{name:"保存数据集"}));
+  await waitFor(()=>expect(api).toHaveBeenCalledWith(base,"PUT",expect.objectContaining({expected_revision:3})));
+  const body=vi.mocked(api).mock.calls.find(([path,method])=>path===base&&method==="PUT")?.[2] as {data:Workspace["data"]};
+  const dataset=body.data.datasets?.[0];expect(dataset).toMatchObject({name:"Exact member rows",secret:true,source:{format:"json"}});
+  expect(JSON.parse(dataset!.source!.source)).toEqual([{id:"9007199254740993",amount:"1.2300",active:true,name:"result-alpha"},{id:null,amount:"2.50",active:false,name:"result-beta"}]);
+  expect(api).toHaveBeenCalledWith(`${base}/dataset/preview`,"POST",{expected_revision:3,dataset:dataset!.source});
+  await waitFor(()=>expect(screen.queryByRole("dialog")).toBeNull());
+  expect(screen.getByRole("button",{name:"保存共享工作区"})).toHaveProperty("disabled",true);
+  expect(vi.mocked(api).mock.calls.some(([path])=>path.startsWith("/api/testing/")||path.startsWith("/api/workspaces/"))).toBe(false);
+});
+it("retains a failed result-save name and retries with the same dataset ID",async()=>{
+  const writes: {data:Workspace["data"]}[]=[];
+  const shared=sharedResultFlow({put:async(body)=>{
+    writes.push(body as {data:Workspace["data"]});
+    if(writes.length===1)throw new Error("network unavailable");
+    return {...shared,revision:4,data:(body as {data:Workspace["data"]}).data};
+  }});
+  render(view("editor"));await openSharedResultDialog();
+  fireEvent.click(screen.getByRole("button",{name:"保存数据集"}));
+  await screen.findByText("数据集保存失败，请检查数据或工作区版本后重试。");
+  expect(screen.getByRole("textbox",{name:"数据集名称"})).toHaveProperty("value","Exact member rows");
+  expect(screen.getByRole("button",{name:"保存数据集"})).toHaveProperty("disabled",false);
+  fireEvent.click(screen.getByRole("button",{name:"保存数据集"}));
+  await waitFor(()=>expect(screen.queryByRole("dialog")).toBeNull());
+  expect(writes).toHaveLength(2);expect(writes[0].data.datasets?.[0].id).toBe(writes[1].data.datasets?.[0].id);
+  expect(writes[1].data.datasets).toHaveLength(1);
+});
+
+it.each(["tab","account","credential","role","revision","cache"] as const)("does not dispatch result CAS after %s changes during member preview",async(boundary)=>{
+  let finish!:(value:unknown)=>void;
+  const shared=sharedResultFlow({preview:()=>new Promise(resolve=>{finish=resolve;})});
+  const mounted=render(view("editor"));await openSharedResultDialog();
+  fireEvent.click(screen.getByRole("button",{name:"保存数据集"}));
+  await waitFor(()=>expect(finish).toBeTypeOf("function"));
+  if(boundary==="tab")fireEvent.click(screen.getByText("文档"));
+  if(boundary==="account")mounted.rerender(view("editor","different-member"));
+  if(boundary==="credential"){vi.mocked(token).mockReturnValue("new-credential");mounted.rerender(view("editor"));}
+  if(boundary==="role")mounted.rerender(view("viewer"));
+  if(boundary==="revision")await act(async()=>{client.setQueryData(["shared-workspace","member","owner-id","w","editor",0],{...shared,revision:4});});
+  if(boundary==="cache"){
+    await act(async()=>{client.setQueryData(["shared-workspace","member","owner-id","w","editor",0],{...shared,revision:4});finish({rows:[]});});
+  }else await act(async()=>finish({rows:[]}));
+  expect(vi.mocked(api).mock.calls.some(([path,method])=>path===base&&method==="PUT")).toBe(false);
+});
+
+it("preserves edits made during result PUT and retains the newly saved dataset in that draft",async()=>{
+  let finish!:(value:unknown)=>void;
+  const shared=sharedResultFlow({put:()=>new Promise(resolve=>{finish=resolve;})});
+  render(view("editor"));await openSharedResultDialog();fireEvent.click(screen.getByRole("button",{name:"保存数据集"}));
+  await waitFor(()=>expect(finish).toBeTypeOf("function"));
+  const body=vi.mocked(api).mock.calls.find(([path,method])=>path===base&&method==="PUT")?.[2] as {data:Workspace["data"]};
+  fireEvent.change(screen.getByLabelText("请求名称"),{target:{value:"Edited during result write"}});
+  await act(async()=>finish({...shared,revision:4,data:body.data}));
+  expect(screen.getByLabelText("请求名称")).toHaveProperty("value","Edited during result write");
+  expect(screen.getByRole("button",{name:"保存共享工作区"})).toHaveProperty("disabled",false);
+  fireEvent.click(screen.getByRole("button",{name:"工作区数据集"}));
+  expect(await screen.findByText("Exact member rows")).toBeTruthy();
+});
+
+it("does not report result save success when the canonical response omits its dataset",async()=>{
+  const shared=sharedResultFlow({put:async()=>shared});
+  render(view("editor"));await openSharedResultDialog();fireEvent.click(screen.getByRole("button",{name:"保存数据集"}));
+  await screen.findByText("数据集保存失败，请检查数据或工作区版本后重试。");
+  expect(screen.getByRole("dialog",{name:"保存查询结果为数据集"})).toBeTruthy();
+});
+
+it("reconciles a committed result save after its response is lost without creating a second dataset",async()=>{
+  let canonical:Workspace;
+  const shared=sharedResultFlow({get:()=>canonical,put:async(body)=>{
+    canonical={...shared,revision:4,data:(body as {data:Workspace["data"]}).data};throw new Error("response lost after commit");
+  }});canonical=shared;
+  render(view("editor"));await openSharedResultDialog();fireEvent.click(screen.getByRole("button",{name:"保存数据集"}));
+  await screen.findByText("数据集保存失败，请检查数据或工作区版本后重试。");
+  await act(async()=>{await client.invalidateQueries({queryKey:["shared-workspace","member","owner-id","w","editor",0]});});
+  await waitFor(()=>expect(screen.queryByRole("dialog")).toBeNull());
+  fireEvent.click(screen.getByRole("button",{name:"工作区数据集"}));await screen.findByText("Exact member rows");
+  expect(canonical.data.datasets).toHaveLength(1);
+  expect(vi.mocked(api).mock.calls.filter(([path,method])=>path===base&&method==="PUT")).toHaveLength(1);
+});
