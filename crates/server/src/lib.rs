@@ -498,6 +498,14 @@ async fn build(
             get(collaboration::shared_mock),
         )
         .route(
+            "/owners/{owner}/workspaces/{workspace}/graphql/introspect",
+            post(collaboration::shared_graphql_introspect),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/graphql/schema",
+            post(collaboration::shared_graphql_schema),
+        )
+        .route(
             "/owners/{owner}/workspaces/{workspace}/specifications/preview",
             post(collaboration::shared_specification_preview),
         )

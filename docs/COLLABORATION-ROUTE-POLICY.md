@@ -43,13 +43,15 @@ This inventory covers every `.route` registered in `crates/server/src/lib.rs` at
 | `/owners/{owner}/workspaces/{workspace}/run` | POST editor | outbound requests, private results and saved report |
 | `/owners/{owner}/workspaces/{workspace}/run/cancel` | POST editor, creator only | instance-local cancellation keyed by actor and membership epoch; early cancellation and actor audit |
 | `/owners/{owner}/workspaces/{workspace}/requests/{request}/execute` | POST editor | canonical saved request execution and private response |
-| `/owners/{owner}/workspaces/{workspace}/execute-draft` | POST editor | HTTP draft execution under canonical collection and expected revision |
-| `/owners/{owner}/workspaces/{workspace}/sessions` | POST editor | canonical saved SSE/WebSocket/Data connection under expected revision |
+| `/owners/{owner}/workspaces/{workspace}/execute-draft` | POST editor | HTTP or GraphQL query/mutation draft execution under canonical collection and expected revision |
+| `/owners/{owner}/workspaces/{workspace}/sessions` | POST editor | canonical saved SSE/WebSocket/Data/GraphQL subscription connection under expected revision |
 | `/owners/{owner}/workspaces/{workspace}/sessions/{id}` | GET/DELETE editor, creator only | bound live session summary and removal |
 | `/owners/{owner}/workspaces/{workspace}/sessions/{id}/events` | GET editor, creator only | bounded private live events |
 | `/owners/{owner}/workspaces/{workspace}/sessions/{id}/send` | POST editor, creator only | WebSocket text/binary/Ping or Data query/schema/cancel; Data queries retain canonical scripts and creator audit |
 | `/owners/{owner}/workspaces/{workspace}/sessions/{id}/close` | POST editor, creator only | close bound live connection |
 | `/owners/{owner}/workspaces/{workspace}/mock/{request}/{example}` | GET editor | saved Mock example preview and call record |
+| `/owners/{owner}/workspaces/{workspace}/graphql/introspect` | POST editor | saved canonical GraphQL request under expected revision; actor audit and member/revision/credential final fence; returns candidate only |
+| `/owners/{owner}/workspaces/{workspace}/graphql/schema` | POST editor | saved request-bound GraphQL specification; expected revision, actor audit and final member/revision/credential fence |
 | `/owners/{owner}/workspaces/{workspace}/specifications/preview` | POST editor | bounded OpenAPI import/replacement candidate; expected revision, actor audit and final membership/revision fence; no persistence |
 | `/owners/{owner}/workspaces/{workspace}/dataset/preview` | Editor/admin session | Bounded literal CSV/JSON preview; canonical revision and membership admission/final fences, actor audit without source |
 | `/owners/{owner}/workspaces/{workspace}/mock-schema/validate` | Editor/admin session | Canonical saved HTTP/spec Schema validation; actor admission audit without source/pointer, membership and workspace revision fences before metadata response |

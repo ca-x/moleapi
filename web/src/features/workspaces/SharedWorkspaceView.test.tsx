@@ -12,7 +12,16 @@ import { saveProjectFile } from "../generation/saveProjectFile";
 import type { SharedWorkspaceSummary, Workspace } from "../../shared/types";
 import SharedWorkspaceView from "./SharedWorkspaceView";
 
+const graphqlEditors = vi.hoisted(() => ({ last: null as null | ((patch: Partial<import("../../shared/types").GraphQLConfig>) => void) }));
 vi.mock("../../shared/api", () => ({ api: vi.fn(), pickFile: vi.fn(), previewSharedMock: vi.fn(), token: vi.fn() }));
+vi.mock("../graphql/GraphQLIDE", async () => {
+  const { useState } = await import("react");
+  return { default: ({ config, onChange, fetcher }: { config: import("../../shared/types").GraphQLConfig; onChange: (patch: Partial<import("../../shared/types").GraphQLConfig>) => void; fetcher: (params: { query: string; variables: Record<string, unknown>; operationName?: string }) => Promise<unknown> }) => {
+    graphqlEditors.last = onChange;
+    const [output, setOutput] = useState("");
+    return <><label>GraphQL 文档<textarea value={config.document} onChange={(event) => onChange({ document: event.target.value })} /></label><label>GraphQL 变量<textarea value={config.variables_source ?? JSON.stringify(config.variables)} onChange={(event) => onChange({ variables_source: event.target.value })} /></label><button onClick={() => void fetcher({ query: config.document, variables: JSON.parse(config.variables_source || "{}"), operationName: config.operation_name ?? undefined }).then(async (result) => { if (result && typeof result === "object" && Symbol.asyncIterator in result) { const iterator = result as AsyncIterableIterator<unknown>; const next = await iterator.next(); setOutput(JSON.stringify(next.value)); await iterator.return?.(); } else setOutput(JSON.stringify(result)); }).catch((error: Error) => setOutput(error.message))}>执行 GraphQL</button><output>{output}</output></>;
+  } };
+});
 vi.mock("../data/DataSqlEditor", () => ({ DataSqlEditor: ({ value, change }: { value: string; change: (sql: string) => void }) => <label>SQL 查询编辑器<textarea value={value} onChange={(event) => change(event.target.value)} /></label> }));
 vi.mock("../generation/saveProjectFile", () => ({ saveProjectFile: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("../../shared/ui", () => ({
@@ -1746,4 +1755,62 @@ it.each(["tab","account","credential","role","revision","edit","file","cache"] a
   if(boundary==="edit")fireEvent.change(screen.getByLabelText("规范名称"),{target:{value:"Newer name"}});
   await act(async()=>{ if(boundary==="cache")client.setQueryData(["shared-workspace","member","owner-id","w","editor",0],{...shared,revision:4});finish(boundary==="file"?"late-file-source":{name:shared.name,data:{...shared.data,specifications:[{...shared.data.specifications![0],name:"Late response"}]},warnings:[]}); });
   expect(screen.queryByText("Late response")).toBeNull();expect(screen.queryByDisplayValue("late-file-source")).toBeNull();expect(vi.mocked(api).mock.calls.some(([,method])=>method==="PUT")).toBe(false);
+});
+
+it("creates a shared GraphQL request, executes current mutation as a member draft, then CAS-saves fields",async()=>{
+  vi.mocked(api).mockImplementation((path,method,body)=>Promise.resolve(path.endsWith("/execute-draft")?{status:200,headers:[],body:'{"data":{"double":14}}',elapsed_ms:1,url:"https://example.test/graphql",tests:[]}:method==="PUT"?{...workspace,revision:4,data:(body as {data:Workspace["data"]}).data}:workspace));
+  render(view("editor"));fireEvent.click(await screen.findByRole("button",{name:"新增 GraphQL 请求"}));
+  fireEvent.change(screen.getByLabelText("请求地址"),{target:{value:"https://example.test/graphql"}});
+  fireEvent.change(screen.getByLabelText("GraphQL 文档"),{target:{value:"mutation Double($value:Int!){double(value:$value)}"}});
+  fireEvent.change(screen.getByLabelText("GraphQL 变量"),{target:{value:'{"value":7}'}});
+  fireEvent.click(screen.getByRole("button",{name:"执行 GraphQL"}));await screen.findByText('{"data":{"double":14}}');
+  expect(api).toHaveBeenCalledWith(`${base}/execute-draft`,"POST",expect.objectContaining({expected_workspace_revision:3,collection_id:workspace.data.collections[0].id,request:expect.objectContaining({protocol:expect.objectContaining({kind:"graphql",operation_name:"Double",variables:{value:7}})})}));
+  expect(vi.mocked(api).mock.calls.some(([path])=>path==="/api/execute")).toBe(false);
+  fireEvent.click(screen.getByRole("button",{name:"保存共享工作区"}));await waitFor(()=>expect(api).toHaveBeenCalledWith(base,"PUT",expect.objectContaining({data:expect.objectContaining({collections:expect.anything()})})));
+  const body=vi.mocked(api).mock.calls.find(([path,method])=>path===base&&method==="PUT")?.[2] as {data:Workspace["data"]};expect(body.data.collections[0].requests.at(-1)).toMatchObject({method:"POST",protocol:{kind:"graphql",document:"mutation Double($value:Int!){double(value:$value)}",variables_source:'{"value":7}'}});
+});
+function graphqlSharedWorkspace() { const shared=structuredClone(workspace);shared.data.collections[0].requests[0].protocol={kind:"graphql",document:"query Hello {hello}",variables:{},connection_params:{}};return shared; }
+it("stages a private-safe member introspection schema/reference and saves only explicitly",async()=>{
+  const shared=graphqlSharedWorkspace(),spec={id:"introspected",kind:"graphql-sdl",dialect:"graphql",name:"Member schema",source:"type Query { hello: String }"};
+  vi.mocked(api).mockImplementation((path,method,body)=>Promise.resolve(path.endsWith("/graphql/introspect")?{response:{status:200,body:'{"data":{"__schema":{}}}',headers:[],elapsed_ms:1,tests:[]},specification:spec,sdl:spec.source}:path.endsWith("/graphql/schema")?{sdl:spec.source}:method==="PUT"?{...shared,revision:4,data:(body as {data:Workspace["data"]}).data}:shared));
+  render(view("editor"));fireEvent.click(await screen.findByRole("button",{name:"读取 Schema"}));
+  await waitFor(()=>expect(screen.getByLabelText("GraphQL Schema")).toHaveProperty("value","spec:introspected"));
+  expect(api).toHaveBeenCalledWith(`${base}/graphql/introspect`,"POST",{request_id:shared.data.collections[0].requests[0].id,expected_revision:3});expect(vi.mocked(api).mock.calls.some(([,method])=>method==="PUT")).toBe(false);
+  fireEvent.click(screen.getByRole("button",{name:"保存共享工作区"}));await waitFor(()=>expect(api).toHaveBeenCalledWith(base,"PUT",expect.objectContaining({data:expect.objectContaining({specifications:[spec]})})));
+  await waitFor(()=>expect(api).toHaveBeenCalledWith(`${base}/graphql/schema`,"POST",{request_id:shared.data.collections[0].requests[0].id,specification_id:"introspected",expected_revision:4}));
+});
+it.each(["edit","account","credential","role","revision","cache","tab"] as const)("discards delayed member GraphQL schema after %s changes",async(boundary)=>{
+  const shared=graphqlSharedWorkspace();let finish!:(value:unknown)=>void;
+  vi.mocked(api).mockImplementation(path=>path.endsWith("/graphql/introspect")?new Promise(resolve=>{finish=resolve;}):Promise.resolve(shared));const mounted=render(view("editor"));fireEvent.click(await screen.findByRole("button",{name:"读取 Schema"}));await waitFor(()=>expect(finish).toBeTypeOf("function"));
+  if(boundary==="edit")fireEvent.change(screen.getByLabelText("GraphQL 文档"),{target:{value:"query Changed {hello}"}});
+  if(boundary==="account")mounted.rerender(view("editor","other-account"));
+  if(boundary==="credential"){vi.mocked(token).mockReturnValue("new-credential");mounted.rerender(view("editor"));}
+  if(boundary==="role")mounted.rerender(view("viewer"));
+  if(boundary==="tab")fireEvent.click(screen.getByRole("button",{name:"文档"}));
+  if(boundary==="revision")await act(async()=>client.setQueryData(["shared-workspace","member","owner-id","w","editor",0],{...shared,revision:4}));
+  await act(async()=>{if(boundary==="cache")client.setQueryData(["shared-workspace","member","owner-id","w","editor",0],{...shared,revision:4});finish({response:{status:200,body:"old"},sdl:"type Query { stale: String }",specification:{id:"late-schema",name:"Late schema",kind:"graphql-sdl",source:"type Query { stale: String }",dialect:"graphql"}});});
+  expect(screen.queryByText("Late schema")).toBeNull();expect(vi.mocked(api).mock.calls.some(([,method])=>method==="PUT")).toBe(false);
+});
+it("keeps invalid subscription connection JSON unapplied and retains the stored object on Cancel",async()=>{
+  const shared=graphqlSharedWorkspace();vi.mocked(api).mockResolvedValue(shared);render(view("editor"));fireEvent.click(await screen.findByRole("button",{name:"编辑订阅连接参数"}));fireEvent.change(screen.getByLabelText("订阅连接参数 JSON"),{target:{value:"invalid"}});expect(screen.getByRole("button",{name:"应用连接参数"})).toHaveProperty("disabled",true);fireEvent.click(screen.getByRole("button",{name:"取消"}));expect(screen.getByRole("button",{name:"保存共享工作区"})).toHaveProperty("disabled",true);
+});
+
+it("does not apply a disposed GraphiQL editor callback to a new account scope",async()=>{
+  const shared=graphqlSharedWorkspace();vi.mocked(api).mockResolvedValue(shared);const mounted=render(view("editor"));await screen.findByLabelText("GraphQL 文档");const old=graphqlEditors.last!;
+  mounted.rerender(view("editor","new-account"));await screen.findByLabelText("GraphQL 文档");
+  act(()=>old({document:"query LatePrivate { secretFromOldActor }"}));
+  expect(screen.getByLabelText("GraphQL 文档")).toHaveProperty("value","query Hello {hello}");
+});
+
+it("starts and closes a saved GraphQL subscription only by its canonical member ID",async()=>{
+  const shared=graphqlSharedWorkspace();shared.data.collections[0].requests[0].protocol={kind:"graphql",document:"subscription Watch {ticks}",variables:{},connection_params:{}};
+  vi.mocked(api).mockImplementation((path)=>Promise.resolve(path===`${base}/sessions`?{id:"gql-session",state:"open"}:path.includes("/events?")?{events:[{cursor:1,message:{kind:"graphql_next",payload:{data:{ticks:1}}}},{cursor:2,message:{kind:"graphql_complete"}}],next_cursor:2,dropped_count:0}:path===`${base}/sessions/gql-session`?{state:"open"}:path.endsWith("/close")?{}:shared));
+  render(view("editor"));fireEvent.click(await screen.findByRole("button",{name:"执行 GraphQL"}));await screen.findByText('{"data":{"ticks":1}}');
+  expect(api).toHaveBeenCalledWith(`${base}/sessions`,"POST",{request_id:shared.data.collections[0].requests[0].id,expected_revision:3,environment_id:shared.data.active_environment_id});expect(api).toHaveBeenCalledWith(`${base}/sessions/gql-session/close`,"POST",{});
+  expect(vi.mocked(api).mock.calls.some(([path])=>path.startsWith("/api/sessions"))).toBe(false);
+});
+it("requires Save before subscribing to an edited GraphQL document or variables",async()=>{
+  const shared=graphqlSharedWorkspace();shared.data.collections[0].requests[0].protocol={kind:"graphql",document:"subscription Watch {ticks}",variables:{},connection_params:{}};vi.mocked(api).mockResolvedValue(shared);render(view("editor"));
+  fireEvent.change(await screen.findByLabelText("GraphQL 文档"),{target:{value:"subscription Changed {ticks}"}});fireEvent.click(screen.getByRole("button",{name:"执行 GraphQL"}));await screen.findByText("先保存 GraphQL 请求及变量，再订阅。");
+  expect(vi.mocked(api).mock.calls.some(([path])=>path.endsWith("/sessions"))).toBe(false);
 });

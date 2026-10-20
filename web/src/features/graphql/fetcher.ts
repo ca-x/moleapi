@@ -18,6 +18,14 @@ export interface GraphQLContext {
   apply: (updates: VariableUpdate[]) => void;
   response: (response: ApiResponse) => void;
   sessions: Set<string>;
+  transport?: {
+    execute: (request: RequestSpec) => Promise<ApiResponse>;
+    createSession: (request: RequestSpec) => Promise<ProtocolSession>;
+    sessionPath: (id: string) => string;
+  };
+}
+function sessionPath(context: GraphQLContext, id: string) {
+  return context.transport?.sessionPath(id) ?? `/api/sessions/${encodeURIComponent(id)}`;
 }
 function executionInput(context: GraphQLContext, parameters: FetcherParams) {
   if (context.request.protocol?.kind !== "graphql")
@@ -72,7 +80,7 @@ export function createRustGraphQLFetcher(
     if (!operation) throw new LocalizedError("请选择要执行的 GraphQL operation");
     const input = executionInput(context, { ...parameters, operationName: operation.name?.value });
     if (operation.operation !== "subscription") {
-      const response = await api<ApiResponse>("/api/execute", "POST", input);
+      const response = await (context.transport ? context.transport.execute(input.request) : api<ApiResponse>("/api/execute", "POST", input));
       if (!context.current()) throw new LocalizedError("GraphQL 请求已取消");
       context.apply(response.variable_updates || []);
       context.response(response);
@@ -94,7 +102,7 @@ function cancellableSubscription(
   const close = () => {
     if (sessionId)
       void api(
-        `/api/sessions/${encodeURIComponent(sessionId)}/close`,
+        `${sessionPath(context, sessionId)}/close`,
         "POST",
         {},
       ).catch(() => {});
@@ -121,7 +129,7 @@ async function* subscribe(
   input: ReturnType<typeof executionInput>,
   created: (id: string) => void,
 ) {
-  const session = await api<ProtocolSession>("/api/sessions", "POST", input);
+  const session = await (context.transport ? context.transport.createSession(input.request) : api<ProtocolSession>("/api/sessions", "POST", input));
   created(session.id);
   context.sessions.add(session.id);
   let cursor = 0;
@@ -130,11 +138,11 @@ async function* subscribe(
     context.apply(session.variable_updates || []);
     while (context.current()) {
       const state = await api<ProtocolSession>(
-        `/api/sessions/${encodeURIComponent(session.id)}`,
+        sessionPath(context, session.id),
       );
       if (!context.current()) return;
       const batch = await api<EventBatch>(
-        `/api/sessions/${encodeURIComponent(session.id)}/events?after=${cursor}`,
+        `${sessionPath(context, session.id)}/events?after=${cursor}`,
       );
       if (!context.current()) return;
       if (batch.dropped_count)
@@ -170,7 +178,7 @@ async function* subscribe(
   } finally {
     context.sessions.delete(session.id);
     await api(
-      `/api/sessions/${encodeURIComponent(session.id)}/close`,
+      `${sessionPath(context, session.id)}/close`,
       "POST",
       {},
     ).catch(() => {});

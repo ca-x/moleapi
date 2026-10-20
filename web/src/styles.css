@@ -1281,6 +1281,15 @@ kbd {
 .graphql-toolbar { padding:8px 20px; border-bottom:1px solid var(--gray-5); }
 .graphql-ide { flex:1; min-height:0; overflow:hidden; }
 .graphql-ide .graphiql-container { height:100%; }
+.shared-graphql { min-width:0; max-width:100%; }
+.shared-graphql .graphiql-editor { position:relative; }
+.shared-graphql .graphql-ide { flex:none; height: min(680px, 75vh); min-height:420px; min-width:0; }
+@media (max-width: 640px) {
+  .shared-graphql #graphiql-session { flex-direction:column; }
+  .shared-graphql .graphiql-horizontal-drag-bar { display:none; }
+  .shared-graphql .graphiql-editors, .shared-graphql .graphiql-response { min-width:0; width:100%; }
+  .shared-graphql .graphiql-editor-tool { min-height:90px; }
+}
 .method-gql { color:var(--cyan-12); }
 .graphql-ide .graphiql-container .graphiql-logo .graphiql-logo-link { color: var(--gray-12); }
 

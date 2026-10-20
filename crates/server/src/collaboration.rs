@@ -24,6 +24,9 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::future::Future;
 
+mod graphql;
+pub use graphql::{shared_graphql_introspect, shared_graphql_schema};
+
 const MAX_MEMBERS: u64 = 100;
 const MAX_PENDING: u64 = 20;
 const TOKEN_PREFIX: &str = "wi_";
@@ -593,8 +596,20 @@ pub async fn shared_execute_draft(
     if canonical.revision != input.expected_workspace_revision {
         return Err(ApiError::conflict("Workspace revision changed"));
     }
-    if input.request.protocol != moleapi_core::Protocol::Http {
-        return Err(ApiError::bad("Draft execution supports HTTP requests only"));
+    if input.request.protocol != moleapi_core::Protocol::Http
+        && !input.request.protocol.is_graphql()
+    {
+        return Err(ApiError::bad(
+            "Draft execution supports HTTP and GraphQL requests only",
+        ));
+    }
+    if input.request.protocol.is_graphql()
+        && moleapi_core::graphql_is_subscription(&input.request)
+            .map_err(|error| ApiError::bad(error.to_string()))?
+    {
+        return Err(ApiError::bad(
+            "GraphQL subscriptions require a saved member session",
+        ));
     }
     if input.request.id.trim().is_empty() {
         return Err(ApiError::bad("Draft request ID is required"));
@@ -690,9 +705,18 @@ pub async fn shared_session_create(
         moleapi_core::Protocol::Sse
             | moleapi_core::Protocol::Websocket
             | moleapi_core::Protocol::Data { .. }
+            | moleapi_core::Protocol::Graphql { .. }
     ) {
         return Err(ApiError::bad(
-            "Shared live sessions support saved SSE, WebSocket and Data requests",
+            "Shared live sessions support saved SSE, WebSocket, Data and GraphQL subscriptions",
+        ));
+    }
+    if request.protocol.is_graphql()
+        && !moleapi_core::graphql_is_subscription(&request)
+            .map_err(|error| ApiError::bad(error.to_string()))?
+    {
+        return Err(ApiError::bad(
+            "GraphQL session requires a saved subscription",
         ));
     }
     tx.commit().await?;

@@ -2308,5 +2308,17 @@
   "应用规范修改": "Apply specification changes",
   "先保存工作区，再校验规范源文档；应用后请再次保存。": "Save the workspace before validating specification source, then save again after applying changes.",
   "规范校验失败，请检查源文档、大小、引用或工作区版本。未应用的编辑已保留。": "Specification validation failed. Check the source, size, references or workspace revision. Unapplied edits are retained.",
-  "规范仍被请求或 Mock 引用，请先更新引用。": "Requests or Mock examples still reference this specification. Update those references first."
+  "规范仍被请求或 Mock 引用，请先更新引用。": "Requests or Mock examples still reference this specification. Update those references first.",
+  "新增 GraphQL 请求": "Add GraphQL request",
+  "先保存工作区，再使用关联 Schema。": "Save the workspace before using the linked schema.",
+  "先保存 GraphQL 请求及变量，再订阅。": "Save the GraphQL request and variables before subscribing.",
+  "共享 GraphQL 客户端": "Shared GraphQL client",
+  "读取 Schema": "Read schema",
+  "编辑订阅连接参数": "Edit subscription connection parameters",
+  "查询与 mutation 可执行当前编辑内容；订阅与 Schema 内省使用已保存请求。读取 Schema 后，请保存共享工作区。": "Queries and mutations use the current editor content. Subscriptions and schema introspection use the saved request. Save the shared workspace after reading a schema.",
+  "GraphQL Schema": "GraphQL schema",
+  "GraphQL 订阅地址": "GraphQL subscription URL",
+  "连接参数必须是 JSON 对象；应用后请保存请求再订阅。": "Connection parameters must be a JSON object. Save the request after applying them, then subscribe.",
+  "订阅连接参数 JSON": "Subscription connection parameters JSON",
+  "应用连接参数": "Apply connection parameters"
 }
