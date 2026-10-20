@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Theme } from "@radix-ui/themes";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { api, previewSharedMock, token } from "../../shared/api";
+import { api, pickFile, previewSharedMock, token } from "../../shared/api";
 import { setLanguage } from "../../shared/i18n";
 import { initialData } from "../../shared/model";
 import { dataConfig } from "../data/model";
@@ -12,13 +12,13 @@ import { saveProjectFile } from "../generation/saveProjectFile";
 import type { SharedWorkspaceSummary, Workspace } from "../../shared/types";
 import SharedWorkspaceView from "./SharedWorkspaceView";
 
-vi.mock("../../shared/api", () => ({ api: vi.fn(), previewSharedMock: vi.fn(), token: vi.fn() }));
+vi.mock("../../shared/api", () => ({ api: vi.fn(), pickFile: vi.fn(), previewSharedMock: vi.fn(), token: vi.fn() }));
 vi.mock("../data/DataSqlEditor", () => ({ DataSqlEditor: ({ value, change }: { value: string; change: (sql: string) => void }) => <label>SQL 查询编辑器<textarea value={value} onChange={(event) => change(event.target.value)} /></label> }));
 vi.mock("../generation/saveProjectFile", () => ({ saveProjectFile: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("../../shared/ui", () => ({
   Field: ({ label, children }: { label: string; children: React.ReactNode }) => <label>{label}{children}</label>,
   Choice: ({ label, value, options, onChange, disabled }: { disabled?: boolean; label: string; value: string; options: { value: string; label: string }[]; onChange: (value: string) => void }) => <label>{label}<select disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)}>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>,
-  Editor: ({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) => <label>{label}<textarea value={value} onChange={(event) => onChange(event.target.value)} /></label>,
+  Editor: ({ label, value, onChange, readOnly }: { label: string; value: string; onChange?: (value: string) => void; readOnly?: boolean }) => <label>{label}<textarea readOnly={readOnly} value={value} onChange={(event) => onChange?.(event.target.value)} /></label>,
   PairEditor: ({ rows, onChange, keyLabel, valueLabel }: { rows: { id: string; key: string; value: string; enabled: boolean }[]; onChange: (rows: { id: string; key: string; value: string; enabled: boolean }[]) => void; keyLabel: string; valueLabel: string }) => <div>{rows.map((row) => <div key={row.id}><label>{keyLabel}<input value={row.key} onChange={(event) => onChange(rows.map((item) => item.id === row.id ? { ...item, key: event.target.value } : item))} /></label><label>{valueLabel}<input value={row.value} onChange={(event) => onChange(rows.map((item) => item.id === row.id ? { ...item, value: event.target.value } : item))} /></label></div>)}<button onClick={() => onChange([...rows, { id: "header-a", key: "X-Test", value: "yes", enabled: true }])}>添加一行</button></div>,
   ToolButton: ({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) => <button aria-label={label} onClick={onClick}>{children}</button>,
 }));
@@ -27,7 +27,7 @@ const workspace: Workspace = { id: "w", name: "Team", revision: 3, updated_at: "
 const summary = (role: SharedWorkspaceSummary["role"]): SharedWorkspaceSummary => ({ owner_id: "owner-id", owner_username: "owner", workspace_id: "w", workspace_name: "Team", revision: 3, role });
 let client: QueryClient;
 function view(role: SharedWorkspaceSummary["role"], accountId = "member") { return <QueryClientProvider client={client}><Theme><SharedWorkspaceView accountId={accountId} selected={summary(role)} dark={false} onClose={vi.fn()} onDirtyChange={vi.fn()} /></Theme></QueryClientProvider>; }
-beforeEach(async () => { vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} }); await setLanguage("zh-CN"); client = new QueryClient({ defaultOptions: { queries: { retry: false } } }); vi.mocked(token).mockReturnValue("session-member"); vi.mocked(api).mockReset(); vi.mocked(api).mockResolvedValue(workspace); vi.mocked(previewSharedMock).mockReset(); vi.mocked(saveProjectFile).mockReset(); vi.mocked(saveProjectFile).mockResolvedValue(undefined); });
+beforeEach(async () => { vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} }); await setLanguage("zh-CN"); client = new QueryClient({ defaultOptions: { queries: { retry: false } } }); vi.mocked(token).mockReturnValue("session-member"); vi.mocked(api).mockReset(); vi.mocked(pickFile).mockReset(); vi.mocked(api).mockResolvedValue(workspace); vi.mocked(previewSharedMock).mockReset(); vi.mocked(saveProjectFile).mockReset(); vi.mocked(saveProjectFile).mockResolvedValue(undefined); });
 afterEach(() => { cleanup(); client.clear(); vi.unstubAllGlobals(); });
 
 it("keeps viewer resources read-only and hides private execution controls", async () => {
@@ -1681,4 +1681,69 @@ it("reconciles a committed result save after its response is lost without creati
   fireEvent.click(screen.getByRole("button",{name:"工作区数据集"}));await screen.findByText("Exact member rows");
   expect(canonical.data.datasets).toHaveLength(1);
   expect(vi.mocked(api).mock.calls.filter(([path,method])=>path===base&&method==="PUT")).toHaveLength(1);
+});
+
+it("imports shared OpenAPI source as a member candidate and saves only after explicit CAS",async()=>{
+  const shared=structuredClone(workspace), candidate=structuredClone(workspace.data);
+  candidate.specifications=[{id:"new-spec",name:"Member API",kind:"openapi",dialect:"3.0.3",source:'{"openapi":"3.0.3"}'}];
+  vi.mocked(api).mockImplementation((path,method,body)=>Promise.resolve(path.endsWith("/specifications/preview")?{name:shared.name,data:candidate,warnings:[]}:method==="PUT"?{...shared,revision:4,data:(body as {data:Workspace["data"]}).data}:shared));
+  render(view("editor"));fireEvent.click(await screen.findByRole("button",{name:"API 规范"}));
+  fireEvent.click(screen.getByRole("button",{name:"导入 OpenAPI 规范"}));
+  fireEvent.change(screen.getByLabelText("规范名称"),{target:{value:"Member API"}});
+  fireEvent.change(screen.getByLabelText("OpenAPI 源文档"),{target:{value:'{"openapi":"3.0.3"}'}});
+  fireEvent.click(screen.getByRole("button",{name:"应用规范修改"}));
+  await waitFor(()=>expect(api).toHaveBeenCalledWith(`${base}/specifications/preview`,"POST",{expected_revision:3,name:"Member API",source:'{"openapi":"3.0.3"}',include_requests:true}));
+  await screen.findByText("Member API");expect(vi.mocked(api).mock.calls.some(([,method])=>method==="PUT")).toBe(false);
+  fireEvent.click(screen.getByRole("button",{name:"保存共享工作区"}));
+  await waitFor(()=>expect(api).toHaveBeenCalledWith(base,"PUT",expect.objectContaining({expected_revision:3,data:candidate})));
+  expect(vi.mocked(api).mock.calls.some(([path])=>path==="/api/import")).toBe(false);
+});
+
+it("shows viewer specification sources read-only without member import or removal controls",async()=>{
+  const shared=linkedMockWorkspace();vi.mocked(api).mockResolvedValue(shared);render(view("viewer"));
+  fireEvent.click(await screen.findByRole("button",{name:"API 规范"}));
+  expect(screen.getByLabelText("规范源文档")).toHaveProperty("readOnly",true);
+  expect(screen.queryByRole("button",{name:"导入 OpenAPI 规范"})).toBeNull();expect(screen.queryByRole("button",{name:"编辑规范"})).toBeNull();expect(screen.queryByRole("button",{name:"删除规范"})).toBeNull();
+});
+it("names request and Mock dependencies before removing a specification and preserves source on Cancel",async()=>{
+  const shared=linkedMockWorkspace();shared.data.collections[0].requests[0].examples[0].mock_schema_link={specification_id:"spec",pointer:linkedPointer};vi.mocked(api).mockResolvedValue(shared);
+  render(view("editor"));fireEvent.click(await screen.findByRole("button",{name:"API 规范"}));fireEvent.click(screen.getByRole("button",{name:"删除规范"}));
+  expect(screen.getByText("规范仍被请求或 Mock 引用，请先更新引用。")).toBeTruthy();expect(screen.getByText(`${shared.data.collections[0].requests[0].name} / Link`)).toBeTruthy();expect(screen.getByRole("button",{name:"确认删除"})).toHaveProperty("disabled",true);
+  fireEvent.click(screen.getByRole("button",{name:"取消"}));expect(screen.getByLabelText("规范源文档")).toHaveProperty("value",shared.data.specifications![0].source);expect(vi.mocked(api).mock.calls.some(([,method])=>method==="PUT")).toBe(false);
+});
+it("switches an HTTP specification explicitly and guards linked Mock examples",async()=>{
+  const shared=linkedMockWorkspace(),request=shared.data.collections[0].requests[0];request.operation_id="old-operation";request.body="keep-body";request.post_response_script="console.log('keep')";request.examples[0].mock_schema_link={specification_id:"spec",pointer:linkedPointer};
+  shared.data.specifications!.push({...shared.data.specifications![0],id:"other",name:"Other spec"});vi.mocked(api).mockResolvedValue(shared);render(view("editor"));
+  fireEvent.change(await screen.findByLabelText("关联 API 规范"),{target:{value:"spec:other"}});expect(screen.getByRole("alert").textContent).toContain("Link");expect(screen.getByLabelText("关联 API 规范")).toHaveProperty("value","spec:spec");
+  fireEvent.click(screen.getByRole("button",{name:"Mock 预览"}));fireEvent.change(screen.getByLabelText("Mock 正文来源"),{target:{value:"static"}});fireEvent.click(screen.getByRole("button",{name:"资源"}));
+  fireEvent.change(screen.getByLabelText("关联 API 规范"),{target:{value:"spec:other"}});fireEvent.click(screen.getByRole("button",{name:"保存共享工作区"}));
+  await waitFor(()=>expect(api).toHaveBeenCalledWith(base,"PUT",expect.anything()));const body=vi.mocked(api).mock.calls.find(([path,method])=>path===base&&method==="PUT")?.[2] as {data:Workspace["data"]};
+  expect(body.data.collections[0].requests[0]).toMatchObject({specification_id:"other",operation_id:null,body:"keep-body",post_response_script:"console.log('keep')"});
+});
+it("can unlink an HTTP request then remove its specification in one canonical draft",async()=>{
+  const shared=linkedMockWorkspace();vi.mocked(api).mockResolvedValue(shared);render(view("editor"));fireEvent.change(await screen.findByLabelText("关联 API 规范"),{target:{value:"none"}});
+  fireEvent.click(screen.getByRole("button",{name:"API 规范"}));fireEvent.click(screen.getByRole("button",{name:"删除规范"}));fireEvent.click(screen.getByRole("button",{name:"确认删除"}));fireEvent.click(screen.getByRole("button",{name:"保存共享工作区"}));
+  await waitFor(()=>expect(api).toHaveBeenCalledWith(base,"PUT",expect.anything()));const body=vi.mocked(api).mock.calls.find(([path,method])=>path===base&&method==="PUT")?.[2] as {data:Workspace["data"]};expect(body.data.specifications).toEqual([]);expect(body.data.collections[0].requests[0].specification_id).toBeNull();
+});
+it("renames a retained non-OpenAPI specification without rewriting its source or invoking import",async()=>{
+  const shared=structuredClone(workspace);shared.data.specifications=[{id:"sdl",name:"Schema",kind:"graphql-sdl",dialect:"graphql",source:"type Query { value: String }"}];vi.mocked(api).mockResolvedValue(shared);render(view("editor"));
+  fireEvent.click(await screen.findByRole("button",{name:"API 规范"}));fireEvent.click(screen.getByRole("button",{name:"编辑规范"}));expect(screen.getByLabelText("规范源文档")).toHaveProperty("readOnly",true);fireEvent.change(screen.getByLabelText("规范名称"),{target:{value:"Renamed schema"}});fireEvent.click(screen.getByRole("button",{name:"应用规范修改"}));
+  expect(await screen.findByText("Renamed schema")).toBeTruthy();fireEvent.click(screen.getByRole("button",{name:"保存共享工作区"}));await waitFor(()=>expect(api).toHaveBeenCalledWith(base,"PUT",expect.objectContaining({data:expect.objectContaining({specifications:[{...shared.data.specifications![0],name:"Renamed schema"}]})})));
+  expect(vi.mocked(api).mock.calls.some(([path])=>path.endsWith("/specifications/preview"))).toBe(false);
+});
+it.each(["tab","account","credential","role","revision","edit","file","cache"] as const)("discards delayed specification source after %s changes",async(boundary)=>{
+  const shared=linkedMockWorkspace();let finish!:(value:unknown)=>void;
+  vi.mocked(api).mockImplementation(path=>path.endsWith("/specifications/preview")?new Promise(resolve=>{finish=resolve;}):Promise.resolve(shared));
+  const mounted=render(view("editor"));fireEvent.click(await screen.findByRole("button",{name:"API 规范"}));fireEvent.click(screen.getByRole("button",{name:"编辑规范"}));
+  fireEvent.change(screen.getByLabelText("规范名称"),{target:{value:"Unapplied name"}});
+  if(boundary==="file"){vi.mocked(pickFile).mockReturnValue(new Promise(resolve=>{finish=(value)=>resolve(value as string);}));fireEvent.click(screen.getByRole("button",{name:"选择 OpenAPI 文件"}));}else fireEvent.click(screen.getByRole("button",{name:"应用规范修改"}));
+  await waitFor(()=>expect(finish).toBeTypeOf("function"));
+  if(boundary==="tab")fireEvent.click(screen.getByRole("button",{name:"文档"}));
+  if(boundary==="account")mounted.rerender(view("editor","different-member"));
+  if(boundary==="credential"){vi.mocked(token).mockReturnValue("changed-credential");mounted.rerender(view("editor"));}
+  if(boundary==="role")mounted.rerender(view("viewer"));
+  if(boundary==="revision"||boundary==="file")await act(async()=>client.setQueryData(["shared-workspace","member","owner-id","w","editor",0],{...shared,revision:4}));
+  if(boundary==="edit")fireEvent.change(screen.getByLabelText("规范名称"),{target:{value:"Newer name"}});
+  await act(async()=>{ if(boundary==="cache")client.setQueryData(["shared-workspace","member","owner-id","w","editor",0],{...shared,revision:4});finish(boundary==="file"?"late-file-source":{name:shared.name,data:{...shared.data,specifications:[{...shared.data.specifications![0],name:"Late response"}]},warnings:[]}); });
+  expect(screen.queryByText("Late response")).toBeNull();expect(screen.queryByDisplayValue("late-file-source")).toBeNull();expect(vi.mocked(api).mock.calls.some(([,method])=>method==="PUT")).toBe(false);
 });

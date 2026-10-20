@@ -983,6 +983,150 @@ pub async fn shared_mock(
     Ok(response)
 }
 
+async fn finish_specification_preview<C: ConnectionTrait>(
+    db: &C,
+    actor: &str,
+    owner: &str,
+    workspace: &str,
+    expected: (Access, i64),
+    credential: impl Future<Output = Result<(), ApiError>>,
+) -> Result<(), ApiError> {
+    credential.await?;
+    let (current_workspace, current) = access(db, actor, owner, workspace).await?;
+    if current != expected.0 {
+        return Err(ApiError::not_found());
+    }
+    if current_workspace.revision != expected.1 {
+        return Err(ApiError::conflict(
+            "Workspace changed during specification preview",
+        ));
+    }
+    Ok(())
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SharedSpecificationPreview {
+    expected_revision: i64,
+    name: String,
+    source: String,
+    specification_id: Option<String>,
+    #[serde(default)]
+    include_requests: bool,
+}
+
+pub async fn shared_specification_preview(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Identity>,
+    headers: HeaderMap,
+    Path((owner, workspace)): Path<(String, String)>,
+    Json(input): Json<SharedSpecificationPreview>,
+) -> Result<Json<moleapi_formats::ImportResult>, ApiError> {
+    if state.local {
+        return Err(ApiError::not_found());
+    }
+    let tx = state.db.begin().await?;
+    let canonical = lock_workspace(&tx, &owner, &workspace).await?;
+    let (_, admission) = access(&tx, &actor.0, &owner, &workspace).await?;
+    if admission.role == Role::Viewer {
+        return Err(ApiError::forbidden("Viewer cannot import specifications"));
+    }
+    if canonical.revision != input.expected_revision {
+        return Err(ApiError::conflict(
+            "Workspace changed before specification preview",
+        ));
+    }
+    if input.name.trim().is_empty()
+        || input.name.len() > 256
+        || input.name.chars().any(char::is_control)
+        || input.source.len() > moleapi_core::MAX_BODY
+    {
+        return Err(ApiError::bad("Invalid specification name or source size"));
+    }
+    if let Some(id) = &input.specification_id {
+        let existing = canonical
+            .data
+            .specifications
+            .iter()
+            .find(|spec| &spec.id == id)
+            .ok_or_else(ApiError::not_found)?;
+        if existing.kind != "openapi" {
+            return Err(ApiError::bad("Source replacement supports OpenAPI only"));
+        }
+    }
+    record_event_result(
+        &tx,
+        &owner,
+        &workspace,
+        &actor.0,
+        "specification.preview",
+        input.specification_id.as_deref(),
+        "started",
+    )
+    .await?;
+    tx.commit().await?;
+    let revision = canonical.revision;
+    let preview = async move {
+        tokio::task::spawn_blocking(move || {
+            let mut parsed = moleapi_formats::import("openapi", &input.source)
+                .map_err(|error| ApiError::bad(error.to_string()))?;
+            let mut spec = parsed
+                .data
+                .specifications
+                .pop()
+                .ok_or_else(|| ApiError::bad("OpenAPI source is missing"))?;
+            spec.name = input.name.trim().to_owned();
+            let mut data = canonical.data;
+            if let Some(id) = input.specification_id {
+                spec.id = id.clone();
+                let target = data
+                    .specifications
+                    .iter_mut()
+                    .find(|spec| spec.id == id)
+                    .ok_or_else(ApiError::not_found)?;
+                *target = spec;
+            } else {
+                data.specifications.push(spec);
+                if input.include_requests {
+                    data.collections.extend(parsed.data.collections);
+                    data.environments.extend(parsed.data.environments);
+                }
+            }
+            moleapi_core::validate_workspace(&data)
+                .map_err(|error| ApiError::bad(error.to_string()))?;
+            Ok(Json(moleapi_formats::ImportResult {
+                name: canonical.name,
+                data,
+                warnings: parsed.warnings,
+            }))
+        })
+        .await
+        .map_err(|_| ApiError::internal())?
+    };
+    let watch = watch_access_revision(
+        &state,
+        &actor.0,
+        &owner,
+        &workspace,
+        admission,
+        revision,
+        "Workspace changed during specification preview",
+    );
+    tokio::pin!(preview);
+    tokio::pin!(watch);
+    let result = tokio::select! { biased; error = &mut watch => return Err(error), result = &mut preview => result };
+    finish_specification_preview(
+        &state.db,
+        &actor.0,
+        &owner,
+        &workspace,
+        (admission, revision),
+        crate::auth::still_authenticated(&state, &actor.0, &headers),
+    )
+    .await?;
+    result
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SharedDatasetPreview {
@@ -1859,6 +2003,84 @@ pub(crate) async fn cascade<C: ConnectionTrait>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn specification_preview_rechecks_after_a_pending_credential_check() {
+        for change in ["role", "remove", "revision"] {
+            let db = storage::connect("sqlite::memory:").await.unwrap();
+            let workspace: Workspace = serde_json::from_value(json!({"id":"w","name":"Private","revision":1,"updated_at":"now","data":{"schema_version":1,"collections":[],"environments":[],"active_environment_id":null}})).unwrap();
+            storage::insert_doc(
+                &db,
+                storage::workspace_key("owner", "w"),
+                "owner",
+                "workspace",
+                "w",
+                1,
+                &workspace,
+            )
+            .await
+            .unwrap();
+            workspace_membership::ActiveModel {
+                id: Set(membership_id("owner", "w", "editor")),
+                owner_id: Set("owner".into()),
+                workspace_id: Set("w".into()),
+                member_id: Set("editor".into()),
+                role: Set("editor".into()),
+                generation: Set(uuid::Uuid::new_v4().to_string()),
+                revision: Set(1),
+                created_at: Set(0),
+                updated_at: Set(0),
+            }
+            .insert(&db)
+            .await
+            .unwrap();
+            let (_, admission) = access(&db, "editor", "owner", "w").await.unwrap();
+            let credential = async {
+                // A successful credential read may suspend while another instance commits a change.
+                match change {
+                    "role" => {
+                        workspace_membership::Entity::update_many()
+                            .col_expr(workspace_membership::Column::Role, Expr::value("viewer"))
+                            .exec(&db)
+                            .await
+                            .unwrap();
+                    }
+                    "remove" => {
+                        workspace_membership::Entity::delete_many()
+                            .exec(&db)
+                            .await
+                            .unwrap();
+                    }
+                    _ => {
+                        let mut next = workspace.clone();
+                        next.revision = 2;
+                        document::Entity::update_many()
+                            .col_expr(
+                                document::Column::Payload,
+                                Expr::value(serde_json::to_string(&next).unwrap()),
+                            )
+                            .exec(&db)
+                            .await
+                            .unwrap();
+                    }
+                }
+                Ok(())
+            };
+            let result = finish_specification_preview(
+                &db,
+                "editor",
+                "owner",
+                "w",
+                (admission, 1),
+                credential,
+            )
+            .await;
+            assert!(
+                result.is_err(),
+                "private preview must be withheld after {change} during credential validation"
+            );
+        }
+    }
 
     #[test]
     fn viewer_projection_accepts_valid_workspace_when_pretty_export_exceeds_import_limit() {

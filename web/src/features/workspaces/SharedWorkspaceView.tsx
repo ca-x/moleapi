@@ -30,6 +30,8 @@ import { mockRouteInfo } from "../requests/mockRouteInfo";
 import SharedCollectionSettingsDialog from "./SharedCollectionSettingsDialog";
 import SharedResourceActions from "./SharedResourceActions";
 import SharedScenariosPanel from "./SharedScenariosPanel";
+import SharedSpecificationsPanel from "./SharedSpecificationsPanel";
+import SharedRequestSpecification from "./SharedRequestSpecification";
 import SharedDatasetsPanel from "./SharedDatasetsPanel";
 import SharedRunOptions from "./SharedRunOptions";
 import { defaultSharedRunConfig, resolveSharedRunOptions, type SharedRunConfig } from "./sharedRunOptions";
@@ -40,7 +42,7 @@ import { dataConfig } from "../data/model";
 import type { DatasetPreview } from "../testing/RunnerDataset";
 import type { CollectionSettingsTarget } from "../collections/CollectionSettingsFields";
 
-type Tab = "resources" | "history" | "reports" | "mock" | "documents" | "variables" | "scenarios" | "datasets";
+type Tab = "resources" | "history" | "reports" | "mock" | "documents" | "variables" | "scenarios" | "datasets" | "specifications";
 type RunResult = { passed: number; failed: number; cancelled: boolean; report_id?: string };
 type MockCall = { id: string; request_id: string | null; example_id: string | null; response_status: number; outcome: string; at: string };
 
@@ -196,6 +198,10 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
   function datasetContextCurrent() {
     const cached = client.getQueryState<Workspace>(["shared-workspace", accountId, owner, workspaceId, selected.role, epoch]);
     return current(scope) && cached?.status === "success" && cached.data?.revision === saved?.revision;
+  }
+  function updateSpecificationData(data: WorkspaceData) {
+    if (!canEdit || !current(scope) || !datasetContextCurrent() || conflict) return;
+    invalidateDraftResults(); setDraft((now) => now ? { ...now, data } : null);
   }
   function updateDatasets(datasets: SavedDataset[]) {
     if (!canEdit || !current(scope)) return;
@@ -370,7 +376,7 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
     {documentError && <Callout.Root color="red" role="alert"><Callout.Text>{documentError}</Callout.Text></Callout.Root>}
     {!workspace.error && draft && loadedScope === scope && <Flex direction="column" gap="4">
       {canEdit && running && activeRun.current?.scope === scope && <Flex role="region" aria-label={t("当前运行任务")} gap="2" justify="between" align="center" wrap="wrap"><Text size="2" style={{ overflowWrap: "anywhere", minWidth: 0 }}>{t("正在运行：{{name}}", { name: activeRun.current.label })}</Text><Button variant="outline" color="gray" loading={stoppingRun} disabled={stoppingRun} onClick={() => void stopCollection()}>{t("停止集合运行")}</Button></Flex>}
-      <Flex gap="2" wrap="wrap"><Button variant={tab === "resources" ? "solid" : "outline"} onClick={() => setTab("resources")}>{t("资源")}</Button><Button variant={tab === "documents" ? "solid" : "outline"} onClick={() => setTab("documents")}>{t("文档")}</Button><Button variant={tab === "variables" ? "solid" : "outline"} onClick={() => setTab("variables")}>{t("环境变量")}</Button>{canEdit && <><Button variant={tab === "datasets" ? "solid" : "outline"} onClick={() => setTab("datasets")}>{t("工作区数据集")}</Button><Button variant={tab === "scenarios" ? "solid" : "outline"} onClick={() => setTab("scenarios")}>{t("工作区测试场景")}</Button><Button variant={tab === "history" ? "solid" : "outline"} onClick={() => setTab("history")}>{t("执行历史")}</Button><Button variant={tab === "reports" ? "solid" : "outline"} onClick={() => setTab("reports")}>{t("测试报告")}</Button><Button variant={tab === "mock" ? "solid" : "outline"} onClick={() => setTab("mock")}>{t("Mock 预览")}</Button></>}</Flex>
+      <Flex gap="2" wrap="wrap"><Button variant={tab === "resources" ? "solid" : "outline"} onClick={() => setTab("resources")}>{t("资源")}</Button><Button variant={tab === "documents" ? "solid" : "outline"} onClick={() => setTab("documents")}>{t("文档")}</Button><Button variant={tab === "specifications" ? "solid" : "outline"} onClick={() => setTab("specifications")}>{t("API 规范")}</Button><Button variant={tab === "variables" ? "solid" : "outline"} onClick={() => setTab("variables")}>{t("环境变量")}</Button>{canEdit && <><Button variant={tab === "datasets" ? "solid" : "outline"} onClick={() => setTab("datasets")}>{t("工作区数据集")}</Button><Button variant={tab === "scenarios" ? "solid" : "outline"} onClick={() => setTab("scenarios")}>{t("工作区测试场景")}</Button><Button variant={tab === "history" ? "solid" : "outline"} onClick={() => setTab("history")}>{t("执行历史")}</Button><Button variant={tab === "reports" ? "solid" : "outline"} onClick={() => setTab("reports")}>{t("测试报告")}</Button><Button variant={tab === "mock" ? "solid" : "outline"} onClick={() => setTab("mock")}>{t("Mock 预览")}</Button></>}</Flex>
       {conflict && <Callout.Root color="amber" role="alert"><Callout.Text>{t("共享工作区已被其他成员更新。选择要保留的版本。")}</Callout.Text><Flex gap="2" wrap="wrap" mt="2"><Button variant="soft" onClick={() => { setDraft(conflict); setSaved(conflict); setConflict(null); setError(""); }}>{t("使用服务器版本")}</Button><Button variant="soft" onClick={() => { setSaved(conflict); setDraft((currentDraft) => currentDraft ? { ...currentDraft, revision: conflict.revision } : null); setConflict(null); setError(""); }}>{t("保留我的修改")}</Button></Flex></Callout.Root>}
       {canEdit && saved && (tab === "resources" || tab === "scenarios") && <SharedRunOptions key={scope} value={runConfig} datasets={saved.data.datasets ?? []} scope={`${scope}/${saved.revision}`} workspaceId={workspaceId} disabled={running || !!dataBusy} dark={dark} onChange={(value) => { if (!running && !dataBusy && current(scope)) { invalidateDraftResults(); setRunConfigState({ scope, value }); } }} onBusyChange={(busy) => { if (current(scope)) setRunDataBusy({ scope, busy }); }} previewSource={previewRunData} />}
       {tab === "resources" && <>
@@ -391,6 +397,7 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
                 <Field label={t("请求地址")}><TextField.Root value={request.url} onChange={(event) => updateSelectedRequest({ url: event.target.value })} /></Field>
               </Flex>}
               <Field label={t("描述")}><TextArea value={request.description} onChange={(event) => updateSelectedRequest({ description: event.target.value })} /></Field>
+              {httpRequest && <SharedRequestSpecification key={`${scope}/${collection.id}/${request.id}/${saved?.revision}`} request={request} specifications={draft.data.specifications ?? []} onChange={updateSelectedRequest} />}
               {request.protocol?.kind === "data" && <SharedDataRequestEditor key={`${scope}/${collection.id}/${request.id}/${saved?.revision}/${conflict?.revision ?? ""}`} request={request} dark={dark} isCurrent={() => datasetContextCurrent() && !conflict} onChange={updateSelectedRequest} />}
               {(!request.protocol?.kind || request.protocol.kind === "http") && <Tabs.Root key={`${collection.id}/${request.id}/${saved?.revision}`} value={requestEditorTab} onValueChange={setRequestEditorTab}>
                 <Tabs.List className="shared-request-tabs">
@@ -424,6 +431,7 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
         </>}
         {canEdit && <Button loading={saving} disabled={!dirty || saving || !!conflict || invalidDocuments} onClick={() => void save()}>{t("保存共享工作区")}</Button>}
       </>}
+      {tab === "specifications" && saved && <SharedSpecificationsPanel key={`${scope}/${saved.revision}/${conflict?.revision ?? ""}`} scope={`${scope}/${saved.revision}/${conflict?.revision ?? ""}`} data={draft.data} base={base} revision={saved.revision} dark={dark} canEdit={canEdit} dirty={dirty} saving={saving} canSave={!saving && !conflict && !invalidDocuments} isCurrent={() => datasetContextCurrent() && !conflict} onChange={updateSpecificationData} onSave={() => void save()} />}
       {tab === "datasets" && canEdit && saved && <SharedDatasetsPanel key={`${scope}/${saved.revision}/${conflict?.revision ?? ""}`} scope={`${scope}/${saved.revision}/${conflict?.revision ?? ""}`} data={draft.data} base={base} revision={saved.revision} dark={dark} dirty={dirty} saving={saving} canSave={!saving && !conflict && !invalidDocuments} isCurrent={datasetContextCurrent} onChange={updateDatasets} onSave={() => void save()} />}
       {tab === "scenarios" && canEdit && <SharedScenariosPanel key={`${scope}/${collection?.id ?? ""}/${saved?.revision}/${conflict?.revision ?? ""}`} data={draft.data} collectionId={collection?.id ?? ""} dirty={dirty} saving={saving} canSave={!saving && !conflict && !invalidDocuments} running={running} runOptionsValid={runOptionsValid} result={runResult} onSelectCollection={(value) => { setCollectionId(value); setRequestId(""); }} onChange={updateScenarios} onSave={() => void save()} onRun={(id) => void runCollection(id)} />}
       {tab === "documents" && <SharedDocumentsPanel key={`${scope}/${saved?.revision}`} data={draft.data} canEdit={canEdit} dark={dark} dirty={dirty} saving={saving} canSave={!saving && !conflict && !invalidDocuments} conflictRevision={conflict?.revision ?? null} onChange={updateDocuments} onSave={() => void save()} onOpenRequest={openSharedRequest} />}
