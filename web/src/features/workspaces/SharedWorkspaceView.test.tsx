@@ -55,6 +55,25 @@ it("downloads a saved redacted report through the member route", async () => {
   expect(vi.mocked(saveProjectFile).mock.calls[0][0]).toBe("report.json");
 });
 
+it("stops the active shared collection using its original client job ID", async () => {
+  let finish!: (value: unknown) => void;
+  vi.mocked(api).mockImplementation((path) => {
+    if (path === `${base}/run`) return new Promise((resolve) => { finish = resolve; });
+    if (path === `${base}/run/cancel`) return Promise.resolve({ cancelled: true });
+    return Promise.resolve(workspace);
+  });
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "运行集合" }));
+  await waitFor(() => expect(finish).toBeTypeOf("function"));
+  const started = vi.mocked(api).mock.calls.find(([path]) => path === `${base}/run`)?.[2] as { job_id: string };
+  expect(started.job_id).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "停止集合运行" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/run/cancel`, "POST", { job_id: started.job_id }));
+  await act(async () => finish({ passed: 0, failed: 0, cancelled: true }));
+  expect(await screen.findByText(/已取消/)).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "停止集合运行" })).toBeNull();
+});
+
 it.each(["role", "account"] as const)("discards a delayed shared report export after the %s changes", async (boundary) => {
   let finish!: (value: unknown) => void;
   vi.mocked(api).mockImplementation((path) => {

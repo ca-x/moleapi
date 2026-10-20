@@ -362,6 +362,72 @@ pub async fn shared_update(
     Ok(Json(updated))
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SharedRunCancel {
+    job_id: String,
+}
+
+fn member_run_job_id(
+    owner: &str,
+    workspace: &str,
+    actor: &str,
+    admission: Access,
+    id: &str,
+) -> Result<String, ApiError> {
+    if id.is_empty()
+        || id.len() > 128
+        || !id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+    {
+        return Err(ApiError::bad("Invalid run job ID"));
+    }
+    let identity = serde_json::to_vec(&(
+        owner,
+        workspace,
+        actor,
+        admission.generation,
+        admission.revision,
+        id,
+    ))
+    .map_err(|_| ApiError::internal())?;
+    Ok(format!("shared-{}", hex::encode(Sha256::digest(identity))))
+}
+
+pub async fn shared_run_cancel(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Identity>,
+    Path((owner, workspace)): Path<(String, String)>,
+    Json(input): Json<SharedRunCancel>,
+) -> Result<Json<Value>, ApiError> {
+    if state.local {
+        return Err(ApiError::not_found());
+    }
+    let tx = state.db.begin().await?;
+    lock_workspace(&tx, &owner, &workspace).await?;
+    let (_, admission) = access(&tx, &actor.0, &owner, &workspace).await?;
+    if admission.role == Role::Viewer {
+        return Err(ApiError::not_found());
+    }
+    let internal_id = member_run_job_id(&owner, &workspace, &actor.0, admission, &input.job_id)?;
+    record_event_result(
+        &tx,
+        &owner,
+        &workspace,
+        &actor.0,
+        "workspace.run.cancel",
+        Some(&input.job_id),
+        "requested",
+    )
+    .await?;
+    tx.commit().await?;
+    state
+        .project_jobs
+        .cancel_job(&owner, Some(&workspace), &internal_id)?;
+    Ok(Json(json!({"cancelled":true})))
+}
+
 pub async fn shared_run(
     State(state): State<AppState>,
     Extension(actor): Extension<Identity>,
@@ -378,6 +444,7 @@ pub async fn shared_run(
     if admission.role == Role::Viewer {
         return Err(ApiError::forbidden("Viewer cannot run this workspace"));
     }
+    let internal_id = member_run_job_id(&owner, &workspace, &actor.0, admission, &job_id)?;
     record_event_result(
         &tx,
         &owner,
@@ -389,7 +456,7 @@ pub async fn shared_run(
     )
     .await?;
     tx.commit().await?;
-
+    input.set_job_id(internal_id.clone());
     let run = crate::runner::run(
         State(state.clone()),
         Extension(Identity(owner.clone())),
@@ -402,7 +469,7 @@ pub async fn shared_run(
     let result = tokio::select! {
         biased;
         _ = &mut watch => {
-            let _ = state.project_jobs.cancel_job(&owner, Some(&workspace), &job_id);
+            let _ = state.project_jobs.cancel_job(&owner, Some(&workspace), &internal_id);
             return Err(ApiError::not_found());
         }
         result = &mut run => result,
@@ -411,7 +478,9 @@ pub async fn shared_run(
     if current != admission {
         return Err(ApiError::not_found());
     }
-    result
+    let mut result = result?;
+    result.0["job_id"] = json!(job_id);
+    Ok(result)
 }
 
 pub async fn shared_execute(

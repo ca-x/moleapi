@@ -41,6 +41,7 @@ This inventory covers every `.route` registered in `crates/server/src/lib.rs` at
 | `/owners/{owner}/workspaces/{workspace}/audit` | GET admin hosted session | actor and action metadata |
 | `/owners/{owner}/workspaces/{workspace}` | GET viewer; PUT editor | workspace; viewer projection |
 | `/owners/{owner}/workspaces/{workspace}/run` | POST editor | outbound requests, private results and saved report |
+| `/owners/{owner}/workspaces/{workspace}/run/cancel` | POST editor, creator only | instance-local cancellation keyed by actor and membership epoch; early cancellation and actor audit |
 | `/owners/{owner}/workspaces/{workspace}/requests/{request}/execute` | POST editor | canonical saved request execution and private response |
 | `/owners/{owner}/workspaces/{workspace}/execute-draft` | POST editor | HTTP draft execution under canonical collection and expected revision |
 | `/owners/{owner}/workspaces/{workspace}/sessions` | POST editor | canonical saved SSE/WebSocket connection under expected revision |

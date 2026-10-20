@@ -46,6 +46,9 @@ pub struct Run {
     job_id: Option<String>,
 }
 impl Run {
+    pub(crate) fn set_job_id(&mut self, id: String) {
+        self.job_id = Some(id);
+    }
     pub(crate) fn ensure_job_id(&mut self) -> &str {
         self.job_id
             .get_or_insert_with(|| uuid::Uuid::new_v4().to_string())

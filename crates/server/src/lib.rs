@@ -462,6 +462,10 @@ async fn build(
             post(collaboration::shared_run),
         )
         .route(
+            "/owners/{owner}/workspaces/{workspace}/run/cancel",
+            post(collaboration::shared_run_cancel),
+        )
+        .route(
             "/owners/{owner}/workspaces/{workspace}/requests/{request}/execute",
             post(collaboration::shared_execute),
         )

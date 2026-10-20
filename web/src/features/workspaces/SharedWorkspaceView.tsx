@@ -48,6 +48,8 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
   const [exampleStatusInput, setExampleStatusInput] = useState("");
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
+  const [stoppingRun, setStoppingRun] = useState(false);
+  const activeRun = useRef<{ jobId: string; scope: string; stopping: boolean } | null>(null);
   const runGeneration = useRef(0);
   const [sending, setSending] = useState(false);
   const sendGeneration = useRef(0);
@@ -65,6 +67,7 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
   const latest = useRef(scope);
   latest.current = scope;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => { activeRun.current = null; setStoppingRun(false); }, [scope]);
   useEffect(() => { setDraft(null); setSaved(null); setLoadedScope(""); setConflict(null); setCollectionId(""); setRequestId(""); setExampleId(""); setTab("resources"); setRequestEditorTab("query"); setError(""); setRunResult(null); setReportFormat("html"); setExportingReport(null); setRequestResponse(null); setResponseSource(null); setMockPreview(null); setSaving(false); setRunning(false); setSending(false); setMocking(false); }, [scope]);
   const current = (origin: string) => mounted.current && latest.current === origin && token() === credential;
   const workspace = useQuery({
@@ -179,12 +182,24 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
     if (!canEdit || !collection || running || dirty || !current(scope)) return;
     const origin = scope;
     const generation = ++runGeneration.current;
+    const jobId = id();
+    activeRun.current = { jobId, scope: origin, stopping: false };
     setRunning(true); setError(""); setRunResult(null);
     try {
-      const result = await api<RunResult>(`${base}/run`, "POST", { collection_id: collection.id, job_id: id() });
+      const result = await api<RunResult>(`${base}/run`, "POST", { collection_id: collection.id, job_id: jobId });
       if (current(origin) && runGeneration.current === generation) { setRunResult(result); void client.invalidateQueries({ queryKey: ["shared-history", accountId, owner, workspaceId] }); void client.invalidateQueries({ queryKey: ["shared-reports", accountId, owner, workspaceId] }); }
     } catch (cause) { if (current(origin) && runGeneration.current === generation) setError(liveError(cause)); }
-    finally { if (current(origin) && runGeneration.current === generation) setRunning(false); }
+    finally { if (current(origin) && runGeneration.current === generation) { activeRun.current = null; setRunning(false); setStoppingRun(false); } }
+  }
+  async function stopCollection() {
+    const job = activeRun.current;
+    if (!job || job.scope !== scope || job.stopping || !current(scope)) return;
+    job.stopping = true;
+    setStoppingRun(true);
+    setError("");
+    try { await api(`${base}/run/cancel`, "POST", { job_id: job.jobId }); }
+    catch (cause) { if (current(job.scope) && activeRun.current === job) setError(liveError(cause)); }
+    finally { if (current(job.scope) && activeRun.current === job) { job.stopping = false; setStoppingRun(false); } }
   }
   async function downloadReport(reportId: string) {
     if (!canEdit || exportingReport || !current(scope)) return;
@@ -246,9 +261,9 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
         {canEdit ? <Field label={t("工作区名称")}><TextField.Root value={draft.name} onChange={(event) => { invalidateDraftResults(); setDraft((currentDraft) => currentDraft ? { ...currentDraft, name: event.target.value } : null); }} /></Field> : <Text size="2">{draft.name}</Text>}
         {draft.data.collections.length === 0 ? <Text size="2" color="gray">{t("此工作区还没有集合")}</Text> : <>
           <Choice label={t("集合")} value={collection?.id ?? ""} onChange={(value) => { setCollectionId(value); setRequestId(""); }} options={draft.data.collections.map((item) => ({ value: item.id, label: item.name }))} />
-          {collection && <Flex align="center" justify="between" gap="2" wrap="wrap"><Heading size="3">{collection.name}</Heading>{canEdit && <Flex gap="2" wrap="wrap"><Button variant="outline" onClick={addHttpRequest}>{t("新增 HTTP 请求")}</Button><Button loading={running} disabled={running || dirty || collection.requests.length === 0} onClick={() => void runCollection()}>{t("运行集合")}</Button></Flex>}</Flex>}
+          {collection && <Flex align="center" justify="between" gap="2" wrap="wrap"><Heading size="3">{collection.name}</Heading>{canEdit && <Flex gap="2" wrap="wrap"><Button variant="outline" onClick={addHttpRequest}>{t("新增 HTTP 请求")}</Button><Button loading={running} disabled={running || dirty || collection.requests.length === 0} onClick={() => void runCollection()}>{t("运行集合")}</Button>{running && <Button variant="outline" color="gray" loading={stoppingRun} disabled={stoppingRun} onClick={() => void stopCollection()}>{t("停止集合运行")}</Button>}</Flex>}</Flex>}
           {canEdit && dirty && <Text size="1" color="gray">{t("先保存修改，再运行集合。")}</Text>}
-          {runResult && <Text role="status" size="2">{t("通过")}: {runResult.passed} · {t("失败")}: {runResult.failed}</Text>}
+          {runResult && <Text role="status" size="2">{t("通过")}: {runResult.passed} · {t("失败")}: {runResult.failed}{runResult.cancelled && <> · {t("已取消")}</>}</Text>}
           {collection && collection.requests.length > 0 && <>
             <Choice label={t("请求")} value={request?.id ?? ""} onChange={setRequestId} options={collection.requests.map((item) => ({ value: item.id, label: `${item.method} ${item.name}` }))} />
             {request && (canEdit ? <Flex direction="column" gap="3">

@@ -980,11 +980,24 @@ async fn editor_run_is_audited_and_cross_instance_removal_withholds_its_result()
     let member_id = accepted["member_id"].as_str().unwrap();
     let shared_path = format!("/api/owners/{owner_id}/workspaces/w");
     let run_path = format!("{shared_path}/run");
+    let cancel_path = format!("{run_path}/cancel");
     let execute_path = format!("{shared_path}/requests/fast/execute");
     let mock_path = format!("{shared_path}/mock/fast/e");
     let mock_calls_path = format!("{shared_path}/mock-calls");
     let history_path = format!("{shared_path}/history");
     let reports_path = format!("{shared_path}/reports");
+    assert_eq!(
+        call(
+            &first,
+            "POST",
+            &cancel_path,
+            Some(&member),
+            Some(json!({"job_id":"cancel-job"}))
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
     assert_eq!(
         call(
             &first,
@@ -1265,6 +1278,111 @@ async fn editor_run_is_audited_and_cross_instance_removal_withholds_its_result()
         .0,
         StatusCode::NOT_FOUND
     );
+    let (_, peer_invitation) = call(
+        &second,
+        "POST",
+        "/api/workspaces/w/invitations",
+        Some(&owner),
+        Some(json!({"role":"editor","expires_in_days":1})),
+    )
+    .await;
+    let (status, peer_membership) = call(
+        &second,
+        "POST",
+        "/api/workspace-invitations/accept",
+        Some(&foreign),
+        Some(json!({"token":peer_invitation["token"]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{peer_membership}");
+    let cancel_router = first.clone();
+    let cancel_member = member.clone();
+    let cancel_run_path = run_path.clone();
+    let mut cancellable = tokio::spawn(async move {
+        call(
+            &cancel_router,
+            "POST",
+            &cancel_run_path,
+            Some(&cancel_member),
+            Some(json!({"collection_id":"c","request_ids":["slow"],"job_id":"cancel-job"})),
+        )
+        .await
+    });
+    tokio::time::timeout(Duration::from_secs(5), started.notified())
+        .await
+        .unwrap();
+    assert_eq!(
+        call(
+            &first,
+            "POST",
+            &cancel_path,
+            Some(&foreign),
+            Some(json!({"job_id":"cancel-job"}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), &mut cancellable)
+            .await
+            .is_err(),
+        "another editor must not stop the creator's job"
+    );
+    assert_eq!(
+        call(
+            &first,
+            "POST",
+            &cancel_path,
+            Some(&member),
+            Some(json!({"job_id":"cancel-job"}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let (status, cancelled) = tokio::time::timeout(Duration::from_secs(3), cancellable)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(status, StatusCode::OK, "{cancelled}");
+    assert_eq!(cancelled["cancelled"], true);
+    assert_eq!(cancelled["job_id"], "cancel-job");
+    assert_eq!(cancelled["stopped_reason"], "cancelled");
+    assert_eq!(
+        call(
+            &first,
+            "POST",
+            &cancel_path,
+            Some(&member),
+            Some(json!({"job_id":"early-cancel"}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let (status, early_cancelled) = call(
+        &first,
+        "POST",
+        &run_path,
+        Some(&member),
+        Some(json!({"collection_id":"c","request_ids":["fast"],"job_id":"early-cancel"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{early_cancelled}");
+    assert_eq!(early_cancelled["cancelled"], true);
+    assert_eq!(
+        call(
+            &first,
+            "POST",
+            &cancel_path,
+            Some(&member),
+            Some(json!({"job_id":"invalid.id"}))
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
     let first_for_run = first.clone();
     let member_for_run = member.clone();
     let run_path_for_task = run_path.clone();
@@ -1293,6 +1411,18 @@ async fn editor_run_is_audited_and_cross_instance_removal_withholds_its_result()
         .unwrap();
     assert_eq!(status, StatusCode::NOT_FOUND, "{withheld}");
     assert!(!withheld.to_string().contains("slow-private-response"));
+    assert_eq!(
+        call(
+            &first,
+            "POST",
+            &cancel_path,
+            Some(&member),
+            Some(json!({"job_id":"slow-job"}))
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
     assert_eq!(
         call(
             &first,
@@ -1331,6 +1461,12 @@ async fn editor_run_is_audited_and_cross_instance_removal_withholds_its_result()
         None,
     )
     .await;
+    assert!(audit.as_array().unwrap().iter().any(|event| {
+        event["actor_id"] == member_id
+            && event["action"] == "workspace.run.cancel"
+            && event["subject_id"] == "cancel-job"
+            && event["result"] == "requested"
+    }));
     assert!(audit.as_array().unwrap().iter().any(|event| {
         event["actor_id"] == member_id
             && event["action"] == "workspace.run"
