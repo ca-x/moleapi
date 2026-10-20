@@ -1158,3 +1158,107 @@ it("keeps all shared resource actions absent for viewers", async () => {
   await screen.findByLabelText("请求");
   for (const name of ["复制请求", "移动请求", "删除请求", "删除集合"]) expect(screen.queryByRole("button", { name })).toBeNull();
 });
+
+it("applies a shared scenario to the canonical draft and preserves notification source IDs", async () => {
+  const shared = structuredClone(workspace);
+  shared.data.scenarios = [{ id: "suite", name: "Original suite", description: "", collection_id: shared.data.collections[0].id, notification_ids: ["saved-notification"], steps: [{ id: "step", request_id: shared.data.collections[0].requests[0].id, name: "Step", group: "", enabled: true }] }];
+  vi.mocked(api).mockImplementation((_path, method, body) => Promise.resolve(method === "PUT" ? { ...shared, revision: 4, data: (body as { data: Workspace["data"] }).data } : shared));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "工作区测试场景" }));
+  fireEvent.click(screen.getByRole("button", { name: "编辑场景" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "场景名称" }), { target: { value: "Shared suite" } });
+  fireEvent.change(screen.getByLabelText("场景请求"), { target: { value: shared.data.collections[0].requests[1].id } });
+  fireEvent.click(screen.getByRole("button", { name: "应用场景修改" }));
+  expect(vi.mocked(api).mock.calls.some(([, method]) => method === "PUT")).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.anything()));
+  const sent = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
+  expect(sent.data.scenarios?.[0]).toMatchObject({ id: "suite", name: "Shared suite", notification_ids: ["saved-notification"], steps: [{ request_id: shared.data.collections[0].requests[1].id }] });
+  expect(vi.mocked(api).mock.calls.every(([path]) => path === base || path.startsWith(`${base}/`))).toBe(true);
+});
+
+it("runs a saved shared scenario through the creator-bound member run endpoint", async () => {
+  const shared = structuredClone(workspace);
+  shared.data.scenarios = [{ id: "suite", name: "Saved flow", description: "", collection_id: shared.data.collections[0].id, steps: [{ id: "step", request_id: shared.data.collections[0].requests[0].id, name: "Step", group: "", enabled: true }] }];
+  vi.mocked(api).mockImplementation((path) => Promise.resolve(path.endsWith("/run") ? { passed: 1, failed: 0, cancelled: false } : shared));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "工作区测试场景" }));
+  fireEvent.click(screen.getByRole("button", { name: "运行已保存场景" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/run`, "POST", expect.objectContaining({ collection_id: shared.data.collections[0].id, scenario_id: "suite", job_id: expect.any(String) })));
+});
+
+it("updates a scenario reference and can then delete the original request in one shared draft", async () => {
+  const shared = structuredClone(workspace);const root=shared.data.collections[0];
+  shared.data.scenarios = [{ id: "suite", name: "References", description: "", collection_id: root.id, steps: [{ id: "step", request_id: root.requests[0].id, name: "Step", group: "", enabled: true }] }];
+  vi.mocked(api).mockImplementation((_path, method, body) => Promise.resolve(method === "PUT" ? { ...shared, revision: 4, data: (body as { data: Workspace["data"] }).data } : shared));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "工作区测试场景" }));
+  fireEvent.click(screen.getByRole("button", { name: "编辑场景" }));
+  expect(screen.getByRole("button", { name: "运行已保存场景" })).toHaveProperty("disabled", true);
+  fireEvent.change(screen.getByLabelText("场景请求"), { target: { value: root.requests[1].id } });
+  fireEvent.click(screen.getByRole("button", { name: "应用场景修改" }));
+  expect(screen.getByRole("button", { name: "运行已保存场景" })).toHaveProperty("disabled", true);
+  fireEvent.click(screen.getByRole("button", { name: "资源" }));
+  fireEvent.click(screen.getByRole("button", { name: "删除请求" }));
+  expect(screen.getByRole("button", { name: "确认删除" })).toHaveProperty("disabled", false);
+  fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base,"PUT",expect.anything()));
+  const sent=vi.mocked(api).mock.calls.find(([path,method])=>path===base&&method==="PUT")?.[2] as {data:Workspace["data"]};
+  expect(sent.data.scenarios?.[0].steps[0].request_id).toBe(root.requests[1].id);
+  expect(sent.data.collections[0].requests.map((request)=>request.id)).toEqual([root.requests[1].id]);
+});
+
+it("cancels scenario removal, then stages a confirmed removal without deleting requests", async () => {
+  const shared=structuredClone(workspace);const root=shared.data.collections[0];
+  shared.data.scenarios=[{id:"suite",name:"Keep requests",description:"",collection_id:root.id,steps:[{id:"step",request_id:root.requests[0].id,name:"Step",group:"",enabled:true}]}];
+  vi.mocked(api).mockImplementation((_path,method,body)=>Promise.resolve(method==="PUT"?{...shared,revision:4,data:(body as {data:Workspace["data"]}).data}:shared));
+  render(view("editor"));fireEvent.click(await screen.findByRole("button",{name:"工作区测试场景"}));
+  fireEvent.click(screen.getByRole("button",{name:"删除场景"}));fireEvent.click(screen.getByRole("button",{name:"取消"}));
+  expect(screen.getByText("Keep requests")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button",{name:"删除场景"}));fireEvent.click(screen.getByRole("button",{name:"确认删除"}));
+  expect(vi.mocked(api).mock.calls.some(([,method])=>method==="PUT")).toBe(false);
+  fireEvent.click(screen.getByRole("button",{name:"保存共享工作区"}));await waitFor(()=>expect(api).toHaveBeenCalledWith(base,"PUT",expect.anything()));
+  const sent=vi.mocked(api).mock.calls.find(([path,method])=>path===base&&method==="PUT")?.[2] as {data:Workspace["data"]};
+  expect(sent.data.scenarios).toEqual([]);expect(sent.data.collections[0].requests).toEqual(root.requests);
+});
+
+it("creates only subtree request references and discards unapplied scenario edits on Cancel", async () => {
+  const shared=structuredClone(workspace);const root=shared.data.collections[0];
+  shared.data.collections.push({...root,id:"child",parent_id:root.id,name:"Child",requests:[{...root.requests[0],id:"nested",name:"Nested"}]},{...root,id:"other",name:"Other",requests:[{...root.requests[0],id:"excluded",name:"Excluded"}]});
+  vi.mocked(api).mockResolvedValue(shared);render(view("editor"));fireEvent.click(await screen.findByRole("button",{name:"工作区测试场景"}));
+  fireEvent.click(screen.getByRole("button",{name:"新建场景"}));fireEvent.change(screen.getByRole("textbox",{name:"场景名称"}),{target:{value:"Unapplied"}});
+  fireEvent.click(screen.getByRole("button",{name:"添加请求步骤"}));
+  expect(screen.getByRole("option",{name:"Child / Nested"})).toBeTruthy();expect(screen.queryByRole("option",{name:"Other / Excluded"})).toBeNull();
+  fireEvent.click(screen.getByRole("button",{name:"取消"}));expect(screen.queryByDisplayValue("Unapplied")).toBeNull();expect(screen.getByRole("button",{name:"保存共享工作区"})).toHaveProperty("disabled",true);
+});
+
+it.each(["account","credential","role","root","revision","conflict"] as const)("discards unapplied scenario edits after %s changes",async(boundary)=>{
+  const shared=structuredClone(workspace);shared.data.collections.push({id:"other",name:"Other",description:"",requests:[]});
+  vi.mocked(api).mockResolvedValue(shared);const {rerender}=render(view("editor"));
+  await screen.findByRole("button",{name:"工作区测试场景"});
+  if(boundary==="conflict")fireEvent.change(screen.getByLabelText("工作区名称"),{target:{value:"Dirty"}});
+  fireEvent.click(screen.getByRole("button",{name:"工作区测试场景"}));fireEvent.click(screen.getByRole("button",{name:"新建场景"}));
+  fireEvent.change(screen.getByRole("textbox",{name:"场景名称"}),{target:{value:"Stale scenario"}});
+  if(boundary==="account")rerender(view("editor","another-member"));
+  if(boundary==="credential"){vi.mocked(token).mockReturnValue("other-token");rerender(view("editor"));}
+  if(boundary==="role")rerender(view("viewer"));
+  if(boundary==="root")fireEvent.change(screen.getByLabelText("集合"),{target:{value:"other"}});
+  if(boundary==="revision"||boundary==="conflict")await act(async()=>client.setQueryData(["shared-workspace","member","owner-id","w","editor",0],{...shared,revision:4}));
+  await waitFor(()=>expect(screen.queryByDisplayValue("Stale scenario")).toBeNull());
+  expect(vi.mocked(api).mock.calls.some(([,method])=>method==="PUT")).toBe(false);
+});
+
+it("stops a running saved scenario using the original member job ID",async()=>{
+  const shared=structuredClone(workspace);const root=shared.data.collections[0];shared.data.scenarios=[{id:"suite",name:"Stop flow",description:"",collection_id:root.id,steps:[{id:"step",request_id:root.requests[0].id,name:"Step",group:"",enabled:true}]}];
+  let finish!:(value:unknown)=>void;vi.mocked(api).mockImplementation((path)=>path.endsWith("/run")?new Promise((resolve)=>{finish=resolve;}):Promise.resolve(path.endsWith("/run/cancel")?{cancelled:true}:shared));
+  render(view("editor"));fireEvent.click(await screen.findByRole("button",{name:"工作区测试场景"}));fireEvent.click(screen.getByRole("button",{name:"运行已保存场景"}));
+  await waitFor(()=>expect(finish).toBeTypeOf("function"));expect(screen.getByRole("button",{name:"新建场景"})).toHaveProperty("disabled",true);
+  const input=vi.mocked(api).mock.calls.find(([path])=>path.endsWith("/run"))?.[2] as {job_id:string};
+  fireEvent.click(screen.getByRole("button",{name:"停止集合运行"}));await waitFor(()=>expect(api).toHaveBeenCalledWith(`${base}/run/cancel`,"POST",{job_id:input.job_id}));
+  await act(async()=>finish({passed:0,failed:0,cancelled:true}));expect(await screen.findByText(/已取消/)).toBeTruthy();
+});
+
+it("hides scenario editing and execution from viewers",async()=>{
+  render(view("viewer"));await screen.findByLabelText("请求");expect(screen.queryByRole("button",{name:"工作区测试场景"})).toBeNull();expect(screen.queryByRole("button",{name:"运行已保存场景"})).toBeNull();
+});
