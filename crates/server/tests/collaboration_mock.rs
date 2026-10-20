@@ -344,3 +344,130 @@ async fn shared_routed_mock_reads_the_canonical_owner_dataset_with_incoming_para
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert!(!response.to_string().contains("owner-row"));
 }
+
+#[tokio::test]
+async fn shared_linked_schema_validation_is_revision_scoped_and_actor_audited() {
+    let fixture = fixture().await;
+    let (_, mut saved) = call(
+        &fixture.router,
+        "GET",
+        &fixture.base,
+        Some(&fixture.editor),
+        None,
+    )
+    .await;
+    saved["data"]["collections"][0]["requests"][0]["specification_id"] = json!("spec");
+    let source = json!({"openapi":"3.1.0","paths":{"/items":{"post":{"responses":{"201":{"content":{"application/json":{"schema":{"type":"object","properties":{"value":{"const":"schema-private"}},"required":["value"]}}}},"422":{"content":{"application/json":{"schema":{"type":"string","pattern":".*"}}}}}},"get":{"responses":{"200":{"content":{"application/json":{"schema":{"type":"integer"}}}}}}}}}).to_string();
+    saved["data"]["specifications"] =
+        json!([{"id":"spec","name":"Spec","kind":"openapi","dialect":"3.1.0","source":source}]);
+    let (status, saved) = call(&fixture.router, "PUT", &fixture.base, Some(&fixture.editor), Some(json!({"name":saved["name"],"data":saved["data"],"expected_revision":saved["revision"]}))).await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+    let endpoint = format!("{}/mock-schema/validate", fixture.base);
+    let mut input = json!({"request_id":"r","specification_id":"spec","pointer":"#/paths/~1items/post/responses/201/content/application~1json/schema","expected_revision":saved["revision"]});
+    for (token, expected) in [
+        (&fixture.viewer, StatusCode::FORBIDDEN),
+        (&fixture.foreign, StatusCode::NOT_FOUND),
+    ] {
+        assert_eq!(
+            call(
+                &fixture.router,
+                "POST",
+                &endpoint,
+                Some(token),
+                Some(input.clone())
+            )
+            .await
+            .0,
+            expected
+        );
+    }
+    assert_eq!(
+        call(
+            &fixture.router,
+            "POST",
+            "/api/workspaces/w/mock-schema/validate",
+            Some(&fixture.editor),
+            Some(input.clone())
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    let (status, result) = call(
+        &fixture.router,
+        "POST",
+        &endpoint,
+        Some(&fixture.editor),
+        Some(input.clone()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{result}");
+    assert_eq!(
+        result,
+        json!({"method":"POST","status":201,"media_type":"application/json"})
+    );
+    input["expected_revision"] = json!(0);
+    assert_eq!(
+        call(
+            &fixture.router,
+            "POST",
+            &endpoint,
+            Some(&fixture.editor),
+            Some(input.clone())
+        )
+        .await
+        .0,
+        StatusCode::CONFLICT
+    );
+    input["expected_revision"] = saved["revision"].clone();
+    for pointer in [
+        "#/paths/~1items/post/responses/422/content/application~1json/schema",
+        "#/paths/~1items/get/responses/200/content/application~1json/schema",
+    ] {
+        input["pointer"] = json!(pointer);
+        assert_eq!(
+            call(
+                &fixture.router,
+                "POST",
+                &endpoint,
+                Some(&fixture.editor),
+                Some(input.clone())
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+    input["specification_id"] = json!("other-spec");
+    assert_eq!(
+        call(
+            &fixture.router,
+            "POST",
+            &endpoint,
+            Some(&fixture.editor),
+            Some(input)
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    let (_, audit) = call(
+        &fixture.router,
+        "GET",
+        &format!("{}/audit", fixture.base),
+        Some(&fixture.owner),
+        None,
+    )
+    .await;
+    assert!(
+        audit
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|event| event["action"] == "mock.schema.validate"
+                && event["actor_id"] == fixture.member_id
+                && event["result"] == "started")
+    );
+    assert!(!audit.to_string().contains("schema-private"));
+    assert!(!audit.to_string().contains("#/paths"));
+}

@@ -64,6 +64,8 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
   const [mocking, setMocking] = useState(false);
   const [mockPreview, setMockPreview] = useState<{ status: number; body: string } | null>(null);
   const mockGeneration = useRef(0);
+  const linkedSchemaGeneration = useRef(0);
+  const [linkingSchema, setLinkingSchema] = useState(false);
   const [error, setError] = useState<ReturnType<typeof liveError>>("");
   const [runResult, setRunResult] = useState<RunResult | null>(null);
   const [reportFormat, setReportFormat] = useState("html");
@@ -108,12 +110,15 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
   const matchRoutePath = request ? mockRouteInfo(request).path : "";
   const liveRequest = request?.protocol?.kind === "sse" || request?.protocol?.kind === "websocket";
   const example = request?.examples.find((item) => item.id === exampleId) ?? request?.examples[0];
+  useEffect(() => { linkedSchemaGeneration.current += 1; setLinkingSchema(false); }, [scope, collection?.id, request?.id, example?.id, tab]);
   const statusPending = !!example && exampleStatusInput !== String(example.status);
   useEffect(() => { setExampleStatusInput(example ? String(example.status) : ""); }, [collection?.id, request?.id, example?.id, example?.status]);
   useEffect(() => { runGeneration.current += 1; setRunning(false); setRunResult(null); }, [collection?.id]);
   useEffect(() => { sendGeneration.current += 1; setSending(false); setRequestResponse(null); setResponseSource(null); }, [collection?.id, request?.id]);
   useEffect(() => { mockGeneration.current += 1; setMocking(false); setMockPreview(null); }, [collection?.id, request?.id, example?.id]);
   function invalidateDraftResults() {
+    linkedSchemaGeneration.current += 1;
+    setLinkingSchema(false);
     sendGeneration.current += 1;
     setSending(false);
     setRequestResponse(null);
@@ -247,6 +252,18 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
     } catch (cause) { if (current(origin) && sendGeneration.current === generation) setError(liveError(cause)); }
     finally { if (current(origin) && sendGeneration.current === generation) setSending(false); }
   }
+  async function selectLinkedSchema(pointer: string) {
+    if (!canEdit || !httpRequest || !request || !example || !saved || !current(scope)) return;
+    if (dirty || saving || conflict || statusPending) { setError(t("先保存工作区，再选择关联响应。")); return; }
+    const origin = scope;
+    const generation = ++linkedSchemaGeneration.current;
+    setLinkingSchema(true); setError("");
+    try {
+      const result = await api<{ method: string; status: number; media_type: string }>(`${base}/mock-schema/validate`, "POST", { request_id: request.id, specification_id: request.specification_id, pointer, expected_revision: saved.revision });
+      if (current(origin) && linkedSchemaGeneration.current === generation) updateExample((item) => ({ ...item, status: result.status, headers: item.headers.map((header) => header.enabled && header.key.toLowerCase() === "content-type" ? { ...header, value: result.media_type } : header), mock_schema: undefined, mock_data: undefined, mock_schema_link: { specification_id: request.specification_id!, pointer } }));
+    } catch (cause) { if (current(origin) && linkedSchemaGeneration.current === generation) setError(liveError(cause)); }
+    finally { if (current(origin) && linkedSchemaGeneration.current === generation) setLinkingSchema(false); }
+  }
   async function previewExample() {
     if (!canEdit || !request || !example || !!example.mock_data?.parameters?.length || mocking || dirty || statusPending || conflict || !current(scope)) return;
     const origin = scope;
@@ -336,11 +353,12 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
         {example && <Flex direction="column" gap="2">
           <Field label={t("示例名称")}><TextField.Root value={example.name} onChange={(event) => updateExample((item) => ({ ...item, name: event.target.value }))} /></Field>
           <Flex className="shared-request-line" gap="2" wrap="wrap">
-            <Field label={t("状态码")}><TextField.Root inputMode="numeric" maxLength={3} value={exampleStatusInput} onChange={(event) => { const value = event.target.value; setExampleStatusInput(value); const status = Number(value); if (/^[2-5]\d\d$/.test(value) && status <= 599) updateExample((item) => ({ ...item, status })); }} onBlur={() => { if (statusPending) setExampleStatusInput(String(example.status)); }} /></Field>
+            <Field label={t("状态码")}><TextField.Root inputMode="numeric" maxLength={3} value={exampleStatusInput} onChange={(event) => { const value = event.target.value; invalidateDraftResults(); setExampleStatusInput(value); const status = Number(value); if (/^[2-5]\d\d$/.test(value) && status <= 599) updateExample((item) => ({ ...item, status })); }} onBlur={() => { if (statusPending) setExampleStatusInput(String(example.status)); }} /></Field>
           </Flex>
           <MockTrafficControls example={example} onChange={(patch) => updateExample((item) => ({ ...item, ...patch }))} />
-          <SharedMockSchemaControls key={`${scope}/${request?.id}/${example.id}/${saved?.revision}/${conflict?.revision ?? ""}`} example={example} dark={dark} datasets={draft.data.datasets ?? []} dataEnabled={httpRequest && draft.data.script_mode === "v2"} onChange={(patch) => updateExample((item) => ({ ...item, ...patch }))} />
+          <SharedMockSchemaControls key={`${scope}/${request?.id}/${example.id}/${saved?.revision}/${conflict?.revision ?? ""}`} example={example} request={request!} specifications={draft.data.specifications ?? []} onSelectLinked={(pointer) => void selectLinkedSchema(pointer)} dark={dark} datasets={draft.data.datasets ?? []} dataEnabled={httpRequest && draft.data.script_mode === "v2"} onChange={(patch) => updateExample((item) => ({ ...item, ...patch }))} />
           {statusPending && <Text role="alert" size="1" color="red">{t("状态码必须为 200 到 599。")}</Text>}
+          {linkingSchema && <Text size="1" color="gray">{t("正在校验关联响应…")}</Text>}
           <Field label={t("响应正文")}><TextArea value={example.body} onChange={(event) => updateExample((item) => ({ ...item, body: event.target.value }))} /></Field>
           <div><Text as="p" size="2" weight="medium">{t("响应头")}</Text><PairEditor rows={example.headers} onChange={(headers) => updateExample((item) => ({ ...item, headers }))} keyLabel="Header" valueLabel={t("值")} secrets /></div>
           {request && matchRoutePath ? <Text as="p" size="1" color="gray" style={{ overflowWrap: "anywhere" }}>{t("匹配路由")}: <code>{`${request.method} ${base}/mocks${matchRoutePath}`}</code></Text> : <Text size="1" color="gray">{t("Mock 匹配路由需要字面量 HTTP URL；路径变量使用单层 {name}。")}</Text>}

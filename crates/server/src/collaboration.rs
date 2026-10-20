@@ -929,6 +929,72 @@ pub async fn shared_mock(
     Ok(response)
 }
 
+pub async fn shared_validate_mock_schema(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Identity>,
+    Path((owner, workspace)): Path<(String, String)>,
+    Json(input): Json<crate::mock::ValidateLinkedSchema>,
+) -> Result<Json<Value>, ApiError> {
+    if state.local {
+        return Err(ApiError::not_found());
+    }
+    let tx = state.db.begin().await?;
+    let canonical = lock_workspace(&tx, &owner, &workspace).await?;
+    let (_, admission) = access(&tx, &actor.0, &owner, &workspace).await?;
+    if admission.role == Role::Viewer {
+        return Err(ApiError::forbidden(
+            "Viewer cannot validate linked Mock responses",
+        ));
+    }
+    if canonical.revision != input.expected_revision {
+        return Err(ApiError::conflict(
+            "Workspace changed before linked Mock validation",
+        ));
+    }
+    record_event_result(
+        &tx,
+        &owner,
+        &workspace,
+        &actor.0,
+        "mock.schema.validate",
+        None,
+        "started",
+    )
+    .await?;
+    tx.commit().await?;
+    let validate = crate::mock::validate_linked_schema(
+        State(state.clone()),
+        Extension(Identity(owner.clone())),
+        Path(workspace.clone()),
+        Json(input),
+    );
+    let watch = watch_access_revision(
+        &state,
+        &actor.0,
+        &owner,
+        &workspace,
+        admission,
+        canonical.revision,
+        "Workspace changed during linked Mock validation",
+    );
+    tokio::pin!(validate);
+    tokio::pin!(watch);
+    let result = tokio::select! {biased;
+        error = &mut watch => return Err(error),
+        result = &mut validate => result,
+    };
+    let (current_workspace, current) = access(&state.db, &actor.0, &owner, &workspace).await?;
+    if current != admission {
+        return Err(ApiError::not_found());
+    }
+    if current_workspace.revision != canonical.revision {
+        return Err(ApiError::conflict(
+            "Workspace changed during linked Mock validation",
+        ));
+    }
+    result
+}
+
 pub async fn shared_mock_dispatch(
     State(state): State<AppState>,
     Extension(actor): Extension<Identity>,

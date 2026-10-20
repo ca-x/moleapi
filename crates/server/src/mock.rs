@@ -26,7 +26,7 @@ pub struct ValidateLinkedSchema {
     request_id: String,
     specification_id: String,
     pointer: String,
-    expected_revision: i64,
+    pub(crate) expected_revision: i64,
 }
 
 pub async fn validate_linked_schema(

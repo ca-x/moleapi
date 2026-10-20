@@ -913,3 +913,80 @@ it("does not offer an HTTP-only data binding for a shared WebSocket request", as
   fireEvent.click(await screen.findByRole("button", { name: "Mock 预览" }));
   expect(screen.queryByRole("option", { name: "已保存的数据绑定" })).toBeNull();
 });
+
+const linkedPointer = "#/paths/~1items/post/responses/201/content/application~1json/schema";
+function linkedMockWorkspace(): Workspace {
+  const first = workspace.data.collections[0].requests[0];
+  return { ...workspace, data: { ...workspace.data, specifications: [{ id: "spec", name: "Responses", kind: "openapi", dialect: "3.1.0", source: JSON.stringify({ openapi: "3.1.0", paths: { "/items": { post: { responses: { "201": { content: { "application/json": { schema: { type: "object", properties: { id: { const: 7 } }, required: ["id"] } } } } } } } } }) }], collections: [{ ...workspace.data.collections[0], requests: [{ ...first, method: "POST", url: "https://example.test/items", specification_id: "spec", examples: [{ id: "linked-e", name: "Link", status: 200, headers: [{ id: "ct", key: "Content-Type", value: "text/plain", enabled: true }], body: "keep static", delay_ms: 12, mock_script: "console.log('keep')", mock_schema: '{"type":"object"}' }] }] }] } };
+}
+
+it("validates a shared OpenAPI response before saving its link, status and media header", async () => {
+  const shared = linkedMockWorkspace();
+  vi.mocked(api).mockImplementation((path, method, body) => Promise.resolve(path.endsWith("/mock-calls") ? [] : path.endsWith("/mock-schema/validate") ? { method: "POST", status: 201, media_type: "application/json" } : method === "PUT" ? { ...shared, revision: 4, data: (body as { data: Workspace["data"] }).data } : shared));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "Mock 预览" }));
+  expect(screen.getByRole("option", { name: "POST /items · 201 application/json" })).toBeTruthy();
+  fireEvent.change(screen.getByLabelText("Mock 正文来源"), { target: { value: linkedPointer } });
+  await waitFor(() => expect(api).toHaveBeenCalledWith(`${base}/mock-schema/validate`, "POST", { request_id: shared.data.collections[0].requests[0].id, specification_id: "spec", pointer: linkedPointer, expected_revision: 3 }));
+  await waitFor(() => expect(screen.getByLabelText("状态码")).toHaveProperty("value", "201"));
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.anything()));
+  const sent = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
+  expect(sent.data.collections[0].requests[0].examples[0]).toMatchObject({ status: 201, headers: [{ value: "application/json" }], body: "keep static", delay_ms: 12, mock_script: "console.log('keep')", mock_schema_link: { specification_id: "spec", pointer: linkedPointer } });
+  expect(sent.data.collections[0].requests[0].examples[0].mock_schema).toBeUndefined();
+  expect(vi.mocked(api).mock.calls.every(([path]) => path === base || path.startsWith(`${base}/`))).toBe(true);
+});
+
+it("retains the source when shared linked Schema validation fails or requires a saved draft", async () => {
+  const shared = linkedMockWorkspace();
+  vi.mocked(api).mockImplementation((path) => path.endsWith("/mock-schema/validate") ? Promise.reject(new Error("Unsupported Schema")) : Promise.resolve(path.endsWith("/mock-calls") ? [] : shared));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "Mock 预览" }));
+  fireEvent.change(screen.getByLabelText("Mock 正文来源"), { target: { value: linkedPointer } });
+  expect(await screen.findByText(/Unsupported Schema/)).toBeTruthy();
+  expect(screen.getByLabelText("Mock 正文来源")).toHaveProperty("value", "inline");
+  fireEvent.change(screen.getByLabelText("示例名称"), { target: { value: "Unsaved" } });
+  fireEvent.change(screen.getByLabelText("Mock 正文来源"), { target: { value: linkedPointer } });
+  expect(await screen.findByText("先保存工作区，再选择关联响应。")).toBeTruthy();
+  expect(vi.mocked(api).mock.calls.filter(([path]) => path.endsWith("/mock-schema/validate"))).toHaveLength(1);
+});
+
+it.each(["edit", "source", "status", "selection", "role", "account", "revision"] as const)("discards delayed linked Schema metadata after %s changes", async (boundary) => {
+  const shared = linkedMockWorkspace();
+  shared.data.collections[0].requests[0].examples.push({ ...shared.data.collections[0].requests[0].examples[0], id: "other-e", name: "Other" });
+  let finish!: (value: unknown) => void;
+  vi.mocked(api).mockImplementation((path) => path.endsWith("/mock-schema/validate") ? new Promise((resolve) => { finish = resolve; }) : Promise.resolve(path.endsWith("/mock-calls") ? [] : shared));
+  const { rerender } = render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "Mock 预览" }));
+  fireEvent.change(screen.getByLabelText("Mock 正文来源"), { target: { value: linkedPointer } });
+  await waitFor(() => expect(finish).toBeTypeOf("function"));
+  expect(screen.getByText("正在校验关联响应…")).toBeTruthy();
+  if (boundary === "edit") fireEvent.change(screen.getByLabelText("示例名称"), { target: { value: "Later edit" } });
+  if (boundary === "source") fireEvent.change(screen.getByLabelText("Mock 正文来源"), { target: { value: "static" } });
+  if (boundary === "status") fireEvent.change(screen.getByLabelText("状态码"), { target: { value: "1" } });
+  if (boundary === "selection") fireEvent.change(screen.getByLabelText("响应示例"), { target: { value: "other-e" } });
+  if (boundary === "role") rerender(view("viewer"));
+  if (boundary === "account") rerender(view("editor", "other-member"));
+  if (boundary === "revision") await act(async () => client.setQueryData(["shared-workspace", "member", "owner-id", "w", "editor", 0], { ...shared, revision: 4 }));
+  await act(async () => finish({ method: "POST", status: 201, media_type: "application/json" }));
+  if (boundary === "role") expect(screen.queryByRole("button", { name: "Mock 预览" })).toBeNull();
+  else {
+    if (boundary === "account") fireEvent.click(await screen.findByRole("button", { name: "Mock 预览" }));
+    expect(screen.getByLabelText("状态码")).toHaveProperty("value", boundary === "status" ? "1" : "200");
+    expect(screen.getByLabelText("Mock 正文来源")).toHaveProperty("value", boundary === "source" ? "static" : "inline");
+  }
+  expect(screen.queryByText("正在校验关联响应…")).toBeNull();
+  expect(vi.mocked(api).mock.calls.some(([, method]) => method === "PUT")).toBe(false);
+});
+
+it("shows a stale linked response without silently replacing it", async () => {
+  const shared = linkedMockWorkspace();
+  shared.data.collections[0].requests[0].examples[0].mock_schema = undefined;
+  shared.data.collections[0].requests[0].examples[0].mock_schema_link = { specification_id: "spec", pointer: "#/removed" };
+  vi.mocked(api).mockImplementation((path) => Promise.resolve(path.endsWith("/mock-calls") ? [] : shared));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "Mock 预览" }));
+  expect(screen.getByRole("alert").textContent).toContain("关联的响应与当前规范不匹配；请重新选择。");
+  expect(screen.getByLabelText("Mock 正文来源")).toHaveProperty("value", "linked");
+  expect(screen.getByRole("button", { name: "保存共享工作区" })).toHaveProperty("disabled", true);
+});
