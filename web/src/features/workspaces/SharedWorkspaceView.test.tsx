@@ -349,22 +349,48 @@ it("saves example edits through owner CAS before previewing the saved version", 
     if (method === "PUT") return Promise.resolve({ ...withExample, revision: 4, data: (body as { data: Workspace["data"] }).data });
     return Promise.resolve(withExample);
   });
-  vi.mocked(previewSharedMock).mockResolvedValue({ status: 401, body: "saved edited body" });
+  vi.mocked(previewSharedMock).mockResolvedValue({ status: 502, body: "simulated failure" });
   render(view("editor"));
   fireEvent.click(await screen.findByRole("button", { name: "Mock 预览" }));
   fireEvent.change(screen.getByLabelText("示例名称"), { target: { value: "Edited" } });
   fireEvent.change(screen.getByLabelText("状态码"), { target: { value: "401" } });
   fireEvent.change(screen.getByLabelText("Mock 延迟（毫秒）"), { target: { value: "500" } });
+  fireEvent.change(screen.getByLabelText("故障比例（%）"), { target: { value: "100" } });
+  fireEvent.change(screen.getByLabelText("故障状态码（5xx）"), { target: { value: "502" } });
+  fireEvent.change(screen.getByLabelText("每分钟请求上限"), { target: { value: "2" } });
   fireEvent.change(screen.getByLabelText("响应正文"), { target: { value: "saved edited body" } });
   fireEvent.click(screen.getByRole("button", { name: "添加一行" }));
   expect(screen.getByRole("button", { name: "预览已保存 Mock 示例" })).toHaveProperty("disabled", true);
   fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
   await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.objectContaining({ expected_revision: 3 })));
   const saved = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
-  expect(saved.data.collections[0].requests[0].examples[0]).toMatchObject({ id: "example-a", name: "Edited", status: 401, delay_ms: 500, body: "saved edited body", mock_script: "console.log('keep')", headers: [{ key: "X-Test", value: "yes" }] });
+  expect(saved.data.collections[0].requests[0].examples[0]).toMatchObject({ id: "example-a", name: "Edited", status: 401, delay_ms: 500, fault_rate_percent: 100, fault_status: 502, rate_limit_per_minute: 2, body: "saved edited body", mock_script: "console.log('keep')", headers: [{ key: "X-Test", value: "yes" }] });
   await waitFor(() => expect(screen.getByRole("button", { name: "预览已保存 Mock 示例" })).toHaveProperty("disabled", false));
   fireEvent.click(screen.getByRole("button", { name: "预览已保存 Mock 示例" }));
   await waitFor(() => expect(previewSharedMock).toHaveBeenCalledWith(`${base}/mock/${encodeURIComponent(first.id)}/example-a`));
+});
+
+it("acknowledges canonical Mock defaults after disabling faults and limits", async () => {
+  const first = workspace.data.collections[0].requests[0];
+  const withExample: Workspace = { ...workspace, data: { ...workspace.data, collections: [{ ...workspace.data.collections[0], requests: [{ ...first, examples: [{ id: "example-a", name: "Traffic", status: 200, headers: [], body: "static", fault_rate_percent: 100, rate_limit_per_minute: 1 }] }] }] } };
+  vi.mocked(api).mockImplementation((path, method, body) => {
+    if (path.endsWith("/mock-calls")) return Promise.resolve([]);
+    if (method === "PUT") {
+      const data = structuredClone((body as { data: Workspace["data"] }).data);
+      delete data.collections[0].requests[0].examples[0].fault_rate_percent;
+      delete data.collections[0].requests[0].examples[0].rate_limit_per_minute;
+      return Promise.resolve({ ...withExample, revision: 4, data });
+    }
+    return Promise.resolve(withExample);
+  });
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "Mock 预览" }));
+  fireEvent.change(screen.getByLabelText("故障比例（%）"), { target: { value: "0" } });
+  fireEvent.change(screen.getByLabelText("每分钟请求上限"), { target: { value: "0" } });
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "预览已保存 Mock 示例" })).toHaveProperty("disabled", false));
+  expect(screen.getByRole("button", { name: "保存共享工作区" })).toHaveProperty("disabled", true);
+  expect(screen.getByLabelText("故障比例（%）")).toHaveProperty("value", "0");
 });
 
 it("adds and removes a shared response example within the unsaved draft", async () => {

@@ -21,6 +21,7 @@ import { hasChanges } from "./draft";
 import SharedDocumentsPanel from "./SharedDocumentsPanel";
 import SharedVariablesPanel from "./SharedVariablesPanel";
 import SharedLiveSessionPanel from "./SharedLiveSessionPanel";
+import MockTrafficControls from "../requests/MockTrafficControls";
 
 type Tab = "resources" | "history" | "reports" | "mock" | "documents" | "variables";
 type RunResult = { passed: number; failed: number; cancelled: boolean; report_id?: string };
@@ -173,7 +174,11 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
     setSaving(true); setError("");
     try {
       const updated = await api<Workspace>(base, "PUT", { name: snapshot.name, data: snapshot.data, expected_revision: saved.revision });
-      if (current(origin)) { invalidateDraftResults(); setDraft((latestDraft) => latestDraft?.id === updated.id ? { ...updated, name: latestDraft.name, data: latestDraft.data } : latestDraft); setSaved(updated); setConflict(null); client.setQueryData(["shared-workspace", accountId, owner, workspaceId, selected.role, epoch], updated); void client.invalidateQueries({ queryKey: ["shared-workspaces", accountId] }); }
+      if (current(origin)) { invalidateDraftResults(); setDraft((latestDraft) => {
+        if (latestDraft?.id !== updated.id) return latestDraft;
+        if (!hasChanges({ draft: latestDraft, saved: snapshot })) return updated;
+        return { ...updated, name: latestDraft.name, data: latestDraft.data };
+      }); setSaved(updated); setConflict(null); client.setQueryData(["shared-workspace", accountId, owner, workspaceId, selected.role, epoch], updated); void client.invalidateQueries({ queryKey: ["shared-workspaces", accountId] }); }
     } catch (cause) {
       if (current(origin)) { setError(liveError(cause)); try { const remote = await api<Workspace>(base); if (current(origin) && remote.revision !== saved.revision) setConflict(remote); } catch { /* Access revocation is shown by the next workspace refresh. */ } }
     } finally { if (current(origin)) setSaving(false); }
@@ -326,8 +331,8 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
           <Field label={t("示例名称")}><TextField.Root value={example.name} onChange={(event) => updateExample((item) => ({ ...item, name: event.target.value }))} /></Field>
           <Flex className="shared-request-line" gap="2" wrap="wrap">
             <Field label={t("状态码")}><TextField.Root inputMode="numeric" maxLength={3} value={exampleStatusInput} onChange={(event) => { const value = event.target.value; setExampleStatusInput(value); const status = Number(value); if (/^[2-5]\d\d$/.test(value) && status <= 599) updateExample((item) => ({ ...item, status })); }} onBlur={() => { if (statusPending) setExampleStatusInput(String(example.status)); }} /></Field>
-            <Field label={t("Mock 延迟（毫秒）")}><TextField.Root type="number" min="0" max="30000" step="1" value={example.delay_ms ?? 0} onChange={(event) => { const delay = Number(event.target.value); if (Number.isInteger(delay) && delay >= 0 && delay <= 30_000) updateExample((item) => ({ ...item, delay_ms: delay })); }} /></Field>
           </Flex>
+          <MockTrafficControls example={example} onChange={(patch) => updateExample((item) => ({ ...item, ...patch }))} />
           {statusPending && <Text role="alert" size="1" color="red">{t("状态码必须为 200 到 599。")}</Text>}
           <Field label={t("响应正文")}><TextArea value={example.body} onChange={(event) => updateExample((item) => ({ ...item, body: event.target.value }))} /></Field>
           <div><Text as="p" size="2" weight="medium">{t("响应头")}</Text><PairEditor rows={example.headers} onChange={(headers) => updateExample((item) => ({ ...item, headers }))} keyLabel="Header" valueLabel={t("值")} secrets /></div>

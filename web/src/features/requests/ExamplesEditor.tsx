@@ -9,6 +9,7 @@ import type { RequestSpec, SavedDataset, Specification } from "../../shared/type
 import MockCallActivity from "./MockCallActivity";
 import MockPublicShares from "./MockPublicShares";
 import {openapiMockChoices} from "./openapiMockChoices";
+import MockTrafficControls from "./MockTrafficControls";
 
 function invalidSchemaInput(source:string):boolean {
   if(new TextEncoder().encode(source).length>256*1024)return true;
@@ -162,28 +163,7 @@ export default function ExamplesEditor({
               </ToolButton>
             </Flex>
           </Flex>
-          <Field label={t("Mock 延迟（毫秒）")} hint={t("0 表示立即响应；最多等待 30000 毫秒。")}><TextField.Root type="number" min="0" max="30000" step="1" value={example.delay_ms??0} onChange={event=>{
-            const value=Number(event.target.value);
-            if(Number.isFinite(value))patchExample(example.id,{delay_ms:Math.min(30_000,Math.max(0,Math.round(value)))});
-          }}/></Field>
-          <Field label={t("故障比例（%）")} hint={t("0 表示关闭；命中时返回指定的 5xx 状态码。")}>
-            <TextField.Root type="number" min="0" max="100" step="1" value={example.fault_rate_percent??0} onChange={event=>{
-              const value=Number(event.target.value);
-              if(Number.isFinite(value))patchExample(example.id,{fault_rate_percent:Math.min(100,Math.max(0,Math.round(value)))});
-            }}/>
-          </Field>
-          <Field label={t("故障状态码（5xx）")} hint={t("仅用于模拟故障；响应正文固定且不包含保存的示例数据。")}>
-            <TextField.Root type="number" min="500" max="599" step="1" value={example.fault_status??503} onChange={event=>{
-              const value=Number(event.target.value);
-              if(Number.isFinite(value))patchExample(example.id,{fault_status:Math.min(599,Math.max(500,Math.round(value)))});
-            }}/>
-          </Field>
-          <Field label={t("每分钟请求上限")} hint={t("0 表示关闭；滑动 60 秒内超过上限立即返回 429，最多 1000 次。")}>
-            <TextField.Root type="number" min="0" max="1000" step="1" value={example.rate_limit_per_minute??0} onChange={event=>{
-              const value=Number(event.target.value);
-              if(Number.isFinite(value))patchExample(example.id,{rate_limit_per_minute:Math.min(1000,Math.max(0,Math.round(value)))});
-            }}/>
-          </Field>
+          <MockTrafficControls example={example} onChange={(patch) => patchExample(example.id, patch)} />
           <Editor value={example.body} readOnly dark={dark} height="150px" />
           {asyncMock&&<Text as="label" size="2"><Checkbox checked={!!example.mock_data} onCheckedChange={checked=>{
             if(checked!==true){patchExample(example.id,{mock_data:undefined});return;}
