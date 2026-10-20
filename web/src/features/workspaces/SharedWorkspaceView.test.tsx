@@ -990,3 +990,78 @@ it("shows a stale linked response without silently replacing it", async () => {
   expect(screen.getByLabelText("Mock 正文来源")).toHaveProperty("value", "linked");
   expect(screen.getByRole("button", { name: "保存共享工作区" })).toHaveProperty("disabled", true);
 });
+
+it("creates the first collection in an empty shared workspace only after Apply and canonical Save", async () => {
+  const shared: Workspace = { ...workspace, data: { ...workspace.data, collections: [] } };
+  vi.mocked(api).mockImplementation((_path, method, body) => Promise.resolve(method === "PUT" ? { ...shared, revision: 4, data: (body as { data: Workspace["data"] }).data } : shared));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "新建集合" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "名称" }), { target: { value: "First collection" } });
+  expect(vi.mocked(api).mock.calls.some(([, method]) => method === "PUT")).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "应用" }));
+  expect(await screen.findByRole("heading", { name: "First collection" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "新增 HTTP 请求" }));
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.anything()));
+  const sent = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
+  expect(sent.data.collections).toHaveLength(1);
+  expect(sent.data.collections[0]).toMatchObject({ name: "First collection", requests: [{ protocol: { kind: "http" } }] });
+});
+
+it("edits shared collection metadata while preserving saved requests", async () => {
+  vi.mocked(api).mockImplementation((_path, method, body) => Promise.resolve(method === "PUT" ? { ...workspace, revision: 4, data: (body as { data: Workspace["data"] }).data } : workspace));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "集合与目录设置" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "名称" }), { target: { value: "Shared settings" } });
+  fireEvent.mouseDown(screen.getByRole("tab", { name: /脚本/ }), { button: 0, ctrlKey: false });
+  fireEvent.change(await screen.findByRole("textbox", { name: /前置脚本/ }), { target: { value: "pm.variables.set('collection', 'yes')" } });
+  fireEvent.click(screen.getByRole("button", { name: "应用" }));
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.anything()));
+  const sent = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
+  expect(sent.data.collections[0].name).toBe("Shared settings");
+  expect(sent.data.collections[0].pre_request_script).toBe("pm.variables.set('collection', 'yes')");
+  expect(sent.data.collections[0].requests).toEqual(workspace.data.collections[0].requests);
+});
+
+it("creates a shared child folder under the current collection and discards Cancel", async () => {
+  vi.mocked(api).mockImplementation((_path, method, body) => Promise.resolve(method === "PUT" ? { ...workspace, revision: 4, data: (body as { data: Workspace["data"] }).data } : workspace));
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: "新建目录" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "名称" }), { target: { value: "Cancelled child" } });
+  fireEvent.click(screen.getByRole("button", { name: "取消" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(screen.queryByRole("option", { name: "Cancelled child" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "新建目录" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "名称" }), { target: { value: "Child folder" } });
+  expect(screen.getByLabelText("父目录")).toHaveProperty("value", `collection:${workspace.data.collections[0].id}`);
+  fireEvent.click(screen.getByRole("button", { name: "应用" }));
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.anything()));
+  const sent = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
+  expect(sent.data.collections[1]).toMatchObject({ name: "Child folder", parent_id: workspace.data.collections[0].id, requests: [] });
+  expect(sent.data.collections[0]).toEqual(workspace.data.collections[0]);
+});
+
+it.each(["account", "credential", "role", "saved", "conflict"] as const)("closes unapplied shared collection settings after %s changes", async (boundary) => {
+  const { rerender } = render(view("editor"));
+  await screen.findByRole("button", { name: "集合与目录设置" });
+  if (boundary === "conflict") fireEvent.change(screen.getByLabelText("工作区名称"), { target: { value: "Unsaved workspace" } });
+  fireEvent.click(screen.getByRole("button", { name: "集合与目录设置" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "名称" }), { target: { value: "Unapplied collection" } });
+  if (boundary === "account") rerender(view("editor", "another-member"));
+  if (boundary === "role") rerender(view("viewer"));
+  if (boundary === "credential") { vi.mocked(token).mockReturnValue("new-credential"); rerender(view("editor")); }
+  if (boundary === "saved" || boundary === "conflict") await act(async () => client.setQueryData(["shared-workspace", "member", "owner-id", "w", "editor", 0], { ...workspace, revision: 4 }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(screen.queryByDisplayValue("Unapplied collection")).toBeNull();
+  expect(vi.mocked(api).mock.calls.some(([, method]) => method === "PUT")).toBe(false);
+});
+
+it("keeps collection creation and settings absent for a viewer", async () => {
+  render(view("viewer"));
+  await screen.findByLabelText("集合");
+  expect(screen.queryByRole("button", { name: "新建集合" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "新建目录" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "集合与目录设置" })).toBeNull();
+});

@@ -27,6 +27,8 @@ import MockDataEditor from "../requests/MockDataEditor";
 import MockMatchingEditor from "../requests/MockMatchingEditor";
 import MockScriptEditor from "../requests/MockScriptEditor";
 import { mockRouteInfo } from "../requests/mockRouteInfo";
+import SharedCollectionSettingsDialog from "./SharedCollectionSettingsDialog";
+import type { CollectionSettingsTarget } from "../collections/CollectionSettingsFields";
 
 type Tab = "resources" | "history" | "reports" | "mock" | "documents" | "variables";
 type RunResult = { passed: number; failed: number; cancelled: boolean; report_id?: string };
@@ -49,6 +51,7 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
   const [tab, setTab] = useState<Tab>("resources");
   const [requestEditorTab, setRequestEditorTab] = useState("query");
   const [collectionId, setCollectionId] = useState("");
+  const [collectionSettings, setCollectionSettings] = useState<CollectionSettingsTarget | null>(null);
   const [requestId, setRequestId] = useState("");
   const [exampleId, setExampleId] = useState("");
   const [exampleStatusInput, setExampleStatusInput] = useState("");
@@ -94,6 +97,7 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
     }
   }, [workspace.data, workspace.error, draft, saved, scope]);
   const canEdit = selected.role !== "viewer";
+  useEffect(() => { setCollectionSettings(null); }, [scope, saved?.revision, conflict?.revision]);
   const dirty = hasChanges({ draft, saved });
   const documentValidation = validateMarkdownDocuments(draft?.data.documents);
   const invalidDocuments = !!(documentValidation.invalidTitleDocument || documentValidation.invalidSourceDocument || documentValidation.invalidTotalSource);
@@ -137,6 +141,12 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
   }
   function updateSelectedRequest(patch: Partial<RequestSpec>) {
     updateRequest((item) => ({ ...item, ...patch }));
+  }
+  function applyCollectionSettings(data: WorkspaceData, selectedId: string) {
+    if (!canEdit || !current(scope)) return;
+    invalidateDraftResults();
+    setDraft((currentDraft) => currentDraft ? { ...currentDraft, data } : null);
+    setCollectionId(selectedId); setRequestId("");
   }
   function addHttpRequest() {
     if (!canEdit || !collection) return;
@@ -287,9 +297,10 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
       {conflict && <Callout.Root color="amber" role="alert"><Callout.Text>{t("共享工作区已被其他成员更新。选择要保留的版本。")}</Callout.Text><Flex gap="2" wrap="wrap" mt="2"><Button variant="soft" onClick={() => { setDraft(conflict); setSaved(conflict); setConflict(null); setError(""); }}>{t("使用服务器版本")}</Button><Button variant="soft" onClick={() => { setSaved(conflict); setDraft((currentDraft) => currentDraft ? { ...currentDraft, revision: conflict.revision } : null); setConflict(null); setError(""); }}>{t("保留我的修改")}</Button></Flex></Callout.Root>}
       {tab === "resources" && <>
         {canEdit ? <Field label={t("工作区名称")}><TextField.Root value={draft.name} onChange={(event) => { invalidateDraftResults(); setDraft((currentDraft) => currentDraft ? { ...currentDraft, name: event.target.value } : null); }} /></Field> : <Text size="2">{draft.name}</Text>}
+        {canEdit && <Button variant="outline" onClick={() => setCollectionSettings({ kind: "create", parent_id: null })}>{t("新建集合")}</Button>}
         {draft.data.collections.length === 0 ? <Text size="2" color="gray">{t("此工作区还没有集合")}</Text> : <>
           <Choice label={t("集合")} value={collection?.id ?? ""} onChange={(value) => { setCollectionId(value); setRequestId(""); }} options={draft.data.collections.map((item) => ({ value: item.id, label: item.name }))} />
-          {collection && <Flex align="center" justify="between" gap="2" wrap="wrap"><Heading size="3">{collection.name}</Heading>{canEdit && <Flex gap="2" wrap="wrap"><Button variant="outline" onClick={addHttpRequest}>{t("新增 HTTP 请求")}</Button><Button loading={running} disabled={running || dirty || collection.requests.length === 0} onClick={() => void runCollection()}>{t("运行集合")}</Button>{running && <Button variant="outline" color="gray" loading={stoppingRun} disabled={stoppingRun} onClick={() => void stopCollection()}>{t("停止集合运行")}</Button>}</Flex>}</Flex>}
+          {collection && <Flex align="center" justify="between" gap="2" wrap="wrap"><Heading size="3">{collection.name}</Heading>{canEdit && <Flex gap="2" wrap="wrap"><Button variant="outline" onClick={() => setCollectionSettings({ kind: "edit", id: collection.id })}>{t("集合与目录设置")}</Button><Button variant="outline" onClick={() => setCollectionSettings({ kind: "create", parent_id: collection.id })}>{t("新建目录")}</Button><Button variant="outline" onClick={addHttpRequest}>{t("新增 HTTP 请求")}</Button><Button loading={running} disabled={running || dirty || collection.requests.length === 0} onClick={() => void runCollection()}>{t("运行集合")}</Button>{running && <Button variant="outline" color="gray" loading={stoppingRun} disabled={stoppingRun} onClick={() => void stopCollection()}>{t("停止集合运行")}</Button>}</Flex>}</Flex>}
           {canEdit && dirty && <Text size="1" color="gray">{t("先保存修改，再运行集合。")}</Text>}
           {runResult && <Text role="status" size="2">{t("通过")}: {runResult.passed} · {t("失败")}: {runResult.failed}{runResult.cancelled && <> · {t("已取消")}</>}</Text>}
           {collection && collection.requests.length > 0 && <>
@@ -379,5 +390,6 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
         {!mockCalls.error && mockCalls.data?.map((item) => <Flex key={item.id} direction="column" gap="1"><Text size="2">{t("请求")}: {item.request_id ?? "—"} · {t("响应示例")}: {item.example_id ?? "—"}</Text><Flex justify="between" gap="2" wrap="wrap"><Text size="2">{item.response_status} · {item.outcome === "served" ? t("已响应") : item.outcome === "unmatched" ? t("未匹配") : item.outcome === "simulated_failure" ? t("模拟故障") : item.outcome === "rate_limited" ? t("已限流") : t("失败")}</Text><Text size="2">{new Date(item.at).toLocaleString(language)}</Text></Flex></Flex>)}
       </Flex>}
     </Flex>}
+    {collectionSettings && canEdit && draft && loadedScope === scope && <SharedCollectionSettingsDialog target={collectionSettings} data={draft.data} dark={dark} onApply={applyCollectionSettings} close={() => setCollectionSettings(null)} />}
   </main>;
 }
