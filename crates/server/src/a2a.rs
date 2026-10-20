@@ -9,10 +9,22 @@ pub(crate) struct Sources {
         std::collections::HashMap<(String, String), tokio_util::sync::CancellationToken>,
     >,
 }
-struct Lease {
+pub(crate) struct Lease {
     sources: std::sync::Arc<Sources>,
     key: (String, String),
-    token: tokio_util::sync::CancellationToken,
+    pub(crate) token: tokio_util::sync::CancellationToken,
+}
+impl Lease {
+    pub(crate) async fn finish<T>(
+        &self,
+        final_check: impl std::future::Future<Output = Result<T, ApiError>>,
+    ) -> Result<T, ApiError> {
+        let result = final_check.await?;
+        if self.token.is_cancelled() {
+            return Err(ApiError::bad("Agent Card discovery stopped locally"));
+        }
+        Ok(result)
+    }
 }
 impl Drop for Lease {
     fn drop(&mut self) {
@@ -21,7 +33,22 @@ impl Drop for Lease {
     }
 }
 impl Sources {
-    fn start(self: &std::sync::Arc<Self>, owner: &str, id: &str) -> Result<Lease, ApiError> {
+    pub(crate) fn cancel(&self, actor: &str, id: &str) {
+        if let Some(token) = self
+            .active
+            .lock()
+            .unwrap()
+            .get(&(actor.to_owned(), id.to_owned()))
+        {
+            token.cancel();
+        }
+    }
+
+    pub(crate) fn start(
+        self: &std::sync::Arc<Self>,
+        owner: &str,
+        id: &str,
+    ) -> Result<Lease, ApiError> {
         if id.is_empty() || id.len() > 128 {
             return Err(ApiError::bad("Invalid discovery id"));
         }
@@ -90,11 +117,11 @@ pub struct Discover {
 }
 #[derive(Serialize)]
 pub struct Candidate {
-    specification: Specification,
+    pub(crate) specification: Specification,
     #[serde(flatten)]
     description: moleapi_protocols::a2a::CardDescription,
 }
-fn candidate(
+pub(crate) fn candidate(
     source: String,
     dialect: &str,
     values: &std::collections::BTreeSet<String>,
@@ -217,8 +244,53 @@ pub async fn discover(
         return Err(ApiError::bad("Select an A2A request"));
     };
     let dialect = config.dialect.clone();
-    let (mut request, _, _, _) =
+    let (request, _, _, _) =
         execution::prepare_live(&s, &owner.0, &w, &c.request, collection, &mut scopes).await?;
+    let fetch = fetch_card(&s, request);
+    let revoked = async {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            if *gate.lock().await != generation {
+                return ApiError::unauthorized();
+            }
+            match owned(&s, &owner.0, &c.workspace_id).await {
+                Ok(workspace)
+                    if workspace.data.collections.iter().any(|collection| {
+                        collection
+                            .requests
+                            .iter()
+                            .any(|request| request.id == c.request.id)
+                    }) => {}
+                _ => return ApiError::not_found(),
+            }
+        }
+    };
+    let source = tokio::select! {biased;_=lease.token.cancelled()=>return Err(ApiError::bad("Agent Card discovery stopped locally")),error=revoked=>return Err(error),result=fetch=>result?};
+    if lease.token.is_cancelled() {
+        return Err(ApiError::bad("Agent Card discovery stopped locally"));
+    }
+    lease
+        .finish(async {
+            let admitted = gate.lock().await;
+            if *admitted != generation {
+                return Err(ApiError::unauthorized());
+            };
+            crate::auth::still_authenticated(&s, &owner.0, &headers).await?;
+            let current = owned(&s, &owner.0, &c.workspace_id).await?;
+            if !current
+                .data
+                .collections
+                .iter()
+                .any(|col| col.requests.iter().any(|r| r.id == c.request.id))
+            {
+                return Err(ApiError::not_found());
+            };
+            Ok(Json(candidate(source, &dialect, &scopes.private_values)?))
+        })
+        .await
+}
+
+pub(crate) async fn fetch_card(s: &AppState, mut request: RequestSpec) -> Result<String, ApiError> {
     request.protocol = moleapi_core::Protocol::Http;
     request.method = "GET".into();
     request.body_kind = "none".into();
@@ -279,41 +351,40 @@ pub async fn discover(
         }
         String::from_utf8(bytes).map_err(|_| ApiError::bad("Agent Card is not UTF-8"))
     };
-    let revoked = async {
-        loop {
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-            if *gate.lock().await != generation {
-                return ApiError::unauthorized();
-            }
-            match owned(&s, &owner.0, &c.workspace_id).await {
-                Ok(workspace)
-                    if workspace.data.collections.iter().any(|collection| {
-                        collection
-                            .requests
-                            .iter()
-                            .any(|request| request.id == c.request.id)
-                    }) => {}
-                _ => return ApiError::not_found(),
-            }
-        }
-    };
-    let source = tokio::select! {biased;_=lease.token.cancelled()=>return Err(ApiError::bad("Agent Card discovery stopped locally")),error=revoked=>return Err(error),result=tokio::time::timeout(std::time::Duration::from_millis(request.timeout_ms.clamp(100,300_000)),fetch)=>result.map_err(|_|ApiError::bad("Agent Card discovery timed out"))??};
-    if lease.token.is_cancelled() {
-        return Err(ApiError::bad("Agent Card discovery stopped locally"));
+    tokio::time::timeout(
+        std::time::Duration::from_millis(request.timeout_ms.clamp(100, 300_000)),
+        fetch,
+    )
+    .await
+    .map_err(|_| ApiError::bad("Agent Card discovery timed out"))?
+}
+
+#[cfg(test)]
+mod discovery_release_tests {
+    use super::*;
+    #[tokio::test]
+    async fn actor_stop_during_final_authorization_withholds_completed_candidate() {
+        let sources = std::sync::Arc::new(Sources::default());
+        let lease = sources.start("actor", "discovery").unwrap();
+        let (candidate_ready, wait_ready) = tokio::sync::oneshot::channel();
+        let (release_check, wait_check) = tokio::sync::oneshot::channel();
+        let stop_sources = sources.clone();
+        let stopped = tokio::spawn(async move {
+            wait_ready.await.unwrap();
+            stop_sources.cancel("actor", "discovery");
+            release_check.send(()).unwrap();
+        });
+        let result = lease
+            .finish(async {
+                candidate_ready.send(()).unwrap();
+                wait_check.await.unwrap();
+                Ok("completed candidate")
+            })
+            .await;
+        assert!(
+            result.is_err(),
+            "Stop during final authorization must withhold the candidate"
+        );
+        stopped.await.unwrap();
     }
-    let admitted = gate.lock().await;
-    if *admitted != generation {
-        return Err(ApiError::unauthorized());
-    };
-    crate::auth::still_authenticated(&s, &owner.0, &headers).await?;
-    let current = owned(&s, &owner.0, &c.workspace_id).await?;
-    if !current
-        .data
-        .collections
-        .iter()
-        .any(|col| col.requests.iter().any(|r| r.id == c.request.id))
-    {
-        return Err(ApiError::not_found());
-    };
-    Ok(Json(candidate(source, &dialect, &scopes.private_values)?))
 }

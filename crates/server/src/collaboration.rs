@@ -24,6 +24,8 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::future::Future;
 
+mod a2a;
+pub use a2a::{shared_a2a_cancel, shared_a2a_discover, shared_a2a_import, shared_a2a_read};
 mod mcp;
 pub use mcp::shared_mcp_config_export;
 mod soap;
@@ -774,9 +776,10 @@ pub async fn shared_session_create(
             | moleapi_core::Protocol::Grpc { .. }
             | moleapi_core::Protocol::Mqtt { .. }
             | moleapi_core::Protocol::Mcp { .. }
+            | moleapi_core::Protocol::A2a { .. }
     ) {
         return Err(ApiError::bad(
-            "Shared live sessions support saved SSE, WebSocket, Data, TCP, Socket.IO, gRPC, MQTT, MCP and GraphQL subscriptions",
+            "Shared live sessions support saved SSE, WebSocket, Data, TCP, Socket.IO, gRPC, MQTT, MCP, A2A and GraphQL subscriptions",
         ));
     }
     if request.protocol.is_graphql()
@@ -944,6 +947,10 @@ pub async fn shared_session_send(
             message,
             SendMessage::Text { .. } | SendMessage::Binary { .. } | SendMessage::Ping { .. }
         ),
+        "a2a" => matches!(
+            message,
+            SendMessage::A2aRequest { .. } | SendMessage::A2aStop { .. }
+        ),
         "mcp" => matches!(
             message,
             SendMessage::McpRequest { .. }
@@ -986,7 +993,7 @@ pub async fn shared_session_send(
     }
     if matches!(
         summary.protocol.as_str(),
-        "data" | "tcp" | "socketio" | "grpc" | "mqtt" | "mcp"
+        "data" | "tcp" | "socketio" | "grpc" | "mqtt" | "mcp" | "a2a"
     ) {
         let action = match &message {
             SendMessage::DataQuery { .. } => "protocol.data.query",
@@ -1002,6 +1009,8 @@ pub async fn shared_session_send(
             SendMessage::MqttSubscribe { .. } => "protocol.mqtt.subscribe",
             SendMessage::MqttUnsubscribe { .. } => "protocol.mqtt.unsubscribe",
             SendMessage::MqttAbort => "protocol.mqtt.abort",
+            SendMessage::A2aRequest { .. } => "protocol.a2a.request",
+            SendMessage::A2aStop { .. } => "protocol.a2a.stop",
             SendMessage::McpRequest { .. } => "protocol.mcp.request",
             SendMessage::McpCallback { .. } => "protocol.mcp.callback",
             SendMessage::McpCancel { .. } => "protocol.mcp.cancel",

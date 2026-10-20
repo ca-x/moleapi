@@ -10,6 +10,7 @@ import type { SaveSharedResultDataset } from "./SharedResultDatasetDialog";
 import SharedDataSessionControls from "./SharedDataSessionControls";
 import SharedTcpSessionControls from "./SharedTcpSessionControls";
 import SharedSocketIoSessionControls from "./SharedSocketIoSessionControls";
+import SharedA2aSessionControls from "./SharedA2aSessionControls";
 import SharedMcpSessionControls from "./SharedMcpSessionControls";
 import SharedMqttSessionControls from "./SharedMqttSessionControls";
 import SharedGrpcSessionControls from "./SharedGrpcSessionControls";
@@ -18,7 +19,7 @@ import SessionEventPane from "../protocols/SessionEventPane";
 import SessionHandshake from "../protocols/SessionHandshake";
 import type { EventBatch, ProtocolEvent, ProtocolSession, SendMessage } from "../protocols/types";
 
-export default function SharedLiveSessionPanel({ base, request, revision, environmentId, dirty, saving, conflict, dark, isCurrent, onSaveResultDataset, grpcSchema = null, connectDisabled = false }: {
+export default function SharedLiveSessionPanel({ base, request, revision, environmentId, dirty, saving, conflict, dark, isCurrent, onSaveResultDataset, grpcSchema = null, connectDisabled = false, a2aSource }: {
   base: string;
   request: RequestSpec;
   revision: number;
@@ -31,6 +32,7 @@ export default function SharedLiveSessionPanel({ base, request, revision, enviro
   onSaveResultDataset: SaveSharedResultDataset;
   grpcSchema?: GrpcSchema | null;
   connectDisabled?: boolean;
+  a2aSource?: string;
 }) {
   useLanguage();
   const [session, setSession] = useState<ProtocolSession | null>(null);
@@ -147,7 +149,8 @@ export default function SharedLiveSessionPanel({ base, request, revision, enviro
         {session.reason && <Text size="2" color="gray">{session.reason}</Text>}
         {session.protocol === "websocket" && session.state === "open" && <Flex direction="column" gap="2"><Choice label={t("消息类型")} value={mode} onChange={(value) => setMode(value as typeof mode)} options={[{ value: "text", label: t("文本") }, { value: "binary", label: "Base64" }, { value: "ping", label: "Ping Base64" }]} /><Field label={mode === "text" ? t("消息正文") : "Base64"}><TextArea value={payload} onChange={(event) => setPayload(event.target.value)} /></Field><Button loading={sending} disabled={sending} onClick={() => void send()}>{t("发送消息")}</Button></Flex>}
         {session.protocol === "tcp" && request.protocol?.kind === "tcp" && <SharedTcpSessionControls key={sessionId} session={session} initial={request.protocol.message} dark={dark} sending={sending} isCurrent={allowed} send={sendData} />}
-        {session.protocol === "mcp" && request.protocol?.kind === "mcp" ? <SharedMcpSessionControls key={sessionId} request={request} channel={{session,events,dropped,error:"",busy,sending,send:sendData,close}} dark={dark} isCurrent={allowed}/> :
+        {session.protocol === "a2a" && request.protocol?.kind === "a2a" ? <SharedA2aSessionControls key={sessionId} request={request} source={a2aSource} channel={{session,events,dropped,error:"",busy,sending,send:sendData,close}} dark={dark} isCurrent={allowed}/> :
+         session.protocol === "mcp" && request.protocol?.kind === "mcp" ? <SharedMcpSessionControls key={sessionId} request={request} channel={{session,events,dropped,error:"",busy,sending,send:sendData,close}} dark={dark} isCurrent={allowed}/> :
         session.protocol === "mqtt" && request.protocol?.kind === "mqtt" ? <SharedMqttSessionControls key={sessionId} request={request} channel={{ session, events, dropped, error: "", busy, sending, send: sendData, close }} dark={dark} isCurrent={allowed} /> :
         session.protocol === "grpc" && request.protocol?.kind === "grpc" ? <SharedGrpcSessionControls key={sessionId} request={request} schema={grpcSchema} channel={{ session, events, dropped, error: "", busy, sending, send: sendData, close }} dark={dark} isCurrent={allowed} /> :
         session.protocol === "socketio" && request.protocol?.kind === "socketio" ? <SharedSocketIoSessionControls key={sessionId} config={request.protocol} channel={{ session, events, dropped, error: "", busy, sending, send: sendData, close }} dark={dark} isCurrent={allowed} /> :

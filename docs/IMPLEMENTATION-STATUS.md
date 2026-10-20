@@ -488,3 +488,8 @@ Shared editors now create SOAP1.1/1.2 requests, stage multi-file WSDL/XSD or che
 ## Shared MCP client checkpoint
 
 Shared editors/admins now configure/save/import/export MCP HTTP/allowed STDIO and explicitly connect to creator-bound sessions. Capability/tool/resource/template/prompt operations, manual callbacks, progress/events and cancellation reuse the official SDK with canonical owner preparation. Runtime edits remain private to the connection; custom Host names and original source use native export privacy screening. Owned export keeps its existing save-before-export behavior. Full details, scope and current verification are in COLLABORATION-COVERAGE.md; shared MCP does not close the395-capability or native distribution gaps.
+
+
+## Shared A2A client checkpoint
+
+Shared editors/admins configure versioned A2A0.3 JSONRPC/1.0 JSONRPC or HTTP+JSON, stage original Card import/discovery/restore candidates and explicitly Save adopted interfaces/templates. Creator-bound sessions use canonical owner preparation for message/task/stream/push operations with runtime-local edits, explicit remote cancellation/local Stop and source/credential/member/revision fences. A reviewed final-authorization cancellation race is fixed and regression-tested in shared/owned discovery. Current detailed evidence and remaining distribution/native/platform boundaries are in COLLABORATION-COVERAGE.md; full395-capability completion is not claimed.

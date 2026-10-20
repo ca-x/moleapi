@@ -29,7 +29,7 @@
 3. Verify/deliver:
    - [x] Full frontend/affected backend/typecheck/production, strict server Clippy/package fmt and embedded build; fixture build before browser.
    - [x] Independent source review and actual bilingual390/1280 HTTP and allowed STDIO/config/read/call/callback/Stop/export/image-data/narrow/a11y checks with native boundary explicit.
-   - [ ] Coverage/map/ledger/screenshots, explicit stage/commit/push, preserved PR update and exact-head CI/Docker.
+   - [x] Coverage/map/ledger/screenshots, explicit stage/commit/push, preserved PR update and exact-head CI/Docker.
 
 ## Review focus
 
@@ -58,3 +58,5 @@
 - Final UI: en/zh390 and1280 no page overflow, external resource links never fetched, no browser errors; scoped light a11y0 violations/0 incomplete, dark0 violations/1 incomplete line-number contrast. Screenshots inspected and saved under docs/images/workspace-collaboration-mcp-{en,zh}-390.png. Native chooser/installed app/long-run reap/full platform database integration remain explicit boundaries; full28-module395-capability goal stays active.
 
 - Delivery: coverage/map/status/screenshots updated. Commit/push and exact-head CI/Docker observation follow; no local Docker build or new registry publication is claimed.
+
+- Delivery: committed/pushed1dc84d0; PR41 appended without replacing prior body. Exact-head Docker39502988936 passed native amd64/arm64 and container smoke; manifest skipped on PR (no registry publish). Application39502988938 source/database passed, check still running at latest observation. QA browser/app/fixtures stopped; root mise.toml remains untouched.

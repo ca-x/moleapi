@@ -2140,3 +2140,24 @@ it("switches shared MCP HTTP auth to STDIO settings without leaving hidden HTTP 
   fireEvent.mouseDown(screen.getByRole('tab',{name:/网络设置/}),{button:0});expect(screen.queryByLabelText('HTTP 版本')).toBeNull();expect(screen.queryByLabelText('验证 TLS 证书')).toBeNull();
   expect(screen.getByLabelText('请求超时 (ms)')).toBeTruthy();
 });
+
+it('stages shared A2A Agent Cards until explicit Save and keeps runtime parameters local',async()=>{
+ let canonical=structuredClone(workspace);const card={specification:{id:'agent-card',name:'Agent',kind:'a2a-agent-card',dialect:'a2a-0.3',source:'{"name":"Agent"}'},card:{name:'Agent'},interfaces:[{url:'http://fixture.test',transport:'JSONRPC',version:'0.3.0',supported:true}],warnings:[],dialect:'0.3'};
+ const session={id:'a2a-session',protocol:'a2a',state:'open',url:'http://fixture.test',received_bytes:0,sent_bytes:0,handshake:null};
+ vi.mocked(api).mockImplementation((path,method,body)=>{
+  if(path===base&&method==='PUT'){canonical={...canonical,revision:canonical.revision+1,data:(body as Workspace).data};return Promise.resolve(canonical);}
+  if(path===`${base}/a2a/cards/import`||path===`${base}/a2a/cards/read`)return Promise.resolve(card);
+  if(path===`${base}/sessions`||path===`${base}/sessions/a2a-session`)return Promise.resolve(session);
+  if(path.startsWith(`${base}/sessions/a2a-session/events`))return Promise.resolve({events:[],next_cursor:0,earliest_cursor:1,dropped_count:0});
+  if(path.endsWith('/send'))return Promise.resolve({ok:true});return Promise.resolve(canonical);
+ });
+ render(view('editor'));fireEvent.click(await screen.findByRole('button',{name:'新增 A2A 请求'}));
+ fireEvent.change(screen.getByLabelText('请求地址'),{target:{value:'http://fixture.test'}});fireEvent.click(screen.getByRole('button',{name:'保存共享工作区'}));await waitFor(()=>expect((screen.getByRole('button',{name:'保存共享工作区'}) as HTMLButtonElement).disabled).toBe(true));
+ fireEvent.click(screen.getByRole('button',{name:'Agent Card 来源'}));fireEvent.change(await screen.findByLabelText('Agent Card 原始 JSON'),{target:{value:card.specification.source}});fireEvent.click(screen.getByRole('button',{name:'验证并使用定义'}));await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull());
+ expect(canonical.data.specifications??[]).toHaveLength(0);expect((screen.getByRole('button',{name:'连接'}) as HTMLButtonElement).disabled).toBe(true);
+ fireEvent.click(screen.getByRole('button',{name:'保存共享工作区'}));await waitFor(()=>expect(canonical.data.specifications).toHaveLength(1));await waitFor(()=>expect((screen.getByRole('button',{name:'连接'}) as HTMLButtonElement).disabled).toBe(false));
+ const saved=structuredClone(canonical);fireEvent.click(screen.getByRole('button',{name:'连接'}));const live=within(await screen.findByRole('region',{name:'共享 A2A 实时调用'}));expect(live.queryByRole('button',{name:'Agent Card 来源'})).toBeNull();
+ fireEvent.change(live.getByLabelText('A2A JSON 参数'),{target:{value:'{"message":{"text":"local"}}'}});fireEvent.click(live.getByRole('button',{name:'运行'}));await waitFor(()=>expect(api).toHaveBeenCalledWith(`${base}/sessions/a2a-session/send`,'POST',expect.objectContaining({kind:'a2a_request',method:'message/send',params_source:'{"message":{"text":"local"}}'})));
+ fireEvent.click(live.getByRole('button',{name:/停止请求/}));await waitFor(()=>expect(api).toHaveBeenCalledWith(`${base}/sessions/a2a-session/send`,'POST',expect.objectContaining({kind:'a2a_stop'})));
+ expect(canonical.data).toEqual(saved.data);expect(canonical.revision).toBe(saved.revision);expect(vi.mocked(api).mock.calls.every(([path])=>path.startsWith(base))).toBe(true);
+});

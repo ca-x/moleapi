@@ -1466,3 +1466,12 @@ kbd {
 .shared-mcp .protocol-events { height:360px; flex:none; min-height:0; }
 .shared-mcp .protocol-event-list { min-width:0; }
 .shared-mcp .protocol-event-list .rt-ScrollAreaViewport > div { width:100%; min-width:0!important; }
+
+.shared-a2a { min-width:0; max-width:100%; }
+.shared-a2a .a2a-workbench { height:auto; overflow:visible; }
+.shared-a2a .a2a-tabs { flex:none; min-height:0; }
+.shared-a2a .a2a-tabs > .rt-TabsContent[data-state="active"] { flex:none; overflow:visible; }
+.shared-a2a .a2a-tabs > .rt-TabsContent > .code-editor { flex:none; height:260px; }
+.shared-a2a .protocol-events { height:360px; flex:none; min-height:0; }
+.shared-a2a .protocol-event-list { min-width:0; }
+.shared-a2a .protocol-event-list .rt-ScrollAreaViewport > div { width:100%; min-width:0!important; }

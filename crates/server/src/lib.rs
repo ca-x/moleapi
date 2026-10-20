@@ -499,6 +499,22 @@ async fn build(
             get(collaboration::shared_mock),
         )
         .route(
+            "/owners/{owner}/workspaces/{workspace}/a2a/cards/import",
+            post(collaboration::shared_a2a_import),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/a2a/cards/read",
+            post(collaboration::shared_a2a_read),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/a2a/cards/discover",
+            post(collaboration::shared_a2a_discover),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/a2a/cards/discover/cancel",
+            post(collaboration::shared_a2a_cancel),
+        )
+        .route(
             "/owners/{owner}/workspaces/{workspace}/mcp/config/export",
             post(collaboration::shared_mcp_config_export),
         )
