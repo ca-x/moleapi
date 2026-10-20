@@ -9,6 +9,7 @@ import { initialData } from "../../shared/model";
 import { dataConfig } from "../data/model";
 import { formatRequestLink } from "../documents/internalLinks";
 import { saveProjectFile } from "../generation/saveProjectFile";
+import { pickBinaryFile } from "../../shared/pickBinaryFile";
 import type { SharedWorkspaceSummary, Workspace } from "../../shared/types";
 import SharedWorkspaceView from "./SharedWorkspaceView";
 
@@ -23,6 +24,7 @@ vi.mock("../graphql/GraphQLIDE", async () => {
   } };
 });
 vi.mock("../data/DataSqlEditor", () => ({ DataSqlEditor: ({ value, change }: { value: string; change: (sql: string) => void }) => <label>SQL 查询编辑器<textarea value={value} onChange={(event) => change(event.target.value)} /></label> }));
+vi.mock("../../shared/pickBinaryFile", () => ({ pickBinaryFile: vi.fn() }));
 vi.mock("../generation/saveProjectFile", () => ({ saveProjectFile: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("../../shared/ui", () => ({
   Field: ({ label, children }: { label: string; children: React.ReactNode }) => <label>{label}{children}</label>,
@@ -36,7 +38,7 @@ const workspace: Workspace = { id: "w", name: "Team", revision: 3, updated_at: "
 const summary = (role: SharedWorkspaceSummary["role"]): SharedWorkspaceSummary => ({ owner_id: "owner-id", owner_username: "owner", workspace_id: "w", workspace_name: "Team", revision: 3, role });
 let client: QueryClient;
 function view(role: SharedWorkspaceSummary["role"], accountId = "member") { return <QueryClientProvider client={client}><Theme><SharedWorkspaceView accountId={accountId} selected={summary(role)} dark={false} onClose={vi.fn()} onDirtyChange={vi.fn()} /></Theme></QueryClientProvider>; }
-beforeEach(async () => { vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} }); await setLanguage("zh-CN"); client = new QueryClient({ defaultOptions: { queries: { retry: false } } }); vi.mocked(token).mockReturnValue("session-member"); vi.mocked(api).mockReset(); vi.mocked(pickFile).mockReset(); vi.mocked(api).mockResolvedValue(workspace); vi.mocked(previewSharedMock).mockReset(); vi.mocked(saveProjectFile).mockReset(); vi.mocked(saveProjectFile).mockResolvedValue(undefined); });
+beforeEach(async () => { vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} }); await setLanguage("zh-CN"); client = new QueryClient({ defaultOptions: { queries: { retry: false } } }); vi.mocked(token).mockReturnValue("session-member"); vi.mocked(api).mockReset(); vi.mocked(pickFile).mockReset(); vi.mocked(pickBinaryFile).mockReset(); vi.mocked(api).mockResolvedValue(workspace); vi.mocked(previewSharedMock).mockReset(); vi.mocked(saveProjectFile).mockReset(); vi.mocked(saveProjectFile).mockResolvedValue(undefined); });
 afterEach(() => { cleanup(); client.clear(); vi.unstubAllGlobals(); });
 
 it("keeps viewer resources read-only and hides private execution controls", async () => {
@@ -1813,4 +1815,70 @@ it("requires Save before subscribing to an edited GraphQL document or variables"
   const shared=graphqlSharedWorkspace();shared.data.collections[0].requests[0].protocol={kind:"graphql",document:"subscription Watch {ticks}",variables:{},connection_params:{}};vi.mocked(api).mockResolvedValue(shared);render(view("editor"));
   fireEvent.change(await screen.findByLabelText("GraphQL 文档"),{target:{value:"subscription Changed {ticks}"}});fireEvent.click(screen.getByRole("button",{name:"执行 GraphQL"}));await screen.findByText("先保存 GraphQL 请求及变量，再订阅。");
   expect(vi.mocked(api).mock.calls.some(([path])=>path.endsWith("/sessions"))).toBe(false);
+});
+
+it.each(["sse", "websocket"] as const)("creates and configures a shared %s request before canonical Save/connect", async (kind) => {
+  let canonical = structuredClone(workspace);
+  const opened = { id: "live-authored", protocol: kind, state: "open", url: "https://fixture.test/events", received_bytes: 0, sent_bytes: 0, handshake: { status: kind === "sse" ? 200 : 101, headers: [{ id: "h", key: "x-fixture", value: "canonical-handshake", enabled: true, secret: false }] } };
+  vi.mocked(api).mockImplementation((path, method, body) => {
+    if (path === base && method === "PUT") { canonical = { ...canonical, name: (body as Workspace).name, data: (body as Workspace).data, revision: canonical.revision + 1 }; return Promise.resolve(canonical); }
+    if (path === `${base}/sessions`) return Promise.resolve(opened);
+    if (path.endsWith("/events?after=0")) return Promise.resolve({ events: [], next_cursor: 0, earliest_cursor: 0, dropped_count: 0 });
+    if (path === `${base}/sessions/live-authored`) return Promise.resolve(opened);
+    return Promise.resolve(canonical);
+  });
+  render(view("editor"));
+  fireEvent.click(await screen.findByRole("button", { name: kind === "sse" ? "新增 SSE 请求" : "新增 WebSocket 请求" }));
+  expect((screen.getByLabelText("请求地址") as HTMLInputElement).value).toBe("");
+  fireEvent.change(screen.getByLabelText("请求名称"), { target: { value: `${kind} authored` } });
+  fireEvent.change(screen.getByLabelText("请求地址"), { target: { value: kind === "sse" ? "https://fixture.test/events" : "wss://fixture.test/socket" } });
+  expect(screen.queryByRole("tab", { name: /请求体/ })).toBeNull();
+  expect(screen.queryByRole("tab", { name: /断言/ })).toBeNull();
+  expect(screen.queryByLabelText("方法")).toBeNull();
+  expect((screen.getByRole("button", { name: "连接" }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.mouseDown(screen.getByRole("tab", { name: /请求头/ }), { button: 0 });
+  fireEvent.click(screen.getByRole("button", { name: "添加一行" }));
+  fireEvent.mouseDown(screen.getByRole("tab", { name: /脚本/ }), { button: 0 });
+  fireEvent.change(screen.getByLabelText("请求前 JavaScript 脚本"), { target: { value: "pm.request.headers.add({key:'X-Pre',value:'member'});" } });
+  fireEvent.mouseDown(screen.getByRole("tab", { name: /网络设置/ }), { button: 0 });
+  fireEvent.change(screen.getByLabelText("请求超时 (ms)"), { target: { value: "17000" } });
+  fireEvent.click(screen.getByLabelText("验证 TLS 证书"));
+  if (kind === "websocket") expect((screen.getByLabelText("HTTP 版本") as HTMLSelectElement).disabled).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
+  await waitFor(() => expect(canonical.revision).toBe(4));
+  const request = canonical.data.collections[0].requests.at(-1)!;
+  expect(request.id).not.toBe(workspace.data.collections[0].requests[0].id);
+  expect(request).toMatchObject({ name: `${kind} authored`, protocol: { kind }, method: "GET", timeout_ms: 17000, verify_tls: false, headers: [{ key: "X-Test", value: "yes" }], pre_request_script: "pm.request.headers.add({key:'X-Pre',value:'member'});" });
+  fireEvent.click(await screen.findByRole("button", { name: "连接" }));
+  await screen.findByRole("button", { name: "断开" });
+  expect(api).toHaveBeenCalledWith(`${base}/sessions`, "POST", { request_id: request.id, expected_revision: 4, environment_id: canonical.data.active_environment_id });
+  fireEvent.mouseDown(screen.getByRole("tab", { name: /握手/ }), { button: 0 });
+  expect(screen.getByText("canonical-handshake")).toBeTruthy();
+  expect(screen.getByText("x-fixture")).toBeTruthy();
+  expect(vi.mocked(api).mock.calls.every(([path]) => path.startsWith(base))).toBe(true);
+});
+
+it("keeps new SSE/WebSocket authoring controls absent for viewers", async () => {
+  render(view("viewer")); await screen.findByLabelText("请求");
+  expect(screen.queryByRole("button", { name: "新增 SSE 请求" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "新增 WebSocket 请求" })).toBeNull();
+});
+
+it.each(["request", "cache", "credential"] as const)("discards shared certificate selection after %s changes", async (boundary) => {
+  const first = structuredClone(workspace);
+  first.data.collections[0].requests.push({ ...structuredClone(first.data.collections[0].requests[0]), id: "other", name: "Other" });
+  vi.mocked(api).mockImplementation((_path, method, body) => Promise.resolve(method === "PUT" ? { ...first, revision: 4, data: (body as Workspace).data } : first));
+  let finish!: (value: { name: string; base64: string; mime: string }) => void;
+  vi.mocked(pickBinaryFile).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+  const { rerender } = render(view("editor"));
+  await screen.findByLabelText("请求");
+  fireEvent.mouseDown(screen.getByRole("tab", { name: /网络设置/ }), { button: 0 });
+  fireEvent.click(screen.getByRole("button", { name: "选择证书文件" }));
+  if (boundary === "request") fireEvent.change(screen.getByLabelText("请求"), { target: { value: "other" } });
+  if (boundary === "cache") client.setQueryData(["shared-workspace", "member", "owner-id", "w", "editor", 0], { ...first, revision: 9 });
+  if (boundary === "credential") { vi.mocked(token).mockReturnValue("rotated"); rerender(view("editor")); }
+  await act(async () => finish({ name: "test.pem", base64: "dGVzdA==", mime: "" }));
+  if (boundary === "request") fireEvent.change(screen.getByLabelText("请求"), { target: { value: first.data.collections[0].requests[0].id } });
+  await waitFor(() => expect((screen.getByRole("button", { name: "保存共享工作区" }) as HTMLButtonElement).disabled).toBe(true));
+  expect(vi.mocked(api).mock.calls.some(([, method]) => method === "PUT")).toBe(false);
 });

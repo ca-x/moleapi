@@ -1,4 +1,6 @@
 {
+  "新增 SSE 请求": "Add SSE request",
+  "新增 WebSocket 请求": "Add WebSocket request",
   "请求版本": "Request history",
   "请求版本历史": "Request version history",
   "按请求内容变更查看旧版本；恢复只修改这个请求。": "Browse changes to this request. Restoring changes only this request.",
