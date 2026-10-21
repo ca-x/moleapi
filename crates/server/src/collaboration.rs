@@ -24,6 +24,8 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::future::Future;
 
+mod mock_preview;
+pub use mock_preview::shared_mock_route_preview;
 mod dubbo;
 pub use dubbo::{shared_dubbo_cancel, shared_dubbo_metadata_import, shared_dubbo_metadata_preview};
 mod a2a;
@@ -1486,6 +1488,7 @@ pub async fn shared_mock_dispatch(
     if state.local {
         return Err(ApiError::not_found());
     }
+    let headers = incoming.headers().clone();
     let tx = state.db.begin().await?;
     let canonical = lock_workspace(&tx, &owner, &workspace).await?;
     let (_, admission) = access(&tx, &actor.0, &owner, &workspace).await?;
@@ -1503,32 +1506,41 @@ pub async fn shared_mock_dispatch(
     )
     .await?;
     tx.commit().await?;
-    let dispatch = crate::mock::dispatch(
-        State(state.clone()),
-        Extension(Identity(owner.clone())),
-        Path((workspace.clone(), path)),
-        OriginalUri(uri),
+    finish_specification_preview(
+        &state.db,
+        &actor.0,
+        &owner,
+        &workspace,
+        (admission, canonical.revision),
+        crate::auth::still_authenticated(&state, &actor.0, &headers),
+    )
+    .await?;
+    let dispatch = crate::mock::dispatch_at_revision(
+        &state,
+        &owner,
+        &workspace,
+        &path,
+        &uri,
         incoming,
+        canonical.revision,
     );
-    let watch = watch_access_revision(
+    let watch = watch_authenticated_revision(
         &state,
         &actor.0,
         &owner,
         &workspace,
         admission,
         canonical.revision,
-        "Workspace changed during Mock routing",
+        &headers,
     );
-    let final_check = async {
-        let (current_workspace, current) = access(&state.db, &actor.0, &owner, &workspace).await?;
-        if current != admission {
-            return Err(ApiError::not_found());
-        }
-        if current_workspace.revision != canonical.revision {
-            return Err(ApiError::conflict("Workspace changed during Mock routing"));
-        }
-        Ok(())
-    };
+    let final_check = finish_specification_preview(
+        &state.db,
+        &actor.0,
+        &owner,
+        &workspace,
+        (admission, canonical.revision),
+        crate::auth::still_authenticated(&state, &actor.0, &headers),
+    );
     with_access_watch(dispatch, watch, final_check).await
 }
 

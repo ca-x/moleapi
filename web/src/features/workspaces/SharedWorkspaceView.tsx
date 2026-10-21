@@ -22,6 +22,7 @@ import SharedDocumentsPanel from "./SharedDocumentsPanel";
 import SharedVariablesPanel from "./SharedVariablesPanel";
 import SharedLiveSessionPanel from "./SharedLiveSessionPanel";
 import MockTrafficControls from "../requests/MockTrafficControls";
+import SharedMockRouteDebugger from "./SharedMockRouteDebugger";
 import SharedMockSchemaControls from "./SharedMockSchemaControls";
 import MockDataEditor from "../requests/MockDataEditor";
 import MockMatchingEditor from "../requests/MockMatchingEditor";
@@ -557,10 +558,11 @@ export default function SharedWorkspaceView({ accountId, selected, dark, onClose
           <Button variant="outline" color="red" onClick={() => { updateRequest((item) => ({ ...item, examples: item.examples.filter((entry) => entry.id !== example.id) })); setExampleId(""); }}>{t("删除示例")}</Button>
         </Flex>}
         {example && <Button loading={mocking} disabled={mocking || dirty || statusPending || !!conflict || !!example.mock_data?.parameters?.length} onClick={() => void previewExample()}>{t("预览已保存 Mock 示例")}</Button>}
-        {!!example?.mock_data?.parameters?.length && <Text size="1" color="gray">{t("带请求参数的数据绑定请通过匹配路由调用。")}</Text>}
+        {!!example?.mock_data?.parameters?.length && <Text size="1" color="gray">{t("带请求参数的数据绑定可在下方路由调试器中测试。")}</Text>}
         {dirty && <Text size="1" color="gray">{t("先保存修改，再预览 Mock 示例。")}</Text>}
         {mockPreview && <><Text role="status" size="2">{t("Mock 响应状态")}: {mockPreview.status}</Text><TextArea aria-label={t("Mock 响应正文")} readOnly value={mockPreview.body.slice(0, 16 * 1024)} />{mockPreview.body.length > 16 * 1024 && <Text size="1" color="gray">{t("仅显示响应正文前 16 KiB。")}</Text>}</>}
         <Button loading={saving} disabled={!dirty || saving || statusPending || !!conflict || invalidDocuments} onClick={() => void save()}>{t("保存共享工作区")}</Button>
+        {httpRequest && request && saved && <SharedMockRouteDebugger key={`${scope}/${collection?.id}/${request.id}/${example?.id}/${saved.revision}`} scope={`${scope}/${collection?.id}/${request.id}/${example?.id}`} base={base} request={request} saved={saved} dark={dark} disabled={dirty || saving || statusPending || !!conflict} isCurrent={() => datasetContextCurrent() && selectedRequestRef.current === request.id && !conflict} onExecuted={() => void client.invalidateQueries({ queryKey: ["shared-mock-calls", accountId, owner, workspaceId] })} />}
         <Heading size="3">{t("Mock 调用记录")}</Heading>
         {mockCalls.isPending && <Text role="status">{t("正在加载 Mock 调用记录…")}</Text>}
         {mockCalls.error && <Callout.Root color="red" role="alert"><Callout.Text>{liveError(mockCalls.error)}</Callout.Text></Callout.Root>}

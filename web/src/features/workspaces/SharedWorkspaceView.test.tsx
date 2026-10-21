@@ -372,7 +372,7 @@ it("saves example edits through owner CAS before previewing the saved version", 
   fireEvent.change(screen.getByLabelText("故障状态码（5xx）"), { target: { value: "502" } });
   fireEvent.change(screen.getByLabelText("每分钟请求上限"), { target: { value: "2" } });
   fireEvent.change(screen.getByLabelText("响应正文"), { target: { value: "saved edited body" } });
-  fireEvent.click(screen.getByRole("button", { name: "添加一行" }));
+  fireEvent.click(within(screen.getByText("响应头").parentElement!).getByRole("button", { name: "添加一行" }));
   expect(screen.getByRole("button", { name: "预览已保存 Mock 示例" })).toHaveProperty("disabled", true);
   fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
   await waitFor(() => expect(api).toHaveBeenCalledWith(base, "PUT", expect.objectContaining({ expected_revision: 3 })));
@@ -891,7 +891,7 @@ it("edits shared data parameters through CAS and directs parameterized previews 
   fireEvent.click(screen.getByRole("button", { name: "保存共享工作区" }));
   await waitFor(() => expect(screen.getByRole("button", { name: "保存共享工作区" })).toHaveProperty("disabled", true));
   expect(screen.getByRole("button", { name: "预览已保存 Mock 示例" })).toHaveProperty("disabled", true);
-  expect(screen.getByText("带请求参数的数据绑定请通过匹配路由调用。")).toBeTruthy();
+  expect(screen.getByText("带请求参数的数据绑定可在下方路由调试器中测试。")).toBeTruthy();
   const sent = vi.mocked(api).mock.calls.find(([path, method]) => path === base && method === "PUT")?.[2] as { data: Workspace["data"] };
   expect(sent.data.collections[0].requests[0].examples[0].mock_data).toMatchObject({ shape: "first", parameters: [{ source: "query", name: "id" }] });
   expect(previewSharedMock).not.toHaveBeenCalled();
@@ -2177,4 +2177,23 @@ it('stages shared Dubbo metadata, explicitly saves methods and invokes cancellab
  fireEvent.click(screen.getByRole('button',{name:'保存共享工作区'}));await waitFor(()=>expect(canonical.data.collections[0].requests).toHaveLength(workspace.data.collections[0].requests.length+2));const saved=structuredClone(canonical);
  fireEvent.change(screen.getByLabelText('请求'),{target:{value:'method-draft'}});await waitFor(()=>expect((screen.getByRole('button',{name:'发送已保存请求'}) as HTMLButtonElement).disabled).toBe(false));fireEvent.click(screen.getByRole('button',{name:'发送已保存请求'}));await waitFor(()=>expect(finishCall).toBeTypeOf('function'));fireEvent.click(screen.getByRole('button',{name:'停止调用'}));await waitFor(()=>expect(api).toHaveBeenCalledWith(`${base}/dubbo/cancel`,'POST',expect.objectContaining({request_id:'method-draft',expected_revision:canonical.revision,job_id:expect.any(String)})));
  await act(async()=>finishCall({status:200,status_text:'Dubbo OK',headers:[],body:'"value"',elapsed_ms:1,size_bytes:7,url:'dubbo://fixture',tests:[],logs:[],variable_updates:[],request_updates:[],skipped:false,truncated:false}));expect(canonical.data).toEqual(saved.data);expect(canonical.revision).toBe(saved.revision);expect(vi.mocked(api).mock.calls.every(([path])=>path.startsWith(base)||path==='/api/dubbo/capability')).toBe(true);
+});
+
+it('tests parameterized shared Mock routing with temporary inputs and preserves saved source', async () => {
+  const canonical = structuredClone(workspace), first = canonical.data.collections[0].requests[0];
+  first.url = 'https://fixture.test/orders/{id}';
+  first.examples = [{ id: 'route-example', name: 'Bound result', status: 201, headers: [], body: 'saved', mock_data: { dataset_id: 'dataset', view_id: 'view', shape: 'rows', parameters: [{ name: 'id', source: 'path' }] } }];
+  const before = JSON.stringify(canonical);
+  vi.mocked(api).mockImplementation(path => Promise.resolve(path.endsWith('/mock-calls') ? [] : path.endsWith('/mock/route-preview') ? { status: 401, status_text: 'Unauthorized', body: 'inert mock 401', headers: [], elapsed_ms: 1, size_bytes: 14, url: 'http://mock.invalid/orders/7', tests: [], logs: [], variable_updates: [], request_updates: [], matched: { request_id: first.id, example_id: 'route-example', outcome: 'served' }, outcome: 'served' } : canonical));
+  render(view('editor'));
+  fireEvent.click(await screen.findByRole('button', { name: 'Mock 预览' }));
+  expect(screen.getByRole('button', { name: '预览已保存 Mock 示例' })).toHaveProperty('disabled', true);
+  fireEvent.change(screen.getByLabelText('测试路径'), { target: { value: '/orders/7' } });
+  fireEvent.change(screen.getByLabelText('测试请求正文'), { target: { value: 'temporary body' } });
+  fireEvent.click(screen.getByRole('button', { name: '测试 Mock 路由' }));
+  await screen.findByText(/实际匹配：.*Bound result/);
+  expect(api).toHaveBeenCalledWith(`${base}/mock/route-preview`, 'POST', { expected_revision: 3, method: first.method, path: '/orders/7', query: [], headers: [], body: 'temporary body' });
+  expect(JSON.stringify(canonical)).toBe(before);
+  expect(vi.mocked(api).mock.calls.every(([path, method]) => path.startsWith(base) && method !== 'PUT')).toBe(true);
+  expect(previewSharedMock).not.toHaveBeenCalled();
 });

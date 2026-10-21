@@ -2367,5 +2367,20 @@
   "元数据导入先暂存方法定义，点击保存后才更新共享工作区。": "Metadata import stages method definitions. Save to update the shared workspace.",
   "停止调用": "Stop invocation",
   "已请求停止调用；远端结果可能未知。": "Stop requested; the remote outcome may be unknown.",
-  "新增 Dubbo 请求": "Add Dubbo request"
+  "新增 Dubbo 请求": "Add Dubbo request",
+  "Mock 路由调试": "Mock route debugger",
+  "临时请求只用于匹配已保存的 Mock；不会保存，也不会发送到外部服务。": "Temporary requests match saved Mocks only. They are not saved or sent to external services.",
+  "测试方法": "Test method",
+  "测试路径": "Test path",
+  "将 {name} 替换为具体路径值；查询参数在下方填写，可重复同名参数。": "Replace {name} with a concrete path value. Enter query parameters below; duplicate names are supported.",
+  "测试查询参数": "Test query parameters",
+  "测试请求头": "Test request headers",
+  "不支持凭据类参数、Authorization、Cookie 或连接控制请求头。正文上限 1 MiB，响应上限 5 MiB。": "Credential parameters, Authorization, Cookie and connection control headers are unavailable. Body limit: 1 MiB; response limit: 5 MiB.",
+  "测试请求正文": "Test request body",
+  "测试 Mock 路由": "Test Mock route",
+  "先保存修改并解决版本冲突，再测试 Mock 路由。": "Save changes and resolve revision conflicts before testing a Mock route.",
+  "实际匹配：{{request}} / {{example}}": "Actual match: {{request}} / {{example}}",
+  "没有可识别的匹配示例": "No identifiable matched example",
+  "带请求参数的数据绑定可在下方路由调试器中测试。": "Test bindings with request parameters in the route debugger below.",
+  "结果": "Outcome"
 }

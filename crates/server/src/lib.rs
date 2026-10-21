@@ -499,6 +499,10 @@ async fn build(
             get(collaboration::shared_mock),
         )
         .route(
+            "/owners/{owner}/workspaces/{workspace}/mock/route-preview",
+            post(collaboration::shared_mock_route_preview),
+        )
+        .route(
             "/owners/{owner}/workspaces/{workspace}/dubbo/cancel",
             post(collaboration::shared_dubbo_cancel),
         )

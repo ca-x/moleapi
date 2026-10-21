@@ -70,7 +70,8 @@ This inventory covers every `.route` registered in `crates/server/src/lib.rs` at
 | `/owners/{owner}/workspaces/{workspace}/specifications/preview` | POST editor | bounded OpenAPI import/replacement candidate; expected revision, actor audit and final membership/revision fence; no persistence |
 | `/owners/{owner}/workspaces/{workspace}/dataset/preview` | Editor/admin session | Bounded literal CSV/JSON preview; canonical revision and membership admission/final fences, actor audit without source |
 | `/owners/{owner}/workspaces/{workspace}/mock-schema/validate` | Editor/admin session | Canonical saved HTTP/spec Schema validation; actor admission audit without source/pointer, membership and workspace revision fences before metadata response |
-| `/owners/{owner}/workspaces/{workspace}/mocks/{*path}` | ANY editor | bounded saved Mock routing and selected script execution; actor audit plus membership/revision fences |
+| `/owners/{owner}/workspaces/{workspace}/mocks/{*path}` | ANY editor | bounded saved Mock routing and selected script execution; actor audit plus credential/member/revision fences |
+| `/owners/{owner}/workspaces/{workspace}/mock/route-preview` | POST editor | Synthetic explicit incoming request; canonical revision-bound routing, inert response envelope, actor audit and credential/member/revision fences |
 | `/owners/{owner}/workspaces/{workspace}/mock-calls` | GET editor | Mock call metadata |
 | `/owners/{owner}/workspaces/{workspace}/history` | GET editor | saved redacted response history |
 | `/owners/{owner}/workspaces/{workspace}/reports` | GET editor | saved report summaries |
