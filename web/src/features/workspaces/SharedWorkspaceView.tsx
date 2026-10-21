@@ -51,7 +51,7 @@ import SharedSpecificationsPanel from "./SharedSpecificationsPanel";
 import SharedRequestSpecification from "./SharedRequestSpecification";
 import SharedDatasetsPanel from "./SharedDatasetsPanel";
 import SharedRunOptions from "./SharedRunOptions";
-import { defaultSharedRunConfig, resolveSharedRunOptions, type SharedRunConfig } from "./sharedRunOptions";
+import { defaultSharedRunConfig, resolveSharedRunOptions, type SharedRunConfig } from "./sharedRunState";
 import SharedDataRequestEditor from "./SharedDataRequestEditor";
 import { resultDatasetSnapshot } from "../data/dataset";
 import type { Result as DataResult } from "../data/types";

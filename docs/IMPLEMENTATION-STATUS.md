@@ -2,9 +2,9 @@
 
 Development is in progress against the full capability matrix; this is not a claim of complete Apifox/Postman parity.
 
-## Native hosted collaboration and v0.2.0 preparation
+## Native hosted collaboration and stable release preparation
 
-The native client now has online shared workspace selection, invitations and the existing role-aware member workbench through canonical hosted data. Same-ID local workspaces stay independent; disconnect/account changes fence callbacks and close reachable creator sessions. See `NATIVE-SHARED-WORKSPACES-COVERAGE.md`. Version0.2.0 packaging is being prepared; tag-specific CI, installer assets and Docker manifests must pass before stable publication. EDAS sandbox, installed GUI acceptance and the full395-capability matrix remain separate open requirements.
+The native client now has online shared workspace selection, invitations and the existing role-aware member workbench through canonical hosted data. Same-ID local workspaces stay independent; disconnect/account changes fence callbacks and close reachable creator sessions. See `NATIVE-SHARED-WORKSPACES-COVERAGE.md`. PR41 is merged. Candidate0.2.0 exposed a case-insensitive frontend module collision in native builds; the renamed helper and build-time path guard are included in corrected0.2.1. Stable packaging is being prepared; tag-specific CI, installer assets and Docker manifests must pass before stable publication. EDAS sandbox, installed GUI acceptance and the full395-capability matrix remain separate open requirements.
 
 ## Foundation implemented and verified locally
 

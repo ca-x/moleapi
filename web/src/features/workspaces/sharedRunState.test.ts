@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { SavedDataset } from "../../shared/types";
-import { defaultSharedRunConfig, resolveSharedRunOptions } from "./sharedRunOptions";
+import { defaultSharedRunConfig, resolveSharedRunOptions } from "./sharedRunState";
 const datasets: SavedDataset[] = [
   { id: "literal", name: "Literal", description: "", secret: true, source: { format: "json", source: '[{"id":1}]' } },
   { id: "query", name: "Query", description: "", secret: true, query: { request_id: "sql" } },

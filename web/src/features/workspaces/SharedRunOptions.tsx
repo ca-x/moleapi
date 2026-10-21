@@ -3,7 +3,7 @@ import { t } from "../../shared/i18n";
 import { Choice, Field } from "../../shared/ui";
 import type { SavedDataset } from "../../shared/types";
 import RunnerDataset, { type DatasetPreview } from "../testing/RunnerDataset";
-import { resolveSharedRunOptions, type SharedRunConfig } from "./sharedRunOptions";
+import { resolveSharedRunOptions, type SharedRunConfig } from "./sharedRunState";
 export default function SharedRunOptions({ value, datasets, scope, workspaceId, disabled, dark, onChange, onBusyChange, previewSource }: {
   value: SharedRunConfig; datasets: SavedDataset[]; scope: string; workspaceId: string; disabled: boolean; dark: boolean;
   onChange: (value: SharedRunConfig) => void; onBusyChange: (busy: boolean) => void;

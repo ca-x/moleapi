@@ -92,3 +92,5 @@ linux/arm64 和 manifest。两个原生镜像均通过固定 JRE21.0.12.1+1 启�
 ## Stable0.2.0 release gate
 
 Version0.2.0 uses the same stable version in Cargo, npm and Tauri installer metadata; Windows no longer applies the numeric beta override. Tag builds still stage a draft prerelease first. After exact-tag Application, native matrix and Docker jobs pass, download all13 archives/installers plus SHA256SUMS and verify every digest and archive matrix; read back the GHCR manifest with both architectures. Only then publish the draft with prerelease=false and mark it latest. Packages remain unsigned unless signing credentials and verification are explicitly provided.
+
+Stable candidate0.2.0 failed native macOS/Windows frontend builds: SharedRunOptions.tsx and sharedRunOptions.ts collide during extensionless module resolution on case-insensitive filesystems. The helper is now sharedRunState.ts; every frontend build first checks normalized case-insensitive module paths. The pushed tag is retained as a failed, unpublished candidate; the corrected stable release is0.2.1.
