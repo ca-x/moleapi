@@ -85,7 +85,7 @@ export default function WorkbenchHeader() {
           <span>{t("搜索请求")}</span>
           <kbd>⌘ K</kbd>
         </Button>}
-        {native ? (
+        {native && !selectedShared ? (
           <Button
             variant="soft"
             color={sync.data?.connected ? "cyan" : "gray"}
@@ -100,7 +100,7 @@ export default function WorkbenchHeader() {
             <span>{sync.data?.connected ? t("同步") : t("连接服务器")}</span>
           </Button>
         ) : (
-          <Badge color="gray" variant="soft"> {t("自托管")} </Badge>
+          <Badge color="gray" variant="soft"> {native && selectedShared ? t("托管共享") : t("自托管")} </Badge>
         )}
         <ToolButton
           label={dark ? t("切换为浅色") : t("切换为深色")}

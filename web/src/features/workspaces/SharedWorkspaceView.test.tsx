@@ -14,7 +14,7 @@ import type { SharedWorkspaceSummary, Workspace } from "../../shared/types";
 import SharedWorkspaceView from "./SharedWorkspaceView";
 
 const graphqlEditors = vi.hoisted(() => ({ last: null as null | ((patch: Partial<import("../../shared/types").GraphQLConfig>) => void) }));
-vi.mock("../../shared/api", () => ({ api: vi.fn(), pickFile: vi.fn(), previewSharedMock: vi.fn(), saveFile: vi.fn(), token: vi.fn() }));
+vi.mock("../../shared/api", () => ({ native: false,  api: vi.fn(), pickFile: vi.fn(), previewSharedMock: vi.fn(), saveFile: vi.fn(), token: vi.fn() }));
 vi.mock("../graphql/GraphQLIDE", async () => {
   const { useState } = await import("react");
   return { default: ({ config, onChange, fetcher }: { config: import("../../shared/types").GraphQLConfig; onChange: (patch: Partial<import("../../shared/types").GraphQLConfig>) => void; fetcher: (params: { query: string; variables: Record<string, unknown>; operationName?: string }) => Promise<unknown> }) => {

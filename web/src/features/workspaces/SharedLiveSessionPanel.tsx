@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, Callout, Flex, Heading, Tabs, Text, TextArea } from "@radix-ui/themes";
-import { api, token } from "../../shared/api";
+import { memberApi as api, memberCredential as token, closeMemberSession } from "../../shared/memberApi";
 import { t, useLanguage } from "../../shared/i18n";
 import { liveError } from "../../shared/i18n/errors";
 import type { RequestSpec } from "../../shared/types";
@@ -98,7 +98,7 @@ export default function SharedLiveSessionPanel({ base, request, revision, enviro
     return () => {
       generation.current++;
       clearTimeout(timer);
-      if (credential.current) void fetch(`${path}/close`, { method: "POST", headers: { Authorization: `Bearer ${credential.current}` } }).catch(() => {});
+      void closeMemberSession(path, credential.current, true).catch(() => {});
     };
   }, [base, sessionId]);
   async function connect() {
@@ -108,7 +108,7 @@ export default function SharedLiveSessionPanel({ base, request, revision, enviro
     try {
       const opened = await api<ProtocolSession>(`${base}/sessions`, "POST", { request_id: request.id, environment_id: environmentId, expected_revision: revision });
       if (current === generation.current && allowed()) adoptSession(opened);
-      else if (credential.current) void fetch(`${base}/sessions/${encodeURIComponent(opened.id)}/close`, { method: "POST", headers: { Authorization: `Bearer ${credential.current}` } }).catch(() => {});
+      else void closeMemberSession(`${base}/sessions/${encodeURIComponent(opened.id)}`, credential.current, true).catch(() => {});
     } catch (cause) { if (current === generation.current && allowed()) fail(cause); }
     finally { if (mounted.current && current === generation.current) setBusy(false); }
   }

@@ -22,10 +22,16 @@ export interface GraphQLContext {
     execute: (request: RequestSpec) => Promise<ApiResponse>;
     createSession: (request: RequestSpec) => Promise<ProtocolSession>;
     sessionPath: (id: string) => string;
+    request?: typeof api;
+    closeSession?: (id: string) => Promise<void>;
   };
 }
 function sessionPath(context: GraphQLContext, id: string) {
   return context.transport?.sessionPath(id) ?? `/api/sessions/${encodeURIComponent(id)}`;
+}
+function request(context: GraphQLContext): typeof api { return context.transport?.request ?? api; }
+function closeSession(context: GraphQLContext, id: string) {
+  return context.transport?.closeSession?.(id) ?? api(`${sessionPath(context, id)}/close`, "POST", {}).then(() => {});
 }
 function executionInput(context: GraphQLContext, parameters: FetcherParams) {
   if (context.request.protocol?.kind !== "graphql")
@@ -101,11 +107,7 @@ function cancellableSubscription(
   });
   const close = () => {
     if (sessionId)
-      void api(
-        `${sessionPath(context, sessionId)}/close`,
-        "POST",
-        {},
-      ).catch(() => {});
+      void closeSession(context, sessionId).catch(() => {});
   };
   const iterator: AsyncIterableIterator<unknown> = {
     next: () =>
@@ -137,11 +139,11 @@ async function* subscribe(
     if (!context.current()) return;
     context.apply(session.variable_updates || []);
     while (context.current()) {
-      const state = await api<ProtocolSession>(
+      const state = await request(context)<ProtocolSession>(
         sessionPath(context, session.id),
       );
       if (!context.current()) return;
-      const batch = await api<EventBatch>(
+      const batch = await request(context)<EventBatch>(
         `${sessionPath(context, session.id)}/events?after=${cursor}`,
       );
       if (!context.current()) return;
@@ -177,10 +179,6 @@ async function* subscribe(
     }
   } finally {
     context.sessions.delete(session.id);
-    await api(
-      `${sessionPath(context, session.id)}/close`,
-      "POST",
-      {},
-    ).catch(() => {});
+    await closeSession(context, session.id).catch(() => {});
   }
 }

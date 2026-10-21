@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { t, useLanguage } from "../../shared/i18n";
 import { LocalizedError } from "../../shared/i18n/errors";
-import { api } from "../../shared/api";
+import { memberApi as api } from "../../shared/memberApi";
 import type { RequestSpec } from "../../shared/types";
 import McpClient from "../mcp/McpClient";
 import McpConfigEditor from "../mcp/McpConfigEditor";

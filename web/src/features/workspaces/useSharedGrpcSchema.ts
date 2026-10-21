@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "../../shared/api";
+import { memberApi as api } from "../../shared/memberApi";
 import { useLanguage, translateCopy } from "../../shared/i18n";
 import { errorCopy, LocalizedError, type ErrorCopy } from "../../shared/i18n/errors";
 import type { RequestSpec, Specification, Workspace, WorkspaceData } from "../../shared/types";

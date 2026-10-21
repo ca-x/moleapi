@@ -6,7 +6,7 @@ import { initialData, newRequest } from "../../shared/model";
 import { setLanguage } from "../../shared/i18n";
 import type { Specification, Workspace } from "../../shared/types";
 import { useSharedGrpcSchema, type SharedGrpcSourceContext } from "./useSharedGrpcSchema";
-vi.mock("../../shared/api", () => ({ api: vi.fn() }));
+vi.mock("../../shared/api", () => ({ native: false,  api: vi.fn() }));
 const base = "/api/owners/owner/workspaces/w";
 const spec: Specification = { id: "proto", name: "Reflected", kind: "protobuf", dialect: "protobuf", source: '{"kind":"descriptor","descriptor_set_base64":"AA=="}' };
 const schema = { services: [] };

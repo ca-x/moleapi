@@ -6,7 +6,7 @@ import {api,token} from '../../shared/api';
 import {initialData,newRequest} from '../../shared/model';
 import {setLanguage} from '../../shared/i18n';
 import SharedMockRouteDebugger from './SharedMockRouteDebugger';
-vi.mock('../../shared/api',()=>({api:vi.fn(),token:vi.fn()}));
+vi.mock('../../shared/api',()=>({ native: false, api:vi.fn(),token:vi.fn()}));
 vi.mock('../requests/ResponsePane',()=>({ResponsePane:({response,error}:{response:{body:string}|null;error:string})=><div>{response?.body}{error}</div>}));
 beforeEach(async()=>{vi.stubGlobal("ResizeObserver",class {observe(){} unobserve(){} disconnect(){}});await setLanguage('zh-CN');vi.mocked(token).mockReturnValue('actor');vi.mocked(api).mockReset();});afterEach(cleanup);
 function props(){const request={...newRequest(),id:'r',url:'https://fixture.test/orders/{id}',examples:[{id:'e',name:'Actual example',status:201,body:'',headers:[]}]};const data=initialData();data.collections[0].requests=[request];return {scope:'first',base:'/api/owners/owner/workspaces/w',request,saved:{id:'w',name:'Team',revision:1,updated_at:'now',data},dark:false,disabled:false,isCurrent:()=>true,onExecuted:vi.fn()};}

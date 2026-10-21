@@ -6,7 +6,7 @@ import { initialData, newRequest } from "../../shared/model";
 import { setLanguage } from "../../shared/i18n";
 import type { Specification, Workspace } from "../../shared/types";
 import { useSharedSoapSchema, type SharedSoapSourceContext } from "./useSharedSoapSchema";
-vi.mock("../../shared/api",()=>({api:vi.fn()}));
+vi.mock("../../shared/api",()=>({ native: false, api:vi.fn()}));
 const base="/api/owners/owner/workspaces/w";
 const spec:Specification={id:"wsdl",name:"Saved WSDL",kind:"wsdl",dialect:"wsdl1.1",source:'{"entry_file":"service.wsdl","files":[]}'};
 const schema={services:[]};

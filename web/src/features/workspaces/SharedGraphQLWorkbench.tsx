@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Callout, Dialog, Flex, Text, TextField } from "@radix-ui/themes";
 import { buildSchema } from "graphql";
-import { api, token } from "../../shared/api";
+import { memberApi as api, memberCredential as token, closeMemberSession } from "../../shared/memberApi";
 import { t, useLanguage } from "../../shared/i18n";
 import { errorCopy, LocalizedError, type ErrorCopy } from "../../shared/i18n/errors";
 import { translateCopy } from "../../shared/i18n";
@@ -23,15 +23,17 @@ export default function SharedGraphQLWorkbench(props: {
   const currentIdentity = useRef(identity); currentIdentity.current = identity;
   const [last, setLast] = useState<{ identity: string; response: ApiResponse } | null>(null), [schema, setSchema] = useState<string | null>(null), [problem, setProblem] = useState<ErrorCopy>(""), [busy, setBusy] = useState(false);
   const [params, setParams] = useState<string | null>(null);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; for (const id of sessions.current) void fetch(`${props.base}/sessions/${encodeURIComponent(id)}/close`, { method: "POST", headers: { Authorization: `Bearer ${credential.current}` } }).catch(() => {}); sessions.current.clear(); }; }, []);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; for (const id of sessions.current) void closeMemberSession(`${props.base}/sessions/${encodeURIComponent(id)}`, credential.current, true).catch(() => {}); sessions.current.clear(); }; }, []);
   const getContext = useCallback(async (): Promise<GraphQLContext> => {
-    const origin = latest.current, originIdentity = currentIdentity.current;
-    const current = () => mounted.current && currentIdentity.current === originIdentity && latest.current.isCurrent() && !latest.current.conflict;
+    const origin = latest.current, originIdentity = currentIdentity.current, originCredential = token();
+    const current = () => mounted.current && token() === originCredential && currentIdentity.current === originIdentity && latest.current.isCurrent() && !latest.current.conflict;
     if (!current() || origin.request.protocol?.kind !== "graphql") throw new LocalizedError("GraphQL 请求已取消");
     if (origin.request.specification_id && !origin.saved.data.specifications?.some((spec) => spec.id === origin.request.specification_id)) throw new LocalizedError("先保存工作区，再使用关联 Schema。");
     return { workspace_id: origin.saved.id, request: structuredClone(origin.request), environment_id: origin.saved.data.active_environment_id, locals: [], sessions: sessions.current, current,
       apply: () => {}, response: (response) => { if (current()) setLast({ identity: originIdentity, response }); },
       transport: {
+        request: api,
+        closeSession: (id) => closeMemberSession(`${origin.base}/sessions/${encodeURIComponent(id)}`, originCredential),
         execute: async (request) => { if (!current() || latest.current.saving) throw new LocalizedError("GraphQL 请求已取消"); return api<ApiResponse>(`${origin.base}/execute-draft`, "POST", { request, collection_id: origin.collectionId, expected_workspace_revision: origin.saved.revision }); },
         createSession: async (request) => { if (!current() || latest.current.dirty || latest.current.saving || !savedSubscriptionMatches(origin.request, request)) throw new LocalizedError("先保存 GraphQL 请求及变量，再订阅。"); return api<ProtocolSession>(`${origin.base}/sessions`, "POST", { request_id: origin.request.id, expected_revision: origin.saved.revision, environment_id: origin.saved.data.active_environment_id }); },
         sessionPath: (id) => `${origin.base}/sessions/${encodeURIComponent(id)}`,

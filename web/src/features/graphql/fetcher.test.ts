@@ -208,3 +208,13 @@ it("polls and closes a member subscription only through its injected member name
   expect(await iterator.next()).toMatchObject({done:false,value:{data:{value:1}}});await iterator.return?.();
   expect(state.transport.createSession).toHaveBeenCalled();expect(vi.mocked(api).mock.calls.every(([url])=>url.startsWith(path))).toBe(true);expect(api).toHaveBeenCalledWith(`${path}/close`,"POST",{});
 });
+it('uses the injected member transport for subscription state, events and both Stop/final close',async()=>{
+ const state=context(),path='/api/owners/remote/workspaces/w/sessions/native-session';
+ const request=vi.fn().mockImplementation((path:string)=>Promise.resolve(path.includes('/events?')?{events:[{cursor:1,message:{kind:'graphql_next',payload:{data:{value:'remote'}}}}],next_cursor:1,dropped_count:0}:{id:'native-session',state:'open'}));
+ const closeSession=vi.fn().mockResolvedValue(undefined);
+ state.transport={execute:vi.fn(),createSession:vi.fn().mockResolvedValue({id:'native-session',state:'open'}),sessionPath:()=>path,request,closeSession};
+ vi.mocked(api).mockRejectedValue(new Error('local API must not be used'));
+ const iterator=await createRustGraphQLFetcher(async()=>state)({query:'subscription {value}'})as AsyncIterableIterator<unknown>;
+ expect(await iterator.next()).toEqual({done:false,value:{data:{value:'remote'}}});await iterator.return?.();await vi.waitFor(()=>expect(state.sessions.size).toBe(0));
+ expect(request).toHaveBeenCalledWith(path);expect(request).toHaveBeenCalledWith(path+'/events?after=0');expect(closeSession).toHaveBeenCalledWith('native-session');expect(api).not.toHaveBeenCalled();
+});

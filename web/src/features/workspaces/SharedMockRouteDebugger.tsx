@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, Flex, Heading, Text, TextArea, TextField } from "@radix-ui/themes";
-import { api, token } from "../../shared/api";
+import { memberApi as api, memberCredential as token } from "../../shared/memberApi";
 import { t, translateCopy, useLanguage } from "../../shared/i18n";
 import { errorCopy, type ErrorCopy } from "../../shared/i18n/errors";
 import type { ApiResponse, Pair, RequestSpec, Workspace } from "../../shared/types";

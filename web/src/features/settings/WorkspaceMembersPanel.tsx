@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertDialog, Button, Callout, Flex, Heading, Text, TextArea } from "@radix-ui/themes";
-import { api, token } from "../../shared/api";
+import { memberApi as api, memberCredential as token } from "../../shared/memberApi";
 import { t, useLanguage } from "../../shared/i18n";
 import { liveError } from "../../shared/i18n/errors";
 import { Choice } from "../../shared/ui";
@@ -15,16 +15,16 @@ type Target = { kind: "member" | "invitation"; id: string; label: string };
 const roles: Role[] = ["admin", "editor", "viewer"];
 const roleLabel = (role: Role | "owner") => ({ owner: t("所有者"), admin: t("管理员"), editor: t("编辑者"), viewer: t("查看者") })[role];
 
-export default function WorkspaceMembersPanel({ accountId, workspaceId, ownerId: scopedOwnerId }: { accountId: string; workspaceId: string; ownerId?: string }) {
+export default function WorkspaceMembersPanel({ accountId, workspaceId, ownerId: scopedOwnerId, invitationOrigin }: { accountId: string; workspaceId: string; ownerId?: string; invitationOrigin?: string }) {
   useLanguage();
   const client = useQueryClient();
   const credential = token();
   const session = !!credential && !credential.startsWith("moleapi_pat_");
-  const boundary = useRef({ accountId, workspaceId, scopedOwnerId, credential, epoch: 0 });
-  if (boundary.current.accountId !== accountId || boundary.current.workspaceId !== workspaceId || boundary.current.scopedOwnerId !== scopedOwnerId || boundary.current.credential !== credential) {
-    boundary.current = { accountId, workspaceId, scopedOwnerId, credential, epoch: boundary.current.epoch + 1 };
+  const boundary = useRef({ accountId, workspaceId, scopedOwnerId, invitationOrigin, credential, epoch: 0 });
+  if (boundary.current.accountId !== accountId || boundary.current.workspaceId !== workspaceId || boundary.current.scopedOwnerId !== scopedOwnerId || boundary.current.credential !== credential || boundary.current.invitationOrigin !== invitationOrigin) {
+    boundary.current = { accountId, workspaceId, scopedOwnerId, invitationOrigin, credential, epoch: boundary.current.epoch + 1 };
   }
-  const scope = JSON.stringify([accountId, scopedOwnerId, workspaceId, boundary.current.epoch]);
+  const scope = JSON.stringify([accountId, scopedOwnerId, workspaceId, invitationOrigin, boundary.current.epoch]);
   const latest = useRef(scope);
   latest.current = scope;
   const mounted = useRef(true);
@@ -88,7 +88,7 @@ export default function WorkspaceMembersPanel({ accountId, workspaceId, ownerId:
   async function copy() {
     if (secret?.scope !== scope || !current(scope)) return;
     const origin = scope;
-    try { await navigator.clipboard.writeText(`${window.location.origin}/#workspace_invite=${encodeURIComponent(secret.token)}`); if (current(origin)) setCopied(true); }
+    try { await navigator.clipboard.writeText(`${invitationOrigin ? new URL(invitationOrigin).origin : window.location.origin}/#workspace_invite=${encodeURIComponent(secret.token)}`); if (current(origin)) setCopied(true); }
     catch (cause) { if (current(origin)) setError(liveError(cause)); }
   }
 
@@ -104,7 +104,7 @@ export default function WorkspaceMembersPanel({ accountId, workspaceId, ownerId:
     </Flex>
     {secret?.scope === scope && <Flex direction="column" gap="2">
       <Text size="2">{t("请立即复制邀请链接；关闭此视图后无法再次查看。")}</Text>
-      <TextArea aria-label={t("新邀请链接")} readOnly value={`${window.location.origin}/#workspace_invite=${encodeURIComponent(secret.token)}`} spellCheck={false} />
+      <TextArea aria-label={t("新邀请链接")} readOnly value={`${invitationOrigin ? new URL(invitationOrigin).origin : window.location.origin}/#workspace_invite=${encodeURIComponent(secret.token)}`} spellCheck={false} />
       <Flex gap="2"><Button variant="soft" onClick={() => void copy()}>{copied ? t("已复制") : t("复制邀请链接")}</Button><Button variant="ghost" onClick={() => { setSecret(null); setCopied(false); }}>{t("隐藏邀请链接")}</Button></Flex>
     </Flex>}
     {members.isPending && <Text role="status">{t("正在加载成员…")}</Text>}

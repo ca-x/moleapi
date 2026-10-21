@@ -168,6 +168,7 @@ This inventory covers every `.route` registered in `crates/server/src/lib.rs` at
 | `/mocks/{workspace_id}/{*path}` | No shared access | Not assessed for member use |
 | `/workspaces/{id}/sync` | No shared access | Not assessed for member use |
 | `/sync/status` | No shared access | Not assessed for member use |
+| `/sync/collaboration` | Native connected hosted session generation | Allowlisted remote member operations only; canonical hosted permissions plus initial/poll/final native connection fence; no local workspace copy |
 | `/sync/connect` | No shared access | Not assessed for member use |
 | `/public/docs/{id}` | Public / unauthenticated | Existing public contract |
 | `/public/docs/{id}/unlock` | Public / unauthenticated | Existing public contract |
@@ -178,6 +179,6 @@ This inventory covers every `.route` registered in `crates/server/src/lib.rs` at
 | `/hooks/{token}` | Public / unauthenticated | Existing public contract |
 | `/docs/{id}` | Public / unauthenticated | Existing public contract |
 
-Inventory: 149 route patterns; 22 explicit member-facing patterns; 8 public patterns. A route without an explicit shared policy is unavailable through owner-scoped member URLs.
+Inventory: 174 route patterns, including 43 explicit owner/workspace patterns and 8 public patterns. A route without an explicit shared policy is unavailable through owner-scoped member URLs.
 
-The workspace-scoped routes currently supported for members are the explicit owner/workspace pair above. Shared collection, canonical saved-request, finite HTTP draft and saved Mock example execution poll membership every 200 ms and withhold results after a role change or removal; draft execution also fences canonical workspace revision. Saved SSE/WebSocket/Data member sessions bind the creator, poll role/revision/credential changes every 200 ms and recheck before returning summaries/events or acknowledging sends. The actor is recorded before execution. Shared history/report/Mock-call reads recheck membership before returning private data. Other protocol sessions, public Mock share management, full workspace exports, credentials and resource routes remain closed to members until their actor attribution, cancellation and response fencing are implemented and tested.
+The explicitly listed owner/workspace routes and hosted invitation/list operations remain the authorization boundary. Collection runs, finite requests and protocol/source/metadata/Mock operations use their actor-aware admission and specified credential, membership and workspace revision fences. Saved member sessions bind their creator and poll/recheck their own context. History, report and Mock-call reads apply their scoped read policy. The native connection-generation bridge delegates only its explicit member method/path/mode/query allowlist, with no credential/header override or implicit local workspace copy. Public share management, full workspace exports, credential and other unregistered resource operations gain no access through the bridge.

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Callout, Checkbox, Flex, Heading, Tabs, Text, TextArea, TextField } from "@radix-ui/themes";
-import { api, previewSharedMock, token } from "../../shared/api";
+import { memberApi as api, previewMemberMock as previewSharedMock, memberCredential as token } from "../../shared/memberApi";
 import { t, useLanguage } from "../../shared/i18n";
 import { liveError } from "../../shared/i18n/errors";
 import { id, newRequest } from "../../shared/model";

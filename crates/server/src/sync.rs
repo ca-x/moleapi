@@ -1,3 +1,4 @@
+mod collaboration;
 use crate::{ApiError, AppState, auth::Identity, entities::document, storage, workspaces};
 use axum::{
     Extension, Json,
@@ -5,6 +6,7 @@ use axum::{
     extract::{Path, State},
     http::Uri,
 };
+pub use collaboration::request as collaboration_request;
 use futures_util::StreamExt;
 use moleapi_core::Workspace;
 use reqwest::{Client, Method};
@@ -178,6 +180,12 @@ pub async fn status(State(s): State<AppState>) -> Result<Json<serde_json::Value>
     Ok(Json(public(connection(&s).await?.as_ref())))
 }
 async fn client(raw: &str) -> Result<(Client, url::Url), ApiError> {
+    client_with_timeout(raw, Some(Duration::from_secs(30))).await
+}
+async fn client_with_timeout(
+    raw: &str,
+    timeout: Option<Duration>,
+) -> Result<(Client, url::Url), ApiError> {
     let mut url = moleapi_core::valid_url(raw).map_err(|e| ApiError::bad(e.to_string()))?;
     if url.query().is_some() || url.fragment().is_some() || url.path() != "/" {
         return Err(ApiError::bad(
@@ -205,18 +213,21 @@ async fn client(raw: &str) -> Result<(Client, url::Url), ApiError> {
         return Err(ApiError::bad("Sync requires HTTPS except loopback HTTP"));
     }
     url.set_path("/");
-    let client = Client::builder()
+    let builder = Client::builder()
         .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
         .connect_timeout(Duration::from_secs(5))
-        .timeout(Duration::from_secs(30))
         .no_gzip()
         .no_brotli()
         .no_deflate()
         .no_zstd()
-        .resolve_to_addrs(&host, &ips)
-        .build()
-        .map_err(|_| ApiError::internal())?;
+        .resolve_to_addrs(&host, &ips);
+    let builder = if let Some(timeout) = timeout {
+        builder.timeout(timeout)
+    } else {
+        builder
+    };
+    let client = builder.build().map_err(|_| ApiError::internal())?;
     Ok((client, url))
 }
 async fn remote(
@@ -268,6 +279,24 @@ async fn remote(
         return Err(ApiError::bad("Invalid remote workspace"));
     }
     Ok(Some(w))
+}
+async fn revoke_connection(previous: &Connection) {
+    // Local disconnect is unconditional. Revoke only this stored remote login;
+    // no global lock is held while a disconnected service may be unavailable.
+    let _ = tokio::time::timeout(Duration::from_millis(750), async {
+        let (client, url) = client(&previous.server_url).await?;
+        client
+            .post(
+                url.join("api/auth/logout")
+                    .map_err(|_| ApiError::internal())?,
+            )
+            .bearer_auth(&previous.token)
+            .send()
+            .await
+            .map_err(|_| ApiError::bad("Hosted logout unavailable"))?;
+        Ok::<(), ApiError>(())
+    })
+    .await;
 }
 pub async fn connect(
     State(s): State<AppState>,
@@ -350,16 +379,27 @@ pub async fn connect(
     )
     .await?;
     tx.commit().await?;
+    drop(_guard);
+    if let Some(previous) = previous
+        && (previous.server_url != conn.server_url || previous.token != conn.token)
+    {
+        revoke_connection(&previous).await;
+    }
     Ok(Json(public(Some(&conn))))
 }
 pub async fn disconnect(State(s): State<AppState>) -> Result<Json<serde_json::Value>, ApiError> {
     native(&s)?;
     let _guard = s.sync_lock.lock().await;
+    let previous = connection(&s).await?;
     document::Entity::delete_many()
         .filter(document::Column::Owner.eq("local"))
         .filter(document::Column::Kind.is_in(["connection", "base"]))
         .exec(&s.db)
         .await?;
+    drop(_guard);
+    if let Some(previous) = previous {
+        revoke_connection(&previous).await;
+    }
     Ok(Json(public(None)))
 }
 async fn save_base<C: ConnectionTrait>(db: &C, id: &str, base: &Base) -> Result<(), ApiError> {

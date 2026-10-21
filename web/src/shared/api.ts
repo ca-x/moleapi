@@ -97,17 +97,19 @@ async function previewMockResponse(path: string, shared = false): Promise<{statu
   }
   return {status:response.status,body};
 }
-export async function saveFile(file: ExportResult): Promise<void> {
+export async function saveFile(file: ExportResult, current: () => boolean = () => true): Promise<void> {
+  if (!current()) return;
   if (native) {
     const [{ save }, { writeTextFile }] = await Promise.all([
       import("@tauri-apps/plugin-dialog"),
       import("@tauri-apps/plugin-fs"),
     ]);
+    if (!current()) return;
     const path = await save({
       defaultPath: file.filename,
       filters: [{ name: t("API 文件"), extensions: ["json", "yaml", "txt", "csv"] }],
     });
-    if (path) await writeTextFile(path, file.content);
+    if (path && current()) await writeTextFile(path, file.content);
     return;
   }
   const url = URL.createObjectURL(

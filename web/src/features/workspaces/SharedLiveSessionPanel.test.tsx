@@ -6,7 +6,7 @@ import { api, token } from "../../shared/api";
 import { setLanguage } from "../../shared/i18n";
 import { initialData } from "../../shared/model";
 import SharedLiveSessionPanel from "./SharedLiveSessionPanel";
-vi.mock("../../shared/api", () => ({ api: vi.fn(), token: vi.fn() }));
+vi.mock("../../shared/api", () => ({ native: false,  api: vi.fn(), token: vi.fn() }));
 vi.mock("../protocols/SessionEventPane", () => ({ default: () => <div>Events</div> }));
 const base = "/api/owners/owner/workspaces/shared";
 const session = { id: "a", protocol: "websocket", state: "open", url: "wss://fixture.test", received_bytes: 0, sent_bytes: 0, handshake: { status: 101, headers: [] } };

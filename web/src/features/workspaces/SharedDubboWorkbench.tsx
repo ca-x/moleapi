@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import {Button,Flex,Text} from '@radix-ui/themes';
-import {api,token} from '../../shared/api';
+import { memberApi as api, memberCredential as token } from "../../shared/memberApi";
 import {id} from '../../shared/model';
 import {t,translateCopy,useLanguage} from '../../shared/i18n';
 import {errorCopy,LocalizedError,type ErrorCopy} from '../../shared/i18n/errors';

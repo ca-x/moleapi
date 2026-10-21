@@ -2,6 +2,10 @@
 
 Development is in progress against the full capability matrix; this is not a claim of complete Apifox/Postman parity.
 
+## Native hosted collaboration and v0.2.0 preparation
+
+The native client now has online shared workspace selection, invitations and the existing role-aware member workbench through canonical hosted data. Same-ID local workspaces stay independent; disconnect/account changes fence callbacks and close reachable creator sessions. See `NATIVE-SHARED-WORKSPACES-COVERAGE.md`. Version0.2.0 packaging is being prepared; tag-specific CI, installer assets and Docker manifests must pass before stable publication. EDAS sandbox, installed GUI acceptance and the full395-capability matrix remain separate open requirements.
+
 ## Foundation implemented and verified locally
 
 - Modular Rust request engine, network policy and redirect checks, bounded interpolation, response caps, declarations/assertions and redacted history.

@@ -2382,5 +2382,17 @@
   "实际匹配：{{request}} / {{example}}": "Actual match: {{request}} / {{example}}",
   "没有可识别的匹配示例": "No identifiable matched example",
   "带请求参数的数据绑定可在下方路由调试器中测试。": "Test bindings with request parameters in the route debugger below.",
-  "结果": "Outcome"
+  "结果": "Outcome",
+  "托管连接已改变，请重新打开共享工作区。": "The hosted connection changed. Reopen the shared workspace.",
+  "托管成员请求失败 ({{value0}})": "Hosted member request failed ({{value0}})",
+  "托管成员响应格式无效。": "Invalid hosted member response.",
+  "请粘贴当前托管服务的有效工作区邀请链接。": "Paste a valid workspace invitation link for the connected hosted service.",
+  "当前托管账号：{{username}}": "Connected hosted account: {{username}}",
+  "托管邀请链接": "Hosted invitation link",
+  "粘贴工作区邀请链接": "Paste a workspace invitation link",
+  "邀请只发送给当前连接的服务；不会复制工作区到本地。": "Invitations are sent only to the connected service. Workspaces are not copied locally.",
+  "接受托管邀请": "Accept hosted invitation",
+  "断开自托管服务": "Disconnect hosted service",
+  "托管共享": "Hosted shared workspace",
+  "共享工作区列表已过期，请重新加载。": "The shared workspace list expired. Reload it."
 }

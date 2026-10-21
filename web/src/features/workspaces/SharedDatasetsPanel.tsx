@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertDialog, Button, Callout, Card, Flex, Heading, Text } from "@radix-ui/themes";
-import { api } from "../../shared/api";
+import { memberApi as api } from "../../shared/memberApi";
 import { t, useLanguage } from "../../shared/i18n";
 import type { SavedDataset, WorkspaceData } from "../../shared/types";
 import DatasetFields from "../testing/DatasetFields";

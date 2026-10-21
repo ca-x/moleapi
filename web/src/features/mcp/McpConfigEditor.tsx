@@ -26,7 +26,7 @@ export default function McpConfigEditor(props:{scope:string;open:boolean;onOpenC
   }
   async function exportCurrent(){
     if(!current()||exporting||props.exportDisabled)return;const origin=form;setExporting(true);setError("");
-    try{const request=await props.readSavedRequest(includeSecrets,name);if(!current()||latest.current.exportDisabled||formRef.current!==origin)return;await saveFile({filename:"moleapi-mcp.json",mime:"application/json",content:hostConfig(request,request.name)});}
+    try{const request=await props.readSavedRequest(includeSecrets,name);if(!current()||latest.current.exportDisabled||formRef.current!==origin)return;await saveFile({filename:"moleapi-mcp.json",mime:"application/json",content:hostConfig(request,request.name)},()=>current()&&!latest.current.exportDisabled&&formRef.current===origin);}
     catch(caught){if(current())setError(errorCopy(caught));}finally{if(current())setExporting(false);}
   }
   return <><Dialog.Root open={props.open} onOpenChange={props.onOpenChange}><Dialog.Content maxWidth="900px">

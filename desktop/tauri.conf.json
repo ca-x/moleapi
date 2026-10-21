@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "MoleAPI", "version": "0.2.0-beta.1", "identifier": "com.ca-x.moleapi",
+  "productName": "MoleAPI", "version": "0.2.0", "identifier": "com.ca-x.moleapi",
   "build": {
     "beforeDevCommand": { "script": "npm run dev", "cwd": "../web" },
     "beforeBuildCommand": { "script": "npm run build", "cwd": "../web" },

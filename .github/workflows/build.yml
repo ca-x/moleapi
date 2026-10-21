@@ -183,7 +183,7 @@ jobs:
         with:
           projectPath: desktop
           tauriScript: ../web/node_modules/.bin/tauri
-          args: --verbose --config tauri.java.json ${{ runner.os == 'Windows' && '--config tauri.windows-preview.json' || '' }} --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+          args: --verbose --config tauri.java.json --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
       - name: Restore original bundled Java in Linux AppImage
         if: runner.os == 'Linux'
         run: python scripts/repair-linux-appimage-java.py target/${{ matrix.target }}/release/bundle

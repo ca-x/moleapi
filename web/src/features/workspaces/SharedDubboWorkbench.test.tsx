@@ -7,7 +7,7 @@ import {initialData,newRequest} from '../../shared/model';
 import {setLanguage} from '../../shared/i18n';
 import {dubboConfig} from '../dubbo/model';
 import SharedDubboWorkbench from './SharedDubboWorkbench';
-vi.mock('../../shared/api',()=>({api:vi.fn(),token:vi.fn()}));
+vi.mock('../../shared/api',()=>({ native: false, api:vi.fn(),token:vi.fn()}));
 vi.mock('../dubbo/DubboWorkbench',()=>({default:()=>null}));
 vi.mock('../requests/ResponsePane',()=>({ResponsePane:({response,error}:{response:{body:string}|null;error:string})=><div>{response?.body}{error}</div>}));
 beforeEach(async()=>{await setLanguage('zh-CN');vi.mocked(token).mockReturnValue('actor');vi.mocked(api).mockReset();});afterEach(cleanup);

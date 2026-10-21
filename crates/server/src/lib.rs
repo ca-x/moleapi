@@ -854,6 +854,7 @@ async fn build(
         protected
             .route("/workspaces/{id}/sync", post(sync::sync))
             .route("/sync/status", get(sync::status))
+            .route("/sync/collaboration", post(sync::collaboration_request))
             .route(
                 "/sync/connect",
                 post(sync::connect).delete(sync::disconnect),

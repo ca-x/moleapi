@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useRef } from "react";
 import { Button, Callout, Flex, Heading, Text } from "@radix-ui/themes";
-import { token } from "../../shared/api";
+import { memberCredential as token } from "../../shared/memberApi";
 import { t, useLanguage } from "../../shared/i18n";
 import { liveError } from "../../shared/i18n/errors";
 import { sharedWorkspaceKey } from "../workspaces/workspaceSelection";

@@ -7,7 +7,7 @@ import { api, token } from "../../shared/api";
 import { setLanguage } from "../../shared/i18n";
 import WorkspaceMembersPanel from "./WorkspaceMembersPanel";
 
-vi.mock("../../shared/api", () => ({ api: vi.fn(), token: vi.fn() }));
+vi.mock("../../shared/api", () => ({ native: false,  api: vi.fn(), token: vi.fn() }));
 vi.mock("../../shared/ui", () => ({ Choice: ({ label, value, options, onChange }: { label: string; value: string; options: { value: string; label: string }[]; onChange: (value: string) => void }) => <label>{label}<select value={value} onChange={(event) => onChange(event.target.value)}>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label> }));
 
 let client: QueryClient;

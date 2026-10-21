@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertDialog, Button, Callout, Checkbox, Flex, Heading, Text, TextField } from "@radix-ui/themes";
-import { api, pickFile } from "../../shared/api";
+import { pickFile } from "../../shared/api";
+import { memberApi as api } from "../../shared/memberApi";
 import { t, useLanguage } from "../../shared/i18n";
 import { Choice, Editor, Field } from "../../shared/ui";
 import type { ImportResult, Specification, WorkspaceData } from "../../shared/types";
