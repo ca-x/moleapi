@@ -17,6 +17,28 @@ Response checks include header/regex/JSONPath/XPath/JSON Schema assertions throu
 
 These screenshots show the actual self-hosted interface with synthetic test data. The desktop shares this frontend; the screenshots do not establish native tray or installer verification.
 
+### Desktop (4 screenshots)
+
+Actual browser captures at 1440 px wide.
+
+| HTTP request and response | Request code generation |
+| --- | --- |
+|![Desktop HTTP workbench with a real JSON response](docs/images/gallery/pc-http.png) |![Desktop request code preview](docs/images/gallery/pc-code.png) |
+| **Environment variables** | **Workspace documentation** |
+|![Desktop environments and scoped variables](docs/images/gallery/pc-environments.png) |![Desktop Markdown documentation](docs/images/gallery/pc-docs.png) |
+
+### Mobile layout (4 screenshots)
+
+Responsive browser captures at 390 px wide; these are not native mobile app or physical-device screenshots.
+
+| HTTP request and response | Request code generation |
+| --- | --- |
+|![Mobile HTTP workbench with a real JSON response](docs/images/gallery/mobile-http.png) |![Mobile request code preview](docs/images/gallery/mobile-code.png) |
+| **Environment variables** | **Workspace documentation** |
+|![Mobile environment variable controls](docs/images/gallery/mobile-environments.png) |![Mobile Markdown documentation preview](docs/images/gallery/mobile-docs.png) |
+
+### More feature screenshots
+
 ![English API workbench](docs/images/workbench-en.png)
 
 ![Chinese protocol workbench](docs/images/protocol-zh-CN.png)

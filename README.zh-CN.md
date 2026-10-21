@@ -17,6 +17,28 @@ MoleAPI 使用 Rust/Axum/SeaORM、React/Radix UI/CodeMirror 和 Tauri。默认 S
 
 截图来自实际运行的自托管界面，使用合成测试数据；与桌面端共用前端，截图不代表托盘或安装包已通过实机验证。
 
+### PC 端（4 张）
+
+实际浏览器截图，视口宽度为 1440 px。
+
+| 请求与响应 | 请求代码生成 |
+| --- | --- |
+|![PC 端 HTTP 工作台与真实 JSON 响应](docs/images/gallery/pc-http.png) |![PC 端请求代码预览](docs/images/gallery/pc-code.png) |
+| **环境变量** | **工作区文档** |
+|![PC 端环境与作用域变量](docs/images/gallery/pc-environments.png) |![PC 端 Markdown 文档](docs/images/gallery/pc-docs.png) |
+
+### 手机窄屏（4 张）
+
+浏览器响应式截图，视口宽度为 390 px；不代表手机原生应用或真机截图。
+
+| 请求与响应 | 请求代码生成 |
+| --- | --- |
+|![手机窄屏 HTTP 工作台与真实 JSON 响应](docs/images/gallery/mobile-http.png) |![手机窄屏请求代码预览](docs/images/gallery/mobile-code.png) |
+| **环境变量** | **工作区文档** |
+|![手机窄屏环境变量管理](docs/images/gallery/mobile-environments.png) |![手机窄屏 Markdown 文档预览](docs/images/gallery/mobile-docs.png) |
+
+### 更多功能截图
+
 ![英文 API 工作台](docs/images/workbench-en.png)
 
 ![中文协议工作台](docs/images/protocol-zh-CN.png)
