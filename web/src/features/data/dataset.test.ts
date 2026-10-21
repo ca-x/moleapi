@@ -1,5 +1,5 @@
 import {expect,it} from "vitest";
-import {resultDatasetSource,ResultDatasetError} from "./dataset";
+import {resultDatasetSource,resultDatasetSnapshot,ResultDatasetError} from "./dataset";
 import type {Result,Cell} from "./types";
 
 function result(columns=["id","amount","active","empty","name"],rows:Cell[][]=[[{kind:"integer",value:"9007199254740993"},{kind:"decimal",value:"1.2300"},{kind:"bool",value:true},{kind:"null"},{kind:"text",value:"猫"}]]):Result {
@@ -26,4 +26,14 @@ it("rejects binary, capped cells and schema/size limits without partial rows",()
   expect(code(result(["value"],Array.from({length:101},()=>[{kind:"text",value:"x"}])))).toBe("rows");
   expect(code(result(Array.from({length:101},(_,i)=>`c${i}`),[Array.from({length:101},()=>({kind:"null"}))]))).toBe("columns");
   expect(code(result(["value"],[[{kind:"text",value:"x".repeat(1024*1024)}]]))).toBe("source_size");
+});
+
+it("creates a private snapshot and rejects name/count/aggregate boundaries",()=>{
+  const saved=resultDatasetSnapshot(result(),"  Exact rows  ",[],"new");
+  expect(saved).toMatchObject({id:"new",name:"Exact rows",secret:true,source:{format:"json"}});
+  for(const name of ["", "汉".repeat(86)]) expect(()=>resultDatasetSnapshot(result(),name,[],"new")).toThrow("name");
+  const existing=Array.from({length:20},(_,index)=>({...saved,id:String(index)}));
+  expect(()=>resultDatasetSnapshot(result(),"Rows",existing,"new")).toThrow("datasets");
+  const large={...saved,source:{format:"json" as const,source:"x".repeat(1024*1024)}};
+  expect(()=>resultDatasetSnapshot(result(),"Rows",Array.from({length:4},(_,index)=>({...large,id:String(index)})),"new")).toThrow("aggregate");
 });

@@ -12,6 +12,8 @@ import GuardDialog from "./features/workspaces/GuardDialog";
 import SaveConflictDialog from "./features/workspaces/SaveConflictDialog";
 import RequestVersionDialog from "./features/requests/RequestVersionDialog";
 import SyncConflictDialog from "./features/sync/SyncConflictDialog";
+import WorkspaceInvitationPrompt from "./features/workspaces/WorkspaceInvitationPrompt";
+import SharedWorkspaceView from "./features/workspaces/SharedWorkspaceView";
 import { WorkbenchContext } from "./features/workbench/context";
 import { useWorkbenchController } from "./features/workbench/useWorkbenchController";
 import { safeMessage } from "./shared/model";
@@ -49,18 +51,16 @@ export default function App() {
         <AuthScreen status={status.data} onLogin={login} />
       ) : (
         <WorkbenchContext.Provider value={state}>
-          <div className="app-shell">
+          <div className={`app-shell${state.selectedShared ? " shared-shell" : ""}`}>
             <WorkbenchHeader />
-            <NavigationRail />
-            <CollectionSidebar />
-            <WorkbenchMain />
-            <StatusBar />
+            {state.selectedShared ? <SharedWorkspaceView key={`${state.sharedAccountId}:${state.selectedShared.owner_id}:${state.selectedShared.workspace_id}:${state.selectedShared.role}`} accountId={state.sharedAccountId} selected={state.selectedShared} dark={dark} onClose={state.closeShared} onDirtyChange={state.setSharedDirty} /> : <><NavigationRail /><CollectionSidebar /><WorkbenchMain /><StatusBar /></>}
           </div>
           <WorkbenchDialogs />
           <GuardDialog />
           <SaveConflictDialog />
           <RequestVersionDialog />
           <SyncConflictDialog />
+          <WorkspaceInvitationPrompt key={state.accountId} accountId={state.accountId} />
         </WorkbenchContext.Provider>
       )}
     </Theme>

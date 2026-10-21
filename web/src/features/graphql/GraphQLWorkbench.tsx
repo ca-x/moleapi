@@ -4,12 +4,8 @@ import { t, useLanguage, translateCopy } from "../../shared/i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Button, Callout, Flex, Text, Dialog } from "@radix-ui/themes";
 import { RefreshCw, FileText } from "lucide-react";
-import { GraphiQL } from "graphiql";
-import { useGraphiQL, useGraphiQLActions } from "@graphiql/react";
-import "graphiql/style.css";
-import "graphiql/setup-workers/vite";
 import { buildSchema } from "graphql";
-import type { Storage } from "@graphiql/toolkit";
+import GraphQLIDE from "./GraphQLIDE";
 import { api } from "../../shared/api";
 import type {
   ApiResponse,
@@ -19,56 +15,6 @@ import type {
 import { useWorkbench } from "../workbench/context";
 import { ResponsePane } from "../requests/ResponsePane";
 import { createRustGraphQLFetcher } from "./fetcher";
-const noEditorPersistence: Storage = {
-  getItem: () => null,
-  setItem: () => {},
-  removeItem: () => {},
-  clear: () => {},
-  length: 0,
-};
-// Subscribe to Monaco changes synchronously; GraphiQL's onEdit callbacks are
-// debounced and may run after the outgoing editor has been disposed.
-function EditorBridge({ onQuery, onVariables, initialOperation }: {
-  onQuery: (value: string) => void;
-  onVariables: (value: string) => void;
-  initialOperation?: string | null;
-}) {
-  const { language } = useLanguage();
-  const queryEditor = useGraphiQL((store) => store.queryEditor);
-  const responseEditor = useGraphiQL((store) => store.responseEditor);
-  const variableEditor = useGraphiQL((store) => store.variableEditor);
-  useEffect(() => {
-    queryEditor?.updateOptions({ ariaLabel: t("GraphiQL:Operation Editor") });
-    variableEditor?.updateOptions({ ariaLabel: t("GraphiQL:Variables") });
-    responseEditor?.updateOptions({ ariaLabel: t("GraphiQL:Result Window") });
-  }, [language, queryEditor, variableEditor, responseEditor]);
-  const { run, setOperationName } = useGraphiQLActions();
-  const savedOperation = useRef(initialOperation);
-  const seededOperation = useRef(false);
-  useEffect(() => {
-    if (!queryEditor || seededOperation.current) return;
-    seededOperation.current = true;
-    if (savedOperation.current) setOperationName(savedOperation.current);
-  }, [queryEditor, setOperationName]);
-  const { graphqlRun } = useWorkbench();
-  const callbacks = useRef({ onQuery, onVariables });
-  callbacks.current = { onQuery, onVariables };
-  useEffect(() => {
-    graphqlRun.current = run;
-    return () => { if (graphqlRun.current === run) graphqlRun.current = null; };
-  }, [graphqlRun, run]);
-  useEffect(() => {
-    const listener = queryEditor?.onDidChangeModelContent(() =>
-      callbacks.current.onQuery(queryEditor.getValue()));
-    return () => listener?.dispose();
-  }, [queryEditor]);
-  useEffect(() => {
-    const listener = variableEditor?.onDidChangeModelContent(() =>
-      callbacks.current.onVariables(variableEditor.getValue()));
-    return () => listener?.dispose();
-  }, [variableEditor]);
-  return null;
-}
 export default function GraphQLWorkbench() {
   useLanguage();
   const state = useWorkbench();
@@ -328,36 +274,7 @@ export default function GraphQLWorkbench() {
         </Dialog.Root>
       )}
       <div className="graphql-ide">
-        <GraphiQL
-          key={scope}
-          fetcher={fetcher}
-          schema={builtSchema ?? null}
-          storage={noEditorPersistence}
-          maxHistoryLength={0}
-          shouldPersistHeaders={false}
-          isHeadersEditorEnabled={false}
-          forcedTheme={state.dark ? "dark" : "light"}
-          initialQuery={gql.document}
-          initialVariables={
-            gql.variables_source ?? JSON.stringify(gql.variables, null, 2)
-          }
-          onEditOperationName={(operation_name) =>
-            update({ operation_name: operation_name || null })
-          }
-        >
-          <EditorBridge
-            initialOperation={gql.operation_name}
-            onQuery={(document) => update({ document })}
-            onVariables={(variables_source) => {
-              let parsed: unknown;
-              try { parsed = JSON.parse(variables_source || "{}"); } catch { /* Preserve invalid drafts. */ }
-              update({ variables_source,
-                ...(parsed && typeof parsed === "object" && !Array.isArray(parsed)
-                  ? { variables: parsed as Record<string, unknown> } : {}),
-              });
-            }}
-          />
-        </GraphiQL>
+        <GraphQLIDE scope={scope} config={gql} schema={builtSchema} fetcher={fetcher} dark={state.dark} onChange={update} runRef={state.graphqlRun} />
       </div>
     </section>
   );

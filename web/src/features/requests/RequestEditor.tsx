@@ -439,7 +439,7 @@ export default function RequestEditor({
               <RequestScripts request={request} update={update} dark={dark} />
             </Tabs.Content>
             <Tabs.Content value="query">
-              {dubbo ? <DubboWorkbench request={request} update={update} workspaceId={cookieWorkspace} workspaceData={workspaceData} workspaceRevision={workspaceRevision} onImported={onWorkspaceImported} dirty={dirty} disabled={busy||sending}/> : <PairEditor
+              {dubbo ? <DubboWorkbench scope={dubboScope} request={request} update={update} workspaceId={cookieWorkspace} workspaceData={workspaceData} workspaceRevision={workspaceRevision} onImported={onWorkspaceImported} dirty={dirty} disabled={busy||sending}/> : <PairEditor
                 rows={request.query}
                 onChange={(query) => update({ query })}
                 keyLabel={t("参数名")}

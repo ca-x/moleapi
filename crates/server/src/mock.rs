@@ -13,6 +13,12 @@ use axum::{
 };
 use rand::Rng;
 use serde::Deserialize;
+#[derive(Clone, serde::Serialize)]
+pub(crate) struct RoutedSelection {
+    pub request_id: String,
+    pub example_id: String,
+    pub outcome: &'static str,
+}
 #[derive(Clone)]
 pub(crate) struct SavedExample;
 #[derive(Clone)]
@@ -26,7 +32,7 @@ pub struct ValidateLinkedSchema {
     request_id: String,
     specification_id: String,
     pointer: String,
-    expected_revision: i64,
+    pub(crate) expected_revision: i64,
 }
 
 pub async fn validate_linked_schema(
@@ -236,7 +242,30 @@ pub async fn dispatch(
     OriginalUri(uri): OriginalUri,
     incoming: Request,
 ) -> Result<axum::response::Response, ApiError> {
-    serve_routed(&s, &owner.0, &id, &path, &uri, incoming, None).await
+    serve_routed(&s, &owner.0, &id, &path, &uri, incoming, None, None).await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn dispatch_at_revision(
+    s: &AppState,
+    owner: &str,
+    workspace: &str,
+    path: &str,
+    uri: &axum::http::Uri,
+    incoming: Request,
+    revision: i64,
+) -> Result<axum::response::Response, ApiError> {
+    serve_routed(
+        s,
+        owner,
+        workspace,
+        path,
+        uri,
+        incoming,
+        None,
+        Some(revision),
+    )
+    .await
 }
 
 pub(crate) async fn dispatch_for(
@@ -254,6 +283,7 @@ pub(crate) async fn dispatch_for(
         uri,
         incoming,
         Some(grant),
+        None,
     )
     .await
 }
@@ -267,6 +297,7 @@ async fn serve_routed(
     uri: &axum::http::Uri,
     incoming: Request,
     grant: Option<&mock_public::PublicGrant>,
+    expected_revision: Option<i64>,
 ) -> Result<axum::response::Response, ApiError> {
     let (parts, body) = incoming.into_parts();
     check_uri_budget(uri)?;
@@ -274,6 +305,9 @@ async fn serve_routed(
         .await
         .map_err(|_| ApiError::bad("Mock request body exceeds 1 MiB"))?;
     let w = owned(s, owner, id).await?;
+    if expected_revision.is_some_and(|revision| revision != w.revision) {
+        return Err(ApiError::conflict("Workspace changed before Mock routing"));
+    }
     if let Some(grant) = grant
         && !mock_public::request_matches(&w, &grant.share)?
     {
@@ -443,7 +477,14 @@ async fn serve_routed(
     if let Some(grant) = grant {
         mock_public::still_active(s, grant).await?;
     }
-    result
+    result.map(|mut response| {
+        response.extensions_mut().insert(RoutedSelection {
+            request_id: request.id.clone(),
+            example_id: example.id.clone(),
+            outcome,
+        });
+        response
+    })
 }
 
 async fn reject_after_owner(

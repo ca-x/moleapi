@@ -4,55 +4,18 @@ import { Badge, Button, Card, Checkbox, Dialog, Flex, Select, Text, TextArea, Te
 import { Trash2 } from "lucide-react";
 import { api, native, previewMock, token } from "../../shared/api";
 import { safeMessage } from "../../shared/model";
-import { Editor, Field, PairEditor, ToolButton } from "../../shared/ui";
+import { Editor, Field, ToolButton } from "../../shared/ui";
 import type { RequestSpec, SavedDataset, Specification } from "../../shared/types";
 import MockCallActivity from "./MockCallActivity";
 import MockPublicShares from "./MockPublicShares";
 import {openapiMockChoices} from "./openapiMockChoices";
+import MockTrafficControls from "./MockTrafficControls";
+import SchemaEditorDialog from "./MockSchemaDialog";
+import MockMatchingEditor from "./MockMatchingEditor";
+import MockScriptEditor from "./MockScriptEditor";
+import { mockRouteInfo } from "./mockRouteInfo";
+import MockDataEditor from "./MockDataEditor";
 
-function invalidSchemaInput(source:string):boolean {
-  if(new TextEncoder().encode(source).length>256*1024)return true;
-  try { const value=JSON.parse(source); return !value||typeof value!=="object"||Array.isArray(value); }
-  catch { return true; }
-}
-
-function SchemaEditorDialog({schema,dark,onCommit}:{schema:string;dark:boolean;onCommit:(schema:string)=>void}) {
-  const [open,setOpen]=useState(false);
-  const [draft,setDraft]=useState(schema);
-  return <Dialog.Root open={open} onOpenChange={next=>{if(next)setDraft(schema);setOpen(next);}}>
-    <Dialog.Trigger><Button variant="soft" color="gray">{t("编辑 Mock JSON Schema")}</Button></Dialog.Trigger>
-    <Dialog.Content maxWidth="min(720px, calc(100vw - 24px))" style={{maxHeight:"calc(100dvh - 24px)",overflowY:"auto"}}>
-      <Dialog.Title>{t("Mock JSON Schema")}</Dialog.Title>
-      <Dialog.Description>{t("保存后预览；支持基本类型、oneOf/anyOf、对象 allOf、可空类型、元组和本地 $defs 引用。静态正文保留。")}</Dialog.Description>
-      <Editor label={t("Mock JSON Schema")} value={draft} onChange={setDraft} dark={dark} language="json" height="320px" />
-      {invalidSchemaInput(draft) && <Text role="alert" size="1" color="red">{t("Schema 必须是 256 KiB 内的 JSON 对象；保存时会检查支持的规则。")}</Text>}
-      <Flex justify="end" mt="4"><Dialog.Close><Button variant="soft" color="gray" disabled={invalidSchemaInput(draft)} onClick={()=>onCommit(draft)}>{t("完成")}</Button></Dialog.Close></Flex>
-    </Dialog.Content>
-  </Dialog.Root>;
-}
-type DataBinding=NonNullable<RequestSpec["examples"][number]["mock_data"]>;
-
-function MockDataEditor({binding,datasets,onChange}:{binding:DataBinding;datasets:SavedDataset[];onChange:(binding:DataBinding)=>void}) {
-  const dataset=datasets.find(item=>item.id===binding.dataset_id);
-  const views=dataset?.views?.filter(view=>!!view.sql)??[];
-  return <fieldset className="mock-data-editor"><legend>{t("数据驱动 Mock")}</legend>
-    <Field label={t("保存的数据集")}><Select.Root value={dataset?.id??""} onValueChange={dataset_id=>{
-      const next=datasets.find(item=>item.id===dataset_id);
-      const view_id=next?.views?.find(view=>!!view.sql)?.id??"";
-      onChange({...binding,dataset_id,view_id});
-    }}><Select.Trigger aria-label={t("保存的数据集")} placeholder={t("数据集不可用")}/><Select.Content>{datasets.filter(item=>item.views?.some(view=>!!view.sql)).map(item=><Select.Item key={item.id} value={item.id}>{item.name}</Select.Item>)}</Select.Content></Select.Root></Field>
-    <Field label={t("只读数据视图")}><Select.Root value={views.some(view=>view.id===binding.view_id)?binding.view_id:""} onValueChange={view_id=>onChange({...binding,view_id})}><Select.Trigger aria-label={t("只读数据视图")} placeholder={t("视图不可用")}/><Select.Content>{views.map(view=><Select.Item key={view.id} value={view.id}>{view.name}</Select.Item>)}</Select.Content></Select.Root></Field>
-    {(!dataset||!views.some(view=>view.id===binding.view_id))&&<Text role="alert" size="1" color="red">{t("所选数据集或只读视图已不可用。")}</Text>}
-    <Field label={t("数据响应形状")}><Select.Root value={binding.shape} onValueChange={shape=>onChange({...binding,shape:shape as DataBinding["shape"]})}><Select.Trigger aria-label={t("数据响应形状")}/><Select.Content><Select.Item value="rows">{t("所有匹配行")}</Select.Item><Select.Item value="first">{t("第一行")}</Select.Item></Select.Content></Select.Root></Field>
-    <Text size="1" color="gray">{t("参数按顺序传入视图 SQL 的 ? 占位符；重复或敏感值会被拒绝。")}</Text>
-    {binding.parameters.map((parameter,index)=><div className="mock-data-parameter" key={index}>
-      <Select.Root value={parameter.source} onValueChange={source=>onChange({...binding,parameters:binding.parameters.map((item,position)=>position===index?{...item,source:source as DataBinding["parameters"][number]["source"]}:item)})}><Select.Trigger aria-label={`${t("参数来源")} ${index+1}`}/><Select.Content><Select.Item value="path">{t("路径变量")}</Select.Item><Select.Item value="query">{t("查询参数")}</Select.Item><Select.Item value="header">{t("请求头")}</Select.Item></Select.Content></Select.Root>
-      <TextField.Root aria-label={`${t("参数名")} ${index+1}`} value={parameter.name} maxLength={128} onChange={event=>onChange({...binding,parameters:binding.parameters.map((item,position)=>position===index?{...item,name:event.target.value}:item)})}/>
-      <Button variant="soft" color="red" onClick={()=>onChange({...binding,parameters:binding.parameters.filter((_,position)=>position!==index)})}>{t("移除参数")}</Button>
-    </div>)}
-    <Button variant="soft" disabled={binding.parameters.length>=16} onClick={()=>onChange({...binding,parameters:[...binding.parameters,{source:"query",name:""}]})}>{t("添加视图参数")}</Button>
-  </fieldset>;
-}
 export default function ExamplesEditor({
   request,
   update,
@@ -99,14 +62,7 @@ export default function ExamplesEditor({
       return merged;
     })});
   };
-  let routePath="";
-  let routeHasQuery=request.query.some(row=>row.enabled);
-  try{
-    const savedUrl=new URL(request.url);
-    routePath=savedUrl.pathname.replace(/%7B/gi,"{").replace(/%7D/gi,"}");
-    routeHasQuery=routeHasQuery||savedUrl.search!=="";
-    if(routePath.split("/").some(segment=>/[{}]/.test(segment)&&!/^[{][A-Za-z_][A-Za-z0-9_]{0,63}[}]$/.test(segment)))routePath="";
-  }catch{routePath="";}
+  const { path: routePath, hasSavedQuery: routeHasQuery } = mockRouteInfo(request);
   const previewExample=(exampleId:string)=>{
     if(!workspaceId||dirty)return;
     const scope=`${workspaceId}/${request.id}/${exampleId}`;
@@ -162,28 +118,7 @@ export default function ExamplesEditor({
               </ToolButton>
             </Flex>
           </Flex>
-          <Field label={t("Mock 延迟（毫秒）")} hint={t("0 表示立即响应；最多等待 30000 毫秒。")}><TextField.Root type="number" min="0" max="30000" step="1" value={example.delay_ms??0} onChange={event=>{
-            const value=Number(event.target.value);
-            if(Number.isFinite(value))patchExample(example.id,{delay_ms:Math.min(30_000,Math.max(0,Math.round(value)))});
-          }}/></Field>
-          <Field label={t("故障比例（%）")} hint={t("0 表示关闭；命中时返回指定的 5xx 状态码。")}>
-            <TextField.Root type="number" min="0" max="100" step="1" value={example.fault_rate_percent??0} onChange={event=>{
-              const value=Number(event.target.value);
-              if(Number.isFinite(value))patchExample(example.id,{fault_rate_percent:Math.min(100,Math.max(0,Math.round(value)))});
-            }}/>
-          </Field>
-          <Field label={t("故障状态码（5xx）")} hint={t("仅用于模拟故障；响应正文固定且不包含保存的示例数据。")}>
-            <TextField.Root type="number" min="500" max="599" step="1" value={example.fault_status??503} onChange={event=>{
-              const value=Number(event.target.value);
-              if(Number.isFinite(value))patchExample(example.id,{fault_status:Math.min(599,Math.max(500,Math.round(value)))});
-            }}/>
-          </Field>
-          <Field label={t("每分钟请求上限")} hint={t("0 表示关闭；滑动 60 秒内超过上限立即返回 429，最多 1000 次。")}>
-            <TextField.Root type="number" min="0" max="1000" step="1" value={example.rate_limit_per_minute??0} onChange={event=>{
-              const value=Number(event.target.value);
-              if(Number.isFinite(value))patchExample(example.id,{rate_limit_per_minute:Math.min(1000,Math.max(0,Math.round(value)))});
-            }}/>
-          </Field>
+          <MockTrafficControls example={example} onChange={(patch) => patchExample(example.id, patch)} />
           <Editor value={example.body} readOnly dark={dark} height="150px" />
           {asyncMock&&<Text as="label" size="2"><Checkbox checked={!!example.mock_data} onCheckedChange={checked=>{
             if(checked!==true){patchExample(example.id,{mock_data:undefined});return;}
@@ -231,21 +166,13 @@ export default function ExamplesEditor({
           {workspaceId && <Text as="p" size="1" color="gray" style={{overflowWrap:"anywhere"}}>{t("Mock 地址")}: <code>{`/api/mock/${encodeURIComponent(workspaceId)}/${encodeURIComponent(request.id)}/${encodeURIComponent(example.id)}`}</code></Text>}
           {workspaceId && routePath && <Text as="p" size="1" color="gray" style={{overflowWrap:"anywhere"}}>{t("匹配路由")}: <code>{`${request.method} /api/mocks/${encodeURIComponent(workspaceId)}${routePath}`}</code></Text>}
           {workspaceId && !routePath && <Text size="1" color="gray">{t("Mock 匹配路由需要字面量 HTTP URL；路径变量使用单层 {name}。")}</Text>}
-          {workspaceId && <Button variant="soft" color="gray" disabled={dirty||busy!==""||!!example.mock_data?.parameters.length} loading={busy===`${workspaceId}/${request.id}/${example.id}`} onClick={()=>previewExample(example.id)}>{t("预览 Mock")}</Button>}
-          {!!example.mock_data?.parameters.length&&<Text size="1" color="gray">{t("带请求参数的数据绑定请通过匹配路由调用。")}</Text>}
+          {workspaceId && <Button variant="soft" color="gray" disabled={dirty||busy!==""||!!example.mock_data?.parameters?.length} loading={busy===`${workspaceId}/${request.id}/${example.id}`} onClick={()=>previewExample(example.id)}>{t("预览 Mock")}</Button>}
+          {!!example.mock_data?.parameters?.length&&<Text size="1" color="gray">{t("带请求参数的数据绑定请通过匹配路由调用。")}</Text>}
           {dirty && <Text size="1" color="gray">{t("先保存工作区，再预览 Mock。")}</Text>}
           {error===`${workspaceId}/${request.id}/${example.id}` && <Text role="alert" size="1" color="red">{t("Mock 预览失败，请检查脚本与数据源。")}</Text>}
           {!dirty && preview?.scope===`${workspaceId}/${request.id}/${example.id}` && preview.fingerprint===JSON.stringify(example) && <Field label={t("Mock 预览结果")} hint={`${t("状态码")}: ${preview.status}`}><TextArea readOnly rows={5} value={preview.body.slice(0,64*1024)} /></Field>}
-          {!example.mock_match ? <Button variant="soft" color="gray" onClick={()=>patchExample(example.id,{mock_match:{priority:0,query:[],headers:[],body:""}})}>{t("添加 Mock 匹配条件")}</Button> : <div>
-            <Text size="1" color="gray">{t("匹配条件全部满足时选中此示例；空正文只匹配无正文请求。")}</Text>
-            <Field label={t("匹配优先级")}><TextField.Root type="number" min="0" max="100" value={example.mock_match.priority} onChange={event=>patchExample(example.id,{mock_match:{...example.mock_match!,priority:Number(event.target.value)}})}/></Field>
-            <Field label={t("查询参数条件")}><PairEditor rows={example.mock_match.query??[]} onChange={query=>patchExample(example.id,{mock_match:{...example.mock_match!,query}})} keyLabel={t("参数名")} valueLabel={t("参数值")} secrets/></Field>
-            <Field label={t("请求头条件")}><PairEditor rows={example.mock_match.headers??[]} onChange={headers=>patchExample(example.id,{mock_match:{...example.mock_match!,headers}})} keyLabel="Header" valueLabel={t("值")} secrets/></Field>
-            <Text as="label" size="2"><Checkbox checked={example.mock_match.body!==undefined} onCheckedChange={checked=>patchExample(example.id,{mock_match:{...example.mock_match!,body:checked===true?"":undefined}})}/>{t("匹配正文")}</Text>
-            {example.mock_match.body!==undefined && <Field label={t("精确匹配正文")}><TextArea value={example.mock_match.body} onChange={event=>patchExample(example.id,{mock_match:{...example.mock_match!,body:event.target.value}})} rows={3}/></Field>}
-            <Button variant="ghost" color="red" onClick={()=>patchExample(example.id,{mock_match:undefined})}>{t("移除匹配条件")}</Button>
-          </div>}
-          {asyncMock ? <Field label={t("Mock 实现脚本")} hint={t("使用 pm.mock 设置状态、响应头与正文；可通过 pm.datasets(ID) 查询工作区数据集。") }><Editor label={t("Mock 实现脚本")} value={example.mock_script??""} onChange={mock_script=>{setPreview(null);setError("");update({examples:request.examples.map(item=>item.id===example.id?{...item,mock_script}:item)});}} dark={dark} language="javascript" height="180px"/></Field> : <Text size="1" color="gray">{t("在工作区设置中启用 v2 脚本模式后可编辑动态 Mock。")}</Text>}
+          <MockMatchingEditor rule={example.mock_match} onChange={(mock_match) => patchExample(example.id, { mock_match })} />
+          <MockScriptEditor script={example.mock_script ?? ""} enabled={!!asyncMock} dark={dark} onChange={(mock_script) => { setPreview(null); setError(""); update({ examples: request.examples.map((item) => item.id === example.id ? { ...item, mock_script } : item) }); }} />
         </Card>
       ))}
       {workspaceId&&!dirty&&<MockCallActivity workspaceId={workspaceId} requestId={request.id}/>}

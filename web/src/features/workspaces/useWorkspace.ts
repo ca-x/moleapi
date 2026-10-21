@@ -87,6 +87,7 @@ export function useWorkspace(authenticated: boolean, accountId = "local") {
     if (item && stateRef.current.draft?.id !== item.id) installWorkspace(item);
   }, [
     selectedId,
+    state.draft?.id,
     workspaces.data,
     authenticated,
     installWorkspace,

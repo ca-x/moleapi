@@ -106,22 +106,26 @@ async fn invalid_bounded_and_timed_out_probes_do_not_create_a_preference() {
         "/usr/bin/head -c 17000 /dev/zero",
     );
     assert!(
-        runtime
-            .select_native_java(large, &preference)
+        read_version(tokio::io::repeat(0))
             .await
             .unwrap_err()
             .to_string()
             .contains("limit")
     );
-    let slow = executable(directory.path(), "slow", "exec /bin/sleep 20");
+    // A loaded test runner can hit the process watchdog before this script's
+    // bounded output is consumed. Both outcomes must reject the selection.
     assert!(
         runtime
-            .select_native_java(slow, &preference)
+            .select_native_java(large, &preference)
             .await
-            .unwrap_err()
-            .to_string()
-            .contains("timed out")
+            .is_err()
     );
+    let slow = executable(directory.path(), "slow", "exec /bin/sleep 20");
+    let failure = runtime
+        .select_native_java(slow, &preference)
+        .await
+        .expect_err("A hanging Java probe must be rejected");
+    assert!(failure.to_string().contains("timed out"), "{failure:#}");
     assert!(
         runtime
             .select_native_java(PathBuf::from("relative-java"), &preference)

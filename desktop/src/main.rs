@@ -84,7 +84,8 @@ async fn api(
         .await
         .map_err(|e| e.to_string())?;
     let status = response.status().as_u16();
-    let bytes = to_bytes(response.into_body(), 30 * 1024 * 1024)
+    // A bounded 5 MiB raw Mock body can JSON-escape to 30 MiB plus metadata.
+    let bytes = to_bytes(response.into_body(), 32 * 1024 * 1024)
         .await
         .map_err(|e| e.to_string())?;
     let body = if bytes.is_empty() {

@@ -21,6 +21,11 @@ export function useAuth() {
         sessionStorage.removeItem("moleapi_token");
         setAuthenticated(false);
         client.removeQueries({ queryKey: ["workspaces"] });
+        client.removeQueries({ queryKey: ["shared-workspaces"] });
+        client.removeQueries({ queryKey: ["shared-workspace"] });
+        client.removeQueries({ queryKey: ["shared-history"] });
+        client.removeQueries({ queryKey: ["shared-reports"] });
+        client.removeQueries({ queryKey: ["shared-mock-calls"] });
         client.removeQueries({ queryKey: ["workspace-versions"] });
       }
     };
@@ -45,6 +50,11 @@ export function useAuth() {
     sessionStorage.removeItem("moleapi_token");
     setAuthenticated(false);
     client.removeQueries({ queryKey: ["workspaces"] });
+    client.removeQueries({ queryKey: ["shared-workspaces"] });
+    client.removeQueries({ queryKey: ["shared-workspace"] });
+    client.removeQueries({ queryKey: ["shared-history"] });
+    client.removeQueries({ queryKey: ["shared-reports"] });
+    client.removeQueries({ queryKey: ["shared-mock-calls"] });
     client.removeQueries({ queryKey: ["workspace-versions"] });
   };
   return {

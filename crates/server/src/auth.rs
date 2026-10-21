@@ -63,6 +63,21 @@ pub async fn status(State(state): State<AppState>) -> Result<Json<serde_json::Va
         serde_json::json!({"mode":if state.local {"desktop"} else {"server"},"setup_required":!state.local && setup_required(&state).await?,"registration_enabled":state.config.allow_registration}),
     ))
 }
+pub async fn me(
+    State(state): State<AppState>,
+    Extension(identity): Extension<Identity>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    if state.local {
+        return Ok(Json(serde_json::json!({"id":"local","username":"local"})));
+    }
+    let account = account::Entity::find_by_id(&identity.0)
+        .one(&state.db)
+        .await?
+        .ok_or_else(ApiError::not_found)?;
+    Ok(Json(
+        serde_json::json!({"id":account.id,"username":account.username}),
+    ))
+}
 async fn new_session(
     state: &AppState,
     owner: &str,
@@ -351,6 +366,7 @@ mod tests {
             oauth2_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(8)),
             oauth2_flows: std::sync::Arc::default(),
             protocol_sessions: moleapi_protocols::SessionManager::new(),
+            member_protocol_sessions: std::sync::Arc::default(),
             a2a_sources: std::sync::Arc::new(crate::a2a::Sources::default()),
             webhooks: std::sync::Arc::new(crate::webhooks::Hub::default()),
             protocol_admission: std::sync::Arc::new(

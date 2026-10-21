@@ -268,7 +268,7 @@ pub fn validate_request(r: &RequestSpec, templates: bool) -> Result<()> {
     } else {
         ensure!(r.body.len() <= MAX_BODY, "Request body exceeds 5 MiB");
     }
-    if !(templates && r.protocol.is_a2a() && r.url.is_empty())
+    if !(templates && (r.protocol.is_a2a() || r.protocol.is_soap()) && r.url.is_empty())
         && !r.protocol.is_mqtt()
         && !r.protocol.is_tcp()
         && !r.protocol.is_dubbo()

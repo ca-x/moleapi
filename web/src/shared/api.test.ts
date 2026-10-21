@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api, ApiError, previewMock } from "./api";
+import { api, ApiError, previewMock, previewSharedMock } from "./api";
 afterEach(() => {
   sessionStorage.clear();
   vi.unstubAllGlobals();
@@ -12,6 +12,27 @@ it("previews an intentional 404 Mock body while rejecting an expired session",as
   expect(await previewMock("/api/mock/w/r/e")).toEqual({status:404,body:"saved example not found"});
   expect(fetcher).toHaveBeenCalledWith("/api/mock/w/r/e",{headers:{Authorization:"Bearer owner"}});
   await expect(previewMock("/api/mock/w/r/e")).rejects.toBeInstanceOf(ApiError);
+});
+it("keeps a saved shared Mock 401 as a preview but rejects an unmarked denial", async () => {
+  sessionStorage.setItem("moleapi_token", "member");
+  const fetcher = vi.fn()
+    .mockResolvedValueOnce({ status: 401, headers: { get: () => "saved-example" }, text: async () => "intentional-auth-example" })
+    .mockResolvedValueOnce({ status: 404, headers: { get: () => null }, text: async () => '{"error":"Access revoked"}' })
+    .mockResolvedValueOnce({ status: 401, headers: { get: () => null }, text: async () => '{"error":"Expired"}' });
+  vi.stubGlobal("fetch", fetcher);
+  const expired = vi.fn();
+  window.addEventListener("moleapi:unauthorized", expired);
+  const path = "/api/owners/owner/workspaces/workspace/mock/request/example";
+  try {
+    expect(await previewSharedMock(path)).toEqual({ status: 401, body: "intentional-auth-example" });
+    expect(expired).not.toHaveBeenCalled();
+    await expect(previewSharedMock(path)).rejects.toMatchObject({ status: 404, message: "Access revoked" });
+    expect(expired).not.toHaveBeenCalled();
+    await expect(previewSharedMock(path)).rejects.toMatchObject({ status: 401 });
+    expect(expired).toHaveBeenCalledTimes(1);
+  } finally {
+    window.removeEventListener("moleapi:unauthorized", expired);
+  }
 });
 describe("hosted session expiry", () => {
   it("reports current-session expiry so the app can show login while retaining its draft", async () => {

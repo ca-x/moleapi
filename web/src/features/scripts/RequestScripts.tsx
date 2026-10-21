@@ -51,7 +51,7 @@ export default function RequestScripts({
         </Tabs.Content>
       </Tabs.Root>
       <Text size="1" color="gray">
-        {["grpc", "socketio", "mqtt"].includes(request.protocol?.kind || "")
+        {["grpc", "socketio", "mqtt", "tcp"].includes(request.protocol?.kind || "")
           ? t("请求前示例：pm.environment.set('token', '本地值');")
           : t("示例：pm.test('状态为200', () => pm.response.to.have.status(200));")}
       </Text>

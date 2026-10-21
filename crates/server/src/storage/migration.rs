@@ -9,6 +9,7 @@ impl MigratorTrait for Migrator {
             Box::new(Initial),
             Box::new(ScheduledDueIndex),
             Box::new(AccessTokens),
+            Box::new(WorkspaceCollaboration),
         ]
     }
 }
@@ -138,6 +139,202 @@ impl MigrationName for AccessTokens {
         "m20261010_personal_access_tokens"
     }
 }
+
+struct WorkspaceCollaboration;
+impl MigrationName for WorkspaceCollaboration {
+    fn name(&self) -> &str {
+        "m20261019_workspace_collaboration"
+    }
+}
+#[async_trait::async_trait]
+impl MigrationTrait for WorkspaceCollaboration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        let mut members = Table::create();
+        members
+            .table(Alias::new("workspace_memberships"))
+            .col(
+                ColumnDef::new(Alias::new("id"))
+                    .string_len(128)
+                    .not_null()
+                    .primary_key(),
+            )
+            .col(
+                ColumnDef::new(Alias::new("owner_id"))
+                    .string_len(64)
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(Alias::new("workspace_id"))
+                    .string_len(128)
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(Alias::new("member_id"))
+                    .string_len(64)
+                    .not_null(),
+            )
+            .col(ColumnDef::new(Alias::new("role")).string_len(16).not_null())
+            .col(
+                ColumnDef::new(Alias::new("generation"))
+                    .string_len(36)
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(Alias::new("revision"))
+                    .big_integer()
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(Alias::new("created_at"))
+                    .big_integer()
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(Alias::new("updated_at"))
+                    .big_integer()
+                    .not_null(),
+            );
+        if manager.get_database_backend() == DbBackend::MySql {
+            members.extra("ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin");
+        }
+        manager.create_table(members).await?;
+        manager
+            .create_index(
+                Index::create()
+                    .name("workspace_memberships_owner_workspace_member")
+                    .table(Alias::new("workspace_memberships"))
+                    .col(Alias::new("owner_id"))
+                    .col(Alias::new("workspace_id"))
+                    .col(Alias::new("member_id"))
+                    .unique()
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .create_index(
+                Index::create()
+                    .name("workspace_memberships_member")
+                    .table(Alias::new("workspace_memberships"))
+                    .col(Alias::new("member_id"))
+                    .to_owned(),
+            )
+            .await?;
+
+        let mut invites = Table::create();
+        invites
+            .table(Alias::new("workspace_invitations"))
+            .col(
+                ColumnDef::new(Alias::new("id"))
+                    .string_len(128)
+                    .not_null()
+                    .primary_key(),
+            )
+            .col(
+                ColumnDef::new(Alias::new("owner_id"))
+                    .string_len(64)
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(Alias::new("workspace_id"))
+                    .string_len(128)
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(Alias::new("token_digest"))
+                    .string_len(64)
+                    .not_null(),
+            )
+            .col(ColumnDef::new(Alias::new("role")).string_len(16).not_null())
+            .col(
+                ColumnDef::new(Alias::new("created_by"))
+                    .string_len(64)
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(Alias::new("created_at"))
+                    .big_integer()
+                    .not_null(),
+            )
+            .col(
+                ColumnDef::new(Alias::new("expires_at"))
+                    .big_integer()
+                    .not_null(),
+            )
+            .col(ColumnDef::new(Alias::new("consumed_by")).string_len(64))
+            .col(ColumnDef::new(Alias::new("revoked_at")).big_integer())
+            .col(
+                ColumnDef::new(Alias::new("revision"))
+                    .big_integer()
+                    .not_null(),
+            );
+        if manager.get_database_backend() == DbBackend::MySql {
+            invites.extra("ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin");
+        }
+        manager.create_table(invites).await?;
+        manager
+            .create_index(
+                Index::create()
+                    .name("workspace_invitations_token_digest")
+                    .table(Alias::new("workspace_invitations"))
+                    .col(Alias::new("token_digest"))
+                    .unique()
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .create_index(
+                Index::create()
+                    .name("workspace_invitations_owner_workspace")
+                    .table(Alias::new("workspace_invitations"))
+                    .col(Alias::new("owner_id"))
+                    .col(Alias::new("workspace_id"))
+                    .to_owned(),
+            )
+            .await?;
+        let schema = sea_orm::Schema::new(manager.get_database_backend());
+        let mut audit =
+            schema.create_table_from_entity(crate::entities::workspace_audit_event::Entity);
+        if manager.get_database_backend() == DbBackend::MySql {
+            audit.extra("ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin");
+        }
+        manager.create_table(audit).await?;
+        manager
+            .create_index(
+                Index::create()
+                    .name("workspace_audit_owner_workspace_time")
+                    .table(Alias::new("workspace_audit_events"))
+                    .col(Alias::new("owner_id"))
+                    .col(Alias::new("workspace_id"))
+                    .col(Alias::new("created_at"))
+                    .to_owned(),
+            )
+            .await?;
+        Ok(())
+    }
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(
+                Table::drop()
+                    .table(Alias::new("workspace_audit_events"))
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .drop_table(
+                Table::drop()
+                    .table(Alias::new("workspace_invitations"))
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .drop_table(
+                Table::drop()
+                    .table(Alias::new("workspace_memberships"))
+                    .to_owned(),
+            )
+            .await
+    }
+}
 #[async_trait::async_trait]
 impl MigrationTrait for AccessTokens {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
@@ -168,7 +365,7 @@ impl MigrationTrait for AccessTokens {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sea_orm::{Database, EntityTrait};
+    use sea_orm::{ConnectionTrait, Database, EntityTrait, Statement};
     #[tokio::test]
     async fn access_token_upgrade_preserves_existing_accounts_sessions_and_version_history() {
         let db = Database::connect("sqlite::memory:").await.unwrap();
@@ -210,7 +407,7 @@ mod tests {
         );
         assert_eq!(
             Migrator::get_applied_migrations(&db).await.unwrap().len(),
-            3
+            4
         );
         assert!(
             crate::entities::access_token::Entity::find()
@@ -222,7 +419,59 @@ mod tests {
         Migrator::up(&db, None).await.unwrap();
         assert_eq!(
             Migrator::get_applied_migrations(&db).await.unwrap().len(),
-            3
+            4
+        );
+    }
+
+    #[tokio::test]
+    async fn membership_upgrade_keeps_canonical_workspace_and_adds_indexed_tables() {
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        Migrator::up(&db, Some(3)).await.unwrap();
+        crate::entities::document::ActiveModel {
+            id: Set("owner:w".into()),
+            owner: Set("owner".into()),
+            kind: Set("workspace".into()),
+            ref_id: Set("w".into()),
+            revision: Set(7),
+            payload: Set("{\"id\":\"w\",\"revision\":7}".into()),
+            updated_at: Set("now".into()),
+        }
+        .insert(&db)
+        .await
+        .unwrap();
+        Migrator::up(&db, None).await.unwrap();
+        assert_eq!(
+            Migrator::get_applied_migrations(&db).await.unwrap().len(),
+            4
+        );
+        assert_eq!(
+            crate::entities::document::Entity::find_by_id("owner:w")
+                .one(&db)
+                .await
+                .unwrap()
+                .unwrap()
+                .payload,
+            "{\"id\":\"w\",\"revision\":7}"
+        );
+        for table in [
+            "workspace_memberships",
+            "workspace_invitations",
+            "workspace_audit_events",
+        ] {
+            let row = db
+                .query_one(Statement::from_string(
+                    DbBackend::Sqlite,
+                    format!("SELECT COUNT(*) AS count FROM {table}"),
+                ))
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(row.try_get::<i64>("", "count").unwrap(), 0);
+        }
+        Migrator::up(&db, None).await.unwrap();
+        assert_eq!(
+            Migrator::get_applied_migrations(&db).await.unwrap().len(),
+            4
         );
     }
 }

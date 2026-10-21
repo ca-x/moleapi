@@ -12,9 +12,10 @@ use axum::{
 use moleapi_core::{
     DubboArgument, DubboConfig, NetworkPolicy, Protocol, RequestSpec, Specification, Workspace,
 };
+use moleapi_protocols::dubbo::DubboMetadataPreview;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
-use std::collections::{HashMap, HashSet};
+use serde_json::{Value, json};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -35,12 +36,12 @@ pub(crate) async fn capability(State(state): State<AppState>) -> Json<Capability
     })
 }
 
-async fn read_metadata(
+pub(crate) async fn read_metadata(
     config: &DubboConfig,
     policy: NetworkPolicy,
     timeout: Duration,
 ) -> anyhow::Result<moleapi_protocols::dubbo::DubboMetadataPreview> {
-    if url::Url::parse(&config.metadata_center_url)?.scheme() == "nacos" {
+    let preview = if url::Url::parse(&config.metadata_center_url)?.scheme() == "nacos" {
         moleapi_protocols::dubbo::preview_nacos_metadata(
             &config.metadata_center_url,
             config,
@@ -59,7 +60,55 @@ async fn read_metadata(
             timeout,
         )
         .await
+    }?;
+    screen_metadata(
+        &preview,
+        &preview.private_auth_values.iter().cloned().collect(),
+    )
+    .map_err(|error| anyhow::anyhow!(error.message))?;
+    Ok(preview)
+}
+
+pub(crate) fn screen_metadata(
+    preview: &DubboMetadataPreview,
+    private: &BTreeSet<String>,
+) -> Result<(), ApiError> {
+    let redactor = crate::privacy::Redactor::new(private)?;
+    let raw: Value = serde_json::from_str(&preview.raw_document)
+        .map_err(|_| ApiError::bad("Invalid Dubbo metadata source"))?;
+    moleapi_core::validate_mcp_json(&raw)
+        .map_err(|_| ApiError::bad("Dubbo metadata source structure exceeds limit"))?;
+    let all = serde_json::to_value(preview).map_err(|_| ApiError::internal())?;
+    let mut stack = vec![&raw, &all];
+    while let Some(value) = stack.pop() {
+        match value {
+            Value::Object(items) => {
+                for (key, value) in items {
+                    let original = json!(key);
+                    let mut text = original.clone();
+                    redactor.scrub(&mut text);
+                    if text != original {
+                        return Err(ApiError::bad(
+                            "Dubbo metadata contains private scoped values; candidate withheld",
+                        ));
+                    }
+                    stack.push(value);
+                }
+            }
+            Value::Array(items) => stack.extend(items),
+            _ => {
+                let original = json!(value.to_string());
+                let mut text = original.clone();
+                redactor.scrub(&mut text);
+                if text != original {
+                    return Err(ApiError::bad(
+                        "Dubbo metadata contains private scoped values; candidate withheld",
+                    ));
+                }
+            }
+        }
     }
+    Ok(())
 }
 
 #[derive(Deserialize)]
@@ -103,7 +152,7 @@ enum ImportAction {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct MethodChoice {
+pub(crate) struct MethodChoice {
     signature: String,
     action: ImportAction,
     #[serde(default)]
@@ -113,11 +162,11 @@ struct MethodChoice {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct MetadataImportInput {
-    request: RequestSpec,
-    collection_id: String,
-    expected_revision: i64,
-    document_sha256: String,
-    decisions: Vec<MethodChoice>,
+    pub(crate) request: RequestSpec,
+    pub(crate) collection_id: String,
+    pub(crate) expected_revision: i64,
+    pub(crate) document_sha256: String,
+    pub(crate) decisions: Vec<MethodChoice>,
 }
 
 fn signature(method: &moleapi_protocols::dubbo::DubboMetadataMethod) -> String {
@@ -216,7 +265,7 @@ pub(crate) async fn import_metadata(
     {
         return Err(ApiError::bad("Invalid metadata document digest"));
     }
-    let mut w = owned(&state, &owner.0, &workspace).await?;
+    let w = owned(&state, &owner.0, &workspace).await?;
     if w.revision != input.expected_revision {
         return Err(ApiError::conflict("Workspace revision changed"));
     }
@@ -241,7 +290,6 @@ pub(crate) async fn import_metadata(
     let Protocol::Dubbo { config } = &source.protocol else {
         return Err(ApiError::bad("Metadata import requires a Dubbo request"));
     };
-    let source = source.clone();
     let config = config.as_ref().clone();
     let policy = NetworkPolicy {
         allow_private_network: state.local || state.config.allow_private_network,
@@ -253,6 +301,53 @@ pub(crate) async fn import_metadata(
     )
     .await
     .map_err(|error| ApiError::bad(error.to_string()))?;
+    let expected_revision = input.expected_revision;
+    let (w, changed) = build_metadata_import(w, input, preview, &config)?;
+    if !changed {
+        return Ok(Json(w));
+    }
+    let mut w = w;
+    if !state.local {
+        moleapi_core::scrub_local_values(&mut w.data);
+    }
+    let w = storage::replace(&state.db, &owner.0, w, expected_revision)
+        .await?
+        .ok_or_else(|| ApiError::conflict("Workspace revision changed"))?;
+    reconcile_sessions(&state, &owner.0, &w).await;
+    Ok(Json(w))
+}
+
+pub(crate) fn build_metadata_import(
+    mut w: Workspace,
+    input: MetadataImportInput,
+    preview: moleapi_protocols::dubbo::DubboMetadataPreview,
+    read_config: &DubboConfig,
+) -> Result<(Workspace, bool), ApiError> {
+    if w.revision != input.expected_revision {
+        return Err(ApiError::conflict("Workspace revision changed"));
+    }
+    let collection = w
+        .data
+        .collections
+        .iter()
+        .find(|c| c.id == input.collection_id)
+        .ok_or_else(ApiError::not_found)?;
+    let source = collection
+        .requests
+        .iter()
+        .find(|r| r.id == input.request.id)
+        .ok_or_else(ApiError::not_found)?;
+    if source != &input.request {
+        return Err(ApiError::conflict(
+            "Save the Dubbo source request before importing metadata",
+        ));
+    }
+    moleapi_core::validate_request(source, true).map_err(|e| ApiError::bad(e.to_string()))?;
+    let Protocol::Dubbo { config } = &source.protocol else {
+        return Err(ApiError::bad("Metadata import requires a Dubbo request"));
+    };
+    let source = source.clone();
+    let config = config.as_ref().clone();
     if preview.document_sha256 != input.document_sha256 {
         return Err(ApiError::conflict(
             "Metadata definition changed after preview",
@@ -346,7 +441,7 @@ pub(crate) async fn import_metadata(
                 config.metadata_auth = None;
             }
         }
-        moleapi_core::validate_request(&generated, false)
+        moleapi_core::validate_request(&generated, true)
             .map_err(|error| ApiError::bad(error.to_string()))?;
         if matches!(choice.action, ImportAction::Replace) {
             let row = collection
@@ -364,18 +459,19 @@ pub(crate) async fn import_metadata(
         return Err(ApiError::bad("Unknown metadata method decision"));
     }
     if !changed {
-        return Ok(Json(w));
+        return Ok((w, false));
     }
-    let metadata_config_group =
-        if url::Url::parse(&config.metadata_center_url).is_ok_and(|url| url.scheme() == "nacos") {
-            if config.metadata_group.is_empty() {
-                "dubbo"
-            } else {
-                &config.metadata_group
-            }
+    let metadata_config_group = if url::Url::parse(&read_config.metadata_center_url)
+        .is_ok_and(|url| url.scheme() == "nacos")
+    {
+        if config.metadata_group.is_empty() {
+            "dubbo"
         } else {
-            ""
-        };
+            &config.metadata_group
+        }
+    } else {
+        ""
+    };
     w.data.specifications.push(Specification {
         id: specification_id,
         name: format!("Dubbo {} ({})", preview.service, preview.application),
@@ -392,14 +488,7 @@ pub(crate) async fn import_metadata(
         .to_string(),
     });
     moleapi_core::validate_workspace(&w.data).map_err(|error| ApiError::bad(error.to_string()))?;
-    if !state.local {
-        moleapi_core::scrub_local_values(&mut w.data);
-    }
-    let w = storage::replace(&state.db, &owner.0, w, input.expected_revision)
-        .await?
-        .ok_or_else(|| ApiError::conflict("Workspace revision changed"))?;
-    reconcile_sessions(&state, &owner.0, &w).await;
-    Ok(Json(w))
+    Ok((w, true))
 }
 
 #[cfg(test)]

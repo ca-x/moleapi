@@ -1,9 +1,10 @@
 import { liveError } from "./../../shared/i18n/errors";
 import { useLanguage, liveTranslation } from "../../shared/i18n";
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api, native } from "../../shared/api";
+import { applyNativeMemberStatus, beginNativeMemberChange, nativeMemberSession, subscribeNativeMember } from "../../shared/nativeMemberSession";
 import { fingerprint } from "../../shared/model";
 import type { SyncResult, SyncStatus } from "../../shared/types";
 import { hasChanges } from "../workspaces/draft";
@@ -14,9 +15,31 @@ export function useSync(
   connect: () => void,
 ) {
   useLanguage();
+  const client = useQueryClient();
+  const connectionAttempt = useRef<{ generation: number; sessionId?: string } | null>(null);
+  function connectionAttemptCurrent() {
+    const attempt = connectionAttempt.current, current = nativeMemberSession();
+    return !!attempt && (current.sessionId ? current.sessionId === attempt.sessionId : current.epoch === attempt.generation);
+  }
+  useEffect(() => {
+    if (!native) return;
+    let previous = nativeMemberSession();
+    return subscribeNativeMember(() => {
+      const current = nativeMemberSession();
+      if (current === previous) return;
+      previous = current;
+      client.removeQueries({ predicate: query => String(query.queryKey[0]).startsWith("shared-") || query.queryKey[0] === "workspace-membership" });
+      if (!current.sessionId) client.setQueryData<SyncStatus>(["sync-status"], { connected: false });
+    });
+  }, [client]);
   const sync = useQuery({
     queryKey: ["sync-status"],
-    queryFn: () => api<SyncStatus>("/api/sync/status"),
+    queryFn: async () => {
+      const origin = nativeMemberSession();
+      const status = await api<SyncStatus>("/api/sync/status");
+      if (nativeMemberSession() !== origin) return client.getQueryData<SyncStatus>(["sync-status"]) ?? { connected: false };
+      return applyNativeMemberStatus(status, origin.epoch) ? status : { connected: false };
+    },
     enabled: authenticated && native,
   });
   const [serverUrl, setServerUrl] = useState("");
@@ -25,22 +48,33 @@ export function useSync(
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncConflict, setSyncConflict] = useState<SyncResult | null>(null);
   async function connectServer() {
-    await api("/api/sync/connect", "POST", {
-      server_url: serverUrl,
-      username: serverUser,
-      password: serverPassword,
-    });
+    const attempt = { generation: nativeMemberSession().epoch + 1, sessionId: undefined as string | undefined };
+    connectionAttempt.current = attempt;
+    const generation = beginNativeMemberChange();
+    let status: SyncStatus;
+    try {
+      status = await api<SyncStatus>("/api/sync/connect", "POST", { server_url: serverUrl, username: serverUser, password: serverPassword });
+    } catch (error) { if (nativeMemberSession().epoch !== generation) return false; throw error; }
+    attempt.sessionId = status.connected ? status.session_id : undefined;
+    if (!applyNativeMemberStatus(status, generation)) return false;
+    const connected = nativeMemberSession();
+    client.setQueryData(["sync-status"], status);
     setServerPassword("");
     await sync.refetch();
+    if (nativeMemberSession() !== connected) return false;
     toast.success(liveTranslation("已连接自托管服务"));
+    return true;
   }
   async function disconnectServer() {
+    connectionAttempt.current = null;
+    const generation = beginNativeMemberChange();
     try {
       await api("/api/sync/connect", "DELETE");
-      await sync.refetch();
+      if (nativeMemberSession().epoch !== generation) return;
+      client.setQueryData<SyncStatus>(["sync-status"], { connected: false });
       toast.success(liveTranslation("已断开同步，本地数据保留"));
     } catch (error) {
-      toast.error(liveError(error));
+      if (nativeMemberSession().epoch === generation) toast.error(liveError(error));
     }
   }
   async function synchronize(resolution?: "push" | "pull") {
@@ -98,6 +132,7 @@ export function useSync(
     syncConflict,
     setSyncConflict,
     connectServer,
+    connectionAttemptCurrent,
     disconnectServer,
     synchronize,
   };

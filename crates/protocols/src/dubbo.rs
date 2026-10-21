@@ -192,6 +192,8 @@ pub struct DubboMetadataType {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct DubboMetadataPreview {
+    #[serde(skip)]
+    pub private_auth_values: Vec<String>,
     pub service: String,
     pub version: String,
     pub group: String,
@@ -437,6 +439,7 @@ fn parse_metadata_definition(
         });
     }
     Ok(DubboMetadataPreview {
+        private_auth_values: Vec::new(),
         service: config.service.clone(),
         version: config.version.clone(),
         group: config.group.clone(),
@@ -544,6 +547,7 @@ pub async fn preview_nacos_metadata(
         .timeout(deadline.saturating_duration_since(Instant::now()))
         .build()?;
     let mut listing = client.get(request_url.clone());
+    let mut private_auth_values = Vec::new();
     if let Some(auth) = &config.metadata_auth {
         let mut login_endpoint = request_url.clone();
         login_endpoint.set_path("/nacos/v1/auth/users/login");
@@ -582,6 +586,7 @@ pub async fn preview_nacos_metadata(
             !token.is_empty() && token.len() <= 4096 && token.is_ascii(),
             "Invalid Nacos metadata access token"
         );
+        private_auth_values.push(token.to_owned());
         listing = listing.bearer_auth(token);
     }
     let response = tokio::time::timeout(
@@ -598,7 +603,9 @@ pub async fn preview_nacos_metadata(
     );
     let body = bounded_nacos_body(response, MAX_INPUT, deadline).await?;
     let raw_document = String::from_utf8(body).context("Metadata definition is not UTF-8")?;
-    parse_metadata_definition(raw_document, config, application, data_id)
+    let mut preview = parse_metadata_definition(raw_document, config, application, data_id)?;
+    preview.private_auth_values = private_auth_values;
+    Ok(preview)
 }
 
 fn registry_candidate_matches(source: &str, config: &DubboConfig) -> Result<bool> {

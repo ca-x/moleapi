@@ -1,0 +1,24 @@
+# Shared dataset resource management
+
+Authority: `docs/specs/workspace-collaboration.md`, canonical member resource editing and Mock dataset binding parity.
+
+1. Extract controlled dataset metadata/source/query/view fields and edit conversion/validation helpers from owned SavedDatasets. Keep owned persistence in its wrapper. Add optional preview callback to RunnerDataset so shared use never reaches the owner-only preview endpoint; shared resource forms omit unrelated iteration controls.
+2. Add `POST /api/owners/{owner}/workspaces/{workspace}/dataset/preview` for editor/admin sessions with expected canonical revision. Reuse bounded DatasetSource parsing/owner preview, content-free actor admission audit and final membership/revision check; viewer/foreign/local/bare-owner remain denied. Classify route inventory.
+3. Add shared dataset panel create/edit/apply/cancel and named delete confirmation. Literal source validation uses the new route before Apply. Query sources select existing read-only Data IDs and force privacy without copying SQL/credentials. Preserve omitted source/view SQL until explicit edits. Prevent dataset deletion or removal of structurally referenced Mock views; name those bindings. Stage only shared draft, then existing CAS Save. Scope/saved/conflict changes and concurrent dataset metadata fence delayed Apply/delete.
+4. Tests first fail for missing route/controls. Cover canonical preview/revision/limits/audit/denial, owned regressions, shared metadata/CSV/JSON/views CAS, query source/privacy, dependency preservation, no owner calls, Cancel/delete and delayed preview/account/edit/revision boundaries. Actual saved Mock generation must consume a member-created dataset/view.
+5. Run affected server/full frontend tests, production build then strict server Clippy then embedded rebuild sequentially, formatting/diff, independent review and real English/Chinese 390 px dataset creation/edit/view/binding/preview/delete acceptance. Record evidence and push PR41.
+
+Remaining: shared dataset-driven collection/scenario run selection, Data request editor/execution parity, specification management, other resources/protocols and native/release gates remain required. This plan does not finish the full goal.
+
+## Execution record
+
+- RED: missing member preview route (viewer request returned 404 rather than policy 403) and missing dataset controls.
+- Extracted DatasetFields and edit conversion/metadata guards, retaining owned persistence. RunnerDataset defaults retain its owner route; shared usage supplies a scoped preview callback and omits iteration-only metadata controls.
+- Tests reproduced a cache-notification race: an awaited preview could Apply after canonical revision was already cached but before React rerendered. Apply now checks the parent's current query-cache revision/status and live actor scope before committing the draft; revision/conflict red cases pass.
+- GREEN: full frontend 590 tests, including owned regressions, shared literal/query/view CAS, no owner routes or copied query SQL, private query conversion, UTF-8/aggregate quotas, missing source/SQL retention, named Mock dependency guards, combined binding removal/dataset deletion, six delayed Apply boundaries and viewer absence.
+- Server collaboration 13, dataset resources 3 and shared Mock 4 pass. Tests cover literal JSON/CSV preview, role/revision/size/audit, actual dataset/view-driven Mock generation and updates, rejected dangling dataset/view/non-SELECT writes, and valid combined binding/dataset removal retaining static body.
+- SQL query results deliberately encode numeric cells as exact strings in the existing dataset query layer; integration expectations use string IDs while literal JSON preview retains numeric input. No query encoding change was made.
+- Independent source review found no concrete issue; reviewer did not rerun tests. Production frontend verifies 45 chunks; strict server Clippy (including the added local-mode test), package formatting/diff checks and embedded server rebuild pass.
+- Runtime: actual English/Chinese 390 px member UI creates/previews a private JSON dataset with custom records table and SELECT view, binds shared Mock, edits to CSV and previews updated SQL rows. Named dataset/view binding guards disable removal; Cancel preserves canonical source/view. Explicitly clearing the Mock binding then deleting its dataset in one valid CAS retains and serves the original static body. Four actor preview audits contain no source values; both languages fit and browser errors are empty. Captures are linked in collaboration coverage.
+- Existing local workspace preview still works through its original endpoint, while the member route returns 404 even for that same existing local owner/workspace. This preserves the standalone local boundary.
+- No plan deviations or deferred independent-review findings. Dataset-driven shared run selection and the full goal remain incomplete.

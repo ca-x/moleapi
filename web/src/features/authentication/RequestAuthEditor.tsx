@@ -12,7 +12,7 @@ import {t,useLanguage} from "../../shared/i18n";
 import type {Auth,JwtAuth,ApiKeyAuth} from "../../shared/types";
 export const jwtConfig=():JwtAuth=>({algorithm:"HS256",key:"",key_base64:false,claims_source:"{}",kid:"",name:"Authorization",prefix:"Bearer",location:"header",add_time_claims:true,ttl_seconds:3600});
 export const apiKeyConfig=():ApiKeyAuth=>({name:"X-API-Key",value:"",location:"header"});
-export default function RequestAuthEditor({auth,change,dark,api=true,digest=true,query=true,inherit=true,credentials=true,collectionId,signing=true}:{auth:Auth;change:(value:Auth)=>void;dark:boolean;api?:boolean;digest?:boolean;query?:boolean;inherit?:boolean;credentials?:boolean;signing?:boolean;collectionId?:string|null}){
+export default function RequestAuthEditor({auth,change,dark,api=true,digest=true,query=true,inherit=true,credentials=true,collectionId,signing=true,tokenManagement=true}:{auth:Auth;change:(value:Auth)=>void;dark:boolean;api?:boolean;digest?:boolean;query?:boolean;inherit?:boolean;credentials?:boolean;signing?:boolean;collectionId?:string|null;tokenManagement?:boolean}){
  useLanguage();const key=auth.api_key??apiKeyConfig(),jwt=auth.jwt??jwtConfig();
  function setKey(patch:Partial<ApiKeyAuth>){change({...auth,api_key:{...key,...patch}});}
  function setJwt(patch:Partial<JwtAuth>){change({...auth,jwt:{...jwt,...patch}});}
@@ -20,7 +20,7 @@ export default function RequestAuthEditor({auth,change,dark,api=true,digest=true
   <Choice label={t("鉴权类型")} value={auth.kind} options={[...(inherit?[{value:"inherit",label:t("继承父级鉴权")}]:[]),{value:"none",label:"No Auth"},...(credentials?[{value:"bearer",label:"Bearer Token"},{value:"basic",label:"Basic Auth"}]:[]),...(api?[{value:"apikey",label:"API Key"},{value:"jwt",label:"JWT"},{value:"oauth2",label:"OAuth 2.0"}]:[]),...(digest?[{value:"digest",label:"Digest Auth"},{value:"ntlm",label:"NTLM"}]:[]),...(signing?[{value:"asap",label:"Atlassian ASAP"},{value:"edgegrid",label:"Akamai EdgeGrid"},{value:"oauth1",label:"OAuth 1.0"},{value:"aws",label:"AWS Signature V4"},{value:"hawk",label:"Hawk"}]:[])]} onChange={kind=>change({...auth,kind:kind as Auth["kind"],...(kind==="apikey"?{api_key:key}:kind==="jwt"?{jwt}:kind==="oauth2"?{oauth2:auth.oauth2??oauth2Config()}:kind==="aws"?{aws:auth.aws??awsConfig()}:kind==="hawk"?{hawk:auth.hawk??hawkConfig()}:kind==="oauth1"?{oauth1:auth.oauth1??oauth1Config()}:kind==="ntlm"?{ntlm:auth.ntlm??ntlmConfig()}:kind==="edgegrid"?{edgegrid:auth.edgegrid??edgeGridConfig()}:kind==="asap"?{asap:auth.asap??asapConfig()}:{})})}/>
   {auth.kind==="asap"&&<AsapAuthEditor config={auth.asap??asapConfig()} change={asap=>change({...auth,asap})} dark={dark}/>}
   {auth.kind==="edgegrid"&&<EdgeGridAuthEditor config={auth.edgegrid??edgeGridConfig()} change={edgegrid=>change({...auth,edgegrid})}/>}
-  {auth.kind==="oauth1"&&<OAuth1AuthEditor config={auth.oauth1??oauth1Config()} change={oauth1=>change({...auth,oauth1})} collectionId={collectionId}/>}
+  {auth.kind==="oauth1"&&<OAuth1AuthEditor config={auth.oauth1??oauth1Config()} change={oauth1=>change({...auth,oauth1})} collectionId={collectionId} tokenManagement={tokenManagement}/>}
   {auth.kind==="hawk"&&<HawkAuthEditor config={auth.hawk??hawkConfig()} change={hawk=>change({...auth,hawk})}/>}
   {auth.kind==="aws"&&<AwsAuthEditor config={auth.aws??awsConfig()} change={aws=>change({...auth,aws})}/> }
   {auth.kind==="inherit"&&<Text size="1" color="gray">{t("执行时使用最近目录、集合或工作区的鉴权；No Auth 停止继承。")}</Text>}
@@ -36,7 +36,7 @@ export default function RequestAuthEditor({auth,change,dark,api=true,digest=true
    <Text as="label" size="2"><Flex gap="2"><Checkbox checked={jwt.add_time_claims} onCheckedChange={v=>setJwt({add_time_claims:v===true})}/>{t("缺失时自动添加 iat 和 exp")}</Flex></Text>
    {jwt.add_time_claims&&<Field label={t("JWT 有效秒数")}><TextField.Root type="number" min={1} max={86400} value={jwt.ttl_seconds} onChange={e=>setJwt({ttl_seconds:Number(e.target.value)})}/></Field>}
   </>}
-  {auth.kind==="oauth2"&&<OAuth2ConfigEditor config={auth.oauth2??oauth2Config()} change={oauth2=>change({...auth,oauth2})} query={query} collectionId={collectionId}/>}
+  {auth.kind==="oauth2"&&<OAuth2ConfigEditor config={auth.oauth2??oauth2Config()} change={oauth2=>change({...auth,oauth2})} query={query} collectionId={collectionId} tokenManagement={tokenManagement}/>}
   {auth.kind==="ntlm"&&<NtlmAuthEditor config={auth.ntlm??ntlmConfig()} change={ntlm=>change({...auth,ntlm})}/>}
   {auth.kind==="digest"&&<Text size="1" color="gray">{t("收到 401 Digest challenge 后自动签名并重试；跨域重定向不携带鉴权。")}</Text>}
   {["apikey","jwt"].includes(auth.kind)&&<Text size="1" color="gray">{t("鉴权在执行时解析环境变量。默认导出移除密钥；JWT 每次执行生成。")}</Text>}

@@ -69,6 +69,13 @@ export async function api<T>(
 }
 export async function previewMock(path: string): Promise<{status:number;body:string}> {
   if (!path.startsWith("/api/mock/")) throw new ApiError(message("Mock 地址无效"), 400);
+  return previewMockResponse(path);
+}
+export async function previewSharedMock(path: string): Promise<{status:number;body:string}> {
+  if (!/^\/api\/owners\/[^/?]+\/workspaces\/[^/?]+\/mock\/[^/?]+\/[^/?]+(?:\?.*)?$/.test(path)) throw new ApiError(message("Mock 地址无效"), 400);
+  return previewMockResponse(path, true);
+}
+async function previewMockResponse(path: string, shared = false): Promise<{status:number;body:string}> {
   if (native) {
     const { invoke } = await import("@tauri-apps/api/core");
     const preview = await invoke<{status:number;body:string}>("preview_mock",{path});
@@ -77,23 +84,32 @@ export async function previewMock(path: string): Promise<{status:number;body:str
   const requestToken=token();
   const response=await fetch(path,{headers:requestToken?{Authorization:`Bearer ${requestToken}`}:{}});
   const body=await response.text();
-  if (response.status===401 && requestToken===token()) {
-    window.dispatchEvent(new Event("moleapi:unauthorized"));
-    throw new ApiError(message("Mock 预览失败 ({{value0}})",{value0:response.status}),response.status);
+  if (!shared || response.headers.get("x-moleapi-mock-preview") !== "saved-example") {
+    if (response.status===401 && requestToken===token()) {
+      window.dispatchEvent(new Event("moleapi:unauthorized"));
+      throw new ApiError(message("Mock 预览失败 ({{value0}})",{value0:response.status}),response.status);
+    }
+    if (shared) {
+      let serverError: string | undefined;
+      try { serverError = (JSON.parse(body) as { error?: string }).error; } catch { /* Non-JSON failures use the status. */ }
+      throw new ApiError(serverError || message("Mock 预览失败 ({{value0}})",{value0:response.status}),response.status);
+    }
   }
   return {status:response.status,body};
 }
-export async function saveFile(file: ExportResult): Promise<void> {
+export async function saveFile(file: ExportResult, current: () => boolean = () => true): Promise<void> {
+  if (!current()) return;
   if (native) {
     const [{ save }, { writeTextFile }] = await Promise.all([
       import("@tauri-apps/plugin-dialog"),
       import("@tauri-apps/plugin-fs"),
     ]);
+    if (!current()) return;
     const path = await save({
       defaultPath: file.filename,
       filters: [{ name: t("API 文件"), extensions: ["json", "yaml", "txt", "csv"] }],
     });
-    if (path) await writeTextFile(path, file.content);
+    if (path && current()) await writeTextFile(path, file.content);
     return;
   }
   const url = URL.createObjectURL(

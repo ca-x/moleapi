@@ -117,7 +117,7 @@ export interface Example {
     dataset_id:string;
     view_id:string;
     shape:"rows"|"first";
-    parameters:{source:"path"|"query"|"header";name:string}[];
+    parameters?:{source:"path"|"query"|"header";name:string}[];
   };
   mock_match?: {
     priority: number;
@@ -217,6 +217,18 @@ export interface Workspace {
   revision: number;
   updated_at: string;
   data: WorkspaceData;
+}
+export interface SharedWorkspaceSummary {
+  owner_id: string;
+  owner_username: string;
+  workspace_id: string;
+  workspace_name: string;
+  revision: number;
+  role: "admin" | "editor" | "viewer";
+}
+export interface SharedWorkspacePage {
+  items: SharedWorkspaceSummary[];
+  next_cursor: string | null;
 }
 export interface TestResult {
   id: string;

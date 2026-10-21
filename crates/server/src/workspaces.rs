@@ -155,6 +155,7 @@ pub async fn delete(
     owned(&s, &owner.0, &id).await?;
     let _webhook_gate = s.webhooks.gates.lock(&owner.0, &id).await;
     let tx = s.db.begin().await?;
+    crate::collaboration::cascade(&tx, &owner.0, &id).await?;
     crate::webhooks::cascade(&tx, &owner.0, &id).await?;
     let result = document::Entity::update_many()
         .col_expr(document::Column::Kind, Expr::value("tombstone"))
@@ -240,14 +241,15 @@ pub(crate) async fn replace_for_restore(
     current: Workspace,
     expected_revision: i64,
 ) -> Result<Workspace, ApiError> {
-    let mut attempts = 0;
+    let mut attempts = 0u64;
     loop {
         match storage::replace(&state.db, owner, current.clone(), expected_revision).await {
             Ok(Some(restored)) => return Ok(restored),
             Ok(None) => return Err(ApiError::conflict("Workspace revision changed")),
-            Err(error) if is_sqlite_busy(&error) && attempts < 3 => {
+            Err(error) if is_sqlite_busy(&error) && attempts < 20 => {
                 attempts += 1;
-                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                tokio::time::sleep(std::time::Duration::from_millis((attempts * 10).min(100)))
+                    .await;
             }
             Err(error) => return Err(error.into()),
         }
@@ -255,13 +257,19 @@ pub(crate) async fn replace_for_restore(
 }
 
 fn is_sqlite_busy(error: &DbErr) -> bool {
-    let DbErr::Exec(RuntimeErr::SqlxError(sea_orm::sqlx::Error::Database(database))) = error else {
+    let (DbErr::Exec(RuntimeErr::SqlxError(sea_orm::sqlx::Error::Database(database)))
+    | DbErr::Query(RuntimeErr::SqlxError(sea_orm::sqlx::Error::Database(database)))
+    | DbErr::Conn(RuntimeErr::SqlxError(sea_orm::sqlx::Error::Database(database)))) = error
+    else {
         return false;
     };
     database
         .try_downcast_ref::<sea_orm::sqlx::sqlite::SqliteError>()
         .is_some()
-        && matches!(database.code().as_deref(), Some("5" | "517"))
+        && matches!(
+            database.code().as_deref(),
+            Some("5" | "6" | "261" | "262" | "517" | "773")
+        )
 }
 
 pub(crate) async fn reconcile_sessions(s: &AppState, owner: &str, w: &Workspace) {

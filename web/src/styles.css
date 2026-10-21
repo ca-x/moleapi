@@ -119,6 +119,54 @@ a:focus-visible {
   grid-template-rows: 64px minmax(0, 1fr) 28px;
   overflow: hidden;
 }
+.app-shell.shared-shell {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 64px minmax(0, 1fr);
+}
+.shared-shell .shared-workspace {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px clamp(16px, 4vw, 48px);
+}
+.shared-workspace > .rt-Flex,
+.shared-workspace .field,
+.shared-workspace .rt-TextFieldRoot,
+.shared-workspace .rt-TextAreaRoot {
+  min-width: 0;
+  max-width: 760px;
+}
+.shared-request-line .field {
+  flex: 1 1 230px;
+}
+.shared-request-line .rt-TextFieldRoot {
+  width: 100%;
+}
+.shared-request-tabs {
+  max-width: min(760px, 100%);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.shared-request-tabs + .rt-TabsContent {
+  padding-top: 12px;
+}
+.shared-documents {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: min(100%, 760px);
+  min-width: 0;
+}
+.shared-document-card,
+.shared-document-card .markdown-preview {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.shared-document-card .markdown-preview {
+  overflow-x: auto;
+}
 .app-header {
   grid-column: 1 / -1;
   display: flex;
@@ -1233,6 +1281,15 @@ kbd {
 .graphql-toolbar { padding:8px 20px; border-bottom:1px solid var(--gray-5); }
 .graphql-ide { flex:1; min-height:0; overflow:hidden; }
 .graphql-ide .graphiql-container { height:100%; }
+.shared-graphql { min-width:0; max-width:100%; }
+.shared-graphql .graphiql-editor { position:relative; }
+.shared-graphql .graphql-ide { flex:none; height: min(680px, 75vh); min-height:420px; min-width:0; }
+@media (max-width: 640px) {
+  .shared-graphql #graphiql-session { flex-direction:column; }
+  .shared-graphql .graphiql-horizontal-drag-bar { display:none; }
+  .shared-graphql .graphiql-editors, .shared-graphql .graphiql-response { min-width:0; width:100%; }
+  .shared-graphql .graphiql-editor-tool { min-height:90px; }
+}
 .method-gql { color:var(--cyan-12); }
 .graphql-ide .graphiql-container .graphiql-logo .graphiql-logo-link { color: var(--gray-12); }
 
@@ -1329,6 +1386,8 @@ kbd {
 .tcp-tabs {min-height:320px;flex:1;display:flex;flex-direction:column;}
 .tcp-tabs > .rt-TabsContent[data-state="active"] {display:flex;flex-direction:column;gap:16px;padding:16px 20px;flex:1;min-height:0;overflow:auto;}
 .tcp-tabs > .rt-TabsContent > .code-editor {flex:1;min-height:180px;}
+.tcp-tabs > .rt-TabsContent > .tcp-message-editor {flex:1;min-height:0;}
+.tcp-tabs .tcp-message-editor > .code-editor {flex:1;min-height:180px;}
 @media(max-width:700px){.tcp-toolbar{padding:12px;}.tcp-tabs{flex-shrink:0;}.tcp-tabs > .rt-TabsContent[data-state="active"]{padding:12px;}}
 
 .webhook-page { display: flex; flex-direction: column; gap: 20px; }
@@ -1367,3 +1426,58 @@ kbd {
 .project-regeneration-dialog,.openapi-source-bundle-dialog { width:min(1000px,calc(100vw - 32px)); min-width:0; }
 .project-regeneration-dialog .code-editor,.openapi-source-bundle-dialog .code-editor { min-width:0; max-width:100%; }
 .project-regeneration-dialog .cm-gutterElement,.openapi-source-bundle-dialog .cm-gutterElement,.generation-dialog .cm-gutterElement { color:var(--gray-11); }
+
+.shared-socketio { min-width:0; max-width:100%; }
+.shared-socketio .socketio-workbench { height:auto; }
+.shared-socketio .grpc-tabs { flex:none; min-height:0; }
+.shared-socketio .grpc-tabs > .rt-TabsContent[data-state="active"] { flex:none; overflow:visible; }
+.shared-socketio .grpc-tabs > .rt-TabsContent > .code-editor { flex:none; min-height:0; }
+
+.shared-grpc { min-width:0; max-width:100%; }
+.shared-grpc .grpc-workbench { height:auto; }
+.shared-grpc .grpc-tabs { flex:none; min-height:0; }
+.shared-grpc .grpc-tabs > .rt-TabsContent[data-state="active"] { flex:none; overflow:visible; }
+.shared-grpc .grpc-tabs > .rt-TabsContent > .code-editor { flex:none; min-height:0; }
+
+.shared-mqtt { min-width:0; max-width:100%; }
+.shared-mqtt .mqtt-workbench { height:auto; }
+.shared-mqtt .grpc-tabs { flex:none; min-height:0; }
+.shared-mqtt .grpc-tabs > .rt-TabsContent[data-state="active"] { flex:none; overflow:visible; }
+.shared-mqtt .mqtt-message-editor .code-editor { flex:none; height:240px; min-height:0; }
+.shared-mqtt .protocol-events { height:360px; flex:none; min-height:0; }
+.shared-mqtt .protocol-event-list { min-width:0; }
+.shared-mqtt .protocol-event-list .rt-ScrollAreaViewport > div { width:100%; min-width:0!important; }
+
+.shared-soap { min-width:0; max-width:100%; }
+.shared-soap .soap-workbench { height:auto; overflow:visible; }
+.shared-soap .grpc-tabs { flex:none; min-height:0; }
+.shared-soap .grpc-tabs > .rt-TabsContent[data-state="active"] { flex:none; overflow:visible; }
+.shared-soap .grpc-tabs > .rt-TabsContent > .code-editor { flex:none; min-height:0; height:240px; }
+.shared-soap .response-pane-fill { min-height:320px; }
+.shared-soap .rt-CalloutRoot[role="alert"] { grid-template-columns:minmax(0,1fr); }
+.shared-soap .rt-CalloutRoot[role="alert"] > .code-editor { min-width:0; max-width:100%; width:100%; }
+.shared-soap .rt-CalloutRoot[role="alert"] .rt-CalloutText { color:var(--red-12); }
+
+.shared-mcp { min-width:0; max-width:100%; }
+.shared-mcp .mcp-workbench { height:auto; overflow:visible; }
+.shared-mcp .mcp-tabs { flex:none; min-height:0; }
+.shared-mcp .mcp-tabs > .rt-TabsContent[data-state="active"] { flex:none; overflow:visible; }
+.shared-mcp .mcp-tabs > .rt-TabsContent > .code-editor { flex:none; height:240px; }
+.shared-mcp .protocol-events { height:360px; flex:none; min-height:0; }
+.shared-mcp .protocol-event-list { min-width:0; }
+.shared-mcp .protocol-event-list .rt-ScrollAreaViewport > div { width:100%; min-width:0!important; }
+
+.shared-a2a { min-width:0; max-width:100%; }
+.shared-a2a .a2a-workbench { height:auto; overflow:visible; }
+.shared-a2a .a2a-tabs { flex:none; min-height:0; }
+.shared-a2a .a2a-tabs > .rt-TabsContent[data-state="active"] { flex:none; overflow:visible; }
+.shared-a2a .a2a-tabs > .rt-TabsContent > .code-editor { flex:none; height:260px; }
+.shared-a2a .protocol-events { height:360px; flex:none; min-height:0; }
+.shared-a2a .protocol-event-list { min-width:0; }
+.shared-a2a .protocol-event-list .rt-ScrollAreaViewport > div { width:100%; min-width:0!important; }
+
+.shared-dubbo { min-width:0; max-width:100%; }
+.shared-dubbo .form-panel { min-width:0; max-width:100%; }
+.shared-dubbo .response-pane { margin-top:16px; min-width:0; }
+.shared-dubbo .rt-Button.rt-variant-soft:not([data-accent-color="gray"]):not([disabled]) { color:var(--accent-12); }
+.shared-dubbo .code-editor .cm-gutters { color:var(--gray-11); }

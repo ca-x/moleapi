@@ -3,14 +3,19 @@ import { errorCopy } from "../../shared/i18n/errors";
 import type { ErrorCopy } from "../../shared/i18n/errors";
 import type { LocalizedCopy } from "../../shared/i18n";
 import { t, useLanguage, message, liveTranslation, translateCopy } from "../../shared/i18n";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { api } from "../../shared/api";
+import { api, native } from "../../shared/api";
+import { memberCredential } from "../../shared/memberApi";
+import { nativeMemberSession, subscribeNativeMember } from "../../shared/nativeMemberSession";
 import { id, initialData } from "../../shared/model";
-import type { Workspace } from "../../shared/types";
+import type { SharedWorkspaceSummary, Workspace } from "../../shared/types";
 import { hasChanges } from "../workspaces/draft";
 import { useAuth } from "../auth/useAuth";
 import { useWorkspace } from "../workspaces/useWorkspace";
+import { resolveWorkspaceChoice } from "../workspaces/workspaceSelection";
+import { fetchSharedWorkspaces } from "../workspaces/sharedWorkspacesApi";
 import { useProtocolSession } from "../protocols/useProtocolSession";
 import { useRequests } from "../requests/useRequests";
 import { useRunner } from "../testing/useRunner";
@@ -41,23 +46,64 @@ export function useWorkbenchController() {
   useLanguage();
   useInputModality();
   const auth = useAuth();
+  const queryClient = useQueryClient();
   const appearance = useAppearance();
   const workspace = useWorkspace(auth.authenticated, auth.accountId);
+  const sync = useSync(auth.authenticated, workspace, () => openModal("connect"));
+  const memberSession = useSyncExternalStore(subscribeNativeMember, nativeMemberSession);
+  const sharedAccountId = native ? `hosted:${memberSession.sessionId ?? "disconnected"}:${memberSession.epoch}` : auth.accountId;
+  const credential = memberCredential();
+  const sharedBoundary = useRef({ accountId: sharedAccountId, credential, epoch: 0 });
+  if (sharedBoundary.current.accountId !== sharedAccountId || sharedBoundary.current.credential !== credential) {
+    sharedBoundary.current = { accountId: sharedAccountId, credential, epoch: sharedBoundary.current.epoch + 1 };
+  }
+  const renderBoundary = sharedBoundary.current;
+  const controllerCurrent = () => sharedBoundary.current === renderBoundary && memberCredential() === credential && (!native || nativeMemberSession() === memberSession);
+  const sharedWorkspaces = useQuery({
+    queryKey: ["shared-workspaces", sharedAccountId, sharedBoundary.current.epoch],
+    queryFn: fetchSharedWorkspaces,
+    enabled: auth.authenticated && !!credential,
+    retry: false,
+    refetchInterval: 5000,
+  });
+  const [sharedSelection, setSharedSelection] = useState<{ accountId: string; epoch: number; item: SharedWorkspaceSummary } | null>(null);
+  const selectedShared = sharedSelection?.accountId === sharedAccountId && sharedSelection.epoch === sharedBoundary.current.epoch && auth.authenticated ? sharedSelection.item : null;
+  const setSelectedShared = (item: SharedWorkspaceSummary | null) => setSharedSelection(item ? { accountId: sharedAccountId, epoch: sharedBoundary.current.epoch, item } : null);
+  const [sharedDirty, setSharedDirty] = useState(false);
   const [view, setView] = useState<View>("requests");
   const [filter, setFilter] = useState("");
   const [sidebar, setSidebar] = useState(false);
-  const [guard, setGuard] = useState<Guard | null>(null);
-  const [modal, setModal] = useState<Modal>(null);
+  const [guard, setGuardState] = useState<Guard | null>(null);
+  const guardRef = useRef<Guard | null>(null);
+  function setGuard(value: Guard | null) { guardRef.current = value; setGuardState(value); }
+  const [modal, setModalState] = useState<Modal>(null);
+  const modalRef = useRef({ value: null as Modal, epoch: 0 });
+  const activeModal = useRef<typeof modalRef.current | null>(null);
+  function setModal(next: Modal | ((current: Modal) => Modal)) {
+    const value = typeof next === "function" ? next(modalRef.current.value) : next;
+    if (value !== modalRef.current.value) modalRef.current = { value, epoch: modalRef.current.epoch + 1 };
+    setModalState(value);
+  }
   const [versionRequestId, setVersionRequestId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [modalError, setModalError] = useState<ErrorCopy>("");
   const [modalBusy, setModalBusy] = useState(false);
   useEffect(() => {
-    setModal(null);
+    setSelectedShared(null);
+    setSharedDirty(false);
+    setModal(current => current === "connect" && sync.connectionAttemptCurrent() ? current : null);
+    if (!sync.connectionAttemptCurrent()) { activeModal.current = null; setModalBusy(false); }
     setVersionRequestId(null);
     setGuard(null);
     setFilter("");
-  }, [auth.accountId]);
+  }, [sharedAccountId]);
+  useEffect(() => { if (!auth.authenticated) setSelectedShared(null); }, [auth.authenticated]);
+  useEffect(() => {
+    if (!selectedShared || !sharedWorkspaces.data) return;
+    const current = sharedWorkspaces.data.find((item) => item.owner_id === selectedShared.owner_id && item.workspace_id === selectedShared.workspace_id);
+    if (!current) setSelectedShared(null);
+    else if (current.role !== selectedShared.role || current.revision !== selectedShared.revision) setSelectedShared(current);
+  }, [selectedShared, sharedWorkspaces.data]);
   const localVariables = useLocalVariables(workspace);
   const requests = useRequests(workspace, setView, setSidebar, localVariables);
   const protocolSession = useProtocolSession(
@@ -87,11 +133,10 @@ export function useWorkbenchController() {
     auth.accountId,
   );
   const interchange = useInterchange(workspace);
-  const sync = useSync(auth.authenticated, workspace, () =>
-    openModal("connect"),
-  );
   function openModal(value: Modal) {
-    const action = () => {
+    if (!controllerCurrent()) return;
+    const action = () => { if (!controllerCurrent()) return;
+      if (selectedShared && (value === "new-workspace" || value === "import")) leaveShared();
       setModal(value);
       setModalError("");
       setName(value === "new-workspace" ? t("我的工作区") : "");
@@ -100,7 +145,9 @@ export function useWorkbenchController() {
       if (value === "export") interchange.setFormat("moleapi");
       if (value === "import") interchange.setFormat("openapi");
     };
-    if (workspace.dirty && (value === "new-workspace" || value === "import"))
+    if (selectedShared && sharedDirty && (value === "new-workspace" || value === "import"))
+      setGuard({ title: message("离开共享工作区"), description: message("共享工作区有未保存的修改。离开会放弃这些修改。"), action, saveFirst: false });
+    else if (workspace.dirty && (value === "new-workspace" || value === "import"))
       setGuard({
         title: message("保留当前工作区修改"),
         description:
@@ -111,15 +158,39 @@ export function useWorkbenchController() {
     else action();
   }
   function switchWorkspace(value: string) {
-    if (value === workspace.selectedId) return;
-    const action = () => {
+    if (!controllerCurrent()) return;
+    const clearSharedCache = () => {
+      if (!selectedShared) return;
+      for (const kind of ["shared-workspace", "shared-history", "shared-reports", "shared-mock-calls"]) {
+        queryClient.removeQueries({ queryKey: [kind, sharedAccountId, selectedShared.owner_id, selectedShared.workspace_id] });
+      }
+    };
+    const choice = resolveWorkspaceChoice(value, workspace.workspaces.data ?? [], sharedWorkspaces.data ?? []);
+    if (!choice) { toast.error(liveTranslation("工作区尚未加载，请稍后重试。")); return; }
+    if (choice.kind === "shared") {
+      const shared = choice.workspace;
+      if (selectedShared?.owner_id === shared.owner_id && selectedShared.workspace_id === shared.workspace_id) return;
+      const action = () => { if (!controllerCurrent()) return; clearSharedCache(); setSharedDirty(false); workspace.setDraft(workspace.stateRef.current.saved); workspace.setSaveConflict(null); setSelectedShared(shared); setModal(null); setVersionRequestId(null); };
+      if (selectedShared && sharedDirty) setGuard({ title: message("离开共享工作区"), description: message("共享工作区有未保存的修改。离开会放弃这些修改。"), action, saveFirst: false });
+      else if (workspace.dirty && !selectedShared) setGuard({ title: message("切换工作区"), description: message("当前工作区有未保存修改。可以保存后切换，或放弃修改。"), action, saveFirst: true });
+      else action();
+      return;
+    }
+    const ownedId = choice.kind === "owned" ? choice.workspace.id : "";
+    if (ownedId === workspace.selectedId && !selectedShared) return;
+    const action = () => { if (!controllerCurrent()) return;
+      clearSharedCache();
+      setSharedDirty(false);
+      setSelectedShared(null);
       workspace.setDraft(null);
       workspace.setSaved(null);
-      workspace.setSelectedId(value);
+      workspace.setSelectedId(ownedId);
       setVersionRequestId(null);
       setView("requests");
     };
-    if (workspace.dirty)
+    if (selectedShared && sharedDirty)
+      setGuard({ title: message("离开共享工作区"), description: message("共享工作区有未保存的修改。离开会放弃这些修改。"), action, saveFirst: false });
+    else if (workspace.dirty)
       setGuard({
         title: message("切换工作区"),
         description: message("当前工作区有未保存修改。可以保存后切换，或放弃修改。"),
@@ -128,19 +199,37 @@ export function useWorkbenchController() {
       });
     else action();
   }
+  function leaveShared() {
+    if (!controllerCurrent()) return;
+    if (selectedShared) {
+      for (const kind of ["shared-workspace", "shared-history", "shared-reports", "shared-mock-calls"]) {
+        queryClient.removeQueries({ queryKey: [kind, sharedAccountId, selectedShared.owner_id, selectedShared.workspace_id] });
+      }
+    }
+    setSharedDirty(false);
+    setSelectedShared(null);
+  }
+  function closeShared() {
+    if (!controllerCurrent()) return;
+    if (sharedDirty) setGuard({ title: message("离开共享工作区"), description: message("共享工作区有未保存的修改。离开会放弃这些修改。"), action: leaveShared, saveFirst: false });
+    else leaveShared();
+  }
   async function submitModal(event: React.FormEvent) {
     event.preventDefault();
-    if (modalBusy) return;
+    if (modalBusy || !controllerCurrent()) return;
+    const operation = modalRef.current;
+    activeModal.current = operation;
+    const current = () => activeModal.current === operation && modalRef.current === operation && (controllerCurrent() || (operation.value === "connect" && sync.connectionAttemptCurrent()));
     setModalBusy(true);
     setModalError("");
     try {
       if (modal === "new-workspace")
-        workspace.installWorkspace(
-          await api<Workspace>("/api/workspaces", "POST", {
-            name,
-            data: initialData(),
-          }),
-        );
+        {
+          const created = await api<Workspace>("/api/workspaces", "POST", { name, data: initialData() });
+          if (!current()) return;
+          workspace.installWorkspace(created);
+          setSelectedShared(null);
+        }
       else if (modal === "new-collection")
         workspace.updateData((data) => ({
           ...data,
@@ -152,23 +241,28 @@ export function useWorkbenchController() {
       else if (modal === "import") await interchange.importWorkspace();
       else if (modal === "export" && !(await interchange.exportWorkspace()))
         return;
-      else if (modal === "connect") await sync.connectServer();
-      setModal(null);
+      else if (modal === "connect" && !(await sync.connectServer())) return;
+      if (current()) setModal(null);
     } catch (error) {
-      setModalError(errorCopy(error));
+      if (current()) setModalError(errorCopy(error));
     } finally {
-      setModalBusy(false);
+      if (activeModal.current === operation) { activeModal.current = null; setModalBusy(false); }
     }
   }
   function logout() {
+    if (!controllerCurrent()) return;
     const action = async () => {
       await auth.endSession();
+      setSelectedShared(null);
+      setSharedDirty(false);
       workspace.setDraft(null);
       workspace.setSaved(null);
       workspace.setSelectedId("");
       setModal(null);
     };
-    if (workspace.dirty)
+    if (selectedShared && sharedDirty)
+      setGuard({ title: message("离开共享工作区"), description: message("共享工作区有未保存的修改。离开会放弃这些修改。"), action, saveFirst: false });
+    else if (workspace.dirty)
       setGuard({
         title: message("退出账户"),
         description: message("工作区有未保存的修改。"),
@@ -178,25 +272,28 @@ export function useWorkbenchController() {
     else void action();
   }
   async function confirmGuard(saveFirst: boolean) {
-    if (!guard) return;
+    if (!guard || !controllerCurrent() || guardRef.current !== guard) return;
     const current = guard;
+    const admitted = () => controllerCurrent() && guardRef.current === current;
     try {
       if (saveFirst) {
-        if (!(await workspace.save(true))) return;
+        if (!(await workspace.save(true)) || !admitted()) return;
         if (hasChanges(workspace.stateRef.current)) {
           toast.message(liveTranslation("保存期间有新修改，请再次保存后继续。"));
           return;
         }
       }
+      if (!admitted()) return;
       await current.action();
-      setGuard(null);
+      if (admitted()) setGuard(null);
     } catch (error) {
-      toast.error(liveError(error));
+      if (admitted()) toast.error(liveError(error));
     }
   }
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey)) return;
+      if (selectedShared) return;
       if (event.key.toLowerCase() === "k") {
         event.preventDefault();
         setModal("search");
@@ -216,7 +313,7 @@ export function useWorkbenchController() {
     };
     window.addEventListener("keydown", listener);
     return () => window.removeEventListener("keydown", listener);
-  }, [sendRequest, workspace.save, modal, guard, interchange.setContent]);
+  }, [sendRequest, workspace.save, modal, guard, interchange.setContent, selectedShared]);
   const environment = workspace.draft?.data.environments.find(
     (e) => e.id === workspace.draft?.data.active_environment_id,
   );
@@ -257,6 +354,11 @@ export function useWorkbenchController() {
     modalBusy,
     openModal,
     switchWorkspace,
+    closeShared,
+    selectedShared,
+    sharedAccountId,
+    setSharedDirty,
+    sharedWorkspaces,
     submitModal,
     logout,
     confirmGuard,

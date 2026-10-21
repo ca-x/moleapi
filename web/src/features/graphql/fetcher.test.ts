@@ -193,3 +193,28 @@ it("requires selection when a stale name cannot disambiguate multiple operations
   })).rejects.toThrow("请选择");
   expect(api).not.toHaveBeenCalled();
 });
+
+it("uses injected member transport for finite GraphQL while preserving current query and variables",async()=>{
+  const state=context(),execute=vi.fn().mockResolvedValue(response('{"data":{"value":7}}'));
+  state.locals=[];state.transport={execute,createSession:vi.fn(),sessionPath:(id)=>`/api/owners/o/workspaces/w/sessions/${id}`};
+  const result=await createRustGraphQLFetcher(async()=>state)({query:"query Actual($id:Int!){value(id:$id)}",variables:{id:7},operationName:"stale"});
+  expect(result).toEqual({data:{value:7}});expect(execute).toHaveBeenCalledWith(expect.objectContaining({protocol:expect.objectContaining({document:"query Actual($id:Int!){value(id:$id)}",variables:{id:7},operation_name:"Actual"})}));expect(api).not.toHaveBeenCalled();
+});
+it("polls and closes a member subscription only through its injected member namespace",async()=>{
+  const state=context(),path="/api/owners/o/workspaces/w/sessions/shared";
+  state.transport={execute:vi.fn(),createSession:vi.fn().mockResolvedValue({id:"shared"}),sessionPath:()=>path};
+  vi.mocked(api).mockImplementation((url)=>Promise.resolve(url.includes("/events?")?{events:[{cursor:1,message:{kind:"graphql_next",payload:{data:{value:1}}}},{cursor:2,message:{kind:"graphql_complete"}}],next_cursor:2,dropped_count:0}:url.endsWith("/close")?{}:{state:"open"}));
+  const iterator=await createRustGraphQLFetcher(async()=>state)({query:"subscription Watch {value}"}) as AsyncIterableIterator<unknown>;
+  expect(await iterator.next()).toMatchObject({done:false,value:{data:{value:1}}});await iterator.return?.();
+  expect(state.transport.createSession).toHaveBeenCalled();expect(vi.mocked(api).mock.calls.every(([url])=>url.startsWith(path))).toBe(true);expect(api).toHaveBeenCalledWith(`${path}/close`,"POST",{});
+});
+it('uses the injected member transport for subscription state, events and both Stop/final close',async()=>{
+ const state=context(),path='/api/owners/remote/workspaces/w/sessions/native-session';
+ const request=vi.fn().mockImplementation((path:string)=>Promise.resolve(path.includes('/events?')?{events:[{cursor:1,message:{kind:'graphql_next',payload:{data:{value:'remote'}}}}],next_cursor:1,dropped_count:0}:{id:'native-session',state:'open'}));
+ const closeSession=vi.fn().mockResolvedValue(undefined);
+ state.transport={execute:vi.fn(),createSession:vi.fn().mockResolvedValue({id:'native-session',state:'open'}),sessionPath:()=>path,request,closeSession};
+ vi.mocked(api).mockRejectedValue(new Error('local API must not be used'));
+ const iterator=await createRustGraphQLFetcher(async()=>state)({query:'subscription {value}'})as AsyncIterableIterator<unknown>;
+ expect(await iterator.next()).toEqual({done:false,value:{data:{value:'remote'}}});await iterator.return?.();await vi.waitFor(()=>expect(state.sessions.size).toBe(0));
+ expect(request).toHaveBeenCalledWith(path);expect(request).toHaveBeenCalledWith(path+'/events?after=0');expect(closeSession).toHaveBeenCalledWith('native-session');expect(api).not.toHaveBeenCalled();
+});

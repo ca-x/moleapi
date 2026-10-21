@@ -88,3 +88,7 @@ Dubbo worker 检查。对应 Application CI 的源码、检查和三数据库作
 linux/arm64 和 manifest。两个原生镜像均通过固定 JRE21.0.12.1+1 启动及真实归属 API
 生成（每个17个 Go 文件、原始规范保持不变），并通过嵌入前端/worker 检查。
 这只证明该提交对应双架构容器；后续提交、桌面安装包和源码/签名发布门禁仍独立确认。
+
+## Stable0.2.0 release gate
+
+Version0.2.0 uses the same stable version in Cargo, npm and Tauri installer metadata; Windows no longer applies the numeric beta override. Tag builds still stage a draft prerelease first. After exact-tag Application, native matrix and Docker jobs pass, download all13 archives/installers plus SHA256SUMS and verify every digest and archive matrix; read back the GHCR manifest with both architectures. Only then publish the draft with prerelease=false and mark it latest. Packages remain unsigned unless signing credentials and verification are explicitly provided.

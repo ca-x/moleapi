@@ -13,6 +13,7 @@ import {
 import { Choice, ToolButton } from "../../shared/ui";
 import { native } from "../../shared/api";
 import { useWorkbench } from "../workbench/context";
+import { ownedWorkspaceKey, sharedWorkspaceKey } from "../workspaces/workspaceSelection";
 
 export default function WorkbenchHeader() {
   useLanguage();
@@ -21,6 +22,8 @@ export default function WorkbenchHeader() {
     dark,
     setDark,
     workspaces,
+    sharedWorkspaces,
+    selectedShared,
     sync,
     selectedId,
     sidebar,
@@ -33,7 +36,7 @@ export default function WorkbenchHeader() {
   return (
     <header className="app-header">
       <Flex align="center" gap="3">
-        <ToolButton
+        {!selectedShared && <ToolButton
           label={sidebar ? t("收起目录") : t("展开目录")}
           className="sidebar-toggle"
           expanded={sidebar}
@@ -41,20 +44,24 @@ export default function WorkbenchHeader() {
           onClick={() => setSidebar(!sidebar)}
         >
           <Menu size={18} />
-        </ToolButton>
+        </ToolButton>}
         <img src="/logo.png" alt="" width="36" height="36" />
         <Heading as="h1" weight="bold" size="3">
           MoleAPI
         </Heading>
         <span className="header-divider" />
-        {workspaces.data?.length ? (
+        {(workspaces.data?.length || sharedWorkspaces.data?.length) ? (
           <Choice
-            value={selectedId || workspaces.data[0].id}
+            value={selectedShared ? sharedWorkspaceKey(selectedShared.owner_id, selectedShared.workspace_id) : selectedId ? ownedWorkspaceKey(selectedId) : workspaces.data?.[0] ? ownedWorkspaceKey(workspaces.data[0].id) : "none"}
             onChange={switchWorkspace}
-            options={workspaces.data.map((w) => ({
-              value: w.id,
-              label: w.name,
-            }))}
+            options={[
+              ...(!workspaces.data?.length ? [{ value: "none", label: t("选择工作区") }] : []),
+              ...(workspaces.data ?? []).map((w) => ({ value: ownedWorkspaceKey(w.id), label: w.name })),
+              ...(sharedWorkspaces.data ?? []).map((w) => ({
+                value: sharedWorkspaceKey(w.owner_id, w.workspace_id),
+                label: `${w.workspace_name} · ${w.owner_username} (${w.role === "viewer" ? t("查看者") : w.role === "admin" ? t("管理员") : t("编辑者")})`,
+              })),
+            ]}
             label={t("工作区")}
           />
         ) : (
@@ -68,7 +75,7 @@ export default function WorkbenchHeader() {
         </ToolButton>
       </Flex>
       <Flex align="center" gap="4">
-        <Button
+        {!selectedShared && <Button
           variant="ghost"
           color="gray"
           className="search-trigger"
@@ -77,8 +84,8 @@ export default function WorkbenchHeader() {
           <Search size={16} />
           <span>{t("搜索请求")}</span>
           <kbd>⌘ K</kbd>
-        </Button>
-        {native ? (
+        </Button>}
+        {native && !selectedShared ? (
           <Button
             variant="soft"
             color={sync.data?.connected ? "cyan" : "gray"}
@@ -93,7 +100,7 @@ export default function WorkbenchHeader() {
             <span>{sync.data?.connected ? t("同步") : t("连接服务器")}</span>
           </Button>
         ) : (
-          <Badge color="gray" variant="soft"> {t("自托管")} </Badge>
+          <Badge color="gray" variant="soft"> {native && selectedShared ? t("托管共享") : t("自托管")} </Badge>
         )}
         <ToolButton
           label={dark ? t("切换为浅色") : t("切换为深色")}

@@ -10,20 +10,54 @@ use moleapi_protocols::{
 use serde::Deserialize;
 use std::sync::Arc;
 type SharedMask = Arc<std::sync::RwLock<Arc<Redactor>>>;
+pub(crate) struct SessionCreateGuard {
+    sessions: Arc<moleapi_protocols::SessionManager>,
+    owner: String,
+    id: String,
+    armed: bool,
+}
+impl SessionCreateGuard {
+    fn new(state: &AppState, owner: &str, id: &str) -> Self {
+        Self {
+            sessions: state.protocol_sessions.clone(),
+            owner: owner.into(),
+            id: id.into(),
+            armed: true,
+        }
+    }
+    pub(crate) fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+impl Drop for SessionCreateGuard {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+            let sessions = self.sessions.clone();
+            let owner = self.owner.clone();
+            let id = self.id.clone();
+            runtime.spawn(async move {
+                let _ = sessions.remove(&owner, &id).await;
+            });
+        }
+    }
+}
 #[derive(Deserialize)]
 pub struct Create {
-    workspace_id: String,
-    request: RequestSpec,
-    environment_id: Option<String>,
+    pub(crate) workspace_id: String,
+    pub(crate) request: RequestSpec,
+    pub(crate) environment_id: Option<String>,
     #[serde(default)]
-    locals: Vec<VariableUpdate>,
+    pub(crate) locals: Vec<VariableUpdate>,
 }
 #[derive(Deserialize)]
 pub struct Cursor {
     #[serde(default)]
     after: u64,
 }
-fn error(e: anyhow::Error) -> ApiError {
+pub(crate) fn error(e: anyhow::Error) -> ApiError {
     let text = e.to_string();
     if text == "Session not found" {
         ApiError::not_found()
@@ -49,8 +83,19 @@ pub(crate) struct DataCompletionContext {
     scopes: tokio::sync::Mutex<moleapi_core::VariableScopes>,
     processing: tokio::sync::watch::Sender<Option<String>>,
     mask_state: SharedMask,
+    member: Option<crate::collaboration::MemberLive>,
+    actor: String,
+    headers: axum::http::HeaderMap,
 }
 impl DataCompletionContext {
+    async fn check_member(&self) -> Result<(), ApiError> {
+        if let Some(member) = &self.member {
+            member.check(&self.state, &self.actor).await?;
+            crate::auth::still_authenticated(&self.state, &self.actor, &self.headers).await?;
+        }
+        Ok(())
+    }
+
     fn refresh_mask(&self, values: &std::collections::BTreeSet<String>) -> Result<(), ApiError> {
         let redactor = Arc::new(Redactor::new(values)?);
         *self.mask_state.write().unwrap() = redactor;
@@ -76,10 +121,24 @@ pub async fn create(
     headers: axum::http::HeaderMap,
     Json(c): Json<Create>,
 ) -> Result<Json<SessionSummary>, ApiError> {
-    let admission = s.protocol_admission.owner(&owner.0)?;
+    let actor = owner.0.clone();
+    let (summary, mut guard) = create_as(s, owner, &actor, headers, c, None).await?;
+    guard.disarm();
+    Ok(Json(summary))
+}
+
+pub(crate) async fn create_as(
+    s: AppState,
+    owner: Identity,
+    actor: &str,
+    headers: axum::http::HeaderMap,
+    c: Create,
+    member: Option<&crate::collaboration::MemberLive>,
+) -> Result<(SessionSummary, SessionCreateGuard), ApiError> {
+    let admission = s.protocol_admission.owner(actor)?;
     let generation = {
         let generation = admission.lock().await;
-        crate::auth::still_authenticated(&s, &owner.0, &headers).await?;
+        crate::auth::still_authenticated(&s, actor, &headers).await?;
         *generation
     };
     let w = owned(&s, &owner.0, &c.workspace_id).await?;
@@ -262,7 +321,10 @@ pub async fn create(
     if *admitted_generation != generation {
         return Err(ApiError::unauthorized());
     }
-    crate::auth::still_authenticated(&s, &owner.0, &headers).await?;
+    crate::auth::still_authenticated(&s, actor, &headers).await?;
+    if let Some(member) = member {
+        member.check(&s, actor).await?;
+    }
     let mut summary = s
         .protocol_sessions
         .register(
@@ -280,6 +342,7 @@ pub async fn create(
             feedback,
         )
         .map_err(error)?;
+    let guard = SessionCreateGuard::new(&s, &owner.0, &summary.id);
     // Registration comes first: concurrent deletion can now cancel the connecting record.
     match check(&s, &owner.0, &summary.id).await {
         Ok(_) => {}
@@ -398,6 +461,9 @@ pub async fn create(
             scopes: tokio::sync::Mutex::new(scopes),
             processing: tokio::sync::watch::channel(None).0,
             mask_state: mask_state.clone(),
+            member: member.cloned(),
+            actor: actor.to_owned(),
+            headers: headers.clone(),
         });
         {
             let mut sessions = s.data_sessions.lock().unwrap();
@@ -460,7 +526,13 @@ pub async fn create(
     }
     summary.variable_updates = updates;
     summary.request_updates = request_updates;
-    Ok(Json(summary))
+    if let Some(member) = member
+        && let Err(error) = member.check(&s, actor).await
+    {
+        let _ = s.protocol_sessions.remove(&owner.0, &summary.id).await;
+        return Err(error);
+    }
+    Ok((summary, guard))
 }
 async fn save_data_completion(
     context: &DataCompletionContext,
@@ -474,6 +546,7 @@ async fn save_data_completion(
     {
         return Ok(None);
     }
+    context.check_member().await?;
     let w = owned(&context.state, &context.owner, &context.workspace_id).await?;
     let mut scopes = context.scopes.lock().await;
     let history_cleared = crate::history::cleared_since(
@@ -588,23 +661,32 @@ async fn save_data_completion(
         stored.size_bytes = stored.body.len();
         stored.tests.clear();
     }
+    context.check_member().await?;
+    let environment = scopes.effective();
+    let privacy = crate::privacy::HistoryPrivacy {
+        values: &scopes.private_values,
+        redact_failed_response,
+    };
     let history_id = if history_cleared {
         None
+    } else if let Some(member) = &context.member {
+        let entry =
+            crate::history::project(&w, &context.request, Some(&environment), &stored, privacy)?;
+        member.insert_history(&context.state, &entry).await?;
+        Some(entry.id)
     } else {
         crate::history::record(
             &context.state,
             &context.owner,
             &w,
             &context.request,
-            Some(&scopes.effective()),
+            Some(&environment),
             &stored,
-            crate::privacy::HistoryPrivacy {
-                values: &scopes.private_values,
-                redact_failed_response,
-            },
+            privacy,
         )
         .await?
     };
+    context.check_member().await?;
     context.refresh_mask(&scopes.private_values)?;
     drop(guard);
     if history_id.is_none() && !history_cleared {
@@ -719,6 +801,7 @@ async fn send_scripted_data_query(
     if *admitted != context.generation || check(s, owner, id).await.is_err() {
         return Err(ApiError::unauthorized());
     }
+    context.check_member().await?;
     let mut scopes = context.scopes.lock().await;
     let before = scopes.clone();
     let prepared = tokio::select! {
@@ -798,6 +881,7 @@ async fn send_scripted_data_query(
             .data_event(owner, id, EventMessage::DataSkipped { query_id });
         return Ok(());
     };
+    context.check_member().await?;
     context.processing.send_replace(Some(query_id.clone()));
     let source = match &context.prepared_request.protocol {
         Protocol::Data { config } => config,

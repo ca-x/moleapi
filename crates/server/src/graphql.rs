@@ -5,15 +5,15 @@ use moleapi_core::{Pair, Protocol, RequestSpec, Response, Specification, Variabl
 use serde::{Deserialize, Serialize};
 #[derive(Deserialize)]
 pub struct Introspect {
-    workspace_id: String,
-    request: RequestSpec,
-    environment_id: Option<String>,
+    pub(crate) workspace_id: String,
+    pub(crate) request: RequestSpec,
+    pub(crate) environment_id: Option<String>,
     #[serde(default)]
-    variables: Vec<Pair>,
+    pub(crate) variables: Vec<Pair>,
     #[serde(default)]
-    data: Vec<Pair>,
+    pub(crate) data: Vec<Pair>,
     #[serde(default)]
-    locals: Vec<VariableUpdate>,
+    pub(crate) locals: Vec<VariableUpdate>,
 }
 #[derive(Serialize)]
 pub struct IntrospectionResult {
@@ -118,8 +118,8 @@ pub async fn introspect(
 }
 #[derive(Deserialize)]
 pub struct SchemaSource {
-    workspace_id: String,
-    specification_id: String,
+    pub(crate) workspace_id: String,
+    pub(crate) specification_id: String,
 }
 #[derive(Serialize)]
 pub struct SchemaResult {

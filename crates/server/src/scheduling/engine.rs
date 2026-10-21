@@ -342,34 +342,37 @@ async fn execute(
         return finish(&state, &claim, record).await;
     }
     let input=serde_json::from_value(serde_json::json!({"collection_id":claim.definition.collection_id,"notification_ids":[],"scenario_id":claim.definition.scenario_id,"environment_id":claim.definition.environment_id,"dataset_id":claim.definition.dataset_id,"iterations":claim.definition.iterations,"job_id":claim.job.id})).map_err(|_|ApiError::internal())?;
-    let future = crate::runner::run(
-        State(state.clone()),
-        Extension(Identity(claim.owner.clone())),
-        Path(claim.workspace.clone()),
-        Json(input),
-    );
-    tokio::pin!(future);
-    let watchdog = async {
-        loop {
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            let active = running(&state, &claim).await?;
-            if active
-                .as_ref()
-                .is_none_or(|job| job.id != claim.job.id || job.cancel_requested)
-            {
-                return Ok::<(), ApiError>(());
+    let result = {
+        // Release the losing DB watchdog and any unfinished run before finish() writes.
+        let future = crate::runner::run(
+            State(state.clone()),
+            Extension(Identity(claim.owner.clone())),
+            Path(claim.workspace.clone()),
+            Json(input),
+        );
+        tokio::pin!(future);
+        let watchdog = async {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                let active = running(&state, &claim).await?;
+                if active
+                    .as_ref()
+                    .is_none_or(|job| job.id != claim.job.id || job.cancel_requested)
+                {
+                    return Ok::<(), ApiError>(());
+                }
             }
-        }
-    };
-    tokio::pin!(watchdog);
-    let result = tokio::select! { biased;
-        _=shutdown.cancelled()=>{let _=state.project_jobs.cancel_job(&claim.owner,Some(&claim.workspace),&claim.job.id);return Ok(());},
-        result=&mut future=>result,
-        watched=&mut watchdog=>{
-            let _=state.project_jobs.cancel_job(&claim.owner,Some(&claim.workspace),&claim.job.id);
-            match watched {
-                Err(error)=>Err(error),
-                Ok(())=>tokio::select!{result=&mut future=>result,_=tokio::time::sleep(std::time::Duration::from_secs(2))=>Ok(Json(serde_json::json!({"cancelled":true}))),_=shutdown.cancelled()=>return Ok(())},
+        };
+        tokio::pin!(watchdog);
+        tokio::select! { biased;
+            _=shutdown.cancelled()=>{let _=state.project_jobs.cancel_job(&claim.owner,Some(&claim.workspace),&claim.job.id);return Ok(());},
+            result=&mut future=>result,
+            watched=&mut watchdog=>{
+                let _=state.project_jobs.cancel_job(&claim.owner,Some(&claim.workspace),&claim.job.id);
+                match watched {
+                    Err(error)=>Err(error),
+                    Ok(())=>tokio::select!{result=&mut future=>result,_=tokio::time::sleep(std::time::Duration::from_secs(2))=>Ok(Json(serde_json::json!({"cancelled":true}))),_=shutdown.cancelled()=>return Ok(())},
+                }
             }
         }
     };

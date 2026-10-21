@@ -191,6 +191,15 @@ fn redact_auth(auth: &mut moleapi_core::Auth, privacy: &ExportPrivacy) {
     auth.token.clear();
     auth.password.clear();
 }
+fn screen_label(privacy: &ExportPrivacy, text: &str) -> String {
+    let screened = privacy.screen_bounded(text, text.len().max(256));
+    if screened.is_empty() && !text.is_empty() {
+        "[REDACTED]".into()
+    } else {
+        screened
+    }
+}
+
 pub(super) fn workspace(source: &Workspace) -> Workspace {
     let linked_specifications: std::collections::HashSet<String> = source
         .data
@@ -229,6 +238,7 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
                     || r.network.is_some()
             });
     let mut result = source.clone();
+    result.name = screen_label(&tcp_privacy, &result.name);
     for document in &mut result.data.documents {
         let name = privacy.screen_bounded(&document.name, 512);
         document.name = if name.is_empty() || name.chars().count() > 128 {
@@ -337,6 +347,7 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
     }
 
     for environment in &mut result.data.environments {
+        environment.name = screen_label(&tcp_privacy, &environment.name);
         for variable in &mut environment.variables {
             // A secret variable can be copied into a public-looking row even without auth.
             variable.value =
@@ -356,12 +367,9 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
         variable.local_value = None;
     }
     for collection in &mut result.data.collections {
+        collection.name = screen_label(&tcp_privacy, &collection.name);
+        collection.description = tcp_privacy.screen_generation_text(&collection.description);
         if auth_private {
-            collection.name = tcp_privacy.screen_bounded(&collection.name, 256);
-            if collection.name.is_empty() {
-                collection.name = "[REDACTED]".into();
-            }
-            collection.description = tcp_privacy.screen_generation_text(&collection.description);
             collection.pre_request_script = tcp_privacy.screen_bounded(
                 &collection.pre_request_script,
                 moleapi_core::MAX_SCRIPT_BYTES,
@@ -385,6 +393,8 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
             variable.local_value = None;
         }
         for request in &mut collection.requests {
+            request.name = screen_label(&tcp_privacy, &request.name);
+            request.description = tcp_privacy.screen_generation_text(&request.description);
             for rule in &mut request.extractions {
                 rule.name = data_privacy.screen_bounded(&rule.name, 256);
                 let target = data_privacy.screen_bounded(&rule.target, 4096);
@@ -426,7 +436,6 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
                 } else {
                     screened_url
                 };
-                request.description = tcp_privacy.screen_generation_text(&request.description);
                 request.pre_request_script = tcp_privacy
                     .screen_bounded(&request.pre_request_script, moleapi_core::MAX_SCRIPT_BYTES);
                 request.post_response_script = tcp_privacy.screen_bounded(
@@ -465,6 +474,7 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
                 }
             }
             for example in &mut request.examples {
+                example.name = screen_label(&tcp_privacy, &example.name);
                 example.mock_script.clear();
                 example.mock_data = None;
                 example.mock_schema.clear();
@@ -776,6 +786,7 @@ pub(super) fn workspace(source: &Workspace) -> Workspace {
         }
     }
     for specification in &mut result.data.specifications {
+        specification.name = screen_label(&tcp_privacy, &specification.name);
         if specification.kind == "insomnia" || linked_specifications.contains(&specification.id) {
             specification.source.clear();
             continue;

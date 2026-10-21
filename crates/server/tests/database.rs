@@ -22,6 +22,7 @@ async fn identical_storage_auth_cas_tests_on_every_configured_database() {
         }
     }
     for url in urls {
+        let backend = url.split("://").next().unwrap_or("unknown").to_owned();
         let router = common::hosted(config(url.clone(), true)).await.unwrap();
         if call(&router, "GET", "/api/auth/status", None, None).await.1["setup_required"] == true {
             let closed = common::hosted(config(url.clone(), false)).await.unwrap();
@@ -64,6 +65,51 @@ async fn identical_storage_auth_cas_tests_on_every_configured_database() {
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{published_workspace}");
+        let invite_path = format!("/api/workspaces/{published_id}/invitations");
+        let (status, invitation) = call(
+            &router,
+            "POST",
+            &invite_path,
+            Some(&a),
+            Some(json!({"role":"viewer","expires_in_days":1})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{invitation}");
+        let (status, accepted) = call(
+            &router_again,
+            "POST",
+            "/api/workspace-invitations/accept",
+            Some(&b),
+            Some(json!({"token":invitation["token"]})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{accepted}");
+        let owner_id = invitation["owner_id"].as_str().unwrap();
+        let shared_path = format!("/api/owners/{owner_id}/workspaces/{published_id}");
+        let (status, projected) = call(&router_again, "GET", &shared_path, Some(&b), None).await;
+        assert_eq!(status, StatusCode::OK, "{projected}");
+        assert_eq!(projected["id"], published_id);
+        assert_eq!(
+            call(
+                &router,
+                "DELETE",
+                &format!(
+                    "{shared_path}/members/{}",
+                    accepted["member_id"].as_str().unwrap()
+                ),
+                Some(&a),
+                None
+            )
+            .await
+            .0,
+            StatusCode::OK
+        );
+        assert_eq!(
+            call(&router_again, "GET", &shared_path, Some(&b), None)
+                .await
+                .0,
+            StatusCode::NOT_FOUND
+        );
         let publications_path = format!("/api/workspaces/{published_id}/doc-publications");
         let publication_input = json!({"title":"Public guides","expected_revision":published_workspace["revision"],"document_ids":["guide"],"idempotency_key":"same-key","appearance":{"theme":"dark","layout":"top"}});
         let (status, publication) = call(
@@ -313,7 +359,7 @@ async fn identical_storage_auth_cas_tests_on_every_configured_database() {
             .0,
             StatusCode::NOT_FOUND
         );
-        verify_workspace_restore(&router, &router_again, &a, &b, &prefix).await;
+        verify_workspace_restore(&router, &router_again, &a, &b, &prefix, &backend).await;
         let rate_id = format!("rate-{prefix}");
         let mut rate_data = example_data();
         rate_data["collections"][0]["requests"][0]["examples"][0]["rate_limit_per_minute"] =
@@ -770,6 +816,7 @@ async fn verify_workspace_restore(
     owner: &str,
     foreign: &str,
     suffix: &str,
+    backend: &str,
 ) {
     let id = format!("restore-{suffix}");
     let path = format!("/api/workspaces/{id}");
@@ -879,7 +926,7 @@ async fn verify_workspace_restore(
     assert!(
         (first.0 == StatusCode::OK && second.0 == StatusCode::CONFLICT)
             || (second.0 == StatusCode::OK && first.0 == StatusCode::CONFLICT),
-        "{first:?} {second:?}"
+        "{backend}: {first:?} {second:?}"
     );
     let (status, latest) = call(other_instance, "GET", &path, Some(owner), None).await;
     assert_eq!(status, StatusCode::OK, "{latest}");

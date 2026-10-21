@@ -2,6 +2,7 @@ mod a2a;
 mod access_tokens;
 mod auth;
 mod ci;
+mod collaboration;
 mod cookies;
 mod credential_revocations;
 mod data_datasets;
@@ -15,6 +16,7 @@ mod generation_projects;
 mod graphql;
 mod grpc;
 mod history;
+mod mcp_config;
 mod mock;
 mod mock_logs;
 mod mock_public;
@@ -97,6 +99,8 @@ struct AppState {
     script_worker: PathBuf,
     protocol_sessions: Arc<moleapi_protocols::SessionManager>,
     protocol_admission: Arc<protocol_admission::AdmissionGates>,
+    member_protocol_sessions:
+        Arc<std::sync::Mutex<std::collections::HashMap<String, collaboration::MemberLive>>>,
     data_sessions: Arc<
         std::sync::Mutex<
             std::collections::HashMap<String, std::sync::Weak<protocols::DataCompletionContext>>,
@@ -345,6 +349,7 @@ async fn build(
         script_worker,
         protocol_sessions: moleapi_protocols::SessionManager::new(),
         protocol_admission: Arc::new(protocol_admission::AdmissionGates::default()),
+        member_protocol_sessions: Arc::default(),
         data_sessions: Arc::default(),
         a2a_sources: Arc::new(a2a::Sources::default()),
         webhooks: Arc::new(webhooks::Hub::default()),
@@ -410,6 +415,7 @@ async fn build(
         .route("/webhooks/listener/start", post(webhooks::listener_start))
         .route("/webhooks/listener/stop", post(webhooks::listener_stop))
         .route("/auth/logout", post(auth::logout))
+        .route("/auth/me", get(auth::me))
         .route(
             "/auth/tokens",
             get(access_tokens::list).post(access_tokens::create),
@@ -421,6 +427,188 @@ async fn build(
         .route(
             "/workspaces",
             get(workspaces::list).post(workspaces::create),
+        )
+        .route("/workspaces/shared", get(collaboration::list_shared))
+        .route(
+            "/workspaces/{id}/invitations",
+            get(collaboration::list_invitations).post(collaboration::create_invitation),
+        )
+        .route(
+            "/workspace-invitations/accept",
+            post(collaboration::accept_invitation),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/invitations",
+            get(collaboration::list_invitations_scoped)
+                .post(collaboration::create_invitation_scoped),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/invitations/{invitation}",
+            axum::routing::delete(collaboration::revoke_invitation),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/members",
+            get(collaboration::list_members),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/audit",
+            get(collaboration::list_audit),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}",
+            get(collaboration::shared_get).put(collaboration::shared_update),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/run",
+            post(collaboration::shared_run),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/run/cancel",
+            post(collaboration::shared_run_cancel),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/requests/{request}/execute",
+            post(collaboration::shared_execute),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/execute-draft",
+            post(collaboration::shared_execute_draft),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/sessions",
+            post(collaboration::shared_session_create),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/sessions/{id}",
+            get(collaboration::shared_session_get).delete(collaboration::shared_session_delete),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/sessions/{id}/events",
+            get(collaboration::shared_session_events),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/sessions/{id}/send",
+            post(collaboration::shared_session_send),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/sessions/{id}/close",
+            post(collaboration::shared_session_close),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/mock/{request}/{example}",
+            get(collaboration::shared_mock),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/mock/route-preview",
+            post(collaboration::shared_mock_route_preview),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/dubbo/cancel",
+            post(collaboration::shared_dubbo_cancel),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/dubbo/metadata/preview",
+            post(collaboration::shared_dubbo_metadata_preview),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/dubbo/metadata/import",
+            post(collaboration::shared_dubbo_metadata_import),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/a2a/cards/import",
+            post(collaboration::shared_a2a_import),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/a2a/cards/read",
+            post(collaboration::shared_a2a_read),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/a2a/cards/discover",
+            post(collaboration::shared_a2a_discover),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/a2a/cards/discover/cancel",
+            post(collaboration::shared_a2a_cancel),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/mcp/config/export",
+            post(collaboration::shared_mcp_config_export),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/soap/import",
+            post(collaboration::shared_soap_import),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/soap/import-url",
+            post(collaboration::shared_soap_import_url),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/soap/schema",
+            post(collaboration::shared_soap_schema),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/grpc/import",
+            post(collaboration::shared_grpc_import),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/grpc/schema",
+            post(collaboration::shared_grpc_schema),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/grpc/reflect",
+            post(collaboration::shared_grpc_reflect),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/graphql/introspect",
+            post(collaboration::shared_graphql_introspect),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/graphql/schema",
+            post(collaboration::shared_graphql_schema),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/specifications/preview",
+            post(collaboration::shared_specification_preview),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/dataset/preview",
+            post(collaboration::shared_dataset_preview),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/mock-schema/validate",
+            post(collaboration::shared_validate_mock_schema),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/mocks/{*path}",
+            axum::routing::any(collaboration::shared_mock_dispatch),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/mock-calls",
+            get(collaboration::shared_mock_calls),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/history",
+            get(collaboration::shared_history),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/reports",
+            get(collaboration::shared_reports),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/reports/{report}",
+            get(collaboration::shared_report),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/reports/{report}/export",
+            get(collaboration::shared_report_export),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/reports/{report}/steps/{position}/response",
+            get(collaboration::shared_report_response),
+        )
+        .route(
+            "/owners/{owner}/workspaces/{workspace}/members/{member}",
+            axum::routing::patch(collaboration::change_role).delete(collaboration::remove_member),
         )
         .route(
             "/workspaces/{id}",
@@ -638,6 +826,10 @@ async fn build(
         .route("/a2a/cards/discover", post(a2a::discover))
         .route("/graphql/introspect", post(graphql::introspect))
         .route("/graphql/schema", post(graphql::schema))
+        .route(
+            "/workspaces/{workspace}/mcp/config/export",
+            post(mcp_config::export),
+        )
         .route("/grpc/schema", post(grpc::schema))
         .route("/grpc/import", post(grpc::import))
         .route("/grpc/reflect", post(grpc::reflect))
@@ -662,6 +854,7 @@ async fn build(
         protected
             .route("/workspaces/{id}/sync", post(sync::sync))
             .route("/sync/status", get(sync::status))
+            .route("/sync/collaboration", post(sync::collaboration_request))
             .route(
                 "/sync/connect",
                 post(sync::connect).delete(sync::disconnect),

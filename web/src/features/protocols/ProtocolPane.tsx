@@ -7,7 +7,6 @@ import {
   Flex,
   Heading,
   ScrollArea,
-  Table,
   Tabs,
   Text,
 } from "@radix-ui/themes";
@@ -16,6 +15,7 @@ import { Editor, Choice } from "../../shared/ui";
 import { bytes } from "../../shared/model";
 import { useWorkbench } from "../workbench/context";
 import { messageContent } from "./events";
+import SessionHandshake from "./SessionHandshake";
 export default function ProtocolPane() {
   useLanguage();
   const { protocolSession, dark } = useWorkbench();
@@ -177,31 +177,7 @@ export default function ProtocolPane() {
               </div>
             </div>
           </Tabs.Content>
-          <Tabs.Content value="handshake">
-            <Text as="p" size="1" color="gray" className="wrap-anywhere">
-              {session.url}
-            </Text>
-            <Text as="p" size="2" mt="3"> {t("状态")} {session.handshake?.status ?? t("等待握手")}
-            </Text>
-            <Table.Root>
-              <Table.Header>
-                <Table.Row>
-                  <Table.ColumnHeaderCell>{t("名称")}</Table.ColumnHeaderCell>
-                  <Table.ColumnHeaderCell>{t("值")}</Table.ColumnHeaderCell>
-                </Table.Row>
-              </Table.Header>
-              <Table.Body>
-                {session.handshake?.headers.map((header, index) => (
-                  <Table.Row key={index}>
-                    <Table.Cell className="mono">{header.key}</Table.Cell>
-                    <Table.Cell className="mono wrap-anywhere">
-                      {header.value}
-                    </Table.Cell>
-                  </Table.Row>
-                ))}
-              </Table.Body>
-            </Table.Root>
-          </Tabs.Content>
+          <Tabs.Content value="handshake"><SessionHandshake session={session} /></Tabs.Content>
           {websocket && (
             <Tabs.Content value="send">
               <Flex align="center" justify="between" gap="3" mb="3">
