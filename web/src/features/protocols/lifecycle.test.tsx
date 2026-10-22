@@ -8,9 +8,9 @@ import { initialData, newRequest } from "../../shared/model";
 import type { Workspace } from "../../shared/types";
 import { useProtocolSession } from "./useProtocolSession";
 import { useWorkbenchController } from "../workbench/useWorkbenchController";
-import type { useWorkspace } from "../workspaces/useWorkspace";
+import { useWorkspace } from "../workspaces/useWorkspace";
 import type { useLocalVariables } from "../variables/useLocalVariables";
-import type { ProtocolSession } from "./types";
+import type { EventBatch, ProtocolSession } from "./types";
 import { dataConfig } from "../data/model";
 vi.mock("../../shared/api", async (original) => ({
   ...(await original<typeof import("../../shared/api")>()),
@@ -356,4 +356,75 @@ it("closes a late session creation after replacing the same workspace without ap
   expect(hook.result.current.session).toBeNull();
   expect(locals.apply).not.toHaveBeenCalled();
   expect(api).toHaveBeenCalledWith("/api/sessions/session-a/close", "POST", {});
+});
+
+
+it("fetches final events after Stop when the initial pending poll captured an empty snapshot", async () => {
+  const empty: EventBatch = { events: [], next_cursor: 0, earliest_cursor: 1, dropped_count: 0 };
+  const finalBatch: EventBatch = {
+    ...empty,
+    next_cursor: 1,
+    events: [{ cursor: 1, received_at: "now", direction: "system", message: { kind: "state", state: "closed", reason: "Finished" } }],
+  };
+  const terminal = { ...session, state: "closed" as const, reason: "Finished", event_count: 1 };
+  let finishFirst!: (value: EventBatch) => void;
+  const firstBatch = new Promise<EventBatch>((resolve) => { finishFirst = resolve; });
+  let closed = false;
+  let eventReads = 0;
+  vi.mocked(api).mockImplementation(async (path, method) => {
+    if (path === "/api/sessions") return session;
+    if (path.endsWith("/close") && method === "POST") {
+      closed = true;
+      return terminal;
+    }
+    if (path.includes("/events?")) {
+      eventReads++;
+      return eventReads === 1 ? firstBatch : finalBatch;
+    }
+    return closed ? terminal : session;
+  });
+  const workspace = { accountId: "account-a", draft, dirty: false, save: vi.fn() } as unknown as ReturnType<typeof useWorkspace>;
+  const locals = { values: () => [], apply: vi.fn() } as unknown as ReturnType<typeof useLocalVariables>;
+  const hook = renderHook(() => useProtocolSession(workspace, request, locals, true), { wrapper: Wrapper });
+  await act(async () => { await hook.result.current.connect(); });
+  await waitFor(() => expect(eventReads).toBe(1));
+  await act(async () => { await hook.result.current.close(); });
+  expect(hook.result.current.session?.state).toBe("closed");
+  await act(async () => {
+    finishFirst(empty);
+    await firstBatch;
+  });
+  await waitFor(() => expect(hook.result.current.events).toEqual(finalBatch.events));
+  expect(eventReads).toBe(2);
+  expect(hook.result.current.session?.state).toBe("closed");
+});
+
+it("rejects a retained send before any POST when the same workspace is replaced before rerender", async () => {
+  const socketRequest = { ...request, protocol: { kind: "websocket" } as const };
+  const original = { ...draft, data: { ...data, collections: [{ ...data.collections[0], requests: [socketRequest] }] } };
+  const opened = { ...session, protocol: "websocket" as const };
+  client.setQueryData(["workspaces", "local"], [original]);
+  vi.mocked(api).mockImplementation(async (path) => {
+    if (path === "/api/workspaces") return [original];
+    if (path.includes("/events?")) return { events: [], next_cursor: 0, earliest_cursor: 1, dropped_count: 0 };
+    return opened;
+  });
+  const locals = { values: () => [], apply: vi.fn() } as unknown as ReturnType<typeof useLocalVariables>;
+  const hook = renderHook(() => {
+    const workspace = useWorkspace(true);
+    const selected = workspace.draft?.data.collections[0].requests[0];
+    return { workspace, channel: useProtocolSession(workspace, selected, locals, true) };
+  }, { wrapper: Wrapper });
+  await waitFor(() => expect(hook.result.current.workspace.draft).toBeDefined());
+  await act(async () => { await hook.result.current.channel.connect(); });
+  expect(hook.result.current.channel.session?.state).toBe("open");
+  const retainedSend = hook.result.current.channel.send;
+  let accepted: boolean | undefined;
+  await act(async () => {
+    hook.result.current.workspace.installWorkspace({ ...original, revision: 3 });
+    accepted = await retainedSend({ kind: "text", text: "stale workspace command" });
+  });
+  expect(accepted).toBe(false);
+  expect(vi.mocked(api).mock.calls.filter(([path]) => path === "/api/sessions/session-a/send")).toHaveLength(0);
+  expect(hook.result.current.channel.session).toBeNull();
 });

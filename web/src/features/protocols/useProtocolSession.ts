@@ -3,7 +3,7 @@ import { errorCopy } from "../../shared/i18n/errors";
 import type { ErrorCopy } from "../../shared/i18n/errors";
 import { useLanguage, translateCopy } from "../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
-import { useQuery, CancelledError } from "@tanstack/react-query";
+import { useQuery, useQueryClient, CancelledError } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "../../shared/api";
 import { safeMessage } from "../../shared/model";
@@ -35,6 +35,7 @@ export function useProtocolSession(
   authenticated: boolean,
 ) {
   useLanguage();
+  const client = useQueryClient();
   const kind = request?.protocol?.kind || "http";
   const identity = JSON.stringify([
     authenticated,
@@ -236,12 +237,18 @@ export function useProtocolSession(
         "POST",
         {},
       );
-      if (current(origin, epoch) && sessionRef.current === sessionId)
-        setActive((previous) =>
-          previous?.session.id === session.id
-            ? { ...previous, session }
-            : previous,
-        );
+      if (!current(origin, epoch) || sessionRef.current !== sessionId) return;
+      setActive((previous) =>
+        previous?.session.id === session.id
+          ? { ...previous, session }
+          : previous,
+      );
+      // An initial pending poll can be reused by refetch even after Stop.
+      // Cancel it so the final read captures events produced by close.
+      await client.cancelQueries({
+        queryKey: ["protocol-session", workspace.accountId, sessionId],
+        exact: true,
+      });
       if (current(origin, epoch) && sessionRef.current === sessionId)
         void poll.refetch();
     } catch (caught) {
@@ -253,12 +260,15 @@ export function useProtocolSession(
     const cancelData = message.kind === "data_cancel";
     if (
       !sessionId ||
-      live?.session.state !== "open" ||
+      !live ||
+      live.session.state !== "open" ||
+      !current(identity, live.generation) ||
+      sessionRef.current !== sessionId ||
       (sends.current.has(scopeKey()) && !cancelData)
     )
       return false;
     const origin = identity;
-    const epoch = generation.current;
+    const epoch = live.generation;
     const ticket = scopeKey();
     if (!cancelData) {
       sends.current.add(ticket);

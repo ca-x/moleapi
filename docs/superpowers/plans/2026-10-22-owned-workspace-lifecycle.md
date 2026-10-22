@@ -4,8 +4,8 @@ Continue development after the native shared-workspace plan. This slice closes t
 
 ## Contract
 
-- A session in `closed` or `error` state cannot return to `open` or `connecting` when an older poll completes. Final events remain readable and automatic polling stops.
-- Explicitly installing/restoring a workspace replaces its transient request-editor state and closes its live sessions, even when workspace/request IDs stay the same. Ordinary edits and successful saves preserve editor input and connections.
+- A session in `closed` or `error` state cannot return to `open` or `connecting` when an older poll completes. Final events remain readable and automatic polling stops; Stop forces a post-close event read even if the initial poll is still pending.
+- Explicitly installing/restoring a workspace replaces its transient request-editor state and closes its live sessions, even when workspace/request IDs stay the same. Ordinary edits and successful saves preserve editor input and connections. Retained send callbacks must reject a replaced context before any network request.
 - Request/account switches and unmount close the session captured by their cleanup; a cleanup cannot close a newer session.
 
 ## Tasks and evidence
@@ -26,7 +26,9 @@ Continue development after the native shared-workspace plan. This slice closes t
 - Task 2 complete: terminal states reject stale live summaries, final events remain visible, and the terminal session stops its polling interval. All four terminal/live-state combinations pass.
 - Task 3 complete: explicit installations advance a local generation separately from persisted revision. Editors/body scopes and live-session identity follow that generation. A synchronous generation reference fences late HTTP results, errors and private updates, including responses resolved before the replacement rerender.
 - Task 4 complete: captured-session cleanup on request change/unmount, pending creation during replacement, and ordinary-save input/connection preservation pass. SharedLiveSessionPanel already has the terminal adoption guard; no shared-path changes were needed.
-- Task 5 complete: focused 36 tests pass; all 808 frontend tests in 148 files pass (12 added); TypeScript and production build pass; 38 frontend chunks pass cycle validation; `git diff --check` passes. No backend or installed-native GUI claim is made for this frontend slice.
+- Task 5 complete: focused 38 tests pass; all 810 frontend tests in 148 files pass (14 added); TypeScript and production build pass; 38 frontend chunks pass cycle validation; `git diff --check` passes. No backend or installed-native GUI claim is made for this frontend slice.
+
+- Independent review found two important ordering gaps: an initial pending empty poll was reused after Stop, dropping final events, and a retained send callback could POST after synchronous workspace replacement. Both new regressions failed for the intended reasons before the fixes. Stop now cancels that exact session query before starting its final read, and send checks the captured generation/session before recording state or network I/O. The focused and full-suite results above include both fixes.
 
 ## Remaining parent-plan boundaries
 
