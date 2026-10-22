@@ -6590,7 +6590,7 @@ dependencies = [
 
 [[package]]
 name = "moleapi-cli"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "axum",
@@ -6614,7 +6614,7 @@ dependencies = [
 
 [[package]]
 name = "moleapi-core"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "apollo-parser",
@@ -6699,7 +6699,7 @@ dependencies = [
 
 [[package]]
 name = "moleapi-data"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -6732,7 +6732,7 @@ dependencies = [
 
 [[package]]
 name = "moleapi-desktop"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "axum",
@@ -6753,7 +6753,7 @@ dependencies = [
 
 [[package]]
 name = "moleapi-formats"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -6780,7 +6780,7 @@ dependencies = [
 
 [[package]]
 name = "moleapi-generation"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -6818,7 +6818,7 @@ dependencies = [
 
 [[package]]
 name = "moleapi-protocols"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "a2a-client",
  "a2a-client-legacy",
@@ -6878,7 +6878,7 @@ dependencies = [
 
 [[package]]
 name = "moleapi-script-runtime"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "moleapi-core",
@@ -6895,7 +6895,7 @@ dependencies = [
 
 [[package]]
 name = "moleapi-server"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "a2a-rs",
  "a2a-types 0.1.1",

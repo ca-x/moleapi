@@ -98,7 +98,7 @@ cargo build --locked --release -p moleapi-server
 ./target/release/moleapi-server --bind 127.0.0.1:8787
 ```
 
-打开 http://127.0.0.1:8787，用首次启动日志中的初始化令牌创建账户。默认仅首次管理员注册；额外注册使用 --allow-registration。局域网接口调试可显式开启 --allow-private-network。
+打开 http://127.0.0.1:8787，用首次启动日志中的初始化令牌创建账户。默认仅首次管理员注册；额外注册使用 `--allow-registration`（等同于 `--allow-registration=true`）。默认允许私有网络请求，可用 `--allow-private-network=false` 禁用。所有服务端启动参数均可省略：监听 `127.0.0.1:8787`、SQLite 数据库 `./data/moleapi.db`、初始化令牌自动随机生成。布尔选项支持裸参数或显式 `true/false`；空环境变量回退默认值。
 
 SQLite 默认文件为 ./data/moleapi.db。其他数据库通过 --database-url 或 MOLEAPI_DATABASE_URL 配置：
 

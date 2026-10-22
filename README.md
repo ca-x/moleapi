@@ -98,7 +98,7 @@ cargo build --locked --release -p moleapi-server
 ./target/release/moleapi-server --bind 127.0.0.1:8787
 ```
 
-Open http://127.0.0.1:8787 and create the first account using the setup token printed on first launch. Further registration requires --allow-registration. Enable --allow-private-network explicitly to debug private-network endpoints.
+Open http://127.0.0.1:8787 and create the first account using the setup token printed on first launch. Further registration requires `--allow-registration` (equivalent to `--allow-registration=true`). Private-network requests are allowed by default; disable them with `--allow-private-network=false`. All server startup options are optional: bind to `127.0.0.1:8787`, store SQLite data in `./data/moleapi.db`, and generate a random setup token. Boolean options accept a bare flag or explicit `true/false`; empty environment variables fall back to defaults.
 
 SQLite defaults to ./data/moleapi.db. Configure another database with --database-url or MOLEAPI_DATABASE_URL:
 

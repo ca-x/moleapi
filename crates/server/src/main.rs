@@ -1,20 +1,6 @@
+mod args;
+use args::Args;
 use clap::Parser;
-#[derive(Parser)]
-#[command(version, about = "MoleAPI standalone API workbench server")]
-struct Args {
-    #[arg(long, env = "MOLEAPI_BIND", default_value = "127.0.0.1:8787")]
-    bind: std::net::SocketAddr,
-    #[arg(long, env = "MOLEAPI_DATABASE_URL")]
-    database_url: Option<String>,
-    #[arg(long, default_value = "./data/moleapi.db")]
-    database: std::path::PathBuf,
-    #[arg(long, env = "MOLEAPI_SETUP_TOKEN")]
-    setup_token: Option<String>,
-    #[arg(long, env = "MOLEAPI_ALLOW_PRIVATE_NETWORK", default_value_t = false)]
-    allow_private_network: bool,
-    #[arg(long, env = "MOLEAPI_ALLOW_REGISTRATION", default_value_t = false)]
-    allow_registration: bool,
-}
 fn main() -> anyhow::Result<()> {
     if moleapi_server::dispatch_script_worker()? {
         return Ok(());
@@ -26,16 +12,19 @@ fn main() -> anyhow::Result<()> {
 }
 async fn run() -> anyhow::Result<()> {
     let args = Args::parse();
-    let database_url = match args.database_url {
+    let database_url = match args.database_url.filter(|value| !value.is_empty()) {
         Some(url) => url,
         None => moleapi_server::sqlite_database_url(&args.database)?,
     };
-    let setup_token = args.setup_token.unwrap_or_else(|| {
-        use rand::RngCore;
-        let mut bytes = [0u8; 32];
-        rand::thread_rng().fill_bytes(&mut bytes);
-        hex::encode(bytes)
-    });
+    let setup_token = args
+        .setup_token
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| {
+            use rand::RngCore;
+            let mut bytes = [0u8; 32];
+            rand::thread_rng().fill_bytes(&mut bytes);
+            hex::encode(bytes)
+        });
     let router = moleapi_server::hosted(moleapi_server::Config {
         database_url: database_url.clone(),
         setup_token: setup_token.clone(),
