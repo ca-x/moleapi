@@ -2,6 +2,10 @@
 
 Development is in progress against the full capability matrix; this is not a claim of complete Apifox/Postman parity.
 
+## Owned workspace lifecycle completion
+
+Explicit same-ID workspace restore/replacement resets transient request-editor/body drafts, closes its old live session and fences late HTTP responses, errors and extracted private values. Persisted-revision changes from ordinary saves preserve draft input and live connections. Terminal sessions retain their final events, reject older live summaries and stop automatic polling; request-change/unmount cleanup closes the captured session. See [workspace version coverage](WORKSPACE-VERSION-COVERAGE.md) and the [completion plan](superpowers/plans/2026-10-22-owned-workspace-lifecycle.md). Local verification passes 808 frontend tests in 148 files, TypeScript and the production build. Installed native GUI/platform acceptance and full feature parity remain separate requirements.
+
 ## Native hosted collaboration and stable release preparation
 
 The native client now has online shared workspace selection, invitations and the existing role-aware member workbench through canonical hosted data. Same-ID local workspaces stay independent; disconnect/account changes fence callbacks and close reachable creator sessions. See `NATIVE-SHARED-WORKSPACES-COVERAGE.md`. PR41 is merged. Candidate0.2.0 exposed a case-insensitive frontend module collision in native builds; the renamed helper and build-time path guard are included in corrected0.2.1. Stable packaging is being prepared; tag-specific CI, installer assets and Docker manifests must pass before stable publication. EDAS sandbox, installed GUI acceptance and the full395-capability matrix remain separate open requirements.

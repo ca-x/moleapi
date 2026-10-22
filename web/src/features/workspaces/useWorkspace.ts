@@ -19,6 +19,8 @@ export function useWorkspace(authenticated: boolean, accountId = "local") {
     enabled: authenticated,
   });
   const [selectedId, setSelectedId] = useState("");
+  const [workspaceGeneration, setWorkspaceGeneration] = useState(0);
+  const workspaceGenerationRef = useRef(0);
   const [state, setState] = useState<DraftState>({ draft: null, saved: null });
   const stateRef = useRef(state);
   const accountRef = useRef(accountId);
@@ -58,6 +60,9 @@ export function useWorkspace(authenticated: boolean, accountId = "local") {
   );
   const installWorkspace = useCallback(
     (item: Workspace) => {
+      // Explicit replacements invalidate transient state even when IDs match.
+      workspaceGenerationRef.current++;
+      setWorkspaceGeneration(workspaceGenerationRef.current);
       client.setQueryData<Workspace[]>(["workspaces", accountId], (old) => [
         ...(old || []).filter((w) => w.id !== item.id),
         item,
@@ -180,6 +185,8 @@ export function useWorkspace(authenticated: boolean, accountId = "local") {
   return {
     accountId,
     accountRef,
+    workspaceGeneration,
+    workspaceGenerationRef,
     workspaces,
     selectedId: accountRef.current === accountId ? selectedId : "",
     setSelectedId,

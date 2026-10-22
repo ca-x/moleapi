@@ -568,3 +568,30 @@ it("restores the selected owned workspace after shared navigation clears the sam
   expect(result.current.saved).toEqual(original);
   expect(result.current.dirty).toBe(false);
 });
+
+it.each(["success", "error"] as const)("ignores a late HTTP %s and private updates after restoring the same workspace", async (outcome) => {
+  const original = makeWorkspace();
+  const pending = deferred<ApiResponse>();
+  mockedApi.mockReturnValue(pending.promise);
+  const apply = vi.fn();
+  const locals = { values: () => [], apply } as unknown as ReturnType<typeof useLocalVariables>;
+  const hook = renderHook(() => {
+    const workspace = useWorkspace(true);
+    const requests = useRequests(workspace, vi.fn(), vi.fn(), locals);
+    return { workspace, requests };
+  }, { wrapper: harness(original) });
+  await waitFor(() => expect(hook.result.current.requests.request).toBeDefined());
+  let sending!: Promise<void>;
+  act(() => { sending = hook.result.current.requests.send(); });
+  await waitFor(() => expect(mockedApi).toHaveBeenCalledWith("/api/execute", "POST", expect.anything()));
+  await act(async () => {
+    hook.result.current.workspace.installWorkspace({ ...original, revision: 3 });
+    if (outcome === "success") pending.resolve({ ...response, variable_updates: [{ scope: "project", key: "issued", value: "stale-private-value" }] });
+    else pending.reject(new Error("stale private failure"));
+    await sending;
+  });
+  expect(apply).not.toHaveBeenCalled();
+  expect(hook.result.current.requests.response).toBeNull();
+  expect(hook.result.current.requests.requestError).toBe("");
+  expect(hook.result.current.workspace.dirty).toBe(false);
+});

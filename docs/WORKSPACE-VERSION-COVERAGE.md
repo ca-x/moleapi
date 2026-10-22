@@ -11,3 +11,12 @@ Scope: `versioning-006` slice specified in [workspace-version-restore.md](specs/
 Local evidence at this branch: the SQLite `database` integration test passes with cross-instance one-winner restore; the 3-case focused restore suite, expired-session cache test and full 384-case frontend suite pass. Strict server all-target Clippy, scoped rustfmt, typecheck, production frontend and embedded server builds pass. An actual hosted 390px Chinese save→history→restore→reload flow and English history preview passed before the final request-selection/cache follow-up; those follow-up paths passed focused tests. Document width equaled 390px. The browser audit reported 0 WCAG A/AA violations, with two incomplete manual checks on Radix focus guards/background and contrast in the existing navigation rail/dialog description. PostgreSQL/MySQL and fixed-commit CI remain pending.
 
 Remaining scope: resource-level history/diff, branch and merge review, Git integration, published API version labels, history retention policy, and final platform/release gates.
+
+
+## Owned request lifecycle follow-up (2026-10-22)
+
+Explicit restore/replacement now advances a local workspace generation even when the workspace and selected request IDs are unchanged. The owned request editor discards its transient protocol/body drafts and closes the old live session. Ordinary workspace saves advance the persisted revision without resetting those drafts or connections.
+
+Late HTTP successes, errors and extracted private-variable updates from the replaced workspace are ignored. The generation reference changes synchronously at replacement, so a reply completed before React rerenders cannot reintroduce old data. Terminal sessions retain final events and cannot be reopened by an older `open`/`connecting` poll; their automatic polling interval stops. Cleanup captures the session to close on request change and unmount.
+
+Verification: 36 focused lifecycle/controller/restore tests and all 808 frontend tests in 148 files pass, including 12 added cases. TypeScript and the production build pass with 38 cycle-checked chunks. This follow-up changes frontend resource handling; it does not add branch/Git workflows or establish installed-native GUI coverage.

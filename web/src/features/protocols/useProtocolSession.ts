@@ -25,6 +25,9 @@ interface Active {
   generation: number;
   session: ProtocolSession;
 }
+function isTerminal(state: ProtocolSession["state"] | undefined) {
+  return state === "closed" || state === "error";
+}
 export function useProtocolSession(
   workspace: ReturnType<typeof useWorkspace>,
   request: RequestSpec | undefined,
@@ -37,6 +40,7 @@ export function useProtocolSession(
     authenticated,
     workspace.accountId,
     workspace.draft?.id,
+    workspace.workspaceGeneration,
     workspace.draft?.data.active_environment_id,
     request?.id,
     kind,
@@ -52,6 +56,8 @@ export function useProtocolSession(
     JSON.stringify([identityRef.current, generation.current]);
   const current = (origin: string, epoch: number) =>
     mounted.current &&
+    (!workspace.workspaceGenerationRef ||
+      workspace.workspaceGenerationRef.current === workspace.workspaceGeneration) &&
     identityRef.current === origin &&
     generation.current === epoch;
   useEffect(() => {
@@ -123,8 +129,7 @@ export function useProtocolSession(
       return { session, batch, identity, generation: epoch };
     },
     refetchInterval: (query) =>
-      query.state.data &&
-      ["closed", "error"].includes(query.state.data.session.state)
+      isTerminal(live?.session.state) || isTerminal(query.state.data?.session.state)
         ? false
         : 750,
   });
@@ -141,11 +146,13 @@ export function useProtocolSession(
       const next = appendEvents(previous.events, update.batch);
       return { events: next.events, dropped: previous.dropped + next.dropped };
     });
-    setActive((previous) =>
-      previous?.session.id === update.session.id
-        ? { ...previous, session: update.session }
-        : previous,
-    );
+    setActive((previous) => {
+      if (previous?.session.id !== update.session.id) return previous;
+      // A poll started before Stop may still contain the old live state.
+      if (isTerminal(previous.session.state) && !isTerminal(update.session.state))
+        return previous;
+      return { ...previous, session: update.session };
+    });
   }, [poll.data]);
   async function connect() {
     const draft = workspace.draft;

@@ -16,6 +16,7 @@ export default function WorkbenchMain() {
   useLanguage();
   const {
     accountId,
+    workspaceGeneration,
     workspaces,
     draft,
     view,
@@ -101,14 +102,14 @@ export default function WorkbenchMain() {
           {view === "requests" &&
             (request ? (
               <RequestEditor
-                key={`${draft.id}/${request.id}`}
+                key={JSON.stringify([accountId, draft.id, workspaceGeneration, request.id])}
                 request={request}
                 workspaceData={draft.data}
                 workspaceRevision={draft.revision}
                 onWorkspaceImported={installWorkspace}
                 openVersions={() => setVersionRequestId(request.id)}
                 cookieWorkspace={draft.id}
-                bodyScope={JSON.stringify([accountId,draft.id,draft.data.active_environment_id])}
+                bodyScope={JSON.stringify([accountId,draft.id,workspaceGeneration,draft.data.active_environment_id])}
                 protocolConnected={
                   !!protocolSession.session &&
                   ["connecting", "open"].includes(protocolSession.session.state)

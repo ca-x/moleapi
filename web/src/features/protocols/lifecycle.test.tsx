@@ -255,3 +255,105 @@ it.each([false, true])(
     );
   },
 );
+
+it.each([["closed", "open"], ["closed", "connecting"], ["error", "open"], ["error", "connecting"]] as const)(
+  "does not reopen a %s session when an earlier %s poll finishes",
+  async (state, staleState) => {
+    let finishEvents!: (value: unknown) => void;
+    const finalEvents = new Promise((resolve) => { finishEvents = resolve; });
+    const terminal = { ...session, state, reason: "Finished" };
+    vi.mocked(api).mockImplementation(async (path, method) => {
+      if (path.endsWith("/close") && method === "POST") return terminal;
+      if (path.includes("/events?")) return finalEvents;
+      return path === "/api/sessions" ? session : { ...session, state: staleState };
+    });
+    const workspace = { accountId: "account-a", draft, dirty: false, save: vi.fn() } as unknown as ReturnType<typeof useWorkspace>;
+    const locals = { values: () => [], apply: vi.fn() } as unknown as ReturnType<typeof useLocalVariables>;
+    const hook = renderHook(() => useProtocolSession(workspace, request, locals, true), { wrapper: Wrapper });
+    await act(async () => { await hook.result.current.connect(); });
+    await waitFor(() => expect(finishEvents).toBeTypeOf("function"));
+    await waitFor(() => expect(vi.mocked(api).mock.calls.some(([path]) => path.includes("/events?"))).toBe(true));
+    await act(async () => { await hook.result.current.close(); });
+    expect(hook.result.current.session?.state).toBe(state);
+    await act(async () => {
+      finishEvents({ events: [{ cursor: 7, received_at: "now", direction: "incoming", message: { kind: "text", text: "final event" } }], next_cursor: 7, earliest_cursor: 1, dropped_count: 0 });
+    });
+    await waitFor(() => expect(hook.result.current.events).toHaveLength(1));
+    expect(hook.result.current.session?.state).toBe(state);
+    expect(hook.result.current.session?.reason).toBe("Finished");
+    const polls = vi.mocked(api).mock.calls.filter(([path, method]) => path === "/api/sessions/session-a" && !method).length;
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 850)); });
+    expect(vi.mocked(api).mock.calls.filter(([path, method]) => path === "/api/sessions/session-a" && !method)).toHaveLength(polls);
+  },
+);
+
+it("closes a live session when the same workspace is explicitly replaced", async () => {
+  vi.mocked(api).mockImplementation(async (path) => path.includes("/events?")
+    ? { events: [], next_cursor: 0, earliest_cursor: 1, dropped_count: 0 }
+    : session);
+  const workspace = { accountId: "account-a", workspaceGeneration: 1, draft, dirty: false, save: vi.fn() } as unknown as ReturnType<typeof useWorkspace>;
+  const locals = { values: () => [], apply: vi.fn() } as unknown as ReturnType<typeof useLocalVariables>;
+  const hook = renderHook(({ current }) => useProtocolSession(current, request, locals, true), { initialProps: { current: workspace }, wrapper: Wrapper });
+  await act(async () => { await hook.result.current.connect(); });
+  expect(hook.result.current.session?.id).toBe(session.id);
+  hook.rerender({ current: { ...workspace, workspaceGeneration: 2, draft: { ...draft, revision: 2 } } });
+  expect(hook.result.current.session).toBeNull();
+  await waitFor(() => expect(api).toHaveBeenCalledWith("/api/sessions/session-a/close", "POST", {}));
+});
+
+it("closes each captured session on request change and unmount", async () => {
+  const secondRequest = { ...request, id: "request-b" };
+  const secondSession = { ...session, id: "session-b", request_id: secondRequest.id };
+  vi.mocked(api).mockImplementation(async (path, method, body) => {
+    if (path === "/api/sessions" && method === "POST") return (body as { request: { id: string } }).request.id === request.id ? session : secondSession;
+    if (path.includes("/events?")) return { events: [], next_cursor: 0, earliest_cursor: 1, dropped_count: 0 };
+    return path.includes("session-b") ? secondSession : session;
+  });
+  const workspace = { accountId: "account-a", draft, dirty: false, save: vi.fn() } as unknown as ReturnType<typeof useWorkspace>;
+  const locals = { values: () => [], apply: vi.fn() } as unknown as ReturnType<typeof useLocalVariables>;
+  const hook = renderHook(({ selected }) => useProtocolSession(workspace, selected, locals, true), { initialProps: { selected: request }, wrapper: Wrapper });
+  await act(async () => { await hook.result.current.connect(); });
+  hook.rerender({ selected: secondRequest });
+  await act(async () => { await hook.result.current.connect(); });
+  expect(hook.result.current.session?.id).toBe(secondSession.id);
+  expect(vi.mocked(api).mock.calls.filter(([path]) => path === "/api/sessions/session-a/close")).toHaveLength(1);
+  expect(vi.mocked(api).mock.calls.filter(([path]) => path === "/api/sessions/session-b/close")).toHaveLength(0);
+  hook.unmount();
+  expect(vi.mocked(api).mock.calls.filter(([path]) => path === "/api/sessions/session-b/close")).toHaveLength(1);
+});
+
+it("preserves the live connection when a normal save advances the workspace revision", async () => {
+  vi.mocked(api).mockImplementation(async (path) => path.includes("/events?")
+    ? { events: [], next_cursor: 0, earliest_cursor: 1, dropped_count: 0 }
+    : session);
+  const workspace = { accountId: "account-a", workspaceGeneration: 1, draft, dirty: false, save: vi.fn() } as unknown as ReturnType<typeof useWorkspace>;
+  const locals = { values: () => [], apply: vi.fn() } as unknown as ReturnType<typeof useLocalVariables>;
+  const hook = renderHook(({ current }) => useProtocolSession(current, request, locals, true), { initialProps: { current: workspace }, wrapper: Wrapper });
+  await act(async () => { await hook.result.current.connect(); });
+  hook.rerender({ current: { ...workspace, draft: { ...draft, revision: 2 } } });
+  expect(hook.result.current.session?.id).toBe(session.id);
+  expect(vi.mocked(api).mock.calls.filter(([path]) => path.endsWith("/close"))).toHaveLength(0);
+});
+
+it("closes a late session creation after replacing the same workspace without applying private updates", async () => {
+  let finish!: (value: ProtocolSession) => void;
+  vi.mocked(api).mockImplementation((path) => path === "/api/sessions"
+    ? new Promise<ProtocolSession>((resolve) => { finish = resolve; })
+    : Promise.resolve({ ...session, state: "closed" }));
+  const workspaceGenerationRef = { current: 1 };
+  const workspace = { accountId: "account-a", workspaceGeneration: 1, workspaceGenerationRef, draft, dirty: false, save: vi.fn() } as unknown as ReturnType<typeof useWorkspace>;
+  const locals = { values: () => [], apply: vi.fn() } as unknown as ReturnType<typeof useLocalVariables>;
+  const hook = renderHook(({ current }) => useProtocolSession(current, request, locals, true), { initialProps: { current: workspace }, wrapper: Wrapper });
+  let connecting!: Promise<void>;
+  act(() => { connecting = hook.result.current.connect(); });
+  await waitFor(() => expect(finish).toBeTypeOf("function"));
+  await act(async () => {
+    workspaceGenerationRef.current = 2;
+    hook.rerender({ current: { ...workspace, workspaceGeneration: 2, draft: { ...draft, revision: 3 } } });
+    finish(session);
+    await connecting;
+  });
+  expect(hook.result.current.session).toBeNull();
+  expect(locals.apply).not.toHaveBeenCalled();
+  expect(api).toHaveBeenCalledWith("/api/sessions/session-a/close", "POST", {});
+});

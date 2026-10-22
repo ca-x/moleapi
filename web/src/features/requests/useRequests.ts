@@ -14,6 +14,7 @@ type Execution = {
   accountId: string;
   workspaceId: string;
   requestId: string;
+  workspaceGeneration: number;
   response: ApiResponse | null;
   error: ErrorCopy;
 };
@@ -25,8 +26,10 @@ export function useRequests(
 ) {
   useLanguage();
   const client = useQueryClient();
-  const { draft, dirty, save, updateData, stateRef, accountId, accountRef } =
-    workspace;
+  const {
+    draft, dirty, save, updateData, stateRef, accountId, accountRef,
+    workspaceGeneration, workspaceGenerationRef,
+  } = workspace;
   const [requestId, setRequestId] = useState("");
   const [busy, setBusy] = useState(false);
   const running = useRef(false);
@@ -37,6 +40,9 @@ export function useRequests(
     );
     setExecution(null);
   }, [draft?.id, accountId]);
+  useEffect(() => {
+    setExecution(null);
+  }, [workspaceGeneration]);
   const request = draft?.data.collections
     .flatMap((c) => c.requests)
     .find((r) => r.id === requestId);
@@ -80,39 +86,39 @@ export function useRequests(
       accountId,
       workspaceId,
       requestId,
+      workspaceGeneration,
       response: null,
       error: "",
     });
+    const current = () =>
+      accountRef.current === accountId &&
+      stateRef.current.draft?.id === workspaceId &&
+      workspaceGenerationRef?.current === workspaceGeneration;
     try {
       if (dirty && !(await save(true))) return;
-      if (
-        accountRef.current !== accountId ||
-        stateRef.current.draft?.id !== workspaceId
-      )
-        return;
+      if (!current()) return;
       const response = await api<ApiResponse>("/api/execute", "POST", {
         workspace_id: workspaceId,
         request: snapshot,
         environment_id: environmentId,
         ...(locals.length ? { locals } : {}),
       });
-      if (
-        accountRef.current === accountId &&
-        stateRef.current.draft?.id === workspaceId
-      )
-        localVariables?.apply(
-          draft,
-          collectionId,
-          environmentId,
-          response.variable_updates || [],
-        );
-      setExecution({ accountId, workspaceId, requestId, response, error: "" });
+      if (!current()) return;
+      localVariables?.apply(
+        draft,
+        collectionId,
+        environmentId,
+        response.variable_updates || [],
+      );
+      setExecution({ accountId, workspaceId, requestId, workspaceGeneration, response, error: "" });
       void client.invalidateQueries({ queryKey: ["history", workspaceId] });
     } catch (error) {
+      if (!current()) return;
       setExecution({
         accountId,
         workspaceId,
         requestId,
+        workspaceGeneration,
         response: null,
         error: errorCopy(error),
       });
@@ -130,8 +136,11 @@ export function useRequests(
     accountId,
     accountRef,
     localVariables,
+    workspaceGeneration,
+    workspaceGenerationRef,
   ]);
   const current =
+    execution?.workspaceGeneration === workspaceGeneration &&
     execution?.accountId === accountId &&
     execution?.workspaceId === draft?.id &&
     execution?.requestId === requestId
